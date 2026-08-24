@@ -98,3 +98,18 @@ async def test_preview_facts_use_injected_text_similarity() -> None:
     )
     preview = next(item for item in result.component_scores if item.component == "expected_preview_facts")
     assert preview.matched
+
+
+@pytest.mark.asyncio
+async def test_vietnamese_name_is_accepted() -> None:
+    dataset = await load_domain_dataset(GOLDEN_ROOT, "ecommerce")
+    case = next(item for item in dataset.metric_cases if item.expected_metric)
+    vietnamese_name = case.expected_metric.business_name
+    result = await evaluate_metric_case(
+        case,
+        _candidate(case, name=vietnamese_name),
+        EvaluationConfig(),
+    )
+    name_score = next(item for item in result.component_scores if item.component == "name")
+    assert name_score.matched
+    assert name_score.score == 1.0

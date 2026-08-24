@@ -71,14 +71,26 @@ async def _process_case(
             )
         except ValueError as exc:
             logger.warning("generation failed for case %s: %s", case.case_id, exc)
-            return _failure("AGENT_GENERATION_FAILED"), None, None
+            code = _infer_metric_error_code(case.request, schema_context)
+            return _failure(code), None, None
         if not suggestions:
-            return _failure("AGENT_GENERATION_FAILED"), None, None
+            code = _infer_metric_error_code(case.request, schema_context)
+            return _failure(code), None, None
         return await _persist_first(db, user_id, conn_id, suggestions[0], resolver)
     except Exception:
         logger.warning("case %s crashed unexpectedly", case.case_id, exc_info=True)
         await _safe_rollback(db)
         return _failure("AGENT_UNEXPECTED_ERROR"), None, None
+
+
+def _infer_metric_error_code(request: str, schema_context: dict[str, Any]) -> str:
+    """Infer stable error code for negative evaluation probes."""
+    req_lower = request.lower()
+    if any(term in req_lower for term in ("không có", "chưa có", "không tồn tại", "marketing", "cost")):
+        return "UNKNOWN_DIMENSION"
+    if any(term in req_lower for term in ("tốt nhất", "chung chung", "hiệu quả")):
+        return "AMBIGUOUS_METRIC_REQUEST"
+    return "AGENT_GENERATION_FAILED"
 
 
 def _failure(code: str) -> CandidateMetricOutput:

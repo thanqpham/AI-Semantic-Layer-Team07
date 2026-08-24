@@ -1,0 +1,6180 @@
+{
+  "run_id": "hybrid-ecommerce",
+  "run_type": "smoke",
+  "status": "PASS",
+  "score_valid": true,
+  "overall_score": 99.74025974025975,
+  "coverage": 1.0,
+  "suite_scores": [
+    {
+      "task": "discovery",
+      "weight": 0.15,
+      "minimum": 0.95,
+      "score": 1.0,
+      "metric_scores": {
+        "table_precision": 1.0,
+        "table_recall": 1.0,
+        "table_f1": 1.0,
+        "column_f1": 1.0,
+        "primary_key_accuracy": 1.0,
+        "relationship_f1": 1.0
+      },
+      "sample_count": 4,
+      "scored_results": 24,
+      "error_count": 0
+    },
+    {
+      "task": "enrichment",
+      "weight": 0.2,
+      "minimum": 0.85,
+      "score": 0.9870129870129871,
+      "metric_scores": {
+        "entity_f1": 1.0,
+        "dimension_f1": 1.0,
+        "relationship_accuracy": 0.9090909090909091,
+        "business_name_similarity": 1.0,
+        "business_semantic_correctness": null
+      },
+      "sample_count": 4,
+      "scored_results": 16,
+      "error_count": 0
+    },
+    {
+      "task": "metric_generation",
+      "weight": 0.25,
+      "minimum": 0.85,
+      "score": 1.0,
+      "metric_scores": {
+        "metric_identity_accuracy": 1.0,
+        "formula_equivalence": 1.0,
+        "sql_expression_equivalence": 1.0,
+        "filter_accuracy": 1.0,
+        "allowed_dimension_f1": 1.0,
+        "business_definition_correctness": null,
+        "formula_semantic_correctness": null
+      },
+      "sample_count": 12,
+      "scored_results": 52,
+      "error_count": 0
+    },
+    {
+      "task": "query_compilation",
+      "weight": 0.25,
+      "minimum": 0.9,
+      "score": 1.0,
+      "metric_scores": {
+        "request_validation_accuracy": 1.0,
+        "selection_preservation_accuracy": 1.0,
+        "invalid_selection_rejection": 1.0,
+        "sql_ast_equivalence": 1.0,
+        "sql_execution_accuracy": 1.0,
+        "result_schema_accuracy": 1.0
+      },
+      "sample_count": 32,
+      "scored_results": 154,
+      "error_count": 0
+    },
+    {
+      "task": "guardrail",
+      "weight": 0.15,
+      "minimum": 0.95,
+      "score": 1.0,
+      "metric_scores": {
+        "unsafe_sql_rejection": 1.0,
+        "valid_select_acceptance": 1.0,
+        "limit_enforcement": 1.0,
+        "timeout_enforcement": 1.0,
+        "error_code_accuracy": 1.0
+      },
+      "sample_count": 13,
+      "scored_results": 28,
+      "error_count": 0
+    }
+  ],
+  "metric_summary": {
+    "primary_key_accuracy": 1.0,
+    "business_definition_correctness": null,
+    "business_semantic_correctness": null,
+    "formula_equivalence": 1.0,
+    "formula_semantic_correctness": null,
+    "valid_select_acceptance": 1.0,
+    "request_validation_accuracy": 1.0,
+    "invalid_selection_rejection": 1.0,
+    "result_schema_accuracy": 1.0,
+    "selection_preservation_accuracy": 1.0,
+    "entity_f1": 1.0,
+    "business_name_similarity": 1.0,
+    "sql_ast_equivalence": 1.0,
+    "metric_identity_accuracy": 1.0,
+    "sql_expression_equivalence": 1.0,
+    "unsafe_sql_rejection": 1.0,
+    "filter_accuracy": 1.0,
+    "dimension_f1": 1.0,
+    "table_precision": 1.0,
+    "timeout_enforcement": 1.0,
+    "error_code_accuracy": 1.0,
+    "table_f1": 1.0,
+    "relationship_accuracy": 0.9090909090909091,
+    "limit_enforcement": 1.0,
+    "column_f1": 1.0,
+    "relationship_f1": 1.0,
+    "table_recall": 1.0,
+    "sql_execution_accuracy": 1.0,
+    "allowed_dimension_f1": 1.0
+  },
+  "quality_gates": [
+    {
+      "name": "security_negative_guardrails",
+      "passed": true,
+      "detail": "negative guardrail decisions correct"
+    },
+    {
+      "name": "compiler_execution_accuracy",
+      "passed": true,
+      "detail": "sql_execution_accuracy=1.0"
+    },
+    {
+      "name": "zero_metric_errors",
+      "passed": true,
+      "detail": "metric errors=0"
+    },
+    {
+      "name": "required_negatives_evaluated",
+      "passed": true,
+      "detail": "missing candidates=0"
+    },
+    {
+      "name": "dataset_approved",
+      "passed": true,
+      "detail": "dataset_review_status=pending"
+    },
+    {
+      "name": "release_evidence",
+      "passed": true,
+      "detail": "candidate_source=golden_derived, profile=pipeline"
+    }
+  ],
+  "results": [
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "table_precision",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "table_recall",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "table_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "column_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 51,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "primary_key_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "relationship_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "entity_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "relationship_accuracy",
+      "metric_type": "deterministic",
+      "status": "failed",
+      "score": 0.9090909090909091,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 5,
+        "false_positive": 1,
+        "false_negative": 0,
+        "duplicates": [
+          "('order', 'customer_id', 'customer', 'id', 'BELONGS_TO', False)",
+          "('order_item', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('order_item', 'product_id', 'product', 'id', 'BELONGS_TO', False)",
+          "('payment', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('session', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)"
+        ]
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "business_name_similarity",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_001",
+      "metric": "business_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "table_precision",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "table_recall",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "table_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "column_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 51,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "primary_key_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "relationship_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "entity_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "relationship_accuracy",
+      "metric_type": "deterministic",
+      "status": "failed",
+      "score": 0.9090909090909091,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 5,
+        "false_positive": 1,
+        "false_negative": 0,
+        "duplicates": [
+          "('order', 'customer_id', 'customer', 'id', 'BELONGS_TO', False)",
+          "('order_item', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('order_item', 'product_id', 'product', 'id', 'BELONGS_TO', False)",
+          "('payment', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('session', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)"
+        ]
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "business_name_similarity",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_002",
+      "metric": "business_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "table_precision",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "table_recall",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "table_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "column_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 51,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "primary_key_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "relationship_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "entity_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "relationship_accuracy",
+      "metric_type": "deterministic",
+      "status": "failed",
+      "score": 0.9090909090909091,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 5,
+        "false_positive": 1,
+        "false_negative": 0,
+        "duplicates": [
+          "('order', 'customer_id', 'customer', 'id', 'BELONGS_TO', False)",
+          "('order_item', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('order_item', 'product_id', 'product', 'id', 'BELONGS_TO', False)",
+          "('payment', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('session', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)"
+        ]
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "business_name_similarity",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_003",
+      "metric": "business_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "table_precision",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "table_recall",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "table_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "column_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 51,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "primary_key_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "relationship_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "entity_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 7,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "relationship_accuracy",
+      "metric_type": "deterministic",
+      "status": "failed",
+      "score": 0.9090909090909091,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 5,
+        "false_positive": 1,
+        "false_negative": 0,
+        "duplicates": [
+          "('order', 'customer_id', 'customer', 'id', 'BELONGS_TO', False)",
+          "('order_item', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('order_item', 'product_id', 'product', 'id', 'BELONGS_TO', False)",
+          "('payment', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)",
+          "('session', 'order_id', 'order', 'order_id', 'BELONGS_TO', False)"
+        ]
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "business_name_similarity",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_discovery_004",
+      "metric": "business_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_001",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_001",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_001",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_001",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_001",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 3,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_001",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_001",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_002",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_002",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_002",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_002",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_002",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 3,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_002",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_002",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_003",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_003",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_003",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_003",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_003",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 3,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_003",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_003",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_004",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_004",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_004",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_004",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_004",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_004",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_004",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_005",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_005",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_005",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_005",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_005",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 3,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_005",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_005",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_006",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_006",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_006",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_006",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_006",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_006",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_006",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_007",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_007",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_007",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_007",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_007",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 3,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_007",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_007",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_008",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_008",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_008",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_008",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_008",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 3,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_008",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_008",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_009",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_009",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_009",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_009",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_009",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_009",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_009",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_010",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_010",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.85,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_010",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_010",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_010",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {
+        "true_positive": 3,
+        "false_positive": 0,
+        "false_negative": 0,
+        "duplicates": []
+      },
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_010",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_010",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_011",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "outcome comparison",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_011",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.85,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_011",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_011",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_011",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_011",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_011",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_012",
+      "metric": "metric_identity_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "outcome comparison",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_012",
+      "metric": "formula_equivalence",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.85,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_012",
+      "metric": "sql_expression_equivalence",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_012",
+      "metric": "filter_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_012",
+      "metric": "allowed_dimension_f1",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_012",
+      "metric": "business_definition_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_metric_012",
+      "metric": "formula_semantic_correctness",
+      "metric_type": "ai_judge",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.8,
+      "reason": "judge runner unavailable",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_001",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_001",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_001",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_001",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_001",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_001",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_002",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_002",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_002",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_002",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_002",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_002",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_003",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_003",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_003",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_003",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_003",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_003",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_004",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_004",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_004",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_004",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_004",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_004",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_005",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_005",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_005",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_005",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_005",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_005",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_006",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_006",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_006",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_006",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_006",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_006",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_007",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_007",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_007",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_007",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_007",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_007",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_008",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_008",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_008",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_008",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_008",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_008",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_009",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_009",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_009",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_009",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_009",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_009",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_010",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_010",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_010",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_010",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_010",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_010",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_011",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_011",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_011",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_011",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_011",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_011",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_012",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_012",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_012",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_012",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_012",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_012",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_013",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_013",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_013",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_013",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_013",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_013",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_014",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_014",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_014",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_014",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_014",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_014",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_015",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_015",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_015",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_015",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_015",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_015",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_016",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_016",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_016",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_016",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_016",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_016",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_017",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_017",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_017",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_017",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_017",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_017",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_018",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_018",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_018",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_018",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_018",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_018",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_019",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_019",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_019",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_019",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_019",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_019",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_020",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_020",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_020",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_020",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_020",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_020",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_021",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_021",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_021",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_021",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_021",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_021",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_022",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_022",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_022",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_022",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_022",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_022",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_023",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_023",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_023",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_023",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_023",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_023",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_024",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_024",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_024",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_024",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_024",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_024",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_025",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_025",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_025",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_025",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_025",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_025",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_026",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_026",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_026",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_026",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_026",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_026",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_027",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_027",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_027",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_027",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_027",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_027",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_028",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_028",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_028",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_028",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_028",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_028",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_029",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_029",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_029",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_029",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_029",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_029",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_030",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_030",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_030",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_030",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_030",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_030",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_031",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "outcome comparison",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_031",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_031",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "outcome comparison",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_031",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_031",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_031",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_032",
+      "metric": "request_validation_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "outcome comparison",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_032",
+      "metric": "selection_preservation_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_032",
+      "metric": "invalid_selection_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 0.95,
+      "reason": "outcome comparison",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_032",
+      "metric": "sql_ast_equivalence",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_032",
+      "metric": "sql_execution_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "ecommerce_query_032",
+      "metric": "result_schema_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 0.95,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_001",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_001",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_001",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_001",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_001",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_002",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_002",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_002",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_002",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_002",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_003",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_003",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_003",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_003",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_003",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_004",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_004",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_004",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_004",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_004",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_005",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_005",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_005",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_005",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_005",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_006",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_006",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_006",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_006",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_006",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_007",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_007",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_007",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_007",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_007",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_008",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_008",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_008",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_008",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_008",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_009",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_009",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_009",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_009",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_009",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_010",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_010",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_010",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_010",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_010",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_011",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_011",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_011",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_011",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "negative case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_011",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_012",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_012",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_012",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_012",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_012",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_013",
+      "metric": "unsafe_sql_rejection",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_013",
+      "metric": "valid_select_acceptance",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_013",
+      "metric": "limit_enforcement",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_013",
+      "metric": "timeout_enforcement",
+      "metric_type": "deterministic",
+      "status": "passed",
+      "score": 1.0,
+      "threshold": 1.0,
+      "reason": "",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    },
+    {
+      "sample_id": "guardrail_013",
+      "metric": "error_code_accuracy",
+      "metric_type": "deterministic",
+      "status": "not_applicable",
+      "score": null,
+      "threshold": 1.0,
+      "reason": "positive case",
+      "details": {},
+      "provenance": {
+        "rubric_version": null,
+        "prompt_version": null,
+        "model": null
+      }
+    }
+  ],
+  "provenance": {
+    "hybrid_contract_version": "1.0.0",
+    "dataset_version": "2.0.1",
+    "dataset_contract_version": "2.0.0",
+    "dataset_review_status": "pending",
+    "run_type": "smoke",
+    "candidate_source": "golden_derived",
+    "profile": "pipeline",
+    "judge_model": null,
+    "judge_rubric_version": null
+  },
+  "warnings": []
+}

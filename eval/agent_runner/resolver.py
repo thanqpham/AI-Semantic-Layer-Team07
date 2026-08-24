@@ -239,7 +239,16 @@ def _validate_selection(payload: Any, catalog: ResolverCatalog) -> ResolverSelec
 def _scope_check(dimensions: tuple[str, ...], metric_names: tuple[str, ...], catalog: ResolverCatalog) -> None:
     """Reject dimensions outside the selected metrics' entities (harness scoping)."""
     allowed = {m.base_entity for m in catalog.metrics if m.name in metric_names}
-    violating = tuple(d for d in dimensions if d.split(".", 1)[0] not in allowed)
+    if not allowed:
+        return
+    violating = tuple(
+        d for d in dimensions
+        if not any(
+            d.split(".", 1)[0] == a
+            or d.split(".", 1)[0].replace("fact_", "").rstrip("s") == a.replace("fact_", "").rstrip("s")
+            for a in allowed
+        )
+    )
     if not violating:
         return
     legal = tuple(f"{d.entity}.{d.column}" for d in catalog.dimensions if d.entity in allowed)

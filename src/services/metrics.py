@@ -271,7 +271,7 @@ async def generate_definitions_v2(
         MetricSuggestionsV2 if use_v2 else MetricSuggestions
     )
     try:
-        structured = raw_llm.with_structured_output(structured_cls)
+        structured = raw_llm.with_structured_output(structured_cls, method="function_calling")
         response = await structured.ainvoke(messages)
         parsed = _parse_v2_payload(response)
         if any(parsed):

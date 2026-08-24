@@ -133,7 +133,7 @@ async def _score_fields(
     for field in _FIELDS:
         expected_value = case.expected_preview_facts if field == "expected_preview_facts" else getattr(expected, field)
         actual_value = actual.expected_preview_facts if field == "expected_preview_facts" else getattr(actual, field)
-        matched = await _field_equal(field, expected_value, actual_value, config, provider)
+        matched = await _field_equal(field, expected_value, actual_value, config, provider, expected_metric=expected)
         duplicates = _field_duplicates(field, actual_value)
         diagnostics = tuple(f"duplicate value: {value}" for value in duplicates)
         scores.append(FieldScore(component=field, score=float(matched), matched=matched, diagnostics=diagnostics))
@@ -164,7 +164,16 @@ async def _field_equal(
     actual: Any,
     config: EvaluationConfig,
     provider: TextSimilarityProvider | None,
+    expected_metric: ExpectedMetricDefinition | None = None,
 ) -> bool:
+    if field == "name":
+        targets = (
+            (expected_metric.business_name, *expected_metric.synonyms, str(expected))
+            if expected_metric is not None
+            else (str(expected),)
+        )
+        result = await compare_business_name(str(actual), targets, config, provider)
+        return result.accepted
     if field in _TEXT_FIELDS:
         result = await compare_business_name(str(actual), (str(expected),), config, provider)
         return result.accepted

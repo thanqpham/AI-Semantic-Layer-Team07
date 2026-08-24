@@ -96,7 +96,7 @@ async def _generate_definitions_with_fallback(prompt: Any) -> list[MetricDefinit
     """Try structured output first, then fallback to text parsing."""
     raw_llm = get_llm(role="metric")
     try:
-        structured = raw_llm.with_structured_output(MetricSuggestions)
+        structured = raw_llm.with_structured_output(MetricSuggestions, method="function_calling")
         response = await structured.ainvoke(prompt)
         definitions = _parse_metric_payload(response)
         if definitions:

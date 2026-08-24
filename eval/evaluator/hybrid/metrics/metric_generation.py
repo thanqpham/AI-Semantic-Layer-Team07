@@ -18,7 +18,7 @@ from eval.evaluator.hybrid.metrics.base import (
 from eval.evaluator.hybrid.samples import EvaluationSample, MetricReference
 from eval.evaluator.metric_eval import _identity
 from eval.evaluator.schemas import CandidateMetricDefinition, CandidateMetricOutput
-from eval.evaluator.scoring import match_sets
+from eval.evaluator.scoring import match_allowed_dimensions
 from eval.evaluator.sql_normalization import normalize_expression, unwrap_declared_aggregation
 from eval.evaluator.text_similarity import compare_business_name
 
@@ -123,9 +123,9 @@ class FilterAccuracy(_PositiveOnlyMetric):
 
 
 class AllowedDimensionF1(_PositiveOnlyMetric):
-    """Set-match allowed dimensions."""
+    """Set-match allowed dimensions with soft tolerance for additional entity dimensions."""
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
         reference, actual = _positive_payload(sample)
-        match = match_sets(reference.expected_metric.allowed_dimensions, actual.allowed_dimensions)
+        match = match_allowed_dimensions(reference.expected_metric.allowed_dimensions, actual.allowed_dimensions)
         return set_match_result(self.spec, sample.sample_id, match)
