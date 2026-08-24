@@ -30,6 +30,8 @@ _NUMERIC_TYPES = (
     "TINYINT",
     "BIGINT",
     "SMALLINT",
+    "BOOL",
+    "BIT",
 )
 
 

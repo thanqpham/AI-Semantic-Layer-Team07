@@ -103,28 +103,6 @@ class MetricFormula(BaseModel):
         return self
 
 
-class MetricFilter(BaseModel):
-    """Represent a fixed predicate without embedding SQL."""
-
-    field: str = Field(..., min_length=1, max_length=200, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*$")
-    column_id: int | None = None
-    operator: FilterOperator
-    value: Any = None
-
-    @model_validator(mode="after")
-    def validate_value_shape(self) -> MetricFilter:
-        """Validate operator-specific value presence and collection shape."""
-        if self.operator in {"is_null", "is_not_null"}:
-            if self.value is not None:
-                raise ValueError(f"{self.operator} does not accept a value")
-        elif self.operator in {"in", "not_in"}:
-            if not isinstance(self.value, list) or not self.value:
-                raise ValueError(f"{self.operator} requires a non-empty list")
-        elif self.value is None:
-            raise ValueError(f"{self.operator} requires a value")
-        return self
-
-
 _OP_MAP = {
     "=": "eq",
     "==": "eq",
@@ -148,6 +126,36 @@ _OP_MAP = {
     "is not null": "is_not_null",
     "is_not_null": "is_not_null",
 }
+
+
+class MetricFilter(BaseModel):
+    """Represent a fixed predicate without embedding SQL."""
+
+    field: str = Field(..., min_length=1, max_length=200, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*$")
+    column_id: int | None = None
+    operator: FilterOperator
+    value: Any = None
+
+    @field_validator("operator", mode="before")
+    @classmethod
+    def normalize_operator(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            cleaned = value.strip().lower()
+            return _OP_MAP.get(cleaned, cleaned)
+        return value
+
+    @model_validator(mode="after")
+    def validate_value_shape(self) -> MetricFilter:
+        """Validate operator-specific value presence and collection shape."""
+        if self.operator in {"is_null", "is_not_null"}:
+            if self.value is not None:
+                raise ValueError(f"{self.operator} does not accept a value")
+        elif self.operator in {"in", "not_in"}:
+            if not isinstance(self.value, list) or not self.value:
+                raise ValueError(f"{self.operator} requires a non-empty list")
+        elif self.value is None:
+            raise ValueError(f"{self.operator} requires a value")
+        return self
 
 
 class MetricSpec(BaseModel):
