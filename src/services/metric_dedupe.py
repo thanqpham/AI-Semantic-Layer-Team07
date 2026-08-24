@@ -153,12 +153,14 @@ def _process_suggestion(
         return item, None, None
     notice = notice_by_proposed[name_key]
     target = by_name.get(_norm_name(notice.existing_metric_name))
-    if target is None or _same_logic(item.definition, target):
-        # Verified-true duplicate (or unverifiable) — drop; the notice previews it.
+    if target is not None and _same_logic(item.definition, target):
+        # Verified-true duplicate — drop; the notice previews it.
         return None, None, None
-    # The LLM's duplicate claim contradicts the formulas — ask the user instead.
-    conflict = _attach_conflict(item, _forced_conflict(item, target, by_name))
-    return conflict, None, _notice_key(notice)
+    if target is not None:
+        # The LLM's duplicate claim contradicts the formulas — ask the user instead.
+        conflict = _attach_conflict(item, _forced_conflict(item, target, by_name))
+        return conflict, None, _notice_key(notice)
+    return item, None, None
 
 
 def _dup_notice_key(name_key: str, notice_by_proposed: dict[str, DuplicateMetricNotice]) -> int | str | None:
