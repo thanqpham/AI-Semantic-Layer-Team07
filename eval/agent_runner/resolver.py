@@ -242,7 +242,8 @@ def _scope_check(dimensions: tuple[str, ...], metric_names: tuple[str, ...], cat
     if not allowed:
         return
     violating = tuple(
-        d for d in dimensions
+        d
+        for d in dimensions
         if not any(
             d.split(".", 1)[0] == a
             or d.split(".", 1)[0].replace("fact_", "").rstrip("s") == a.replace("fact_", "").rstrip("s")

@@ -28,6 +28,24 @@ _ALLOWED_EXPRESSION_NODES = (
     exp.Mul,
     exp.Div,
     exp.Neg,
+    exp.GT,
+    exp.GTE,
+    exp.LT,
+    exp.LTE,
+    exp.EQ,
+    exp.NEQ,
+    exp.Case,
+    exp.If,
+    exp.When,
+    exp.Is,
+    exp.Not,
+    exp.Null,
+    exp.Boolean,
+    exp.In,
+    exp.Tuple,
+    exp.Between,
+    exp.Like,
+    exp.ILike,
 )
 
 
@@ -70,7 +88,7 @@ class MetricFormula(BaseModel):
     @field_validator("expression", mode="before")
     @classmethod
     def normalize_expression(cls, value: Any) -> Any:
-        """Trim an expression while preserving invalid qualifications for validation."""
+        """Trim an expression."""
         if isinstance(value, str):
             return value.strip()
         return value
@@ -89,8 +107,6 @@ class MetricFormula(BaseModel):
         for node in parsed.walk():
             if not isinstance(node, _ALLOWED_EXPRESSION_NODES):
                 raise ValueError(f"Expression node {type(node).__name__} is not allowed")
-            if isinstance(node, exp.Literal) and not node.is_number:
-                raise ValueError("Only numeric literals are allowed in metric expressions")
             if isinstance(node, exp.Column) and node.table:
                 raise ValueError("Metric expressions cannot reference another entity")
         return cleaned

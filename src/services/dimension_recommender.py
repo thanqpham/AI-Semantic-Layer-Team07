@@ -59,19 +59,21 @@ NUMERIC_TYPES = {
 TIME_TYPES = {"DATE", "TIME", "TIMESTAMP", "DATETIME", "TIMESTAMPTZ"}
 
 
-def is_valid_dimension_column(col: SemanticColumnModel) -> bool:
+def is_valid_dimension_column(col: SemanticColumnModel, *, include_time: bool = False) -> bool:
     """Validate if a column is a clean categorical/entity business dimension."""
     if col.is_primary_key or col.is_foreign_key:
         return False
+    name = col.column_name.lower()
+    if any(junk in name for junk in JUNK_KEYWORDS):
+        return False
+    if name.endswith("_id"):
+        return any(kw in name for kw in ("store", "product", "channel", "category", "device"))
     dt = (col.data_type or "").upper()
-    if any(t in dt for t in TIME_TYPES) or col.is_time_dimension:
+    if not include_time and (any(t in dt for t in TIME_TYPES) or col.is_time_dimension):
         return False
     if any(t in dt for t in NUMERIC_TYPES):
         if not col.allowed_values or len(col.allowed_values) > 30:
             return False
-    name = col.column_name.lower()
-    if any(junk in name for junk in JUNK_KEYWORDS):
-        return False
     if col.allowed_values and len(col.allowed_values) > 30:
         return False
     return True
@@ -112,7 +114,7 @@ def _collect_tier_a(base_table: SemanticTableModel) -> list[RecommendedDimension
     """Collect Tier A (core) dimensions from the metric's base table."""
     items = []
     for col in base_table.columns:
-        if is_valid_dimension_column(col):
+        if is_valid_dimension_column(col, include_time=True):
             items.append(_make_dimension_item(col, base_table, "A", True, False))
     return items
 
@@ -133,7 +135,7 @@ def _collect_outgoing_rel_dims(
             if not target_table:
                 continue
             for col in target_table.columns:
-                if is_valid_dimension_column(col):
+                if is_valid_dimension_column(col, include_time=True):
                     item = _make_dimension_item(col, target_table, tier, True, False)
                     results.append((rel.to_entity_id, item))
     return results

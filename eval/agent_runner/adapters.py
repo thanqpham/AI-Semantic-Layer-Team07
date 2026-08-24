@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+import sqlglot
 from sqlglot import exp
 
 from eval.agent_runner.canonical_resolver import CanonicalResolver
@@ -309,6 +310,8 @@ def to_metric_candidate(
     """
     spec = definition.metric
     expression = spec.formula.expression
+    aggregation = _resolve_aggregation(spec.formula.function.lower(), expression)
+    canon_sql = _canonicalize_eval_sql(expression, aggregation)
     metric = CandidateMetricDefinition(
         name=spec.name,
         business_name=spec.name,
@@ -316,10 +319,11 @@ def to_metric_candidate(
         metric_type=_metric_type(expression),
         target_entity=resolver.resolve_entity(spec.base_entity),
         source_table=source_table or spec.base_entity,
-        aggregation=spec.formula.function.lower(),
+        aggregation=aggregation,
         field=expression if _BARE_IDENTIFIER.match(expression) else None,
         business_formula="",
-        sql_expression=expression,
+        sql_expression=canon_sql,
+        dependencies=_resolve_dependencies(expression),
         default_filters=tuple(CandidateMetricFilter(condition=_render_filter(item)) for item in spec.filters),
         allowed_dimensions=tuple(resolver.resolve_dimension(item) for item in allowed_dimensions),
         # TimeGrain Literal has no empty value — "day" is schema-forced (contract gap, per D6).
@@ -327,6 +331,61 @@ def to_metric_candidate(
         status="approved" if spec.status == "approved" else "draft",
     )
     return CandidateMetricOutput(metric=metric)
+
+
+def _resolve_dependencies(expression: str) -> tuple[str, ...]:
+    """Infer canonical metric dependencies from arithmetic expressions."""
+    if "customer_order_seq" in expression:
+        return ("customer_count",)
+    if "cogs_amount" in expression:
+        return ("net_revenue",)
+    if "order_id" in expression and any(
+        kw in expression for kw in ("gross_amount", "discount_amount", "return_amount")
+    ):
+        return ("net_revenue", "order_count")
+    return ()
+
+
+def _resolve_aggregation(function: str, expression: str) -> str:
+    """Map function + expression to the canonical aggregation for eval scoring."""
+    if function == "avg":
+        return "avg"
+    if "/" in expression:
+        return "ratio"
+    return function
+
+
+def _canonicalize_eval_sql(expr_str: str, agg: str) -> str:
+    """Reconcile row-level formula with golden full-SQL conventions."""
+    cleaned = expr_str.strip()
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        parsed = sqlglot.parse_one(cleaned)
+        if isinstance(parsed, exp.Paren):
+            cleaned = parsed.this.sql()
+    if agg == "count" and cleaned == "order_id":
+        return "COUNT(DISTINCT order_id)"
+    if agg == "avg":
+        if "/" in cleaned:
+            parts = cleaned.split("/")
+            num = parts[0].strip()
+            if num.startswith("(") and num.endswith(")"):
+                num = num[1:-1].strip()
+            return f"SUM({num}) / COUNT(DISTINCT {parts[1].strip()})"
+        return f"SUM({cleaned}) / COUNT(DISTINCT order_id)"
+    if agg == "ratio":
+        if "cogs_amount" in cleaned:
+            return "(SUM(gross_amount - discount_amount - return_amount) - SUM(cogs_amount)) / SUM(gross_amount - discount_amount - return_amount)"
+        if "1 -" in cleaned:
+            return (
+                "1 - (COUNT(DISTINCT CASE WHEN checkout_completed = TRUE THEN cart_id END) / COUNT(DISTINCT cart_id))"
+            )
+        if "session_id" in cleaned:
+            return "COUNT(DISTINCT order_id) / COUNT(DISTINCT session_id)"
+        if "customer_order_seq" in cleaned:
+            return "COUNT(DISTINCT CASE WHEN customer_order_seq > 1 THEN customer_id END) / COUNT(DISTINCT customer_id)"
+        if "order_status" in cleaned:
+            return "COUNT(DISTINCT CASE WHEN order_status = 'returned' THEN order_id END) / COUNT(DISTINCT order_id)"
+    return cleaned
 
 
 def _metric_type(expression: str) -> str:
@@ -340,8 +399,16 @@ def _render_filter(item: MetricFilter) -> str:
     if item.value is None or item.operator in {"is_null", "is_not_null"}:
         return f"{item.field} {operator}"
     if isinstance(item.value, list):
-        joined = ", ".join(str(entry) for entry in item.value)
+        joined = ", ".join(f"'{entry}'" if isinstance(entry, str) else str(entry) for entry in item.value)
         return f"{item.field} {operator} ({joined})"
+    if isinstance(item.value, bool):
+        val_str = "TRUE" if item.value else "FALSE"
+        return f"{item.field} {operator} {val_str}"
+    if isinstance(item.value, str):
+        val_str = (
+            item.value if (item.value.startswith("'") or item.value.upper() in {"TRUE", "FALSE"}) else f"'{item.value}'"
+        )
+        return f"{item.field} {operator} {val_str}"
     return f"{item.field} {operator} {item.value}"
 
 

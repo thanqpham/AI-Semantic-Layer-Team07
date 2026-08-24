@@ -32,7 +32,7 @@ async def test_run_agent_engine_wires_hybrid_request(tmp_path, monkeypatch):
         collected["prepare"] = (golden_root, domain, run_dir)
         return object()  # opaque ctx
 
-    async def fake_collect(ctx, dataset, *, query_mode, enrichment_override=None):
+    async def fake_collect(ctx, dataset, *, query_mode, enrichment_override=None, suites=None):
         collected["query_mode"] = query_mode
         return AgentCandidates(manifest={"candidate_source": "agent_live"}, guardrail=guardrail)
 
@@ -87,7 +87,7 @@ async def test_run_agent_engine_exits_one_on_fail(tmp_path, monkeypatch):
     async def fake_prepare_run(golden_root, domain, run_dir):
         return object()
 
-    async def fake_collect(ctx, dataset, *, query_mode, enrichment_override=None):
+    async def fake_collect(ctx, dataset, *, query_mode, enrichment_override=None, suites=None):
         return AgentCandidates()
 
     async def fake_run_hybrid(request):

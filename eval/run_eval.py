@@ -89,6 +89,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--engine", choices=("legacy", "hybrid"), default="legacy")
     parser.add_argument("--source", choices=("smoke", "agent"), default="smoke")
     parser.add_argument("--query-mode", choices=("resolver", "oracle"), default="resolver")
+    parser.add_argument(
+        "--suite",
+        choices=("all", "discovery", "enrichment", "metrics", "compiler", "guardrails"),
+        default="all",
+        help="evaluate only a single suite (default: all)",
+    )
     parser.add_argument("--run-dir", type=Path, default=None)
     parser.add_argument("--run-type", choices=("smoke", "benchmark", "release"), default="smoke")
     parser.add_argument(
@@ -204,7 +210,8 @@ async def run_agent_engine(args: argparse.Namespace) -> int:
     run_dir = args.run_dir or Path(f"eval/runs/agent-{args.domain}-{_utc_timestamp()}")
     ctx = await prepare_run(args.golden_root, args.domain, run_dir)
     dataset = await load_domain_dataset(args.golden_root, args.domain)
-    candidates = await collect_candidates(ctx, dataset, query_mode=args.query_mode)
+    suites = frozenset({args.suite}) if args.suite != "all" else None
+    candidates = await collect_candidates(ctx, dataset, query_mode=args.query_mode, suites=suites)
     write_candidates(run_dir, candidates)
     run_id = f"agent-{args.domain}"
     result = await run_hybrid_evaluation(_agent_request(dataset, candidates, args, run_id))

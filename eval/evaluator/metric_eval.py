@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import sqlglot
 from pydantic import JsonValue
+from sqlglot import exp
 
 from eval.dataset.loader import DomainDataset
 from eval.dataset.models import ExpectedMetricDefinition, MetricDefinitionCase
@@ -232,8 +234,24 @@ def _identity(metric: ExpectedMetricDefinition | CandidateMetricDefinition) -> t
         unwrap_declared_aggregation(metric.sql_expression, metric.aggregation) if metric.field is None else None
     )
     dependencies = tuple(sorted(set(metric.dependencies))) if metric.field is None else ()
-    filters = tuple(sorted({_filter(item.condition) for item in metric.default_filters}))
+    filters = tuple(sorted(_filter_set(metric.default_filters)))
     return metric.target_entity, metric.aggregation, metric.field, expression, dependencies, filters
+
+
+def _filter_set(items: Any) -> set[str]:
+    result = set()
+    for item in items:
+        cond = getattr(item, "condition", str(item))
+        try:
+            parsed = sqlglot.parse_one(cond)
+            if isinstance(parsed, exp.And):
+                result.add(normalize_expression(parsed.left.sql()))
+                result.add(normalize_expression(parsed.right.sql()))
+            else:
+                result.add(normalize_expression(cond))
+        except Exception:
+            result.add(normalize_expression(cond))
+    return result
 
 
 def _filter(value: str) -> str:

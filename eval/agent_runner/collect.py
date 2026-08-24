@@ -89,6 +89,7 @@ async def collect_candidates(
     *,
     query_mode: str = "resolver",
     enrichment_override: dict | None = None,
+    suites: frozenset[str] | None = None,
 ) -> AgentCandidates:
     """Run discovery, enrichment, metrics, query, and guardrail collection."""
     if query_mode not in QUERY_MODES:
@@ -97,19 +98,32 @@ async def collect_candidates(
     conn_id = await run_enrichment_pipeline(ctx, raw, enrichment=enrichment_override)
     entity_resolver = CanonicalResolver.from_dataset(dataset, {})
     discovery_ids = iter_discovery_ids(dataset)
-    discovery = await collect_discovery(ctx, discovery_ids, raw)
-    enrichment = await collect_enrichment(ctx, conn_id, discovery_ids, entity_resolver)
-    metric_result = await collect_metrics(ctx, conn_id, iter_metric_cases(dataset), entity_resolver)
-    compiler_resolver = CanonicalResolver.from_dataset(dataset, metric_result.metric_ids)
-    compiler = await _collect_compiler(ctx, conn_id, dataset, query_mode, metric_result, compiler_resolver)
-    guardrail = await collect_guardrails(iter_guardrail_cases(dataset))
+    run_all = suites is None
+    discovery = await collect_discovery(ctx, discovery_ids, raw) if run_all or "discovery" in suites else {}
+    enrichment = (
+        await collect_enrichment(ctx, conn_id, discovery_ids, entity_resolver)
+        if run_all or "enrichment" in suites
+        else {}
+    )
+    metric_result = (
+        await collect_metrics(ctx, conn_id, iter_metric_cases(dataset), entity_resolver)
+        if run_all or "metrics" in suites
+        else MetricCollectResult({}, {})
+    )
+    compiler: dict[str, CandidateCompilerOutput] = {}
+    if run_all or "compiler" in suites:
+        compiler_resolver = CanonicalResolver.from_dataset(dataset, metric_result.metric_ids)
+        compiler = await _collect_compiler(ctx, conn_id, dataset, query_mode, metric_result, compiler_resolver)
+    guardrail = await collect_guardrails(iter_guardrail_cases(dataset)) if run_all or "guardrails" in suites else {}
     return AgentCandidates(
         discovery=discovery,
         enrichment=enrichment,
         metrics=metric_result.candidates,
         compiler=compiler,
         guardrail=guardrail,
-        manifest=_manifest(ctx, query_mode, entity_resolver, compiler_resolver),
+        manifest=_manifest(
+            ctx, query_mode, entity_resolver, CanonicalResolver.from_dataset(dataset, metric_result.metric_ids)
+        ),
     )
 
 

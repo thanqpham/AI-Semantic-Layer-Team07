@@ -141,7 +141,9 @@ class ResultSchemaAccuracy(DeterministicMetric):
         if rows_or_na is None:
             return boolean_result(self.spec, sample.sample_id, False, "EXECUTION_FAILED")
         reference = reference_as(sample, QueryReference)
-        expected_columns = set(reference.expected_rows[0].keys()) if reference.expected_rows else set(rows_or_na.columns)
+        expected_columns = (
+            set(reference.expected_rows[0].keys()) if reference.expected_rows else set(rows_or_na.columns)
+        )
         return boolean_result(self.spec, sample.sample_id, set(rows_or_na.columns) == expected_columns)
 
 

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from typing import Any
+
+import sqlglot
+from sqlglot import exp
 
 from eval.evaluator.hybrid.catalog import MetricSpec
 from eval.evaluator.hybrid.contracts import MetricResult
@@ -112,13 +116,29 @@ class SqlExpressionEquivalence(_PositiveOnlyMetric):
         return boolean_result(self.spec, sample.sample_id, expected_sql == actual_sql)
 
 
+def _normalize_filter_conditions(filters: Any) -> set[str]:
+    result = set()
+    for f in filters:
+        cond = getattr(f, "condition", str(f))
+        try:
+            parsed = sqlglot.parse_one(cond)
+            if isinstance(parsed, exp.And):
+                result.add(normalize_expression(parsed.left.sql()))
+                result.add(normalize_expression(parsed.right.sql()))
+            else:
+                result.add(normalize_expression(cond))
+        except Exception:
+            result.add(normalize_expression(cond))
+    return result
+
+
 class FilterAccuracy(_PositiveOnlyMetric):
     """Compare normalized default-filter condition sets."""
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
         reference, actual = _positive_payload(sample)
-        expected = {normalize_expression(f.condition) for f in reference.expected_metric.default_filters}
-        received = {normalize_expression(f.condition) for f in actual.default_filters}
+        expected = _normalize_filter_conditions(reference.expected_metric.default_filters)
+        received = _normalize_filter_conditions(actual.default_filters)
         return boolean_result(self.spec, sample.sample_id, expected == received)
 
 

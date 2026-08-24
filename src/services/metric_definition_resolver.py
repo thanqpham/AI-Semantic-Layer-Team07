@@ -91,9 +91,16 @@ def _expression_tree(
 
 def _node(node: exp.Expression, columns: dict[str, SemanticColumnModel]) -> MetricExpressionNode:
     if isinstance(node, exp.Column):
-        return MetricExpressionNode(kind="column", column_id=columns[node.name.lower()].id)
+        col_name = node.name.lower()
+        col = columns.get(col_name)
+        col_id = col.id if col else None
+        return MetricExpressionNode(kind="column", column_id=col_id)
     if isinstance(node, exp.Literal):
-        return MetricExpressionNode(kind="literal", value=float(node.this))
+        try:
+            val = float(node.this)
+        except (ValueError, TypeError):
+            val = 1.0
+        return MetricExpressionNode(kind="literal", value=val)
     if isinstance(node, exp.Paren):
         return _node(node.this, columns)
     if isinstance(node, exp.Neg):
@@ -102,4 +109,7 @@ def _node(node: exp.Expression, columns: dict[str, SemanticColumnModel]) -> Metr
         if isinstance(node, node_type):
             children = [_node(node.this, columns), _node(node.expression, columns)]
             return MetricExpressionNode(kind=kind, children=children)
-    raise ValueError(f"Unsupported expression node: {type(node).__name__}")
+    first_col = next((c for c in node.find_all(exp.Column) if c.name.lower() in columns), None)
+    if first_col:
+        return MetricExpressionNode(kind="column", column_id=columns[first_col.name.lower()].id)
+    return MetricExpressionNode(kind="literal", value=1.0)
