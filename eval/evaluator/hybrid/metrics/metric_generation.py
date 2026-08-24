@@ -19,7 +19,7 @@ from eval.evaluator.hybrid.samples import EvaluationSample, MetricReference
 from eval.evaluator.metric_eval import _identity
 from eval.evaluator.schemas import CandidateMetricDefinition, CandidateMetricOutput
 from eval.evaluator.scoring import match_sets
-from eval.evaluator.sql_normalization import normalize_expression
+from eval.evaluator.sql_normalization import normalize_expression, unwrap_declared_aggregation
 from eval.evaluator.text_similarity import compare_business_name
 
 
@@ -81,9 +81,11 @@ class _PositiveOnlyMetric(DeterministicMetric):
 
 
 class FormulaEquivalence(_PositiveOnlyMetric):
-    """Compare business formulas with Vietnamese-aware similarity."""
+    """Compare business formulas, unless the field is a declared contract gap."""
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
+        if "business_formula" in context.contract_gap_fields.get("metric", frozenset()):
+            return not_applicable_result(self.spec, sample.sample_id, "contract gap (D6)")
         reference, actual = _positive_payload(sample)
         expected = reference.expected_metric
         result = await compare_business_name(
@@ -93,12 +95,20 @@ class FormulaEquivalence(_PositiveOnlyMetric):
 
 
 class SqlExpressionEquivalence(_PositiveOnlyMetric):
-    """Compare normalized SQL expressions."""
+    """Compare normalized SQL expressions, symmetric on aggregation wrappers.
+
+    Each side strips one top-level aggregation wrapper only when it matches
+    that side's own declared ``aggregation`` (golden and candidate both carry
+    it), so a wrapped golden ``SUM(x)`` and a bare candidate ``x`` compare
+    equal while contradicting wrappers still mismatch.
+    """
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
         reference, actual = _positive_payload(sample)
-        expected_sql = normalize_expression(reference.expected_metric.sql_expression)
-        actual_sql = normalize_expression(actual.sql_expression)
+        expected_sql = unwrap_declared_aggregation(
+            reference.expected_metric.sql_expression, reference.expected_metric.aggregation
+        )
+        actual_sql = unwrap_declared_aggregation(actual.sql_expression, actual.aggregation)
         return boolean_result(self.spec, sample.sample_id, expected_sql == actual_sql)
 
 

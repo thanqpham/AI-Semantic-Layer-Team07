@@ -44,6 +44,40 @@ async def test_identity_mutation_decreases_score() -> None:
 
 
 @pytest.mark.asyncio
+async def test_identity_equal_wrapped_vs_bare_with_matching_aggregation() -> None:
+    """_identity equates SUM(x) with declared sum against a bare x candidate."""
+    from eval.evaluator.metric_eval import _identity
+
+    dataset = await load_domain_dataset(GOLDEN_ROOT, "ecommerce")
+    case = next(
+        item
+        for item in dataset.metric_cases
+        if item.expected_metric and item.expected_metric.field is None and item.expected_metric.aggregation == "sum"
+    )
+    expected = case.expected_metric
+    assert expected is not None
+    wrapped = expected.model_copy(update={"sql_expression": f"SUM({expected.sql_expression})"})
+    assert _identity(wrapped) == _identity(expected)
+
+
+@pytest.mark.asyncio
+async def test_identity_unequal_when_wrapper_contradicts_aggregation() -> None:
+    """A wrapper that contradicts the declared aggregation must stay a mismatch."""
+    from eval.evaluator.metric_eval import _identity
+
+    dataset = await load_domain_dataset(GOLDEN_ROOT, "ecommerce")
+    case = next(
+        item
+        for item in dataset.metric_cases
+        if item.expected_metric and item.expected_metric.field is None and item.expected_metric.aggregation == "sum"
+    )
+    expected = case.expected_metric
+    assert expected is not None
+    mismatched = expected.model_copy(update={"sql_expression": f"COUNT({expected.sql_expression})"})
+    assert _identity(mismatched) != _identity(expected)
+
+
+@pytest.mark.asyncio
 async def test_expected_error_matches_candidate_error() -> None:
     dataset = await load_domain_dataset(GOLDEN_ROOT, "ecommerce")
     case = next(item for item in dataset.metric_cases if item.expected_error)

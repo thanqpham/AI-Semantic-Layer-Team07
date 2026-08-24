@@ -193,3 +193,113 @@ smoke/benchmark/release evidence rules: judge metrics that are entirely
 deterministic metrics are exempt only in `smoke` runs — `benchmark` and
 `release` require deterministic evidence for the score to be valid. The legacy
 engine remains the default (`--engine legacy`).
+
+### 4) Agent source (agent_live)
+
+`--source agent` replaces the golden-derived smoke candidates with candidates
+collected **live from the real `src/` pipeline** (bootstrap → introspection →
+enrichment → metric generation → compilation), then feeds them to the hybrid
+engine. It requires `--engine hybrid` (any other engine is a `parser.error`,
+exit 2). The legacy engine and the smoke source are unchanged — `--source smoke`
+remains the default:
+
+```bash
+.venv/Scripts/python.exe -m eval.run_eval --engine hybrid --source agent --domain ecommerce
+.venv/Scripts/python.exe -m eval.run_eval --engine hybrid --source agent --query-mode oracle --domain ecommerce
+```
+
+**Requires `LLM_*` in `.env`** — unlike the smoke source, this lane calls the
+real `get_llm()` boundary, so it cannot run without credentials. The guardrail
+suite stays offline: it reuses the product's read-only validator via
+`ProductionGuardrailAdapter` and never executes SQL. Collected guardrail
+decisions are persisted in `candidates.json` and passed to the engine as the
+request's `guardrail` mapping — the `guardrail_adapter` kwarg alone only
+serves the compiler execution lane, so without the mapping the guardrail
+suite would score 0.0 with "no candidate response" warnings.
+
+Each run writes to its own throwaway directory (default
+`eval/runs/agent-<domain>-<UTC timestamp>`, override with `--run-dir`; the
+directory must not already contain files — `prepare_run` refuses a non-empty
+run dir instead of mixing artifacts from different runs):
+
+```
+<run_dir>/
+├── target.sqlite      # throwaway target DB built from the golden sources
+├── metadata.sqlite    # isolated metadata store (own eval user, no secrets)
+├── candidates.json    # every collected candidate + run manifest
+└── reports/           # report.json, report.csv, report.md
+```
+
+Notes on reading the result:
+
+- **SQL normalization for the execution lane:** the connector strips the
+  product's `__default__` namespace qualifier (the compiler's placeholder for
+  schema-less targets like SQLite; the engine's fixtures are schema-less) and
+  inlines the compiler's named bind parameters (`:runtime_N`, `:metric_N`) as
+  literals, taking the values from `CompiledQuery.parameters` — the compiler's
+  own bind map. The engine's SQLite lane executes the raw SQL string with no
+  parameter binding, so without this serialization normalization every
+  compiled query would fail with EXECUTION_FAILED regardless of correctness.
+  Query semantics are unchanged.
+- **`run_type=smoke` until the golden dataset is approved** — keep the default
+  `--run-type smoke` until the golden dataset passes review; `benchmark` and
+  `release` enforce stricter evidence rules.
+- **Oracle mode is debug-only.** `--query-mode oracle` feeds ground-truth
+  selections to the compiler to isolate compiler errors from resolver quality;
+  the default `--query-mode resolver` is the honest end-to-end path.
+- **Exit code:** `0` for PASS/WARN, `1` otherwise.
+- **Contract gaps (disclosed permanent misses, spec §9.1 / decision D6):** the
+  eval contract has no empty representation for the metric fields
+  `business_formula` and `default_time_grain` (the `TimeGrain` Literal admits
+  no empty value), and the deterministic pipeline cannot produce a meaningful
+  value for either — `business_formula` is always submitted empty and
+  `default_time_grain` is always the placeholder `"day"`. The run manifest in
+  `candidates.json` records both fields under `contract_gaps`, and the engine
+  now scores these fields `not_applicable` (excluded from coverage and suite
+  weights) when the run declares them via `contract_gap_fields` — they remain
+  **contract artifacts, not agent quality**, and no longer drag the score.
+- **ORDER BY is presentation, not semantics (AST lane):** golden reference SQL
+  always carries `ORDER BY <dim>` (fixture determinism) while the product
+  compiler never emits one, and the execution lane already compares row
+  multisets (`ordered=False`). `structurally_equal(..., ignore_limit=True)`
+  therefore strips top-level ORDER BY and LIMIT from both sides — a query
+  differing only in ordering/limit now compares by semantics alone. The
+  default comparison path (guardrail/`effective_limit`) is unchanged.
+- **Resolver entity scoping, abstain, unsafe-intent screen:** the resolver
+  catalog lists each dimension with its table's business name
+  (`entity.column — business name (bảng: ...)`), the system prompt requires
+  dimensions to belong to the selected metric's entity, a cross-entity pick is
+  retried up to twice with corrective feedback, and exhaustion fails closed with
+  `RESOLVER_SCOPE_VIOLATION`. The LLM may abstain
+  (`{"metrics": [], "abstain": true}` → `UNKNOWN_METRIC`), and questions
+  starting with a destructive verb (xóa/hủy/drop/delete/truncate/alter/
+  insert/update, diacritics-insensitive) are rejected `UNSAFE_INTENT` before
+  any LLM call. Evidence: all 32 golden query cases use same-entity
+  dimensions; only case 032 matches the destructive-verb screen.
+- **Judge prompts are contract-gap aware:** fields declared in
+  `contract_gap_fields` (`business_formula` today) are not rendered into
+  judge prompts — the judge scores the remaining real signals
+  (`description`, `sql_expression`). This mirrors the deterministic lane's
+  `not_applicable` policy for the same gap; when the pipeline later produces
+  the field, it is removed from `CONTRACT_GAPS` and judged again with no code
+  change (prompt versions bumped to `business-definition-v2` /
+  `formula-semantics-v2`).
+- **Enrichment naming artifact (RESOLVED):** entity/dimension/relationship
+  identifiers are now resolved to canonical names via `CanonicalResolver`
+  (exact canonical-name mapping from the registry plus provenance), so
+  agent-live enrichment scoring compares canonical-to-canonical instead of
+  penalizing the PHYSICAL-vs-CANONICAL naming mismatch. Every resolution is
+  auditable via the `identity_resolutions` log in `candidates.json`.
+
+### 5) Re-scoring an existing run (no LLM)
+
+`--rescore <run_dir>` reloads a run's `candidates.json` and re-runs the hybrid
+engine with the current scoring layer — no collection, no LLM. Reports go to
+`<run_dir>/reports-rescore/`. Use it to isolate scoring-layer changes from
+collection-layer changes, and for revertible what-if experiments on golden
+expectations (edit a golden copy, rescore, revert).
+
+Note that rescoring uses the **current CLI flags**, not the original run's —
+a run collected under `--run-type release` and rescored without the flag is
+evaluated with the default `smoke` gate rules and can flip gate outcomes, so
+pass `--run-type` explicitly to match the original collection.

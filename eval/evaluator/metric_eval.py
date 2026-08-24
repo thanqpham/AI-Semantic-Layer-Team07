@@ -22,7 +22,7 @@ from eval.evaluator.schemas import (
     SuiteEvaluationResult,
 )
 from eval.evaluator.scoring import micro_average, precision_recall_f1
-from eval.evaluator.sql_normalization import normalize_expression
+from eval.evaluator.sql_normalization import normalize_expression, unwrap_declared_aggregation
 from eval.evaluator.text_similarity import TextSimilarityProvider, compare_business_name, normalize_text
 
 _SET_FIELDS = {"synonyms", "dependencies", "allowed_dimensions"}
@@ -219,7 +219,9 @@ def _identity_score(expected: ExpectedMetricDefinition, actual: CandidateMetricD
 
 
 def _identity(metric: ExpectedMetricDefinition | CandidateMetricDefinition) -> tuple[Any, ...]:
-    expression = normalize_expression(metric.sql_expression) if metric.field is None else None
+    expression = (
+        unwrap_declared_aggregation(metric.sql_expression, metric.aggregation) if metric.field is None else None
+    )
     dependencies = tuple(sorted(set(metric.dependencies))) if metric.field is None else ()
     filters = tuple(sorted({_filter(item.condition) for item in metric.default_filters}))
     return metric.target_entity, metric.aggregation, metric.field, expression, dependencies, filters

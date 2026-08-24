@@ -61,3 +61,61 @@ def test_data_modifying_cte_reports_nested_dml() -> None:
 def test_multiple_selects_report_multi_statement() -> None:
     with pytest.raises(SqlValidationError, match="MULTI_STATEMENT"):
         normalize_sql("SELECT 1; SELECT 2")
+
+
+def test_structurally_equal_ignore_limit():
+    from eval.evaluator.sql_normalization import structurally_equal
+
+    assert structurally_equal("SELECT 1 AS x", "SELECT 1 AS x LIMIT 100", "sqlite", ignore_limit=True)
+    assert not structurally_equal("SELECT 1 AS x", "SELECT 1 AS x LIMIT 100", "sqlite")
+    assert structurally_equal("SELECT 1 AS x LIMIT 5", "SELECT 1 AS x LIMIT 100", "sqlite", ignore_limit=True)
+    assert not structurally_equal("SELECT 1 AS x", "SELECT 2 AS x", "sqlite", ignore_limit=True)
+
+
+def test_normalize_expression_boolean_literals_are_integers():
+    from eval.evaluator.sql_normalization import normalize_expression
+
+    assert normalize_expression("is_test_order = FALSE") == normalize_expression("is_test_order = 0")
+    assert normalize_expression("is_bot_traffic = TRUE") == normalize_expression("is_bot_traffic = 1")
+
+
+def test_normalize_sql_boolean_literals_are_integers():
+    from eval.evaluator.sql_normalization import normalize_sql
+
+    left = normalize_sql("SELECT 1 FROM t WHERE is_test_order = FALSE", "sqlite").canonical
+    right = normalize_sql("SELECT 1 FROM t WHERE is_test_order = 0", "sqlite").canonical
+    assert left == right
+
+
+def test_structurally_equal_ignore_limit_combined_with_aliases_and_booleans():
+    from eval.evaluator.sql_normalization import structurally_equal
+
+    left = "SELECT SUM(a - b) AS net_revenue FROM fact_orders WHERE is_test_order = FALSE"
+    right = "SELECT SUM(a - b) AS metric_1 FROM fact_orders WHERE is_test_order = 0 LIMIT 100"
+    assert structurally_equal(left, right, "sqlite", ignore_limit=True)
+
+
+def test_structurally_equal_ignore_limit_also_ignores_order_by():
+    from eval.evaluator.sql_normalization import structurally_equal
+
+    # Golden shape (GROUP BY + ORDER BY + LIMIT) vs product shape (no ORDER BY/LIMIT).
+    left = (
+        "SELECT channel, COUNT(order_id) AS order_count FROM fact_orders "
+        "WHERE is_test_order = FALSE GROUP BY channel ORDER BY channel LIMIT 100"
+    )
+    right = "SELECT channel, COUNT(order_id) AS order_count FROM fact_orders WHERE is_test_order = 0 GROUP BY channel"
+    assert structurally_equal(left, right, "sqlite", ignore_limit=True)
+
+
+def test_structurally_equal_order_by_difference_matters_by_default():
+    from eval.evaluator.sql_normalization import structurally_equal
+
+    left = "SELECT id FROM orders ORDER BY id"
+    right = "SELECT id FROM orders ORDER BY name"
+    assert not structurally_equal(left, right, "sqlite")
+
+
+def test_structurally_equal_limit_value_difference_matters_by_default():
+    from eval.evaluator.sql_normalization import structurally_equal
+
+    assert not structurally_equal("SELECT 1 AS x LIMIT 5", "SELECT 1 AS x LIMIT 100", "sqlite")

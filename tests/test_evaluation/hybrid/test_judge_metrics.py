@@ -13,6 +13,8 @@ from eval.evaluator.schemas import (
     CandidateDimension,
     CandidateEnrichmentOutput,
     CandidateEntity,
+    CandidateMetricDefinition,
+    CandidateMetricOutput,
     EvaluationConfig,
 )
 
@@ -92,3 +94,60 @@ async def test_prompt_blinds_judge_to_scores_and_models(mini_dataset) -> None:
     prompt = llm.prompts[0]
     assert "Đơn hàng" in prompt  # candidate + reference content present
     assert "gpt" not in prompt.lower() and "score" not in prompt.lower()
+
+
+def _metric_sample(mini_dataset):
+    metric = CandidateMetricDefinition(
+        name="total_revenue",
+        business_name="Tổng doanh thu",
+        description="Tổng doanh thu",
+        metric_type="simple",
+        target_entity="orders",
+        source_table="orders",
+        aggregation="sum",
+        field="amount",
+        business_formula="",
+        sql_expression="SUM(amount)",
+        allowed_dimensions=("order_month",),
+        default_time_grain="day",
+    )
+    samples = build_samples(mini_dataset, {}, {}, {"metric_001": CandidateMetricOutput(metric=metric)}, {}, {})
+    return next(s for s in samples if s.task == "metric_generation")
+
+
+def _formula_metrics():
+    return build_judge_metrics(metrics_for_task("metric_generation"))
+
+
+async def test_judge_prompt_hides_declared_gap_fields(mini_dataset) -> None:
+    llm = ScriptedLLM(
+        {"business_meaning": 1.0, "reference_alignment": 1.0, "unsupported_assumptions": 1.0, "clarity": 1.0}
+    )
+    context = EvaluationContext(
+        EvaluationConfig(),
+        judge_runner=_runner(llm),
+        contract_gap_fields={"metric": frozenset({"business_formula"})},
+    )
+    await _formula_metrics()["formula_semantic_correctness"].score(_metric_sample(mini_dataset), context)
+    prompt = llm.prompts[0]
+    assert "business_formula" not in prompt  # gap field not rendered on either side
+    assert "SUM(order_amount)" not in prompt  # golden formula value hidden with the field
+    assert "SUM(amount)" in prompt  # real signal (sql_expression) still judged
+
+
+async def test_judge_prompt_shows_gap_fields_when_not_declared(mini_dataset) -> None:
+    llm = ScriptedLLM(
+        {"business_meaning": 1.0, "reference_alignment": 1.0, "unsupported_assumptions": 1.0, "clarity": 1.0}
+    )
+    context = EvaluationContext(EvaluationConfig(), judge_runner=_runner(llm))
+    await _formula_metrics()["formula_semantic_correctness"].score(_metric_sample(mini_dataset), context)
+    prompt = llm.prompts[0]
+    assert "business_formula" in prompt
+
+
+async def test_judge_prompt_version_bumped_for_gap_awareness() -> None:
+    from eval.evaluator.hybrid.judge.prompts import PROMPT_VERSIONS
+
+    assert PROMPT_VERSIONS["business_definition_correctness"] == "business-definition-v2"
+    assert PROMPT_VERSIONS["formula_semantic_correctness"] == "formula-semantics-v2"
+    assert PROMPT_VERSIONS["business_semantic_correctness"] == "business-semantics-v1"

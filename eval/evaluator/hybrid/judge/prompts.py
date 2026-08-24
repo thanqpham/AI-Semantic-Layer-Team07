@@ -13,8 +13,8 @@ RUBRIC: tuple[tuple[str, float], ...] = (
 
 PROMPT_VERSIONS = {
     "business_semantic_correctness": "business-semantics-v1",
-    "business_definition_correctness": "business-definition-v1",
-    "formula_semantic_correctness": "formula-semantics-v1",
+    "business_definition_correctness": "business-definition-v2",
+    "formula_semantic_correctness": "formula-semantics-v2",
 }
 
 

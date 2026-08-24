@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from eval.dataset.loader import DomainDataset
 from eval.run_eval import parse_args, run_hybrid_engine
@@ -65,3 +66,38 @@ async def test_hybrid_without_judge_does_not_build_judge(mini_dataset, tmp_path,
     args = parse_args(["--engine", "hybrid", "--report-dir", str(tmp_path / "reports")])
     exit_code = await run_hybrid_engine(args)
     assert exit_code == 0
+
+
+async def test_rescore_rewrites_reports_from_collected_candidates(tmp_path) -> None:
+    """--rescore re-runs the engine over candidates.json without any LLM."""
+    from eval.dataset.loader import load_domain_dataset
+    from eval.evaluator import EvaluationConfig
+    from eval.evaluator.hybrid import smoke_candidates
+    from eval.run_eval import run_rescore_engine
+
+    dataset = await load_domain_dataset(Path("eval/golden_dataset"), "ecommerce")
+    config = EvaluationConfig()
+    candidates = await smoke_candidates(dataset, config)
+    run_dir = tmp_path / "agent-ecommerce-fake"
+    run_dir.mkdir()
+    payload = {
+        "manifest": {"candidate_source": "agent_live"},
+        "discovery": {},
+        "enrichment": {k: v.model_dump(mode="json") for k, v in candidates.enrichment.items()},
+        "metrics": {k: v.model_dump(mode="json") for k, v in candidates.metrics.items()},
+        "compiler": {k: v.model_dump(mode="json") for k, v in candidates.compiler.items()},
+        "guardrail": {},
+    }
+    (run_dir / "candidates.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    args = SimpleNamespace(
+        golden_root=Path("eval/golden_dataset"),
+        domain="ecommerce",
+        run_type="smoke",
+        rescore=run_dir,
+    )
+    exit_code = await run_rescore_engine(args)
+
+    assert exit_code in (0, 1)
+    report = json.loads((run_dir / "reports-rescore" / "report.json").read_text(encoding="utf-8"))
+    assert report["run_id"] == "rescore-agent-ecommerce-fake"

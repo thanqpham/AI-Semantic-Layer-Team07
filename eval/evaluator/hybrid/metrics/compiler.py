@@ -55,7 +55,12 @@ def _negative(reference: QueryReference, response: CandidateCompilerOutput) -> b
 
 
 class RequestValidationAccuracy(DeterministicMetric):
-    """Score intent/domain/primary-entity agreement, or outcome on negative cases."""
+    """Score primary-entity agreement, or outcome on negative cases.
+
+    ``intent``/``domain`` are excluded: the deterministic pipeline has no
+    classifier producing them (the adapter emits them empty by contract),
+    so comparing them would measure the connector, not the agent.
+    """
 
     async def _score(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
         reference, response = _payload(sample)
@@ -64,12 +69,8 @@ class RequestValidationAccuracy(DeterministicMetric):
             return boolean_result(self.spec, sample.sample_id, matched, "outcome comparison")
         assert reference.expected is not None and response.canonical_query is not None
         expected_query, actual_query = reference.expected.canonical_query, response.canonical_query
-        checks = (
-            expected_query.intent == actual_query.intent,
-            expected_query.domain == actual_query.domain,
-            expected_query.primary_entity == actual_query.primary_entity,
-        )
-        return score_result(self.spec, sample.sample_id, sum(checks) / len(checks))
+        matched = expected_query.primary_entity == actual_query.primary_entity
+        return score_result(self.spec, sample.sample_id, 1.0 if matched else 0.0)
 
 
 class SelectionPreservationAccuracy(DeterministicMetric):
@@ -110,7 +111,7 @@ class SqlAstEquivalence(DeterministicMetric):
         assert reference.expected is not None
         expected_sql = reference.expected.sql_by_dialect[context.config.execution_dialect]
         try:
-            matched = structurally_equal(expected_sql, response.sql, "sqlite")
+            matched = structurally_equal(expected_sql, response.sql, "sqlite", ignore_limit=True)
         except SqlValidationError as exc:
             return boolean_result(self.spec, sample.sample_id, False, str(exc))
         return boolean_result(self.spec, sample.sample_id, matched)

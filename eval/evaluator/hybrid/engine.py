@@ -37,6 +37,7 @@ class EvaluationContext:
     dataset: DomainDataset | None = None
     judge_runner: JudgeRunner | None = None
     execution_cache: dict[str, ExecutionResult | None] = field(default_factory=dict)
+    contract_gap_fields: Mapping[str, frozenset[str]] = field(default_factory=dict)
 
 
 async def score_sample(

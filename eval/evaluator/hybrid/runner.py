@@ -66,6 +66,7 @@ class HybridRunRequest:
     run_type: RunType = "smoke"
     candidate_source: CandidateSource = "golden_derived"
     profile: EvaluationProfile = "pipeline"
+    contract_gap_fields: Mapping[str, frozenset[str]] = field(default_factory=dict)
 
 
 def default_implementations() -> dict[str, EvaluationMetric]:
@@ -151,6 +152,7 @@ def _context(request: HybridRunRequest) -> EvaluationContext:
         guardrail_adapter=request.guardrail_adapter,
         dataset=request.dataset,
         judge_runner=request.judge_runner,
+        contract_gap_fields=request.contract_gap_fields,
     )
 
 
