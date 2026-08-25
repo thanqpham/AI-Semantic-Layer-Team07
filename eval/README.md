@@ -98,7 +98,7 @@ result.guardrails  # SuiteEvaluationResult
 
 ---
 
-## Chạy đánh giá (How to run)
+## Cách chạy đánh giá
 
 ### Yêu cầu trước
 
@@ -107,7 +107,7 @@ result.guardrails  # SuiteEvaluationResult
 - `pytest.ini` đặt `pythonpath = .`, nên `pytest` tự thấy package `eval`/`src`. Khi chạy **script riêng** (không qua pytest), hãy chạy từ **thư mục gốc repo** để `import eval` hoạt động.
 - **Golden Dataset** phải nằm ở `eval/golden_dataset/<domain>/` — thuộc PR golden-data xếp chồng. Nếu chỉ có PR framework này thì `load_domain_dataset` sẽ báo thiếu dataset (điều này bình thường).
 
-### 1) Kiểm tra (verify) framework
+### 1) Kiểm tra framework
 
 ```bash
 pytest tests/test_evaluation/ -v   # 35 test case pure-logic, không cần Golden Dataset
@@ -149,7 +149,7 @@ from eval.evaluator.discovery_eval import CandidateDiscoveryOutput, evaluate_dis
 
 ---
 
-## Test
+## Kiểm thử
 
 Sáu module test pure-logic trong `tests/test_evaluation/` (35 test case), **không phụ thuộc
 Golden Dataset**, nên framework verify độc lập:
@@ -163,143 +163,311 @@ Golden Dataset**, nên framework verify độc lập:
 | `test_sql_normalization` | So sánh cấu trúc, chuẩn hóa alias, ép read-only. |
 | `test_text_similarity` | Logic NFC/fuzzy/semantic tiếng Việt và ngưỡng chấp nhận. |
 
-Cách chạy xem mục [Chạy đánh giá](#chạy-đánh-giá-how-to-run) — Bước 1.
+Cách chạy xem mục [Cách chạy đánh giá](#cách-chạy-đánh-giá) — Bước 1.
 
 ---
 
-## Hybrid evaluator (flag-gated)
+## Hybrid evaluator (bật bằng flag)
 
-Run the Ragas-style hybrid engine (deterministic metrics + optional AI judge)
-against the golden dataset, with the legacy evaluator still the default:
+Chạy hybrid engine kiểu Ragas (metric deterministic + AI judge tùy chọn) trên
+golden dataset, trong khi evaluator legacy vẫn là mặc định:
 
 ```bash
-python -m eval.run_eval --domain ecommerce --engine hybrid            # smoke, no judge
-python -m eval.run_eval --domain ecommerce --engine hybrid --judge    # + AI judge lane
+python -m eval.run_eval --domain ecommerce --engine hybrid            # smoke, không chạy judge
+python -m eval.run_eval --domain ecommerce --engine hybrid --judge    # kèm lane AI judge
 ```
 
-`--judge` uses the dedicated `JUDGE_*` configuration. Judge provider, model,
-and API key must each differ from the Agent LLM; missing or matching values
-stop the run before any API call. There is no fallback to Agent credentials.
-Judge temperature is always `0.0`.
+`--judge` dùng cấu hình `JUDGE_*` riêng. Provider, model và API key của judge
+phải khác với LLM của Agent ở từng mục; thiếu giá trị hoặc trùng giá trị sẽ
+dừng run trước mọi lời gọi API. Không có cơ chế fallback sang credential của
+Agent. Temperature của judge luôn là `0.0`.
 
-Reports go to `--report-dir` (default `eval/reports/hybrid`) as `report.json`
-(full contract), `report.csv` (one row per sample), and `report.md` (summary).
-Status follows the spec gates: PASS ≥ 90, WARN 80–90, FAIL on a critical-gate
-failure or < 80, INCOMPLETE when coverage < 95% or evidence gates block the
-score. Without `--judge`, judge metrics are reported as `not_applicable` and
-excluded from coverage and suite weights. `--run-type` selects
-smoke/benchmark/release evidence rules: judge metrics that are entirely
-`not_applicable` are always exempt from the required-metric check, while
-deterministic metrics are exempt only in `smoke` runs — `benchmark` and
-`release` require deterministic evidence for the score to be valid. The legacy
-engine remains the default (`--engine legacy`).
+Report được ghi vào `--report-dir` (mặc định `eval/reports/hybrid`) gồm
+`report.json` (contract đầy đủ), `report.csv` (mỗi sample một dòng) và
+`report.md` (tóm tắt). Trạng thái tuân theo gate của spec: PASS ≥ 90, WARN
+80–90, FAIL khi rơi critical-gate hoặc điểm < 80, INCOMPLETE khi coverage
+< 95% hoặc evidence gate chặn điểm. Khi không dùng `--judge`, các metric judge
+được báo `not_applicable` và loại khỏi coverage cũng như trọng số suite.
+`--run-type` chọn luật evidence cho smoke/benchmark/release: metric judge hoàn
+toàn `not_applicable` luôn được miễn khỏi kiểm required-metric, còn metric
+deterministic chỉ được miễn trong run `smoke` — `benchmark` và `release` đòi
+bằng chứng deterministic để điểm hợp lệ. Engine legacy vẫn là mặc định
+(`--engine legacy`).
 
-### 4) Agent source (agent_live)
+### 4) Nguồn agent (agent_live)
 
-`--source agent` replaces the golden-derived smoke candidates with candidates
-collected **live from the real `src/` pipeline** (bootstrap → introspection →
-enrichment → metric generation → compilation), then feeds them to the hybrid
-engine. It requires `--engine hybrid` (any other engine is a `parser.error`,
-exit 2). The legacy engine and the smoke source are unchanged — `--source smoke`
-remains the default:
+`--source agent` thay các smoke candidate suy ra từ golden bằng candidate thu
+thập **trực tiếp từ pipeline `src/` thật** (bootstrap → introspection →
+enrichment → sinh metric → biên dịch), rồi đưa vào hybrid engine. Cần kèm
+`--engine hybrid` (engine khác sẽ bị `parser.error`, exit 2). Engine legacy và
+nguồn smoke giữ nguyên — `--source smoke` vẫn là mặc định:
 
 ```bash
 .venv/Scripts/python.exe -m eval.run_eval --engine hybrid --source agent --domain ecommerce
 .venv/Scripts/python.exe -m eval.run_eval --engine hybrid --source agent --query-mode oracle --domain ecommerce
 ```
 
-**Requires `LLM_*` in `.env`** — unlike the smoke source, this lane calls the
-real `get_llm()` boundary, so it cannot run without credentials. The guardrail
-suite stays offline: it reuses the product's read-only validator via
-`ProductionGuardrailAdapter` and never executes SQL. Collected guardrail
-decisions are persisted in `candidates.json` and passed to the engine as the
-request's `guardrail` mapping — the `guardrail_adapter` kwarg alone only
-serves the compiler execution lane, so without the mapping the guardrail
-suite would score 0.0 with "no candidate response" warnings.
+**Cần `LLM_*` trong `.env`** — khác với nguồn smoke, lane này gọi boundary
+`get_llm()` thật nên không thể chạy khi thiếu credential. Suite guardrail vẫn
+offline: nó tái dụng read-only validator của sản phẩm qua
+`ProductionGuardrailAdapter` và không bao giờ thực thi SQL. Các quyết định
+guardrail đã thu được lưu trong `candidates.json` và truyền vào engine qua
+mapping `guardrail` của request — kwarg `guardrail_adapter` chỉ phục vụ lane
+thực thi của compiler, nên thiếu mapping thì suite guardrail sẽ bị chấm 0.0
+kèm cảnh báo "no candidate response".
 
-Each run writes to its own throwaway directory (default
-`eval/runs/agent-<domain>-<UTC timestamp>`, override with `--run-dir`; the
-directory must not already contain files — `prepare_run` refuses a non-empty
-run dir instead of mixing artifacts from different runs):
+Mỗi run ghi vào một thư mục dùng-một-lần riêng (mặc định
+`eval/runs/agent-<domain>-<UTC timestamp>`, ghi đè bằng `--run-dir`; thư mục
+không được chứa sẵn file — `prepare_run` từ chối run dir không rỗng thay vì
+trộn artifact của các run khác):
 
 ```
 <run_dir>/
-├── target.sqlite      # throwaway target DB built from the golden sources
-├── metadata.sqlite    # isolated metadata store (own eval user, no secrets)
-├── candidates.json    # every collected candidate + run manifest
+├── target.sqlite      # target DB dùng một lần, dựng từ golden sources
+├── metadata.sqlite    # metadata store cô lập (eval user riêng, không secret)
+├── candidates.json    # mọi candidate đã thu + run manifest
 └── reports/           # report.json, report.csv, report.md
 ```
 
-Notes on reading the result:
+Lưu ý khi đọc kết quả:
 
-- **SQL normalization for the execution lane:** the connector strips the
-  product's `__default__` namespace qualifier (the compiler's placeholder for
-  schema-less targets like SQLite; the engine's fixtures are schema-less) and
-  inlines the compiler's named bind parameters (`:runtime_N`, `:metric_N`) as
-  literals, taking the values from `CompiledQuery.parameters` — the compiler's
-  own bind map. The engine's SQLite lane executes the raw SQL string with no
-  parameter binding, so without this serialization normalization every
-  compiled query would fail with EXECUTION_FAILED regardless of correctness.
-  Query semantics are unchanged.
-- **`run_type=smoke` until the golden dataset is approved** — keep the default
-  `--run-type smoke` until the golden dataset passes review; `benchmark` and
-  `release` enforce stricter evidence rules.
-- **Oracle mode is debug-only.** `--query-mode oracle` feeds ground-truth
-  selections to the compiler to isolate compiler errors from resolver quality;
-  the default `--query-mode resolver` is the honest end-to-end path.
-- **Exit code:** `0` for PASS/WARN, `1` otherwise.
-- **Contract gaps (disclosed permanent misses, spec §9.1 / decision D6):** the
-  eval contract has no empty representation for the metric fields
-  `business_formula` and `default_time_grain` (the `TimeGrain` Literal admits
-  no empty value), and the deterministic pipeline cannot produce a meaningful
-  value for either — `business_formula` is always submitted empty and
-  `default_time_grain` is always the placeholder `"day"`. The run manifest in
-  `candidates.json` records both fields under `contract_gaps`, and the engine
-  now scores these fields `not_applicable` (excluded from coverage and suite
-  weights) when the run declares them via `contract_gap_fields` — they remain
-  **contract artifacts, not agent quality**, and no longer drag the score.
-- **ORDER BY is presentation, not semantics (AST lane):** golden reference SQL
-  always carries `ORDER BY <dim>` (fixture determinism) while the product
-  compiler never emits one, and the execution lane already compares row
-  multisets (`ordered=False`). `structurally_equal(..., ignore_limit=True)`
-  therefore strips top-level ORDER BY and LIMIT from both sides — a query
-  differing only in ordering/limit now compares by semantics alone. The
-  default comparison path (guardrail/`effective_limit`) is unchanged.
-- **Resolver entity scoping, abstain, unsafe-intent screen:** the resolver
-  catalog lists each dimension with its table's business name
-  (`entity.column — business name (bảng: ...)`), the system prompt requires
-  dimensions to belong to the selected metric's entity, a cross-entity pick is
-  retried up to twice with corrective feedback, and exhaustion fails closed with
-  `RESOLVER_SCOPE_VIOLATION`. The LLM may abstain
-  (`{"metrics": [], "abstain": true}` → `UNKNOWN_METRIC`), and questions
-  starting with a destructive verb (xóa/hủy/drop/delete/truncate/alter/
-  insert/update, diacritics-insensitive) are rejected `UNSAFE_INTENT` before
-  any LLM call. Evidence: all 32 golden query cases use same-entity
-  dimensions; only case 032 matches the destructive-verb screen.
-- **Judge prompts are contract-gap aware:** fields declared in
-  `contract_gap_fields` (`business_formula` today) are not rendered into
-  judge prompts — the judge scores the remaining real signals
-  (`description`, `sql_expression`). This mirrors the deterministic lane's
-  `not_applicable` policy for the same gap; when the pipeline later produces
-  the field, it is removed from `CONTRACT_GAPS` and judged again with no code
-  change (prompt versions bumped to `business-definition-v2` /
-  `formula-semantics-v2`).
-- **Enrichment naming artifact (RESOLVED):** entity/dimension/relationship
-  identifiers are now resolved to canonical names via `CanonicalResolver`
-  (exact canonical-name mapping from the registry plus provenance), so
-  agent-live enrichment scoring compares canonical-to-canonical instead of
-  penalizing the PHYSICAL-vs-CANONICAL naming mismatch. Every resolution is
-  auditable via the `identity_resolutions` log in `candidates.json`.
+- **Chuẩn hóa SQL cho lane thực thi:** connector bóc qualifier namespace
+  `__default__` của sản phẩm (placeholder của compiler cho target không có
+  schema như SQLite; fixture của engine không có schema) và inline các bind
+  parameter có tên của compiler (`:runtime_N`, `:metric_N`) thành literal, lấy
+  giá trị từ `CompiledQuery.parameters` — chính bind map của compiler. Lane
+  SQLite của engine thực thi chuỗi SQL thô không bind tham số, nên thiếu bước
+  chuẩn hóa serialization này thì mọi compiled query đều fail EXECUTION_FAILED
+  dù đúng đến đâu. Ngữ nghĩa truy vấn không đổi.
+- **`run_type=smoke` cho đến khi golden dataset được duyệt** — giữ mặc định
+  `--run-type smoke` đến khi golden dataset qua review; `benchmark` và
+  `release` áp dụng luật evidence chặt hơn.
+- **Oracle mode chỉ dùng để debug.** `--query-mode oracle` đưa selection
+  ground-truth vào compiler để tách lỗi compiler khỏi chất lượng resolver;
+  `--query-mode resolver` mặc định là đường end-to-end trung thực.
+- **Exit code:** `0` cho PASS/WARN, `1` cho các trường hợp còn lại.
+- **Contract gap (thiếu hụt vĩnh viễn đã công bố, spec §9.1 / decision D6):**
+  contract của eval không có biểu diễn rỗng cho các trường metric
+  `business_formula` và `default_time_grain` (Literal `TimeGrain` không nhận
+  giá trị rỗng), còn pipeline deterministic không thể sinh giá trị có nghĩa cho
+  cả hai — `business_formula` luôn nộp rỗng và `default_time_grain` luôn là
+  placeholder `"day"`. Run manifest trong `candidates.json` ghi cả hai trường
+  dưới `contract_gaps`, và engine chấm các trường này `not_applicable` (loại
+  khỏi coverage và trọng số suite) khi run khai báo chúng qua
+  `contract_gap_fields` — chúng là **artifact của contract, không phải chất
+  lượng agent**, và không còn kéo điểm xuống.
+- **ORDER BY là trình bày, không phải ngữ nghĩa (lane AST):** SQL golden luôn
+  mang `ORDER BY <dim>` (để fixture tất định) trong khi compiler của sản phẩm
+  không bao giờ phát, và lane thực thi đã so multiset hàng (`ordered=False`).
+  Vì vậy `structurally_equal(..., ignore_limit=True)` bóc ORDER BY và LIMIT
+  top-level khỏi cả hai phía — query chỉ khác nhau về thứ tự/limit giờ so
+  thuần ngữ nghĩa. Đường so sánh mặc định
+  (guardrail/`effective_limit`) không đổi.
+- **Phạm vi entity của resolver, abstain, sàng lọc intent phá hoại:** catalog
+  resolver liệt kê mỗi dimension kèm tên nghiệp vụ của bảng chứa nó
+  (`entity.column — business name (bảng: ...)`), system prompt yêu cầu
+  dimension phải thuộc entity của metric đã chọn, chọn sai entity được thử lại
+  tối đa 2 lần kèm phản hồi sửa lỗi, hết lượt thì fail closed với
+  `RESOLVER_SCOPE_VIOLATION`. LLM được phép abstain
+  (`{"metrics": [], "abstain": true}` → `UNKNOWN_METRIC`), và câu hỏi mở đầu
+  bằng động từ phá hoại (xóa/hủy/drop/delete/truncate/alter/insert/update,
+  không phân biệt dấu thanh) bị từ chối `UNSAFE_INTENT` trước mọi lời gọi LLM.
+  Bằng chứng: cả 32 query case golden đều dùng dimension cùng entity; chỉ case
+  032 khớp sàng lọc động từ phá hoại.
+- **Judge prompt nhận biết contract gap:** các trường khai báo trong
+  `contract_gap_fields` (hiện là `business_formula`) không được render vào
+  prompt judge — judge chỉ chấm các tín hiệu thật còn lại (`description`,
+  `sql_expression`). Điều này phản chiếu chính sách `not_applicable` của lane
+  deterministic cho cùng gap; khi pipeline sau này sinh được trường này, nó
+  được bỏ khỏi `CONTRACT_GAPS` và chấm lại mà không cần sửa code (bump prompt
+  version thành `business-definition-v2` / `formula-semantics-v2`).
+- **Artifact đặt tên enrichment (ĐÃ XỬ LÝ):** định danh
+  entity/dimension/relationship giờ được phân giải về tên canonical qua
+  `CanonicalResolver` (ánh xạ exact canonical-name từ registry kèm
+  provenance), nên chấm agent-live enrichment so canonical-với-canonical thay
+  vì phạt lệch PHYSICAL-vs-CANONICAL. Mỗi lần phân giải đều kiểm toán được qua
+  log `identity_resolutions` trong `candidates.json`.
 
-### 5) Re-scoring an existing run (no LLM)
+### 5) Chấm lại một run có sẵn (không dùng LLM)
 
-`--rescore <run_dir>` reloads a run's `candidates.json` and re-runs the hybrid
-engine with the current scoring layer — no collection, no LLM. Reports go to
-`<run_dir>/reports-rescore/`. Use it to isolate scoring-layer changes from
-collection-layer changes, and for revertible what-if experiments on golden
-expectations (edit a golden copy, rescore, revert).
+`--rescore <run_dir>` nạp lại `candidates.json` của một run và chạy lại hybrid
+engine với lớp chấm điểm hiện tại — không thu thập lại, không LLM. Report được
+ghi vào `<run_dir>/reports-rescore/`. Dùng để tách thay đổi của lớp chấm điểm
+khỏi lớp thu thập, và cho các thử nghiệm what-if hoàn nguyên được trên kỳ vọng
+golden (sửa một bản copy golden, rescore, revert).
 
-Note that rescoring uses the **current CLI flags**, not the original run's —
-a run collected under `--run-type release` and rescored without the flag is
-evaluated with the default `smoke` gate rules and can flip gate outcomes, so
-pass `--run-type` explicitly to match the original collection.
+Lưu ý: rescore dùng **CLI flag hiện tại**, không phải flag của run gốc — một
+run thu dưới `--run-type release` mà rescore không kèm flag sẽ bị đánh giá
+bằng luật gate `smoke` mặc định và có thể lật kết quả gate, nên hãy truyền
+`--run-type` tường minh khớp với lần thu gốc.
+
+---
+
+## Các metric đánh giá
+
+Khung đánh giá đo bằng hai lớp: **suite evaluator** legacy (chấm từng case theo
+component `FieldScore`) và **hybrid engine** (danh bạ metric "đóng băng" kèm
+trọng số — ngưỡng; đây là các metric xuất hiện trong `report.md` của hybrid
+run). Cả hai dùng chung bộ nguyên thủy tính điểm dưới đây.
+
+### Nguyên thủy tính điểm — `evaluator/scoring.py`
+
+Mọi metric so tập hợp đều quy về **Precision / Recall / F1**:
+
+- `precision = TP / (TP + FP)` — trong số những gì agent đưa ra, bao nhiêu là đúng.
+- `recall = TP / (TP + FN)` — trong số kỳ vọng của golden, agent tìm được bao nhiêu.
+- `F1 = 2·P·R / (P + R)`.
+- Chính sách tập rỗng: predicted rỗng → precision = 1.0; expected rỗng →
+  recall = 1.0; hai tập rỗng là khớp hoàn toàn (F1 = 1.0).
+
+Các helper chính:
+
+- `match_sets` — so kiểu **tập hợp**, không tính thứ tự. Giá trị lặp không làm
+  tăng FP nhưng được báo cáo riêng (`duplicates`) và khiến case không được coi
+  là khớp hoàn toàn dù F1 = 1.0.
+- `match_allowed_dimensions` — dimension thừa nhưng hợp lệ chỉ bị tính tối đa
+  **1 FP** (soft penalty; dùng cho `allowed_dimension_f1`).
+- **micro** — cộng dồn TP/FP/FN của mọi case rồi tính PRF1 trên tổng (case lớn
+  nặng hơn); **macro** — trung bình cộng điểm (mọi case nặng như nhau).
+
+### So sánh text tiếng Việt — `evaluator/text_similarity.py`
+
+Một tên nghiệp vụ được **chấp nhận** khi: `exact HOẶC fuzzy ≥ 0.85 HOẶC
+semantic ≥ 0.85` (ngưỡng nằm trong `EvaluationConfig`):
+
+- **Exact** — chuẩn hóa NFC + casefold + bỏ dấu câu/khoảng trắng rồi so bằng.
+- **Fuzzy** — `SequenceMatcher`, lấy max của bản có dấu và bản bỏ dấu thanh
+  (accent-insensitive): `"Doanh thu." ≈ "doanh thu"`.
+- **Semantic** — provider tùy chọn inject vào; không có thì bỏ qua, không fail.
+
+### So sánh SQL — `evaluator/sql_normalization.py`
+
+- `structurally_equal` — so **AST sqlglot** sau chuẩn hóa: bỏ alias, bỏ format,
+  viết lại boolean (`FALSE` → `0`); với `ignore_limit=True` còn bỏ `LIMIT` và
+  `ORDER BY` top-level của cả hai phía (dùng ở lane compiler vì LIMIT là
+  guardrail được ép thêm còn ORDER BY chỉ là trình bày — lane thực thi đã so
+  multiset hàng).
+- `normalize_expression` — chuẩn hóa biểu thức SQL của trường metric/filter.
+- `unwrap_declared_aggregation` — bóc đúng **một** wrapper aggregation khi và
+  chỉ khi khớp `aggregation` khai báo của chính phía đó: golden `SUM(x)`
+  (khai báo `sum`) tương đương candidate `x`; wrapper mâu thuẫn với khai báo
+  bị giữ nguyên để mismatch trung thực.
+
+### Danh bạ metric hybrid — `evaluator/hybrid/catalog.py`
+
+Năm suite, mỗi suite có trọng số và ngưỡng riêng. Mỗi metric có `threshold`
+(đạt khi điểm ≥ ngưỡng; đa số 0.95, riêng `formula_equivalence` và
+`business_name_similarity` là 0.85, metric judge là 0.80, guardrail là 1.0),
+`weight` (trọng số trong suite) và `prerequisites` (metric phải chạy được
+trước).
+
+| Suite | Trọng số | Ngưỡng suite | Metric |
+|---|---:|---:|---|
+| `discovery` | 0.15 | 0.95 | 6 deterministic |
+| `enrichment` | 0.20 | 0.85 | 4 deterministic + 1 AI-judge |
+| `metric_generation` | 0.25 | 0.85 | 5 deterministic + 2 AI-judge |
+| `query_compilation` | 0.25 | 0.90 | 6 deterministic |
+| `guardrail` | 0.15 | 0.95 | 5 deterministic (ngưỡng 1.0) |
+
+#### Suite `discovery` — độ trung thực trích xuất schema
+
+| Metric | Trọng số | Ý nghĩa | Cách tính |
+|---|---:|---|---|
+| `table_precision` / `table_recall` | 0 | Báo cáo bổ sung (đã bao hàm trong F1) | P/R của tập tên bảng |
+| `table_f1` | 0.40 | Nhận diện đúng các bảng | F1 của tập tên bảng |
+| `column_f1` | 0.30 | Đủ cột trong từng bảng | Micro-F1: so tập cột từng bảng golden rồi gộp |
+| `primary_key_accuracy` | 0.15 | Nhận diện đúng khóa chính | F1 của tập PK theo từng bảng |
+| `relationship_f1` | 0.15 | Nhận diện đúng quan hệ FK | F1 của tập tuple `(from_table, from_col, to_table, to_col)` |
+
+#### Suite `enrichment` — đặt tên nghiệp vụ và quan hệ
+
+| Metric | Trọng số | Ý nghĩa | Cách tính |
+|---|---:|---|---|
+| `entity_f1` | 0.30 | Đúng tập entity canonical | F1 của tập tên entity |
+| `dimension_f1` | 0.20 | Đủ dimension của từng entity | Micro-F1 tập tên dimension theo từng canonical entity |
+| `relationship_accuracy` | 0.10 | Đúng quan hệ, đúng loại, đúng cờ inferred | F1 của tuple 6 phần tử `(source_entity, source_field, target_entity, target_field, relation_type, inferred)` |
+| `business_name_similarity` | 0.10 | Mức giống tên golden | Trung bình `max(exact, fuzzy, semantic)` trên mọi entity + dimension (thiếu entity → 0.0) |
+| `business_semantic_correctness` | 0.30 | Tên nghiệp vụ đúng ngữ nghĩa kinh doanh (AI-judge) | LLM judge chấm theo rubric; điều kiện tiên quyết `entity_f1` |
+
+#### Suite `metric_generation` — sinh định nghĩa chỉ số
+
+| Metric | Trọng số | Ý nghĩa | Cách tính |
+|---|---:|---|---|
+| `metric_identity_accuracy` | 0.25 | Danh tính chỉ số khớp golden | So tuple `(target_entity, aggregation, field, sql_expression, dependencies, default_filters)`; case âm: so error code |
+| `formula_equivalence` | 0.15 | Công thức nghiệp vụ tương đương | So `business_formula` qua `compare_business_name`; contract gap → `not_applicable` |
+| `sql_expression_equivalence` | 0.15 | Biểu thức SQL tương đương | So chuỗi canonical sau `unwrap_declared_aggregation` hai phía |
+| `filter_accuracy` | 0.05 | Default filter đúng | So tập điều kiện đã chuẩn hóa; `A AND B` tách thành hai phép so con |
+| `allowed_dimension_f1` | 0.15 | Dimension đi kèm chỉ số | `match_allowed_dimensions` — dimension thừa hợp lệ chỉ tính 1 FP |
+| `business_definition_correctness` | 0.15 | Mô tả nghiệp vụ đúng ngữ nghĩa (AI-judge) | Judge chấm `description` (+ `business_formula` khi không phải contract gap) |
+| `formula_semantic_correctness` | 0.10 | Ngữ nghĩa công thức đúng (AI-judge) | Judge chấm `business_formula` + `sql_expression` |
+
+Các metric từ `formula_equivalence` trở xuống chỉ áp dụng cho case dương; case
+âm trả `not_applicable`.
+
+#### Suite `query_compilation` — biên dịch chỉ số thành SQL
+
+| Metric | Trọng số | Ý nghĩa | Cách tính |
+|---|---:|---|---|
+| `request_validation_accuracy` | 0.15 | Xác định đúng entity chính của request | So `primary_entity` của Canonical Query Model; case âm: so error code |
+| `selection_preservation_accuracy` | 0.15 | Giữ nguyên metrics/dimensions được chọn | `(tập metrics khớp + tập dimensions khớp) / 2` — mỗi tập đúng cho 0.5 |
+| `invalid_selection_rejection` | 0.10 | Từ chối selection không hợp lệ | Chỉ case âm: `error_code` có khớp kỳ vọng không |
+| `sql_ast_equivalence` | 0.30 | SQL biên dịch tương đương golden | `structurally_equal(..., ignore_limit=True)` — so AST đã chuẩn hóa |
+| `sql_execution_accuracy` | 0.20 | Kết quả thực thi đúng | Chạy SQL (qua guardrail thật) trên SQLite fixture cô lập, so **multiset hàng** không theo thứ tự, sai số float 1e-6 |
+| `result_schema_accuracy` | 0.10 | Đúng bộ cột kết quả | So tập tên cột của kết quả với golden |
+
+#### Suite `guardrail` — an toàn (mọi ngưỡng = 1.0, critical)
+
+Mỗi aspect chỉ chấm trên đúng cực của case (metric dành cho case dương trả
+`not_applicable` với case âm và ngược lại) nên không bị phạt kép:
+
+| Metric | Trọng số | Ý nghĩa | Cách tính |
+|---|---:|---|---|
+| `unsafe_sql_rejection` | 0.30 | Chặn SQL nguy hiểm | Case âm: guardrail phải `accepted = False` |
+| `valid_select_acceptance` | 0.20 | Cho qua SELECT hợp lệ | Case dương: guardrail phải `accepted = True` |
+| `limit_enforcement` | 0.20 | Ép LIMIT đúng | Case dương: `effective_limit == expected_limit` |
+| `timeout_enforcement` | 0.15 | Ép timeout đúng | Case dương: `effective_timeout == expected_timeout` (15s) |
+| `error_code_accuracy` | 0.15 | Trả error code đúng | Case âm: `error_code` khớp golden |
+
+### AI-judge metric — `evaluator/hybrid/judge/`
+
+Ba metric judge (kiểu Ragas) dùng chung một luồng: render prompt **mù thông
+tin** (judge không biết bên nào là golden), gọi LLM với temperature `0.0`, nhận
+verdict cấu trúc theo **rubric có phiên bản**; điểm = tổng có trọng số của
+rubric (tiêu chí thiếu tính 0). Mỗi kết quả mang provenance (rubric version,
+prompt version, model) và được cache theo content-hash; judge crash trả
+`error`, không làm sập run. Trọng số judge bị giới hạn (`JUDGE_WEIGHT_CAPS`:
+enrichment ≤ 0.30, metric_generation ≤ 0.25) để không lấn át phần
+deterministic.
+
+### Gom điểm và gates — `evaluator/hybrid/aggregation.py`, `run_result.py`
+
+```
+Điểm metric = mean(điểm của metric đó trên mọi sample được chấm)
+Điểm suite  = Σ(weight × điểm metric) / Σ(weight)      # chỉ tính metric có điểm
+Overall     = 100 × Σ(suite_weight × điểm suite) / Σ(suite_weight)
+Coverage    = (sample được chấm) / (sample phù hợp, đã loại not_applicable)
+```
+
+Trọng số được chuẩn hóa lại trên tập metric khả dụng — metric `not_applicable`
+nhường trọng số cho các metric còn lại thay vì kéo điểm suite xuống. Trạng
+thái run được xử lý theo thứ tự ưu tiên: **FAIL** khi rơi critical gate;
+**INCOMPLETE** khi điểm không hợp lệ hoặc coverage < 95%; **PASS** khi overall
+≥ 90; **WARN** khi 80–90; còn lại **FAIL**.
+
+### Các component của suite evaluator legacy
+
+Tầng suite chấm mỗi case theo các component `FieldScore`; điểm case = macro
+trung bình các component khả dụng, điểm suite = macro trung bình các case, kèm
+group score theo tag và micro cho component đặc thù:
+
+- **discovery** — `tables`, `columns`, `primary_keys`, `relationships` (F1).
+- **enrichment** — `entities`, tập `dimensions` của từng entity, tên nghiệp vụ
+  từng entity/dimension, `relationships`.
+- **metric** — `core_identity` + 14 trường: `name`, `business_name`,
+  `metric_type`, `target_entity`, `source_table`, `aggregation`, `field`,
+  `business_formula`, `sql_expression`, `dependencies`, `default_filters`,
+  `allowed_dimensions`, `default_time_grain`, `expected_preview_facts`.
+- **compiler** — các trường `cqm.*` của Canonical Query Model, `sql_ast`,
+  `execution`.
+- **guardrail** — `accepted`, `error_code`, `effective_limit`,
+  `effective_timeout`.
