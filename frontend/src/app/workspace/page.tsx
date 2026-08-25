@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { AIStudioView } from '@/components/views/AIStudioView';
 import { MetricsCatalogView } from '@/components/views/MetricsCatalogView';
 import type { ExplorerInitialSelection } from '@/components/views/MetricExplorerView';
-import { NotificationCenter } from '@/components/workspace/NotificationCenter';
 import { WorkspaceApp } from '@/components/workspace/WorkspaceApp';
 import type { ViewId, WorkspaceDatabase } from '@/components/workspace/shared';
 import { streamNotifications } from '@/lib/notificationStream';

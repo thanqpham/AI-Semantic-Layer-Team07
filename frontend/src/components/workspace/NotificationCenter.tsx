@@ -1,7 +1,7 @@
 'use client';
 
 import { Bell, CheckCircle2, ChevronRight, Inbox, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { AppNotification } from '@/lib/api';
@@ -108,6 +108,27 @@ export function NotificationCenter({
   align?: 'left' | 'right';
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
 
   const openItem = (item: AppNotification) => {
     if (!isMetricRequestNotification(item)) return;
@@ -117,7 +138,7 @@ export function NotificationCenter({
   };
 
   return (
-    <div className={cn('relative inline-flex', className)}>
+    <div ref={containerRef} className={cn('relative inline-flex', className)}>
       <Button
         size="icon"
         variant="ghost"

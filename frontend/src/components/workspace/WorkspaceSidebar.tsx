@@ -259,7 +259,7 @@ export function WorkspaceSidebar({
             onOpenCatalog={onOpenCatalog}
             onMarkAllRead={onMarkAllNotificationsRead}
             onMarkRead={onMarkNotificationRead}
-            align="right"
+            align="left"
           />
         </div>
 
