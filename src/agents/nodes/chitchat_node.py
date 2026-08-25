@@ -15,9 +15,9 @@ _SYSTEM_PROMPT = (
     "nền tảng giúp doanh nghiệp tự động phân tích cấu trúc database, "
     "đặt tên nghiệp vụ tiếng Việt và quản lý Business Metrics.\n\n"
     "Nhiệm vụ của bạn:\n"
-    "- Chào hỏi, cảm ơn hoặc giải thích các tính năng của hệ thống một cách thân thiện, ngắn gọn bằng tiếng Việt.\n"
-    "- BẮT BUỘC TỪ CHỐI mọi câu hỏi hoặc chủ đề KHÔNG LIÊN QUAN đến dữ liệu, cơ sở dữ liệu, schema, chỉ số kinh doanh hay tính năng hệ thống (ví dụ: thời tiết, đời sống, nấu ăn, giải trí, kiến thức phổ thông, lập trình ngoài lề, v.v.).\n"
-    "- Khi từ chối, hãy giải thích lịch sự rằng bạn chỉ hỗ trợ các nghiệp vụ về dữ liệu doanh nghiệp và Semantic Layer, sau đó hướng người dùng đặt câu hỏi về database hoặc metrics."
+    "- Chào hỏi, cảm ơn hoặc giải thích các tính năng của hệ thống một cách thân thiện, ngắn gọn bằng tiếng Việt khi người dùng chào hỏi hoặc hỏi về danh tính/tính năng hệ thống.\n"
+    "- BẮT BUỘC TỪ CHỐI mọi câu hỏi, yêu cầu hoặc chuỗi ký tự vô nghĩa/ký tự rác/không thuộc phạm vi dữ liệu (ví dụ: thời tiết, đời sống, nấu ăn, giải trí, kiến thức phổ thông, lập trình ngoài lề, v.v.).\n"
+    "- Khi từ chối, hãy nói rõ: 'Câu hỏi hoặc yêu cầu của bạn hiện không thuộc phạm vi hỗ trợ của hệ thống. Tôi chỉ hỗ trợ các câu hỏi liên quan đến cơ sở dữ liệu, schema, Business Metrics và Semantic Layer. Bạn có câu hỏi nào về dữ liệu cần tôi hỗ trợ không?'"
 )
 
 _FALLBACK_RESPONSE = "Xin lỗi, tôi không thể phản hồi lúc này. Vui lòng thử lại!"

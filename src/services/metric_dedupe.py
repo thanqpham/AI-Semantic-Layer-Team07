@@ -240,12 +240,12 @@ def _duplicate_message(name: str, status: str) -> str:
     """Render the advisory message with the saved metric's approval status."""
     if status == "approved":
         return (
-            f'Metric "{name}" đã tồn tại ở dạng chuẩn (đã duyệt) với cùng công thức '
-            "— không cần tạo mới, hãy dùng metric có sẵn."
+            f'Chỉ số "{name}" đã được định nghĩa và phê duyệt sẵn trong Semantic Layer. '
+            "Bạn có muốn tính toán và hiển thị kết quả ngay từ chỉ số này không?"
         )
     return (
-        f'Metric "{name}" đã có trong hệ thống (trạng thái: {status}) '
-        "với cùng tên và cùng công thức. Cân nhắc dùng metric có sẵn thay vì tạo mới."
+        f'Chỉ số "{name}" đã có trong hệ thống (trạng thái: {status}). '
+        "Bạn có muốn sử dụng chỉ số này để tính toán kết quả không?"
     )
 
 

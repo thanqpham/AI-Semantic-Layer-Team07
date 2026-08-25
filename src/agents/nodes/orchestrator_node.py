@@ -12,22 +12,31 @@ logger = logging.getLogger(__name__)
 
 _OUT_OF_SCOPE_RESPONSE = (
     "Tôi là trợ lý AI chuyên về Semantic Layer và phân tích dữ liệu doanh nghiệp. "
+    "Câu hỏi hoặc yêu cầu của bạn hiện không thuộc phạm vi hỗ trợ của hệ thống. "
     "Tôi chỉ hỗ trợ các câu hỏi liên quan đến cơ sở dữ liệu, schema, bảng, cột, "
-    "Business Metrics và tính năng của hệ thống. "
-    "Rất tiếc tôi không thể trả lời câu hỏi ngoài phạm vi này. "
-    "Bạn có câu hỏi nào về dữ liệu không?"
+    "Business Metrics và tính năng của hệ thống Semantic Layer. "
+    "Bạn có câu hỏi nào về dữ liệu cần tôi hỗ trợ không?"
 )
 
 _CLASSIFY_PROMPT = """Bạn là bộ phân loại câu hỏi thông minh cho hệ thống AI Semantic Layer.
 Phân loại câu hỏi của người dùng vào đúng 1 trong 5 nhóm:
 
-- "semantic_query": Câu hỏi yêu cầu xem số liệu, kết quả, báo cáo, truy vấn, thống kê hoặc tính toán dữ liệu thực tế từ Live Database (ví dụ: "cho tôi kết quả Tổng doanh thu theo từng khách hàng", "Xem kết quả doanh thu", "Tổng doanh thu theo khách hàng năm 2024", "Doanh thu tháng này theo chi nhánh", "Số lượng đơn hàng hoàn thành", "Báo cáo doanh số theo sản phẩm", "Thống kê đơn hàng"). BẤT KỲ CÂU HỎI NÀO YÊU CẦU LẤY SỐ LIỆU/KẾT QUẢ/TÍNH TOÁN ĐỀU THUỘC NHÓM NÀY.
-- "metric_query": Yêu cầu tạo mới, chỉnh sửa, xây dựng hoặc đề xuất công thức định nghĩa Business Metric mới vào hệ thống (ví dụ: "Tạo metric mới Doanh thu thuần", "Đề xuất metric cho bảng orders", "Định nghĩa công thức AOV", "Tạo chỉ số tỷ lệ hủy đơn"). CHỈ phân loại vào nhóm này khi người dùng muốn định nghĩa/tạo thêm metric mới vào catalog, KHÔNG phân loại vào đây nếu người dùng muốn xem số liệu/kết quả thực tế.
-- "data_question": Hỏi về cấu trúc database, schema, bảng, cột, kiểu dữ liệu, glossary, quan hệ bảng, danh sách metric đã có hoặc hướng dẫn chọn dữ liệu/dimension/filter để tìm hiểu dữ liệu (không yêu cầu lấy số liệu cụ thể).
-- "chitchat": Chào hỏi (xin chào, cảm ơn, tạm biệt), hỏi về danh tính/khả năng của AI trợ lý hoặc hỏi thông tin/tính năng chung của hệ thống AI Semantic Layer.
-- "out_of_scope": Câu hỏi hoặc yêu cầu KHÔNG LIÊN QUAN đến dữ liệu, database, Business Metrics hay tính năng hệ thống (ví dụ: thời tiết, công thức nấu ăn, viết thơ, kể chuyện, giải toán ngoài lề, tin tức xã hội, thể thao, giải trí, lập trình ứng dụng ngoài lề...).
+- "metric_query": Yêu cầu tạo mới, định nghĩa, xây dựng, tính toán công thức hoặc đề xuất Business Metric / KPI mới cho hệ thống Semantic Layer. Bao gồm:
+  + Các câu hỏi mô tả công thức, logic tính toán, chỉ số kinh doanh (ví dụ: "Tính giá trị trung bình trên mỗi đơn hàng (Average Order Value - AOV)", "Tính tổng doanh thu thuần của các đơn hàng có trạng thái hoàn thành (Net Revenue)", "Tính tổng số lượng đơn đặt hàng phát sinh trong toàn hệ thống", "Tính tỷ lệ hủy đơn hàng", "Doanh thu thực nhận sau khi trừ chiết khấu, hoàn trả", "Giá trị đơn hàng trung bình", "Lợi nhuận gộp Gross Profit", "Thời gian giao hàng trung bình", "Tỷ lệ đơn hàng thành công", "Số lượng khách hàng mới").
+  + Các câu hỏi yêu cầu tạo/đề xuất metric (ví dụ: "Tạo metric mới Doanh thu thuần", "Đề xuất metric cho bảng orders", "Định nghĩa công thức AOV", "Xây dựng chỉ số khách hàng mới", "Thêm KPI tỷ lệ hoàn hàng").
+  BẤT KỲ CÂU HỎI NÀO MÔ TẢ ĐỊNH NGHĨA/CÔNG THỨC CHỈ SỐ HOẶC YÊU CẦU TÍNH TOÁN/TẠO METRIC (không kèm yêu cầu trích xuất bảng báo cáo dữ liệu cụ thể theo thời gian hay chiều lọc) ĐỀU THUỘC NHÓM NÀY.
 
-Chỉ trả về DUY NHẤT 1 từ trong 5 từ: "semantic_query", "metric_query", "data_question", "chitchat", hoặc "out_of_scope"
+- "semantic_query": Câu hỏi yêu cầu truy vấn, trích xuất dữ liệu, xem kết quả bảng số liệu, báo cáo hoặc thống kê cụ thể từ Live Database theo các chiều phân tích (dimensions: theo khách hàng, theo ngày/tháng/năm, theo chi nhánh, theo sản phẩm) hoặc theo bộ lọc (filters) (ví dụ: "cho tôi kết quả Tổng doanh thu theo từng khách hàng", "Xem kết quả doanh thu", "Tổng doanh thu theo khách hàng năm 2024", "Doanh thu tháng này theo chi nhánh", "Số lượng đơn hàng hoàn thành năm 2024", "Báo cáo doanh số theo sản phẩm", "Thống kê đơn hàng tháng này", "Top 5 khách hàng chi tiêu nhiều nhất").
+
+- "data_question": Hỏi về cấu trúc database, schema, bảng, cột, kiểu dữ liệu, glossary, quan hệ bảng, danh sách metric đã có hoặc hướng dẫn chọn dữ liệu/dimension/filter để tìm hiểu dữ liệu (không yêu cầu tạo metric hay lấy số liệu cụ thể) (ví dụ: "Bảng orders có những cột nào?", "Quan hệ giữa bảng orders và customers", "Có những metric doanh thu nào đã được phê duyệt?").
+
+- "chitchat": CHỈ DÀNH CHO các câu chào hỏi rõ ràng (ví dụ: "xin chào", "hello", "hi", "cảm ơn", "tạm biệt") hoặc hỏi trực tiếp về danh tính/khả năng của AI trợ lý ("bạn là ai", "bạn có thể làm được gì"). TUYỆT ĐỐI KHÔNG xếp các ký tự vô nghĩa, ký tự rác, câu hỏi gõ sai hoặc chuỗi ngẫu nhiên vào nhóm này.
+
+- "out_of_scope": BẤT KỲ câu hỏi, yêu cầu hoặc chuỗi ký tự nào KHÔNG LIÊN QUAN ĐẾN DỮ LIỆU hoặc không phải lời chào hỏi hợp lệ. Bao gồm:
+  + Các ký tự vô nghĩa, ký tự rác, escape characters, chuỗi gõ sai/gõ nhầm (ví dụ: "\\n \\t", "asdfgh", "12345", "???", "...", ký tự ngẫu nhiên).
+  + Các chủ đề ngoài lề (thời tiết, công thức nấu ăn, viết thơ, kể chuyện, giải toán ngoài lề, tin tức xã hội, thể thao, giải trí, lập trình ứng dụng ngoài lề...).
+
+Chỉ trả về DUY NHẤT 1 từ trong 5 từ: "metric_query", "semantic_query", "data_question", "chitchat", hoặc "out_of_scope"
 
 Câu hỏi trước đây:
 {history}
@@ -45,6 +54,11 @@ async def orchestrator_node(state: AgentState) -> dict[str, Any]:
     """
     existing_intent = state.get("intent")
     if existing_intent in _INTENTS:
+        if existing_intent == "out_of_scope":
+            return {
+                "intent": "out_of_scope",
+                "chat_response": state.get("chat_response") or _OUT_OF_SCOPE_RESPONSE,
+            }
         return {"intent": existing_intent}
     user_message = state.get("user_message", "").strip()
     if not user_message:
@@ -74,15 +88,16 @@ def _classification_prompt(state: AgentState, user_message: str) -> str:
 
 def _parse_intent(raw: str) -> str:
     """Parse raw LLM response into recognized intent string."""
-    if "semantic_query" in raw:
-        return "semantic_query"
-    if "metric_query" in raw:
+    cleaned = raw.strip().lower()
+    if "metric_query" in cleaned:
         return "metric_query"
-    if "data_question" in raw:
+    if "semantic_query" in cleaned:
+        return "semantic_query"
+    if "data_question" in cleaned:
         return "data_question"
-    if "out_of_scope" in raw or "unrelated" in raw:
+    if "out_of_scope" in cleaned or "unrelated" in cleaned:
         return "out_of_scope"
-    if "chitchat" in raw:
+    if "chitchat" in cleaned:
         return "chitchat"
     return "data_question"
 

@@ -109,6 +109,18 @@ def _node(node: exp.Expression, columns: dict[str, SemanticColumnModel]) -> Metr
         if isinstance(node, node_type):
             children = [_node(node.this, columns), _node(node.expression, columns)]
             return MetricExpressionNode(kind=kind, children=children)
+    if isinstance(node, exp.Case):
+        for when in node.args.get("whens", []):
+            then_expr = when.args.get("then") or when.this
+            if then_expr:
+                target = next((c for c in then_expr.find_all(exp.Column) if c.name.lower() in columns), None)
+                if target:
+                    return MetricExpressionNode(kind="column", column_id=columns[target.name.lower()].id)
+        default_expr = node.args.get("default")
+        if default_expr:
+            target = next((c for c in default_expr.find_all(exp.Column) if c.name.lower() in columns), None)
+            if target:
+                return MetricExpressionNode(kind="column", column_id=columns[target.name.lower()].id)
     first_col = next((c for c in node.find_all(exp.Column) if c.name.lower() in columns), None)
     if first_col:
         return MetricExpressionNode(kind="column", column_id=columns[first_col.name.lower()].id)

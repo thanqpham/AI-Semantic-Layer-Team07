@@ -173,12 +173,15 @@ _BASE_RULES = """Quy tắc BẮT BUỘC:
 - Giỏ hàng / Tỷ lệ bỏ giỏ hàng $\to$ base_entity là `fact_carts`.
 - Đơn hàng / Doanh thu / AOV / Khách hàng mua lại $\to$ base_entity là `fact_orders`.
 - Chi tiết đơn hàng / Số lượng sản phẩm (SKU) bán ra $\to$ base_entity là `fact_order_items`.
-12. Đối với metric tính tỷ lệ / phân số:
-- Tỷ lệ hoàn trả: base_entity `fact_orders`, function "COUNT_DISTINCT", expression "CASE WHEN order_status = 'returned' THEN order_id END / order_id" (filter is_test_order = false).
-- Tỷ lệ khách hàng mua lại: base_entity `fact_orders`, function "COUNT_DISTINCT", expression "CASE WHEN customer_order_seq > 1 THEN customer_id END / customer_id" (filter is_test_order = false).
-- Tỷ lệ chuyển đổi: base_entity `fact_sessions`, function "COUNT_DISTINCT", expression "order_id / session_id" (filter is_bot_traffic = false, KHÔNG thêm filter order_id IS NOT NULL).
-- Tỷ lệ bỏ giỏ hàng: base_entity `fact_carts`, function "COUNT_DISTINCT", expression "1 - (CASE WHEN checkout_completed = TRUE THEN cart_id END / cart_id)" (filter is_test_order = false).
-- Biên lợi nhuận gộp: base_entity `fact_orders`, function "SUM", expression "(gross_amount - discount_amount - return_amount - cogs_amount) / (gross_amount - discount_amount - return_amount)" (filter is_test_order = false).
+12. QUY TẮC BẮT BUỘC ĐỐI VỚI METRIC TÍNH TỶ LỆ / PHẦN TRĂM (Rate, Ratio, Percentage, Tỷ lệ, Tỉ lệ):
+- Khi yêu cầu hoặc tên metric chứa từ "Tỷ lệ", "Tỉ lệ", "Rate", "Percentage", "Tỷ trọng": BẮT BUỘC formula.expression phải là PHÉP CHIA (dấu '/') giữa cột tử số và cột mẫu số (ví dụ: `id / id` hoặc `customer_id / customer_id`). TUYỆT ĐỐI KHÔNG sinh expression chỉ gồm 1 cột đơn lẻ.
+- Mẫu chuẩn cho các metric tỷ lệ:
+  + Tỷ lệ trả hàng / hoàn trả: base_entity bảng đơn hàng (`order_header` hoặc `fact_orders`), function "COUNT_DISTINCT", expression "id / id", filters: [field "return_required", operator "eq", value "1"].
+  + Tỷ lệ khách hàng quay lại mua hàng: base_entity bảng đơn hàng, function "COUNT_DISTINCT", expression "customer_id / customer_id", filters: [field "customer_order_seq", operator "gt", value 1].
+  + Tỷ lệ hủy đơn hàng: base_entity bảng đơn hàng, function "COUNT_DISTINCT", expression "id / id", filters: [field "is_canceled", operator "eq", value 1] hoặc [field "order_status", operator "eq", value "cancelled"].
+  + Tỷ lệ chuyển đổi: base_entity `fact_sessions`, function "COUNT_DISTINCT", expression "order_id / session_id".
+  + Tỷ lệ bỏ giỏ hàng: base_entity `fact_carts`, function "COUNT_DISTINCT", expression "1 - (cart_id / cart_id)".
+  + Biên lợi nhuận gộp: base_entity `fact_orders`, function "SUM", expression "(gross_amount - discount_amount - return_amount - cogs_amount) / (gross_amount - discount_amount - return_amount)".
 """
 
 _DEDUPE_RULES = """8. Trước khi trả về, so sánh mỗi metric đề xuất với danh sách metric đang tồn tại. Nếu một metric đề xuất **cùng ý nghĩa nghiệp vụ và cùng logic tính toán ≥90%** với một metric đã có (bỏ qua hoa/thường, khoảng trắng, khác biệt cú pháp SQL vô nghĩa): KHÔNG đưa metric đó vào `metrics`; thêm mục vào `duplicates` với `proposed_metric_name` đúng bằng tên metric đề xuất bị coi là trùng (để hệ thống tự loại nếu vẫn lọt vào `metrics`), `user_message` tiếng Việt giải thích và `similarity_reason` nêu điểm giống. Nếu metric đã có ở trạng thái `approved`, nhấn mạnh rằng đã có metric chuẩn và không cần tạo mới. Chỉ xếp vào `duplicates` khi hai metric THAY THẾ ĐƯỢC CHO NHAU HOÀN TOÀN — cùng ý nghĩa VÀ cùng công thức sau chuẩn hóa. Nếu công thức/logic khác nhau (kể cả khi ý nghĩa gần giống hoặc tên gần trùng): đó là `conflicts` theo quy tắc 9, TUYỆT ĐỐI KHÔNG xếp vào `duplicates`. Các metric tính tỷ lệ/trung bình (như AOV, Tỷ lệ chuyển đổi, Tỷ lệ mua lại, Tỷ lệ bỏ giỏ) là các metric phái sinh độc lập, TUYỆT ĐỐI KHÔNG xếp vào `duplicates`.

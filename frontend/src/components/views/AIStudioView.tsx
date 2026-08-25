@@ -203,6 +203,7 @@ export function AIStudioView({
         return;
       }
       const suggestions = response.suggestions || [];
+      const duplicates = response.duplicates || [];
       setMessages((current) => [
         ...current,
         {
@@ -212,7 +213,9 @@ export function AIStudioView({
             response.chat_response ||
             (suggestions.length
               ? `Dựa trên schema của bạn, tôi đề xuất ${suggestions.length} Metric Definition dưới đây. Bạn có thể xem trước YAML và lưu vào catalog để duyệt:`
-              : 'Không sinh được metric phù hợp từ schema.'),
+              : duplicates.length > 0
+                ? 'Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer. Bạn có thể sử dụng trực tiếp chỉ số có sẵn bên dưới để tính toán kết quả.'
+                : 'Tôi chưa tìm thấy cấu trúc dữ liệu phù hợp trong hệ thống để tự động đề xuất chỉ số này. Bạn có thể thử mô tả chi tiết hơn về các trường dữ liệu cần dùng nhé!'),
           suggestions,
           duplicates: response.duplicates,
           dedupeSkipped: response.dedupe_performed === false,
@@ -301,7 +304,12 @@ export function AIStudioView({
       duplicates: message.duplicates?.filter((_, itemIndex) => itemIndex !== index),
     }));
 
-  const useExistingDuplicate = (messageId: string, index: number): void =>
+  const useExistingDuplicate = (messageId: string, index: number): void => {
+    const targetMessage = messages.find((m) => m.id === messageId);
+    const notice = targetMessage?.duplicates?.[index];
+    const targetMetricName = notice?.existing_metric_name || '';
+    const isApproved = notice?.existing_metric_status === 'approved' || !notice?.existing_metric_status;
+
     updateMessage(messageId, (message) => {
       if (!message.duplicates?.[index]) return message;
       const duplicates = message.duplicates.map((item, itemIndex) =>
@@ -309,6 +317,19 @@ export function AIStudioView({
       );
       return { ...message, duplicates };
     });
+
+    if (targetMetricName) {
+      if (isApproved) {
+        setTimeout(() => {
+          void send(`Cho tôi xem kết quả chỉ số "${targetMetricName}"`, []);
+        }, 150);
+      } else {
+        onNotify?.(
+          `Chỉ số "${targetMetricName}" đang ở trạng thái chờ duyệt. Vui lòng phê duyệt trong Catalog trước khi truy vấn.`,
+        );
+      }
+    }
+  };
 
   const save = async (suggestion: MetricSuggestion) => {
     if (!semanticDbId) {

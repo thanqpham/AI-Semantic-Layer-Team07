@@ -493,6 +493,23 @@ def _dimension_alias(item: dict[str, Any]) -> str:
     return f"dimension_{item['column_id']}"
 
 
+def _is_ratio_node(
+    node: MetricExpressionNode | None,
+) -> tuple[bool, MetricExpressionNode | None, MetricExpressionNode | None, float]:
+    """Identify if the expression tree represents a ratio or scaled ratio."""
+    if node is None:
+        return False, None, None, 1.0
+    if node.kind == "div" and len(node.children) == 2:
+        return True, node.children[0], node.children[1], 100.0
+    if node.kind == "mul" and len(node.children) == 2:
+        c0, c1 = node.children[0], node.children[1]
+        if c0.kind == "div" and len(c0.children) == 2 and c1.kind == "literal":
+            return True, c0.children[0], c0.children[1], float(c1.value or 100.0)
+        if c1.kind == "div" and len(c1.children) == 2 and c0.kind == "literal":
+            return True, c1.children[0], c1.children[1], float(c0.value or 100.0)
+    return False, None, None, 1.0
+
+
 def _compile_metric(
     definition: MetricDefinition,
     table: str,
@@ -502,12 +519,29 @@ def _compile_metric(
     alias: str,
 ) -> str:
     formula = definition.metric.formula
-    argument = _compile_argument(formula.expression_ast, table, columns, dialect)
+    is_ratio, left_node, right_node, scale = _is_ratio_node(formula.expression_ast)
     predicates = [
         _predicate(table, _resolved_filter(item, columns), dialect, parameters, "metric")
         for item in definition.metric.filters
     ]
     condition = " AND ".join(predicates)
+
+    if is_ratio and left_node is not None and right_node is not None:
+        left_arg = _compile_argument(left_node, table, columns, dialect)
+        right_arg = _compile_argument(right_node, table, columns, dialect)
+        left_cond = f"CASE WHEN {condition} THEN {left_arg if left_arg != '*' else '1'} END" if condition else left_arg
+        right_cond = right_arg if right_arg != "*" else "1"
+        if formula.function == "COUNT_DISTINCT":
+            num_agg = f"COUNT(DISTINCT {left_cond})"
+            den_agg = f"COUNT(DISTINCT {right_cond})"
+        else:
+            num_agg = f"{formula.function}({left_cond})"
+            den_agg = f"{formula.function}({right_cond})"
+        cast_type = "REAL" if dialect == "sqlite" else "NUMERIC"
+        aggregate = f"ROUND((CAST({num_agg} AS {cast_type}) * {scale} / NULLIF({den_agg}, 0)), 2)"
+        return f"{aggregate} AS {_quoted(alias, dialect)}"
+
+    argument = _compile_argument(formula.expression_ast, table, columns, dialect)
     conditional = f"CASE WHEN {condition} THEN {argument if argument != '*' else '1'} END" if condition else argument
     if formula.function == "COUNT_DISTINCT":
         aggregate = f"COUNT(DISTINCT {conditional})"

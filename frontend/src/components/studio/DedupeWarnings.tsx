@@ -61,7 +61,7 @@ export function ConflictWarningStrip({ conflict, onRename, onUseExisting }: Conf
           onClick={onUseExisting}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-amber-500/40 bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs transition-all hover:bg-accent"
         >
-          Dùng metric có sẵn
+          📊 Tính kết quả từ chỉ số này
         </button>
       </div>
     </div>
@@ -95,11 +95,10 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <div className="space-y-1">
             <p className="font-medium leading-relaxed">
-              Đã chọn dùng metric có sẵn &quot;{notice.existing_metric_name}&quot; — không tạo metric mới. Xem trong
-              danh sách metric của Semantic Layer.
+              Đang tính toán kết quả từ chỉ số &quot;{notice.existing_metric_name}&quot;...
             </p>
             <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-              🎯 Hãy cùng tạo metric tiếp theo nhé!
+              🎯 Kết quả truy vấn đã được tải bên dưới!
             </p>
           </div>
         </div>
@@ -136,16 +135,16 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
           >
             <Eye className="h-3.5 w-3.5 text-primary" />
-            <span>{showExisting ? 'Ẩn metric có sẵn' : 'Xem metric có sẵn'}</span>
+            <span>{showExisting ? 'Ẩn định nghĩa' : 'Xem định nghĩa'}</span>
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showExisting ? 'rotate-180' : ''}`} />
           </button>
         ) : null}
         <button
           type="button"
           onClick={() => onUseExisting?.()}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs transition-all hover:bg-accent"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary shadow-xs transition-all hover:bg-primary hover:text-primary-foreground"
         >
-          Dùng metric có sẵn
+          📊 Tính kết quả từ chỉ số này
         </button>
       </div>
     </div>

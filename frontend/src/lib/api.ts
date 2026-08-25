@@ -619,12 +619,13 @@ export interface ChatClarificationOption {
   id: string;
   label: string;
   description?: string | null;
-  spec: {
+  spec?: {
     metric_ids: number[];
     dimensions?: { column_id: number; time_grain?: string | null }[];
     filters?: { column_id: number; operator: string; value?: unknown }[];
     limit?: number;
-  };
+  } | null;
+  action?: string | null;
 }
 
 export interface ChatClarificationSelection {

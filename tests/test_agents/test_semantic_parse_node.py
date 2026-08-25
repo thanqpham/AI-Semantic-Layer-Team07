@@ -196,3 +196,99 @@ async def test_llm_exception_falls_back_gracefully(sample_catalog: dict) -> None
 
     assert result["interpretation"]["status"] == "needs_clarification"
     assert "chưa hiểu rõ" in result["chat_response"]
+
+
+@pytest.mark.asyncio
+async def test_missing_metric_returns_create_metric_option_for_lead(sample_catalog: dict) -> None:
+    """When requested metric is missing and user is Lead/Admin, returns clean prompt and Tạo Business Metric option."""
+    llm_payload = {
+        "status": "needs_clarification",
+        "clarification": {
+            "prompt": "Hệ thống hiện chưa có chỉ số 'Tỷ lệ giữ chân khách hàng (Retention Rate)'. Các chỉ số liên quan hiện có gồm ID 8. Bạn có muốn tạo mới không?",
+            "options": [],
+        },
+        "rationale": "Chưa có chỉ số trong catalog",
+    }
+
+    state = {
+        "user_message": "Xem tỷ lệ giữ chân khách hàng (Retention Rate) tháng này",
+        "parser_catalog": sample_catalog,
+        "can_generate_metrics": True,
+    }
+
+    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = llm_payload
+        result = await semantic_parse_node(state)
+
+    interp = result["interpretation"]
+    assert interp["status"] == "needs_clarification"
+    assert result["clarification"] is not None
+    # Verify prompt is clean without unrelated metrics listing
+    assert "ID 8" not in result["chat_response"]
+    assert "Bạn có muốn tôi đề xuất tạo Business Metric mới này không?" in result["chat_response"]
+    assert len(result["clarification"]["options"]) == 1
+    assert result["clarification"]["options"][0]["id"] == "create_metric"
+    assert "Tạo Business Metric" in result["clarification"]["options"][0]["label"]
+    assert "Tỷ lệ giữ chân khách hàng" in result["clarification"]["options"][0]["label"]
+
+
+@pytest.mark.asyncio
+async def test_missing_metric_returns_submit_request_option_for_member(sample_catalog: dict) -> None:
+    """When requested metric is missing and user is Member, returns prompt for Data Lead proposal."""
+    llm_payload = {
+        "status": "needs_clarification",
+        "clarification": {
+            "prompt": "Hệ thống hiện chưa có chỉ số 'Tỷ lệ giữ chân khách hàng'. Bạn có muốn tạo không?",
+            "options": [],
+        },
+        "rationale": "Chưa có chỉ số trong catalog",
+    }
+
+    state = {
+        "user_message": "Xem tỷ lệ giữ chân khách hàng",
+        "parser_catalog": sample_catalog,
+        "can_generate_metrics": False,
+    }
+
+    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = llm_payload
+        result = await semantic_parse_node(state)
+
+    interp = result["interpretation"]
+    assert interp["status"] == "needs_clarification"
+    assert result["clarification"] is not None
+    assert "Bạn có muốn gửi Data Lead đề xuất chỉ số này không?" in result["chat_response"]
+    assert len(result["clarification"]["options"]) == 1
+    assert result["clarification"]["options"][0]["id"] == "create_metric"
+    assert "Gửi Data Lead đề xuất chỉ số" in result["clarification"]["options"][0]["label"]
+
+
+@pytest.mark.asyncio
+async def test_forced_mismatch_intercepted_and_converted_to_clarification(sample_catalog: dict) -> None:
+    """If LLM hallucinates resolved for a different metric (e.g. retention mapped to order count), safety net converts to clarification."""
+    llm_payload = {
+        "status": "resolved",
+        "metric_ids": [2],  # order_count / Số lượng đơn hàng
+        "dimensions": [],
+        "filters": [],
+        "time_ranges": [],
+    }
+
+    state = {
+        "user_message": "Xem tỷ lệ giữ chân khách hàng",
+        "parser_catalog": sample_catalog,
+        "can_generate_metrics": True,
+    }
+
+    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = llm_payload
+        result = await semantic_parse_node(state)
+
+    interp = result["interpretation"]
+    assert interp["status"] == "needs_clarification"
+    assert result["clarification"] is not None
+    assert "tỷ lệ giữ chân khách hàng" in result["chat_response"].lower()
+    assert len(result["clarification"]["options"]) == 1
+    assert result["clarification"]["options"][0]["id"] == "create_metric"
+    assert "tỷ lệ giữ chân khách hàng" in result["clarification"]["options"][0]["label"].lower()
+

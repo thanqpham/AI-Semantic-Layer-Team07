@@ -146,7 +146,7 @@ def test_safety_net_forces_duplicate_on_exact_name() -> None:
     assert kept == []
     assert len(notices) == 1
     assert notices[0].existing_metric_id == 12
-    assert "đã duyệt" in notices[0].user_message
+    assert "phê duyệt" in notices[0].user_message
 
 
 def test_safety_net_forces_conflict_on_same_name_diff_formula() -> None:

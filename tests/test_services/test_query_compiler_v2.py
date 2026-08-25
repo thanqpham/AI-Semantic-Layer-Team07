@@ -254,6 +254,61 @@ async def test_compiler_normalizes_date_parameters(async_session: AsyncSession) 
     assert compiled.parameters["metric_1"] == date(2025, 2, 1)
 
 
+@pytest.mark.asyncio
+async def test_compile_ratio_metric(async_session: AsyncSession) -> None:
+    """Ratio metric with div and filters compiles to scaled percentage formula."""
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    table = await _table(async_session, db_id, "orders")
+    id_col = await _column(async_session, table.id, "id")
+    status_col = await _column(async_session, table.id, "status")
+
+    ratio_def = {
+        "schema_version": 2,
+        "metric": {
+            "name": "Cancellation Rate",
+            "formula": {
+                "function": "COUNT_DISTINCT",
+                "expression": "id / id",
+                "expression_ast": {
+                    "kind": "div",
+                    "children": [
+                        {"kind": "column", "column_id": id_col.id},
+                        {"kind": "column", "column_id": id_col.id},
+                    ],
+                },
+            },
+            "base_entity": "orders",
+            "base_entity_id": table.id,
+            "grain": {"column_ids": [id_col.id]},
+            "filters": [{"field": "status", "column_id": status_col.id, "operator": "eq", "value": "cancelled"}],
+            "status": "approved",
+            "confidence": "high",
+            "excluded_notes": "",
+        },
+    }
+    ratio_metric = SemanticMetricModel(
+        db_id=db_id,
+        created_by=1,
+        name="Cancellation Rate",
+        description="",
+        sql_template="",
+        source="ai",
+        status="approved",
+        base_entity_id=table.id,
+        formula="",
+        aggregation_type="COUNT_DISTINCT",
+        definition=ratio_def,
+    )
+    async_session.add(ratio_metric)
+    await async_session.commit()
+
+    query = SemanticQuerySpec(metric_ids=[ratio_metric.id])
+    compiled = await SemanticQueryCompiler(async_session).compile(db_id, query)
+    assert "ROUND" in compiled.sql
+    assert "NULLIF" in compiled.sql
+    assert "COUNT(DISTINCT" in compiled.sql
+
+
 async def _table(db: AsyncSession, db_id: int, name: str) -> SemanticTableModel:
     from sqlalchemy import select
 
