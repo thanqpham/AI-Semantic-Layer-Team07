@@ -111,8 +111,8 @@ async def test_collect_and_evaluate_smoke(tmp_path, monkeypatch):
     assert isinstance(candidates, AgentCandidates)
     assert len(candidates.discovery) == 4
     assert len(candidates.enrichment) == 4
-    assert len(candidates.metrics) == 12
-    assert len(candidates.compiler) == 32
+    assert len(candidates.metrics) == 21
+    assert len(candidates.compiler) == 39
     assert candidates.manifest["candidate_source"] == "agent_live"
     assert candidates.manifest["query_mode"] == "resolver"
     gaps = candidates.manifest["contract_gaps"]["metric"]
@@ -192,7 +192,7 @@ async def test_collect_candidates_oracle_mode(tmp_path, monkeypatch):
         enrichment_override=_fake_enrichment(raw),
     )
     assert candidates.manifest["query_mode"] == "oracle"
-    assert len(candidates.compiler) == 32
+    assert len(candidates.compiler) == 39
     error_cases = {case.case_id for case in dataset.query_cases if case.expected_error is not None}
     for case_id in error_cases:
         assert candidates.compiler[case_id].error_code == "ORACLE_INPUT_MISSING"

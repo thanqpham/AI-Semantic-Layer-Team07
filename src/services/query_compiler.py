@@ -79,6 +79,8 @@ def validate_read_only(sql: str) -> bool:
     ddl = (exp.Drop, exp.Alter, exp.TruncateTable)
     if any(isinstance(node, ddl) for node in parsed.walk()):
         raise ValueError("DDL is not allowed")
+    if parsed.find(exp.Lock):
+        raise ValueError("Locking clauses (FOR UPDATE/SHARE) are not allowed")
     return True
 
 

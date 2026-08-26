@@ -167,6 +167,8 @@ def _validate_read_only(expression: exp.Expression) -> None:
         raise SqlValidationError("SELECT_INTO_FORBIDDEN")
     if not isinstance(expression, exp.Query):
         raise SqlValidationError("NON_SELECT_STATEMENT")
+    if expression.find(exp.Lock) is not None:
+        raise SqlValidationError("UNSAFE_SQL")
     for function in expression.find_all(exp.Anonymous):
         if function.name.casefold() in _FORBIDDEN_FUNCTIONS:
             raise SqlValidationError("FORBIDDEN_FUNCTION")

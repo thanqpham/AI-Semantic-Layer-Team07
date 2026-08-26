@@ -21,9 +21,9 @@ async def test_views_cover_all_cases_without_expected_fields():
     guardrail_cases = iter_guardrail_cases(dataset)
 
     assert len(discovery_ids) == 4
-    assert len(metric_cases) == 12
-    assert len(query_cases) == 32
-    assert len(guardrail_cases) == 13
+    assert len(metric_cases) == 21
+    assert len(query_cases) == 39
+    assert len(guardrail_cases) == 16
     first = metric_cases[0]
     assert isinstance(first, MetricCaseView)
     assert first.request
