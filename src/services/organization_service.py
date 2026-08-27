@@ -86,6 +86,11 @@ def _slugify(value: str) -> str:
     return slug[:120] or "workspace"
 
 
+def _is_reserved_personal_slug(value: str) -> bool:
+    """Return whether a slug belongs to the Personal Workspace namespace."""
+    return re.fullmatch(r"user-\d+", value.strip().lower()) is not None
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -174,8 +179,12 @@ async def _resolve_membership_uncached(
     stmt = select(OrganizationMemberModel).where(OrganizationMemberModel.user_id == user_id)
     memberships = list((await db.execute(stmt)).scalars().all())
     if not memberships:
-        organization = await create_organization(db, user_id, "Personal Workspace", f"user-{user_id}")
+        organization = await ensure_personal_workspace(db, user_id)
+        if organization is None:
+            raise PermissionError("Workspace membership required")
         membership = await get_membership(db, user_id, organization.id)
+        if membership is None:
+            raise PermissionError("Workspace membership required")
         return organization, membership
     if len(memberships) != 1:
         raise ValueError("X-Organization-ID is required when user belongs to multiple Workspaces")
@@ -191,9 +200,18 @@ def require_permission(membership: OrganizationMemberModel, permission: str) -> 
         raise PermissionError("Insufficient Workspace permission")
 
 
-async def create_organization(db: AsyncSession, user_id: int, name: str, slug: str | None) -> OrganizationModel:
+async def create_organization(
+    db: AsyncSession,
+    user_id: int,
+    name: str,
+    slug: str | None,
+    *,
+    commit: bool = True,
+) -> OrganizationModel:
     """Create a Workspace and make the creator its Admin."""
     base_slug = _slugify(slug or name)
+    if _is_reserved_personal_slug(base_slug):
+        raise ValueError("Personal Workspace slugs are reserved")
     candidate = base_slug
     suffix = 2
     while await db.scalar(select(OrganizationModel.id).where(OrganizationModel.slug == candidate)):
@@ -203,8 +221,44 @@ async def create_organization(db: AsyncSession, user_id: int, name: str, slug: s
     db.add(organization)
     await db.flush()
     db.add(OrganizationMemberModel(org_id=organization.id, user_id=user_id, role="admin"))
-    await db.commit()
-    await db.refresh(organization)
+    await db.flush()
+    if commit:
+        await db.commit()
+        await db.refresh(organization)
+    invalidate_membership_cache(user_id)
+    return organization
+
+
+async def ensure_personal_workspace(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    commit: bool = True,
+) -> OrganizationModel | None:
+    """Provision the user's Personal Workspace when no membership exists."""
+    membership_stmt = select(OrganizationMemberModel.id).where(OrganizationMemberModel.user_id == user_id)
+    if await db.scalar(membership_stmt) is not None:
+        return None
+
+    slug = f"user-{user_id}"
+    organization = await db.scalar(
+        select(OrganizationModel).where(
+            OrganizationModel.created_by == user_id,
+            OrganizationModel.slug == slug,
+        )
+    )
+    if organization is None:
+        collision = await db.scalar(select(OrganizationModel).where(OrganizationModel.slug == slug))
+        if collision is not None:
+            raise ValueError("Personal Workspace slug is already in use")
+        organization = OrganizationModel(name="Personal Workspace", slug=slug, created_by=user_id)
+        db.add(organization)
+        await db.flush()
+    db.add(OrganizationMemberModel(org_id=organization.id, user_id=user_id, role="admin"))
+    await db.flush()
+    if commit:
+        await db.commit()
+        await db.refresh(organization)
     invalidate_membership_cache(user_id)
     return organization
 
@@ -217,7 +271,11 @@ async def list_organizations(db: AsyncSession, user_id: int) -> list[Organizatio
         .where(OrganizationMemberModel.user_id == user_id)
         .order_by(OrganizationModel.created_at, OrganizationModel.id)
     )
-    return [_organization_response(org, member) for org, member in (await db.execute(stmt)).all()]
+    rows = (await db.execute(stmt)).all()
+    if not rows:
+        await ensure_personal_workspace(db, user_id)
+        rows = (await db.execute(stmt)).all()
+    return [_organization_response(org, member) for org, member in rows]
 
 
 def _organization_response(org: OrganizationModel, member: OrganizationMemberModel) -> OrganizationSummaryResponse:

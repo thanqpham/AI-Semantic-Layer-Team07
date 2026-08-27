@@ -28,6 +28,7 @@ from src.models.schemas import (
     UserRegisterRequest,
 )
 from src.services.database import get_db_session
+from src.services.organization_service import ensure_personal_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,8 @@ async def _create_user(db: AsyncSession, email: str, username: str, password: st
         status="active",
     )
     db.add(user)
+    await db.flush()
+    await ensure_personal_workspace(db, user.id, commit=False)
     await db.commit()
     await db.refresh(user)
     return user

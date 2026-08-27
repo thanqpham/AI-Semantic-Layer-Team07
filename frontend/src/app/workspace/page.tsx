@@ -125,6 +125,11 @@ const WorkspaceManagementModal = dynamic(
   { ssr: false },
 );
 
+const CreateWorkspaceModal = dynamic(
+  () => import('@/components/modals/CreateWorkspaceModal').then((m) => m.CreateWorkspaceModal),
+  { ssr: false },
+);
+
 const MetricModal = dynamic(
   () => import('@/components/modals/MetricModal').then((m) => m.MetricModal),
   { ssr: false },
@@ -188,6 +193,7 @@ export default function WorkspacePage() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workspaceManagementOpen, setWorkspaceManagementOpen] = useState(false);
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
   const [metricOpen, setMetricOpen] = useState(false);
   const [editingMetric, setEditingMetric] = useState<MetricRecord | null>(null);
   const [editingSuggestion, setEditingSuggestion] = useState<MetricSuggestion | null>(null);
@@ -623,6 +629,7 @@ export default function WorkspacePage() {
       }
       onConnectDatabase={canManageSchema ? () => setConnectOpen(true) : undefined}
       onOpenSettings={() => setSettingsOpen(true)}
+      onCreateWorkspace={() => setCreateWorkspaceOpen(true)}
       onOpenWorkspaceManagement={
         permissions.can_manage_members ? () => setWorkspaceManagementOpen(true) : undefined
       }
@@ -816,6 +823,12 @@ export default function WorkspacePage() {
         <WorkspaceManagementModal
           isOpen={workspaceManagementOpen}
           onClose={() => setWorkspaceManagementOpen(false)}
+        />
+      )}
+      {createWorkspaceOpen && (
+        <CreateWorkspaceModal
+          isOpen={createWorkspaceOpen}
+          onClose={() => setCreateWorkspaceOpen(false)}
         />
       )}
     </WorkspaceApp>

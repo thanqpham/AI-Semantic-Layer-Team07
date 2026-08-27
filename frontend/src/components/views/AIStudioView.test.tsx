@@ -21,10 +21,14 @@ describe('AIStudioView', () => {
   });
 
   const mockLayer: api.SemanticLayerData = {
+    id: 'ecom-live',
     db_name: 'ecom_live',
+    db_type: 'postgresql',
+    status: 'Saved',
+    updated_at: '2026-01-01T00:00:00Z',
     source_type: 'live',
     semantic_db_id: 101,
-    tables: [{ table_name: 'orders', business_name: 'Đơn hàng', columns: [] }],
+    tables: [{ table_name: 'orders', business_name: 'Đơn hàng', description: '', columns: [] }],
     metrics: [],
   };
 

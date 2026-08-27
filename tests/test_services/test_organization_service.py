@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from src.models.db import OrganizationInvitationModel, OrganizationMemberModel, UserModel
+from src.models.db import OrganizationInvitationModel, OrganizationMemberModel, OrganizationModel, UserModel
 from src.services.organization_service import (
     _MEMBERSHIP_CACHE,
     ROLE_PERMISSIONS,
@@ -14,11 +14,14 @@ from src.services.organization_service import (
     change_member_role,
     create_invitation,
     create_organization,
+    ensure_personal_workspace,
     get_membership,
     invalidate_membership_cache,
     list_members,
+    list_organizations,
     remove_member,
     require_permission,
+    resolve_membership,
 )
 
 # ---------------------------------------------------------------------------
@@ -119,6 +122,87 @@ async def test_create_workspace_makes_creator_admin(async_session):
     membership = await get_membership(async_session, 1, organization.id)
     assert organization.slug == "acme-analytics"
     assert membership is not None
+    assert membership.role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_personal_workspace_provision_is_idempotent(async_session):
+    user = await _add_user(async_session, 10, "personal@company.com")
+
+    created = await ensure_personal_workspace(async_session, user.id)
+    repeated = await ensure_personal_workspace(async_session, user.id)
+
+    assert created is not None
+    assert created.name == "Personal Workspace"
+    assert created.slug == "user-10"
+    assert (await get_membership(async_session, user.id, created.id)).role == "admin"
+    assert repeated is None
+    organizations = (await async_session.execute(select(OrganizationModel))).scalars().all()
+    assert len(organizations) == 1
+
+
+@pytest.mark.asyncio
+async def test_personal_workspace_provision_reuses_existing_org(async_session):
+    user = await _add_user(async_session, 11, "legacy@company.com")
+    organization = OrganizationModel(
+        name="Personal Workspace", slug="user-11", created_by=user.id
+    )
+    async_session.add(organization)
+    await async_session.commit()
+
+    result = await ensure_personal_workspace(async_session, user.id)
+
+    assert result is not None
+    assert result.id == organization.id
+    assert (await get_membership(async_session, user.id, organization.id)).role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_personal_workspace_provision_skips_user_with_membership(async_session):
+    user = await _add_user(async_session, 14, "membered@company.com")
+    organization = await create_organization(async_session, user.id, "Existing Workspace", "existing")
+
+    result = await ensure_personal_workspace(async_session, user.id)
+
+    assert result is None
+    organizations = (await async_session.execute(select(OrganizationModel))).scalars().all()
+    assert [item.slug for item in organizations] == [organization.slug]
+
+
+@pytest.mark.asyncio
+async def test_generic_workspace_cannot_claim_personal_slug(async_session):
+    with pytest.raises(ValueError, match="reserved"):
+        await create_organization(async_session, 1, "Imposter", "user-999")
+
+
+@pytest.mark.asyncio
+async def test_personal_workspace_reports_reserved_slug_collision(async_session):
+    user = await _add_user(async_session, 16, "collision@company.com")
+    async_session.add(OrganizationModel(name="Collision", slug="user-16", created_by=1))
+    await async_session.commit()
+
+    with pytest.raises(ValueError, match="already in use"):
+        await ensure_personal_workspace(async_session, user.id)
+
+
+@pytest.mark.asyncio
+async def test_list_organizations_provisions_legacy_user(async_session):
+    user = await _add_user(async_session, 12, "legacy-list@company.com")
+
+    organizations = await list_organizations(async_session, user.id)
+
+    assert len(organizations) == 1
+    assert organizations[0].slug == "user-12"
+    assert organizations[0].role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_resolve_membership_provisions_user_without_membership(async_session):
+    user = await _add_user(async_session, 13, "legacy-current@company.com")
+
+    organization, membership = await resolve_membership(async_session, user.id, None)
+
+    assert organization.slug == "user-13"
     assert membership.role == "admin"
 
 

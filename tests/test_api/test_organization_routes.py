@@ -1,9 +1,16 @@
 """API behavior tests for Workspace and invitation endpoints."""
 
 import pytest
+from sqlalchemy import select
 
 from src.api.auth import create_access_token
-from src.models.db import OrganizationMemberModel, SemanticDatabaseModel, SemanticTableModel, UserModel
+from src.models.db import (
+    OrganizationMemberModel,
+    OrganizationModel,
+    SemanticDatabaseModel,
+    SemanticTableModel,
+    UserModel,
+)
 from src.services.organization_service import create_organization
 
 
@@ -22,6 +29,57 @@ async def test_create_and_list_workspace(client, async_session):
     listed = await client.get("/api/v1/org/my-orgs", headers=_headers(user))
     assert listed.status_code == 200
     assert listed.json()[0]["name"] == "Acme Analytics"
+
+
+@pytest.mark.asyncio
+async def test_legacy_user_gets_personal_workspace_from_my_orgs(client, async_session):
+    user = await async_session.get(UserModel, 1)
+
+    response = await client.get("/api/v1/org/my-orgs", headers=_headers(user))
+
+    assert response.status_code == 200
+    assert response.json()[0]["name"] == "Personal Workspace"
+    assert response.json()[0]["slug"] == "user-1"
+    assert response.json()[0]["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_current_workspace_reuses_personal_workspace(client, async_session):
+    user = await async_session.get(UserModel, 1)
+
+    first = await client.get("/api/v1/org/my-orgs", headers=_headers(user))
+    second = await client.get("/api/v1/org/current", headers=_headers(user))
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()[0]["id"]
+    organizations = (await async_session.execute(select(OrganizationModel))).scalars().all()
+    assert len(organizations) == 1
+
+
+@pytest.mark.asyncio
+async def test_my_orgs_returns_existing_workspace(client, async_session):
+    user = await async_session.get(UserModel, 1)
+    organization = await create_organization(async_session, user.id, "Existing Workspace", "existing")
+
+    response = await client.get("/api/v1/org/my-orgs", headers=_headers(user))
+
+    assert response.status_code == 200
+    assert [(item["id"], item["name"]) for item in response.json()] == [
+        (organization.id, "Existing Workspace")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_my_orgs_returns_all_workspaces(client, async_session):
+    user = await async_session.get(UserModel, 1)
+    first = await create_organization(async_session, user.id, "First Workspace", "first")
+    second = await create_organization(async_session, user.id, "Second Workspace", "second")
+
+    response = await client.get("/api/v1/org/my-orgs", headers=_headers(user))
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [first.id, second.id]
 
 
 @pytest.mark.asyncio

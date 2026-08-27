@@ -57,6 +57,7 @@ interface WorkspaceSidebarProps {
   onRemoveDatabase?: (id: string) => void;
   onConnectDatabase?: () => void;
   onOpenSettings: () => void;
+  onCreateWorkspace?: () => void;
   onOpenWorkspaceManagement?: () => void;
   onLogout?: () => void;
   onSelectChatSession?: (sessionId: string) => void;
@@ -100,6 +101,7 @@ export function WorkspaceSidebar({
   onRemoveDatabase,
   onConnectDatabase,
   onOpenSettings,
+  onCreateWorkspace,
   onOpenWorkspaceManagement,
   onLogout,
   onSelectChatSession,
@@ -107,7 +109,7 @@ export function WorkspaceSidebar({
   onDeleteChatSession,
   onRenameChatSession,
 }: WorkspaceSidebarProps) {
-  const { workspaces, currentWorkspace, role, permissions, switchWorkspace } = useWorkspace();
+  const { workspaces, currentWorkspace, role, permissions, isLoading, switchWorkspace } = useWorkspace();
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const canManageWorkspace = Boolean(
     permissions.can_manage_members || permissions.can_manage_invitations,
@@ -239,7 +241,7 @@ export function WorkspaceSidebar({
               <ChevronDown className="h-3 w-3 shrink-0 text-sidebar-foreground/50" />
             </div>
             <p className="truncate font-mono text-[10px] text-sidebar-foreground/50 capitalize">
-              {role ? role.replace('_', ' ') : 'Member'}
+              {role ? role.replace('_', ' ') : 'Chưa có vai trò'}
             </p>
           </div>
           {canManageWorkspace && onOpenWorkspaceManagement && (
@@ -267,7 +269,7 @@ export function WorkspaceSidebar({
           <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-sidebar-border bg-card p-1 shadow-lg">
             <div className="flex items-center justify-between px-2 py-1">
               <p className="font-mono text-[10px] uppercase text-muted-foreground">
-                Workspaces ({workspaces.length})
+                {isLoading ? 'Đang tải Workspace...' : workspaces.length ? `Workspaces (${workspaces.length})` : 'Chưa có Workspace'}
               </p>
               {canManageWorkspace && onOpenWorkspaceManagement && (
                 <button
@@ -301,6 +303,17 @@ export function WorkspaceSidebar({
                 <span className="font-mono text-[10px] opacity-75 capitalize">{ws.role}</span>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setWsDropdownOpen(false);
+                onCreateWorkspace?.();
+              }}
+              className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-primary transition-colors hover:bg-accent cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Tạo Workspace mới
+            </button>
           </div>
         )}
       </div>

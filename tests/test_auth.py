@@ -2,6 +2,7 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import (
@@ -14,7 +15,8 @@ from src.api.auth import (
     verify_password,
 )
 from src.main import app
-from src.models.db import UserModel
+from src.models.db import OrganizationMemberModel, OrganizationModel, UserModel
+from src.api.auth import _get_or_create_google_user
 from src.services.database import get_db_session
 
 
@@ -107,6 +109,19 @@ async def test_register_and_login_api(async_session: AsyncSession) -> None:
         assert data_reg["expires_in"] == ACCESS_TOKEN_EXPIRE_SECONDS
         assert data_reg["user"]["email"] == "authtest@company.com"
         assert "role" not in data_reg["user"]
+        registered = (await async_session.execute(
+            select(UserModel).where(UserModel.email == "authtest@company.com")
+        )).scalar_one()
+        workspace = (await async_session.execute(
+            select(OrganizationModel).where(OrganizationModel.slug == f"user-{registered.id}")
+        )).scalar_one()
+        membership = (await async_session.execute(
+            select(OrganizationMemberModel).where(
+                OrganizationMemberModel.user_id == registered.id,
+                OrganizationMemberModel.org_id == workspace.id,
+            )
+        )).scalar_one()
+        assert membership.role == "admin"
 
         # Login user
         login_payload = {
@@ -131,6 +146,24 @@ async def test_register_and_login_api(async_session: AsyncSession) -> None:
         assert "role" not in res_me.json()
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_google_created_user_gets_personal_workspace(async_session: AsyncSession) -> None:
+    user = await _get_or_create_google_user(async_session, "google@company.com", "Google User")
+
+    workspace = (await async_session.execute(
+        select(OrganizationModel).where(OrganizationModel.slug == f"user-{user.id}")
+    )).scalar_one()
+    membership = (await async_session.execute(
+        select(OrganizationMemberModel).where(
+            OrganizationMemberModel.user_id == user.id,
+            OrganizationMemberModel.org_id == workspace.id,
+        )
+    )).scalar_one()
+
+    assert workspace.name == "Personal Workspace"
+    assert membership.role == "admin"
 
 
 @pytest.mark.asyncio

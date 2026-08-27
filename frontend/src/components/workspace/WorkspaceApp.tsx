@@ -31,6 +31,7 @@ interface WorkspaceAppProps {
   onRemoveDatabase?: (id: string) => void;
   onConnectDatabase?: () => void;
   onOpenSettings: () => void;
+  onCreateWorkspace?: () => void;
   onOpenWorkspaceManagement?: () => void;
   onLogout?: () => void;
   onSelectChatSession?: (sessionId: string) => void;
@@ -66,6 +67,7 @@ export function WorkspaceApp({
   onRemoveDatabase,
   onConnectDatabase,
   onOpenSettings,
+  onCreateWorkspace,
   onOpenWorkspaceManagement,
   onLogout,
   onSelectChatSession,
@@ -109,6 +111,7 @@ export function WorkspaceApp({
         onRemoveDatabase={onRemoveDatabase}
         onConnectDatabase={onConnectDatabase}
         onOpenSettings={onOpenSettings}
+        onCreateWorkspace={onCreateWorkspace}
         onOpenWorkspaceManagement={onOpenWorkspaceManagement}
         onLogout={onLogout}
         onSelectChatSession={onSelectChatSession}

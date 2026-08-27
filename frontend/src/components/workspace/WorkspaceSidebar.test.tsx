@@ -2,9 +2,12 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceSidebar } from '@/components/workspace/WorkspaceSidebar';
 import type { WorkspaceDatabase, ViewId } from '@/components/workspace/shared';
+import type { WorkspaceRole } from '@/lib/api';
 
 const workspaceState = vi.hoisted(() => ({
-  role: 'admin',
+  role: 'admin' as WorkspaceRole | null,
+  isLoading: false,
+  workspaces: [] as Array<{ id: number; name: string; role: WorkspaceRole }>,
   permissions: {
     can_manage_members: true,
     can_manage_invitations: true,
@@ -14,10 +17,11 @@ const workspaceState = vi.hoisted(() => ({
 
 vi.mock('@/context/WorkspaceContext', () => ({
   useWorkspace: () => ({
-    workspaces: [],
+    workspaces: workspaceState.workspaces,
     currentWorkspace: { id: 1, name: 'Risk Analytics', role: workspaceState.role },
     role: workspaceState.role,
     permissions: workspaceState.permissions,
+    isLoading: workspaceState.isLoading,
     switchWorkspace: vi.fn(),
   }),
 }));
@@ -26,6 +30,8 @@ describe('WorkspaceSidebar', () => {
   afterEach(() => {
     cleanup();
     workspaceState.role = 'admin';
+    workspaceState.isLoading = false;
+    workspaceState.workspaces = [];
     workspaceState.permissions = {
       can_manage_members: true,
       can_manage_invitations: true,
@@ -141,6 +147,33 @@ describe('WorkspaceSidebar', () => {
     workspaceState.permissions = { can_manage_members: false, can_manage_invitations: false };
     rerender(<WorkspaceSidebar {...defaultProps} onOpenWorkspaceManagement={onOpenWorkspaceManagement} />);
     expect(screen.queryByLabelText('Manage workspace')).not.toBeInTheDocument();
+  });
+
+  it('always renders the create workspace action in the workspace dropdown', () => {
+    const onCreateWorkspace = vi.fn();
+    render(<WorkspaceSidebar {...defaultProps} onCreateWorkspace={onCreateWorkspace} />);
+
+    fireEvent.click(screen.getByText('Risk Analytics'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo Workspace mới' }));
+
+    expect(onCreateWorkspace).toHaveBeenCalledOnce();
+  });
+
+  it('shows loading and empty workspace states without inventing a Member role', () => {
+    workspaceState.isLoading = true;
+    workspaceState.role = null;
+    render(<WorkspaceSidebar {...defaultProps} />);
+
+    fireEvent.click(screen.getByText('Risk Analytics'));
+    expect(screen.getByText('Đang tải Workspace...')).toBeInTheDocument();
+    expect(screen.getByText('Chưa có vai trò')).toBeInTheDocument();
+    expect(screen.queryByText('Member')).not.toBeInTheDocument();
+
+    workspaceState.isLoading = false;
+    const { unmount } = render(<WorkspaceSidebar {...defaultProps} />);
+    fireEvent.click(screen.getAllByText('Risk Analytics')[1]);
+    expect(screen.getByText('Chưa có Workspace')).toBeInTheDocument();
+    unmount();
   });
 
   it('hides AI Studio navigation when the workspace has no chat capability', () => {
@@ -292,7 +325,7 @@ describe('WorkspaceSidebar', () => {
       expect(onConnectDatabase).toHaveBeenCalledTimes(1);
     });
 
-    it.each([
+    it.each<[WorkspaceRole, boolean]>([
       ['admin', false],
       ['member', false],
       ['data_lead', true],
