@@ -12,6 +12,7 @@ interface WorkspaceAppProps {
   theme: 'light' | 'dark';
   pendingCount: number;
   pendingSchemaCount?: number;
+  pendingDriftCount?: number;
   collapsed: boolean;
   userName?: string;
   chatSessions?: ChatSessionItem[];
@@ -33,6 +34,7 @@ interface WorkspaceAppProps {
   onOpenSettings: () => void;
   onCreateWorkspace?: () => void;
   onOpenWorkspaceManagement?: () => void;
+  onOpenSyncLogs?: () => void;
   onLogout?: () => void;
   onSelectChatSession?: (sessionId: string) => void;
   onNewChatSession?: () => void;
@@ -48,6 +50,7 @@ export function WorkspaceApp({
   theme,
   pendingCount,
   pendingSchemaCount,
+  pendingDriftCount,
   collapsed,
   userName,
   chatSessions,
@@ -69,6 +72,7 @@ export function WorkspaceApp({
   onOpenSettings,
   onCreateWorkspace,
   onOpenWorkspaceManagement,
+  onOpenSyncLogs,
   onLogout,
   onSelectChatSession,
   onNewChatSession,
@@ -92,6 +96,7 @@ export function WorkspaceApp({
         theme={theme}
         pendingCount={pendingCount}
         pendingSchemaCount={pendingSchemaCount}
+        pendingDriftCount={pendingDriftCount}
         collapsed={collapsed}
         userName={userName}
         chatSessions={chatSessions}
@@ -113,6 +118,7 @@ export function WorkspaceApp({
         onOpenSettings={onOpenSettings}
         onCreateWorkspace={onCreateWorkspace}
         onOpenWorkspaceManagement={onOpenWorkspaceManagement}
+        onOpenSyncLogs={onOpenSyncLogs}
         onLogout={onLogout}
         onSelectChatSession={onSelectChatSession}
         onNewChatSession={onNewChatSession}

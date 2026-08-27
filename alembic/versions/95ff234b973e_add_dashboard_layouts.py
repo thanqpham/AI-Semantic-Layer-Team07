@@ -19,9 +19,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Create the dashboard_layouts singleton table."""
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    tables = inspector.get_table_names()
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    tables = set(insp.get_table_names())
     if "dashboard_layouts" not in tables:
         op.create_table(
             "dashboard_layouts",
