@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.auth import (
     ACCESS_TOKEN_EXPIRE_SECONDS,
     REFRESH_TOKEN_EXPIRE_SECONDS,
+    _get_or_create_google_user,
     create_access_token,
     create_refresh_token,
     decode_jwt_token,
@@ -16,7 +17,6 @@ from src.api.auth import (
 )
 from src.main import app
 from src.models.db import OrganizationMemberModel, OrganizationModel, UserModel
-from src.api.auth import _get_or_create_google_user
 from src.services.database import get_db_session
 
 
