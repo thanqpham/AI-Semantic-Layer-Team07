@@ -21,6 +21,7 @@ from src.models.schemas import (
     SemanticQuerySpec,
     SemanticTimeRange,
 )
+from src.observability import trace_action, trace_node
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 
@@ -92,6 +93,7 @@ CHỈ TRẢ VỀ DUY NHẤT 1 JSON OBJECT hợp lệ theo cấu trúc sau:
 }}"""
 
 
+@trace_node("semantic_parse")
 async def semantic_parse_node(state: AgentState) -> dict[str, Any]:
     """Parse user query against catalog using LLM without direct DB execution."""
     catalog = state.get("parser_catalog") or {}
@@ -103,7 +105,9 @@ async def semantic_parse_node(state: AgentState) -> dict[str, Any]:
     can_generate = state.get("can_generate_metrics", False)
     prompt = _build_parse_prompt(state, user_message, catalog, can_generate)
     try:
-        raw_json = await ainvoke_json(get_llm(), prompt, retries=1)
+        raw_json = await trace_action(
+            "semantic_parse", {"catalog_metrics": len(metrics)}, ainvoke_json(get_llm(), prompt, retries=1)
+        )
         interpretation = _parse_interpretation(raw_json, catalog, can_generate, user_message)
     except Exception as exc:
         logger.warning("Semantic parse node failed: %s", exc)

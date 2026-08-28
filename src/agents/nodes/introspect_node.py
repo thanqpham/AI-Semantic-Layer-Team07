@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from src.agents.state import AgentState
+from src.observability import trace_action, trace_node
 from src.services.introspection import (
     ConnectionIntrospectionError,
     IntrospectionError,
@@ -17,6 +18,7 @@ from src.services.introspection import (
 logger = logging.getLogger(__name__)
 
 
+@trace_node("introspect")
 async def introspect_node(state: AgentState) -> dict[str, object]:
     """Read target schema metadata through the introspection interface."""
     if not state.get("conn_url_enc") or not state.get("db_type"):
@@ -29,7 +31,7 @@ async def introspect_node(state: AgentState) -> dict[str, object]:
         "connection_id": state["db_id"],
     }
     try:
-        result = await extract_raw_schema(req)
+        result = await trace_action("schema_introspection", {"db_type": state["db_type"]}, extract_raw_schema(req))
     except IntrospectionError as exc:
         return _error_response(state, exc)
     if not result["raw_schema"]["tables"]:

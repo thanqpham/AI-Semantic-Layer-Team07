@@ -5,19 +5,24 @@ from src.agents.nodes.introspect_node import introspect_node
 from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
 from src.agents.nodes.save_node import save_node
 from src.agents.state import AgentState
+from src.observability import trace_transition
 
 
 def route_after_introspect(state: AgentState) -> str:
     """Route to enrich if introspect succeeded, else terminate with error."""
     if state.get("error"):
+        trace_transition("introspect", END)
         return END
+    trace_transition("introspect", "enrich")
     return "enrich"
 
 
 def route_after_save(state: AgentState) -> str:
     """Route after save: saved → END, rejected → re-enrich."""
     if state.get("semantic_layer_id"):
+        trace_transition("save", END)
         return END
+    trace_transition("save", "enrich")
     return "enrich"
 
 

@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from src.observability import trace_action
 from src.services.query_compiler import CompiledQuery, validate_read_only
 
 
@@ -45,6 +46,20 @@ async def execute_compiled_query(
     timeout_seconds: int = 15,
 ) -> QueryResult:
     """Execute one validated SELECT using an async connection and hard timeout."""
+    return await trace_action(
+        "read_only_execute",
+        {"dialect": dialect, "timeout_seconds": timeout_seconds},
+        _execute_validated_query(conn_url, dialect, compiled, timeout_seconds),
+    )
+
+
+async def _execute_validated_query(
+    conn_url: str,
+    dialect: str,
+    compiled: CompiledQuery,
+    timeout_seconds: int,
+) -> QueryResult:
+    """Run the validated query inside a read-only transaction."""
     validate_read_only(compiled.sql)
     engine = create_async_engine(_async_url(conn_url, dialect), pool_pre_ping=True)
     try:

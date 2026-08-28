@@ -21,6 +21,7 @@ from src.models.db import (
 )
 from src.models.metric_definition import MetricDefinition, MetricExpressionNode, MetricFilter
 from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQuerySpec
+from src.observability import trace_action, trace_value
 from src.services.semantic_compile_error import SemanticCompileError
 
 
@@ -62,6 +63,11 @@ def _reject_duplicate_selections(spec: SemanticQuerySpec) -> None:
 
 def validate_read_only(sql: str) -> bool:
     """Require exactly one SELECT without write-capable AST nodes."""
+    return trace_value("sql_guardrail", {"sql_length": len(sql)}, lambda: _validate_read_only(sql))
+
+
+def _validate_read_only(sql: str) -> bool:
+    """Validate the SQL AST without coupling parsing to tracing."""
     try:
         statements = sqlglot.parse(sql, error_level=sqlglot.ErrorLevel.RAISE)
     except sqlglot.errors.ParseError as exc:
@@ -103,7 +109,11 @@ class SemanticQueryCompiler:
         """Compile semantic selections without accepting SQL from the caller."""
         spec = _query_spec(query, metric_ids, dimension_ids, filters, limit)
         _reject_duplicate_selections(spec)
-        return await self._compile_spec(connection_id, spec)
+        return await trace_action(
+            "query_compile",
+            {"connection_id": connection_id, "metric_count": len(spec.metric_ids)},
+            self._compile_spec(connection_id, spec),
+        )
 
     async def _compile_spec(self, connection_id: int, spec: SemanticQuerySpec) -> CompiledQuery:
         dialect = await self._load_dialect(connection_id)

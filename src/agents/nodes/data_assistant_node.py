@@ -8,6 +8,7 @@ import unicodedata
 from typing import Any
 
 from src.agents.state import AgentState
+from src.observability import trace_node
 from src.services.llm import get_llm
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ GFM table hợp lệ có dòng trống trước và sau. Không nối nhiều ý
 _MAX_HISTORY_CHARS = 10000
 
 
+@trace_node("data_assistant")
 async def data_assistant_node(state: AgentState) -> dict[str, Any]:
     """Answer read-only schema and approved-metric questions."""
     user_message = state.get("user_message", "").strip()

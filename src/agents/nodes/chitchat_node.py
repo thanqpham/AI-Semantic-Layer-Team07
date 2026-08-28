@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from src.agents.state import AgentState
+from src.observability import trace_node
 from src.services.llm import get_llm
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ _FALLBACK_RESPONSE = "Xin lỗi, tôi không thể phản hồi lúc này. Vui l
 _MAX_HISTORY_CHARS = 12000
 
 
+@trace_node("chitchat")
 async def chitchat_node(state: AgentState) -> dict[str, Any]:
     """Generate a friendly natural-language response to chitchat messages.
 

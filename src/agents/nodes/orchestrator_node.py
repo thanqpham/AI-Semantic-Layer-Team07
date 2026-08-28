@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from src.agents.state import AgentState
+from src.observability import trace_node
 from src.services.llm import get_llm
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ Latest request: {user_message}"""
 _INTENTS = {"chitchat", "semantic_query", "data_question", "metric_query", "out_of_scope"}
 
 
+@trace_node("orchestrator")
 async def orchestrator_node(state: AgentState) -> dict[str, Any]:
     """Classify user message into chitchat, semantic_query, data_question, metric_query, or out_of_scope.
 

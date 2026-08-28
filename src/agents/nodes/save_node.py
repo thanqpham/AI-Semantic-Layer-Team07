@@ -23,6 +23,7 @@ from src.models.schema_metadata import (
     SchemaMetadata,
     TableMetadata,
 )
+from src.observability import trace_action, trace_node
 from src.services.database import get_db_session
 from src.services.semantic_service import (
     approve_metric,
@@ -120,6 +121,7 @@ def _convert_fk(fk: dict, dialect: SchemaDialect) -> ForeignKeyMetadata:
 # ---------------------------------------------------------------------------
 
 
+@trace_node("save")
 async def save_node(state: AgentState) -> dict:
     """Persist approved Semantic Layer to Metadata Store via semantic_service.
 
@@ -141,13 +143,17 @@ async def save_node(state: AgentState) -> dict:
         canonical = raw_schema_to_canonical(raw_schema, dialect)
         enrichment = state.get("enriched_schema")
         async for session in get_db_session():
-            result = await enrich_and_save_canonical_schema(
-                db=session,
-                user_id=user_id,
-                connection_id=db_id,
-                raw_schema=canonical,
-                dialect=dialect,
-                enrichment=enrichment,
+            result = await trace_action(
+                "semantic_persist",
+                {"connection_id": db_id, "table_count": len(raw_schema["tables"])},
+                enrich_and_save_canonical_schema(
+                    db=session,
+                    user_id=user_id,
+                    connection_id=db_id,
+                    raw_schema=canonical,
+                    dialect=dialect,
+                    enrichment=enrichment,
+                ),
             )
             await _save_approved_metrics(session, state, db_id, user_id)
             await session.commit()
@@ -175,10 +181,25 @@ async def _save_approved_metrics(
     """Persist and approve reviewed metric definitions from graph state."""
     for payload in state.get("suggested_metrics", []):
         definition = MetricDefinition.model_validate(payload)
-        metric = await create_metric(
-            session,
-            db_id,
-            {"definition": definition.model_dump(mode="json"), "source": "ai"},
-            user_id,
+        await trace_action(
+            "metric_approve",
+            {"connection_id": db_id},
+            _create_and_approve_metric(session, db_id, user_id, definition),
         )
-        await approve_metric(session, metric.id, user_id)
+
+
+async def _create_and_approve_metric(
+    session: Any,
+    db_id: int,
+    user_id: int,
+    definition: MetricDefinition,
+) -> Any:
+    """Create and approve a reviewed metric in one traced action boundary."""
+    metric = await create_metric(
+        session,
+        db_id,
+        {"definition": definition.model_dump(mode="json"), "source": "ai"},
+        user_id,
+    )
+    await approve_metric(session, metric.id, user_id)
+    return metric

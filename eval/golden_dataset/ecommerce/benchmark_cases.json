@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "case_id": "ecommerce_trace_pipeline_001",
+      "suite": "pipeline",
+      "fixture": "sqlite_ecommerce",
+      "expected_terminal": "completed",
+      "constraints": {
+        "required_actions": ["schema_introspection", "llm_enrichment", "metric_generation", "query_compile", "sql_guardrail"],
+        "required_precedence": [["schema_introspection", "llm_enrichment"], ["llm_enrichment", "metric_generation"]],
+        "max_iterations": 50,
+        "max_actions": 100
+      }
+    }
+  ]
+}

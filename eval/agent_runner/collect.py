@@ -33,6 +33,7 @@ from eval.evaluator.schemas import (
     CandidateMetricOutput,
     EvaluationConfig,
 )
+from src.observability import trace_action, trace_transition
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,14 @@ async def collect_candidates(
     """Run discovery, enrichment, metrics, query, and guardrail collection."""
     if query_mode not in QUERY_MODES:
         raise ValueError(f"unknown query mode: {query_mode!r}")
-    raw = await introspect_target(ctx)
-    conn_id = await run_enrichment_pipeline(ctx, raw, enrichment=enrichment_override)
+    trace_transition("benchmark", "introspect")
+    raw = await trace_action("schema_introspection", {"source": "sandbox"}, introspect_target(ctx))
+    trace_transition("introspect", "enrich")
+    conn_id = await trace_action(
+        "llm_enrichment",
+        {"table_count": _table_count(raw)},
+        run_enrichment_pipeline(ctx, raw, enrichment=enrichment_override),
+    )
     entity_resolver = CanonicalResolver.from_dataset(dataset, {})
     discovery_ids = iter_discovery_ids(dataset)
     run_all = suites is None
@@ -106,15 +113,31 @@ async def collect_candidates(
         else {}
     )
     metric_result = (
-        await collect_metrics(ctx, conn_id, iter_metric_cases(dataset), entity_resolver)
+        await trace_action(
+            "metric_generation",
+            {"case_count": len(dataset.metric_cases)},
+            collect_metrics(ctx, conn_id, iter_metric_cases(dataset), entity_resolver),
+        )
         if run_all or "metrics" in suites
         else MetricCollectResult({}, {})
     )
     compiler: dict[str, CandidateCompilerOutput] = {}
     if run_all or "compiler" in suites:
         compiler_resolver = CanonicalResolver.from_dataset(dataset, metric_result.metric_ids)
-        compiler = await _collect_compiler(ctx, conn_id, dataset, query_mode, metric_result, compiler_resolver)
-    guardrail = await collect_guardrails(iter_guardrail_cases(dataset)) if run_all or "guardrails" in suites else {}
+        compiler = await trace_action(
+            "query_compile",
+            {"case_count": len(dataset.query_cases)},
+            _collect_compiler(ctx, conn_id, dataset, query_mode, metric_result, compiler_resolver),
+        )
+    guardrail = (
+        await trace_action(
+            "sql_guardrail",
+            {"case_count": len(dataset.guardrail_cases)},
+            collect_guardrails(iter_guardrail_cases(dataset)),
+        )
+        if run_all or "guardrails" in suites
+        else {}
+    )
     return AgentCandidates(
         discovery=discovery,
         enrichment=enrichment,
@@ -216,6 +239,14 @@ def _dedupe_logs(entries: Iterable[dict[str, str]]) -> list[dict[str, str]]:
             seen.add(key)
             unique.append(entry)
     return unique
+
+
+def _table_count(raw: Any) -> int:
+    """Read table cardinality from either raw schema contract shape."""
+    tables = getattr(raw, "tables", None)
+    if tables is not None:
+        return len(tables)
+    return len(raw.get("tables", [])) if isinstance(raw, dict) else 0
 
 
 def _build_oracle_inputs(dataset: DomainDataset, metric_result: MetricCollectResult) -> dict[str, OracleInput]:

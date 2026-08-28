@@ -10,15 +10,19 @@ from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_sugg
 from src.agents.nodes.orchestrator_node import orchestrator_node
 from src.agents.nodes.semantic_parse_node import semantic_parse_node
 from src.agents.state import AgentState
+from src.observability import trace_transition
 
 
 def _route_by_intent(state: AgentState) -> str:
     """Route the server-classified intent without a metric-decision gate."""
     if state.get("chat_response"):
+        trace_transition("orchestrator", "chitchat_done")
         return "chitchat_done"
     intent = state.get("intent", "chitchat")
     if intent == "out_of_scope":
+        trace_transition("orchestrator", "out_of_scope")
         return "chitchat_done"
+    trace_transition("orchestrator", intent)
     return intent
 
 

@@ -8,6 +8,7 @@ from typing import Any
 from src.agents.state import AgentState
 from src.models.metric_definition import MetricDefinition
 from src.models.schemas import MetricSuggestionItem, MetricSuggestions
+from src.observability import trace_action, trace_node
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 from src.services.metric_dedupe import format_existing_metrics_context, merge_dedupe
@@ -21,6 +22,7 @@ from src.services.metrics import (
 logger = logging.getLogger(__name__)
 
 
+@trace_node("metric_suggest")
 async def on_demand_metric_suggest_node(state: AgentState) -> dict[str, Any]:
     """Generate metric definitions from enriched schema without generating SQL."""
     schema = state.get("enriched_schema")
@@ -36,7 +38,9 @@ async def on_demand_metric_suggest_node(state: AgentState) -> dict[str, Any]:
         history = _format_history(state.get("chat_history", []))
         current = user_msg if user_msg else "Hãy đề xuất 3 metric quan trọng nhất từ schema trên."
         messages = _metric_messages(sys_prompt, history, current, decision)
-        definitions = await _generate_definitions_with_fallback(messages)
+        definitions = await trace_action(
+            "metric_generation", {"has_existing_metrics": bool(existing)}, _generate_definitions_with_fallback(messages)
+        )
         definitions = _valid_definitions(definitions, valid_columns, decision)
         if not definitions:
             raise ValueError("LLM failed to generate a schema-valid metric definition")

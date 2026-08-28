@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from src.agents.state import AgentState
+from src.observability import trace_action, trace_node
 from src.services.clustering import cluster_tables, table_key
 from src.services.enrichment_config import DEFAULT_CONFIG
 from src.services.pass1_global_glossary import execute_pass1
@@ -68,6 +69,7 @@ def _assemble_enriched_tables(
     return enriched_list
 
 
+@trace_node("enrich")
 async def enrich_node(state: AgentState) -> dict[str, Any]:
     """Two-Pass enrichment: Pass 1 global glossary + Pass 2 cluster enrichment.
 
@@ -83,13 +85,14 @@ async def enrich_node(state: AgentState) -> dict[str, Any]:
         dialect = state.get("db_type", "postgresql")
         sem = asyncio.Semaphore(DEFAULT_CONFIG.max_concurrency)
 
-        global_glossary = await execute_pass1(tables, dialect, sem)
+        global_glossary = await trace_action(
+            "llm_glossary", {"table_count": len(tables)}, execute_pass1(tables, dialect, sem)
+        )
         clusters = cluster_tables(tables)
-        enriched_dict = await enrich_clusters_parallel(
-            clusters,
-            global_glossary,
-            dialect,
-            sem,
+        enriched_dict = await trace_action(
+            "llm_enrichment",
+            {"cluster_count": len(clusters)},
+            enrich_clusters_parallel(clusters, global_glossary, dialect, sem),
         )
 
         enriched_list = _assemble_enriched_tables(tables, enriched_dict, global_glossary)
