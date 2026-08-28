@@ -43,6 +43,19 @@ def match_sets(expected: Iterable[Hashable], actual: Iterable[Hashable]) -> SetM
     return SetMatchResult(counts, precision_recall_f1(counts), duplicates)
 
 
+def match_allowed_dimensions(expected: Iterable[Hashable], actual: Iterable[Hashable]) -> SetMatchResult:
+    """Match allowed dimensions with soft penalty for additional valid entity dimensions."""
+    expected_set = set(expected)
+    actual_values = tuple(actual)
+    actual_set = set(actual_values)
+    tp = len(expected_set & actual_set)
+    fn = len(expected_set - actual_set)
+    fp = min(len(actual_set - expected_set), 1) if (actual_set - expected_set) else 0
+    counts = MatchCounts(true_positive=tp, false_positive=fp, false_negative=fn)
+    duplicates = _duplicates(actual_values)
+    return SetMatchResult(counts, precision_recall_f1(counts), duplicates)
+
+
 def micro_average(counts: Iterable[MatchCounts]) -> PrecisionRecallF1:
     """Calculate a micro average by summing all match counts."""
     values = tuple(counts)

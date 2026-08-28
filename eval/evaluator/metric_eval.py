@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import sqlglot
 from pydantic import JsonValue
+from sqlglot import exp
+from sqlglot.errors import ParseError as SqlParseError
 
 from eval.dataset.loader import DomainDataset
 from eval.dataset.models import ExpectedMetricDefinition, MetricDefinitionCase
@@ -22,7 +25,7 @@ from eval.evaluator.schemas import (
     SuiteEvaluationResult,
 )
 from eval.evaluator.scoring import micro_average, precision_recall_f1
-from eval.evaluator.sql_normalization import normalize_expression
+from eval.evaluator.sql_normalization import normalize_expression, unwrap_declared_aggregation
 from eval.evaluator.text_similarity import TextSimilarityProvider, compare_business_name, normalize_text
 
 _SET_FIELDS = {"synonyms", "dependencies", "allowed_dimensions"}
@@ -133,7 +136,7 @@ async def _score_fields(
     for field in _FIELDS:
         expected_value = case.expected_preview_facts if field == "expected_preview_facts" else getattr(expected, field)
         actual_value = actual.expected_preview_facts if field == "expected_preview_facts" else getattr(actual, field)
-        matched = await _field_equal(field, expected_value, actual_value, config, provider)
+        matched = await _field_equal(field, expected_value, actual_value, config, provider, expected_metric=expected)
         duplicates = _field_duplicates(field, actual_value)
         diagnostics = tuple(f"duplicate value: {value}" for value in duplicates)
         scores.append(FieldScore(component=field, score=float(matched), matched=matched, diagnostics=diagnostics))
@@ -164,7 +167,16 @@ async def _field_equal(
     actual: Any,
     config: EvaluationConfig,
     provider: TextSimilarityProvider | None,
+    expected_metric: ExpectedMetricDefinition | None = None,
 ) -> bool:
+    if field == "name":
+        targets = (
+            (expected_metric.business_name, *expected_metric.synonyms, str(expected))
+            if expected_metric is not None
+            else (str(expected),)
+        )
+        result = await compare_business_name(str(actual), targets, config, provider)
+        return result.accepted
     if field in _TEXT_FIELDS:
         result = await compare_business_name(str(actual), (str(expected),), config, provider)
         return result.accepted
@@ -219,10 +231,40 @@ def _identity_score(expected: ExpectedMetricDefinition, actual: CandidateMetricD
 
 
 def _identity(metric: ExpectedMetricDefinition | CandidateMetricDefinition) -> tuple[Any, ...]:
-    expression = normalize_expression(metric.sql_expression) if metric.field is None else None
+    expression = (
+        unwrap_declared_aggregation(metric.sql_expression, metric.aggregation) if metric.field is None else None
+    )
     dependencies = tuple(sorted(set(metric.dependencies))) if metric.field is None else ()
-    filters = tuple(sorted({_filter(item.condition) for item in metric.default_filters}))
+    filters = tuple(sorted(_filter_set(metric.default_filters)))
     return metric.target_entity, metric.aggregation, metric.field, expression, dependencies, filters
+
+
+def _filter_set(items: Any) -> set[str]:
+    """Split AND-combined filter conditions into atomic, canonical conditions.
+
+    ``a AND b`` declared as one condition and ``a``/``b`` declared as two
+    filters are the same semantics; golden uses the former, the product
+    persists the latter. Chained conjunctions split recursively via sqlglot;
+    unparsable text falls back to whole-string canonicalization.
+    """
+    result: set[str] = set()
+    for item in items:
+        cond = getattr(item, "condition", str(item))
+        try:
+            parsed = sqlglot.parse_one(cond)
+        except SqlParseError:
+            result.add(normalize_expression(cond))
+            continue
+        for atom in _conjunction_atoms(parsed):
+            result.add(normalize_expression(atom.sql()))
+    return result
+
+
+def _conjunction_atoms(node: exp.Expression) -> tuple[exp.Expression, ...]:
+    """Flatten one expression into its AND-connected atoms."""
+    if isinstance(node, exp.And):
+        return _conjunction_atoms(node.left) + _conjunction_atoms(node.right)
+    return (node,)
 
 
 def _filter(value: str) -> str:

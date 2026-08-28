@@ -184,3 +184,39 @@ def test_build_metric_system_prompt_v2_includes_dedupe_rules() -> None:
     assert "[ID 12 | approved]" in text
     assert "duplicates" in text and "conflicts" in text
     assert "90%" in text  # ngưỡng semantics ≥90% xuất hiện trong rule
+
+
+# ---------------------------------------------------------------------------
+# build_metric_system_prompt — WHERE-correctness rules (spec §3)
+# ---------------------------------------------------------------------------
+
+
+def test_metric_system_prompt_requires_default_filters() -> None:
+    """Rule 5(a): hygiene flags are system-attached; 5(b): exclude terminal invalid states."""
+    prompt = build_metric_system_prompt("test")
+    assert "KHÔNG tự khai filter loại trừ cờ test/bot" in prompt
+    assert "hệ thống tự đính kèm" in prompt
+    assert "dùng phép loại trừ trạng thái vô hiệu lối cuối" in prompt
+    assert "Không bịa filter khi schema không có cờ tương ứng" in prompt
+
+
+def test_metric_system_prompt_forbids_column_reference_filter_values() -> None:
+    """Rule 5(c): filter values must be literals, never column references or joins."""
+    prompt = build_metric_system_prompt("test")
+    assert "TUYỆT ĐỐI KHÔNG dùng tên cột hay tham chiếu cột" in prompt
+    assert "điều kiện join không thuộc filter" in prompt
+
+
+def test_metric_system_prompt_binary_flag_numeric_typing() -> None:
+    """Rule 7 must prefer numeric 0/1 for numeric flag columns."""
+    prompt = build_metric_system_prompt("test")
+    assert "dùng giá trị số 1" in prompt
+    assert 'dùng chuỗi "1"/"0"' in prompt
+    assert "'Y', 'N', 'TRUE', 'true'" in prompt
+
+
+def test_metric_system_prompt_entity_counting_uses_count_distinct() -> None:
+    """Rule 1 must mandate COUNT_DISTINCT for entity counting."""
+    prompt = build_metric_system_prompt("test")
+    assert "COUNT_DISTINCT trên khóa thực thể" in prompt
+    assert "COUNT chỉ dùng" in prompt

@@ -29,17 +29,25 @@ def _compiler_sample(mini_dataset, candidate):
     return next(s for s in samples if s.task == "query_compilation")
 
 
-def _candidate(sql: str = _GOOD_SQL) -> CandidateCompilerOutput:
+def _candidate(sql: str = _GOOD_SQL, *, intent: str = "aggregate", domain: str = "mini") -> CandidateCompilerOutput:
     return CandidateCompilerOutput(
         canonical_query=CandidateCanonicalQuery(
-            intent="aggregate",
-            domain="mini",
+            intent=intent,
+            domain=domain,
             primary_entity="orders",
             metrics=("total_revenue",),
             dimensions=("order_month",),
         ),
         sql=sql,
     )
+
+
+def _dataset_with_reference_sql(dataset, sql: str):
+    assert dataset.query_cases[0].expected is not None
+    positive = dataset.query_cases[0]
+    expected = positive.expected.model_copy(update={"sql_by_dialect": {"sqlite": sql}})
+    queries = [positive.model_copy(update={"expected": expected}), *dataset.query_cases[1:]]
+    return dataset.model_copy(update={"query_cases": queries})
 
 
 async def test_ast_equivalence_ignores_formatting(mini_dataset) -> None:
@@ -100,3 +108,72 @@ async def test_missing_candidate_carries_sentinel_reason(mini_dataset) -> None:
     result = await metrics["request_validation_accuracy"].score(sample, EvaluationContext(EvaluationConfig()))
     assert result.status == "failed"
     assert result.reason == "CANDIDATE_ERROR:no candidate response"
+
+
+async def test_request_validation_ignores_intent_and_domain(mini_dataset) -> None:
+    """Empty intent/domain must not fail validation (no classifier in pipeline v1)."""
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    sample = _compiler_sample(mini_dataset, _candidate(intent="", domain=""))
+    result = await metrics["request_validation_accuracy"].score(sample, EvaluationContext(EvaluationConfig()))
+    assert result.status == "passed" and result.score == 1.0
+
+
+async def test_sql_ast_equivalence_ignores_guardrail_limit(mini_dataset) -> None:
+    """Agent SQL carries the mandated LIMIT 100; golden reference omits LIMIT."""
+    dataset = _dataset_with_reference_sql(
+        mini_dataset, "SELECT order_month, SUM(amount) FROM orders GROUP BY order_month"
+    )
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    candidate = _candidate(sql="SELECT order_month, SUM(amount) AS anything FROM orders GROUP BY order_month LIMIT 100")
+    sample = _compiler_sample(dataset, candidate)
+    result = await metrics["sql_ast_equivalence"].score(sample, EvaluationContext(EvaluationConfig()))
+    assert result.status == "passed" and result.score == 1.0
+
+
+async def test_ast_mismatch_details_carry_both_canonical_strings(mini_dataset) -> None:
+    dataset = _dataset_with_reference_sql(mini_dataset, "SELECT SUM(amount) FROM orders WHERE status = 'open'")
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    candidate = _candidate(sql="SELECT SUM(amount) FROM orders WHERE status = 'closed' LIMIT 100")
+    sample = _compiler_sample(dataset, candidate)
+    result = await metrics["sql_ast_equivalence"].score(sample, EvaluationContext(EvaluationConfig()))
+    assert result.status == "failed"
+    assert "'open'" in result.details["expected"]
+    assert "'closed'" in result.details["actual"]
+
+
+async def test_execution_mismatch_details_carry_columns_and_rows(mini_dataset, tmp_path) -> None:
+    sources = tmp_path / "sources" / "sqlite"
+    sources.mkdir(parents=True)
+    (sources / "schema.sql").write_text(
+        "CREATE TABLE orders (id INTEGER, amount REAL, order_month TEXT);", encoding="utf-8"
+    )
+    (sources / "seed_data.sql").write_text(
+        "INSERT INTO orders VALUES (1, 10.0, '2026-01');\nINSERT INTO orders VALUES (2, 20.0, '2026-02');",
+        encoding="utf-8",
+    )
+    dataset = mini_dataset.model_copy(
+        update={
+            "expected_query_results": {"query_001": [{"order_month": "2026-01", "total": 30.0}]},
+            "domain_dir": tmp_path,
+        }
+    )
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    sample = _compiler_sample(dataset, _candidate())
+    context = EvaluationContext(EvaluationConfig(), guardrail_adapter=FakeAdapter(), dataset=dataset)
+    result = await metrics["sql_execution_accuracy"].score(sample, context)
+    assert result.status == "failed"
+    assert result.details["expected_row_count"] == 1
+    assert result.details["actual_row_count"] == 2
+    assert result.details["expected_columns"] == ["order_month", "total"]
+    assert result.details["actual_rows_preview"][0]["total"] == 10.0
+
+
+async def test_outcome_mismatch_details_carry_both_error_codes(mini_dataset) -> None:
+    case = mini_dataset.query_cases[0]
+    negative = case.model_copy(update={"expected": None, "expected_error": "METRIC_NOT_FOUND"})
+    dataset = mini_dataset.model_copy(update={"query_cases": [negative]})
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    sample = _compiler_sample(dataset, CandidateCompilerOutput(error_code="UNKNOWN_METRIC"))
+    result = await metrics["invalid_selection_rejection"].score(sample, EvaluationContext(EvaluationConfig()))
+    assert result.status == "failed"
+    assert result.details == {"expected_error": "METRIC_NOT_FOUND", "actual_error": "UNKNOWN_METRIC"}

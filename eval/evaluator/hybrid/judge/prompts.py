@@ -12,9 +12,9 @@ RUBRIC: tuple[tuple[str, float], ...] = (
 )
 
 PROMPT_VERSIONS = {
-    "business_semantic_correctness": "business-semantics-v1",
-    "business_definition_correctness": "business-definition-v1",
-    "formula_semantic_correctness": "formula-semantics-v1",
+    "business_semantic_correctness": "business-semantics-v2",
+    "business_definition_correctness": "business-definition-v3",
+    "formula_semantic_correctness": "formula-semantics-v3",
 }
 
 
@@ -25,10 +25,12 @@ def judge_system_prompt() -> str:
         "You are a strict data-semantic quality judge for a Vietnamese enterprise semantic layer. "
         f"Score each criterion ({criteria}) from 0.0 to 1.0. "
         "Respond with ONLY a JSON object: "
-        '{"criteria": [{"name": "<criterion>", "score": <0.0-1.0>, "justification": "<one short sentence>"}], '
-        '"overall": <0.0-1.0>, "summary": "<one short sentence>"}. '
+        '{"criteria": [{"name": "<criterion>", "score": <0.0-1.0>, "justification": "<max 15 words>"}], '
+        '"overall": <0.0-1.0>, "summary": "<max 20 words>"}. '
         "Judge business meaning in Vietnamese business language. "
-        "Give concise justifications only; never include step-by-step reasoning."
+        "Keep each justification under 15 words and the summary under 20 words; "
+        "never include step-by-step reasoning. "
+        "Your entire response must be that JSON object — nothing before or after it."
     )
 
 

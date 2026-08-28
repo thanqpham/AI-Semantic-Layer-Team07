@@ -66,6 +66,7 @@ class HybridRunRequest:
     run_type: RunType = "smoke"
     candidate_source: CandidateSource = "golden_derived"
     profile: EvaluationProfile = "pipeline"
+    contract_gap_fields: Mapping[str, frozenset[str]] = field(default_factory=dict)
 
 
 def default_implementations() -> dict[str, EvaluationMetric]:
@@ -138,7 +139,7 @@ def build_run_result(
         metric_summary=summary,
         quality_gates=gates,
         results=results,
-        warnings=warnings,
+        warnings=(*warnings, *_judge_error_warnings(results)),
         provenance=_provenance(manifest, run_type, candidate_source, profile, judge_model),
     )
 
@@ -151,6 +152,7 @@ def _context(request: HybridRunRequest) -> EvaluationContext:
         guardrail_adapter=request.guardrail_adapter,
         dataset=request.dataset,
         judge_runner=request.judge_runner,
+        contract_gap_fields=request.contract_gap_fields,
     )
 
 
@@ -193,8 +195,9 @@ def _score_valid(
     if blocked & {"dataset_approved", "release_evidence"}:
         return False
     not_applicable_only = _not_applicable_metrics(results)
+    error_only = _error_only_metrics(results)
     return all(
-        _required_satisfied(spec, not_applicable_only, summary, run_type)
+        _required_satisfied(spec, not_applicable_only, error_only, summary, run_type)
         for spec in all_metric_specs()
         if spec.required
     )
@@ -203,12 +206,14 @@ def _score_valid(
 def _required_satisfied(
     spec: MetricSpec,
     not_applicable_only: frozenset[str],
+    error_only: frozenset[str],
     summary: dict[str, float | None],
     run_type: RunType,
 ) -> bool:
     """Judge unavailability is designed; deterministic unavailability only in smoke runs."""
     exempt = spec.name in not_applicable_only and (spec.metric_type == "ai_judge" or run_type == "smoke")
-    return exempt or summary.get(spec.name) is not None
+    judge_infra_failure = spec.metric_type == "ai_judge" and spec.name in error_only
+    return exempt or judge_infra_failure or summary.get(spec.name) is not None
 
 
 def _not_applicable_metrics(results: tuple[MetricResult, ...]) -> frozenset[str]:
@@ -216,6 +221,34 @@ def _not_applicable_metrics(results: tuple[MetricResult, ...]) -> frozenset[str]
     names = {result.metric for result in results}
     return frozenset(
         name for name in names if all(result.status == "not_applicable" for result in results if result.metric == name)
+    )
+
+
+def _error_only_metrics(results: tuple[MetricResult, ...]) -> frozenset[str]:
+    """Names whose every scored-or-errored result is an infrastructure error.
+
+    A judge metric that only ever errored (timeouts, malformed completions)
+    is treated like an unavailable judge rather than invalidating the run;
+    deterministic metrics stay subject to the strict rule via metric_type.
+    """
+    names = {result.metric for result in results}
+    return frozenset(
+        name
+        for name in names
+        if any(result.status == "error" for result in results if result.metric == name)
+        and all(result.status in {"error", "not_applicable"} for result in results if result.metric == name)
+    )
+
+
+def _judge_error_warnings(results: tuple[MetricResult, ...]) -> tuple[str, ...]:
+    """Surface judge infrastructure errors the score tolerates as warnings."""
+    counts: dict[str, int] = {}
+    for result in results:
+        if result.status == "error" and result.metric_type == "ai_judge":
+            counts[result.metric] = counts.get(result.metric, 0) + 1
+    return tuple(
+        f"judge metric {name} errored on {count} sample(s); scores treated as unavailable"
+        for name, count in sorted(counts.items())
     )
 
 

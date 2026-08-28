@@ -197,8 +197,9 @@ def _cqm_duplicates(field: str, value: Any) -> tuple[Any, ...]:
 
 
 def _score_ast(expected: str, actual: str) -> tuple[FieldScore, EvaluationIssue | None]:
+    """Score AST equivalence ignoring ORDER BY/LIMIT (presentation, not semantics)."""
     try:
-        matched = structurally_equal(expected, actual, "sqlite")
+        matched = structurally_equal(expected, actual, "sqlite", ignore_limit=True)
     except SqlValidationError as exc:
         score = FieldScore(component="sql_ast", status="failed", score=0.0, matched=False)
         return score, EvaluationIssue(code="UNSAFE_OR_INVALID_SQL", message=str(exc), field="sql")

@@ -85,3 +85,84 @@ async def test_resolve_marks_metric_without_grain_for_review(async_session: Asyn
     assert resolved.metric.status == "needs_review"
     assert resolved.metric.grain.column_ids == []
     assert resolved.diagnostics[0].code == "MISSING_GRAIN"
+
+
+async def _seed_flagged_table(db: AsyncSession) -> tuple[int, SemanticTableModel]:
+    """Seed a table carrying hygiene flags plus a business flag."""
+    semantic_db = SemanticDatabaseModel(
+        created_by=1, display_name="Retail", db_type="sqlite", conn_url_enc="encrypted", status="draft"
+    )
+    db.add(semantic_db)
+    await db.flush()
+    table = SemanticTableModel(
+        db_id=semantic_db.id,
+        table_name="fact_orders",
+        business_name="Đơn hàng",
+        description="",
+        primary_key_column="id",
+    )
+    db.add(table)
+    await db.flush()
+    db.add_all(
+        [
+            SemanticColumnModel(
+                table_id=table.id,
+                column_name=name,
+                data_type=data_type,
+                business_name=name,
+                is_primary_key=name == "id",
+            )
+            for name, data_type in [
+                ("id", "INTEGER"),
+                ("amount", "NUMERIC"),
+                ("is_test_order", "BOOLEAN"),
+                ("is_bot_traffic", "BOOLEAN"),
+                ("checkout_completed", "BOOLEAN"),
+                ("is_test_review", "INTEGER"),
+            ]
+        ]
+    )
+    await db.flush()
+    return semantic_db.id, table
+
+
+def _hygiene_draft(filters: list[dict] | None = None) -> MetricDefinition:
+    return MetricDefinition.model_validate(
+        {
+            "metric": {
+                "name": "Doanh thu",
+                "formula": {"function": "SUM", "expression": "amount"},
+                "base_entity": "FACT_ORDERS",
+                "filters": filters or [],
+                "status": "pending_approval",
+            }
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_attaches_hygiene_filters_with_column_ids(async_session: AsyncSession) -> None:
+    """Test/bot boolean flags get eq-False filters with resolved column ids."""
+    db_id, table = await _seed_flagged_table(async_session)
+
+    resolved = await MetricDefinitionResolver(async_session).resolve(db_id, _hygiene_draft())
+
+    attached = {(f.field, f.operator, f.value) for f in resolved.metric.filters}
+    assert ("is_test_order", "eq", False) in attached
+    assert ("is_bot_traffic", "eq", False) in attached
+    assert all(f.column_id is not None for f in resolved.metric.filters)
+    assert ("checkout_completed", "eq", False) not in attached
+    assert ("is_test_review", "eq", False) not in attached
+
+
+@pytest.mark.asyncio
+async def test_resolve_does_not_duplicate_declared_flag_filter(async_session: AsyncSession) -> None:
+    """A filter already on the flag field is kept verbatim, not duplicated."""
+    db_id, _ = await _seed_flagged_table(async_session)
+    draft = _hygiene_draft(filters=[{"field": "is_test_order", "operator": "neq", "value": True}])
+
+    resolved = await MetricDefinitionResolver(async_session).resolve(db_id, draft)
+
+    flag_filters = [f for f in resolved.metric.filters if f.field == "is_test_order"]
+    assert len(flag_filters) == 1
+    assert (flag_filters[0].operator, flag_filters[0].value) == ("neq", True)

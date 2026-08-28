@@ -9,6 +9,9 @@ from pathlib import Path
 from eval.evaluator.hybrid.contracts import MetricResult
 from eval.evaluator.hybrid.run_result import HybridRunResult
 
+#: Below this many scored samples a judge metric's mean gets an ``(n=...)`` note.
+_JUDGE_MIN_SAMPLES = 3
+
 
 def write_json_report(result: HybridRunResult, path: Path) -> None:
     """Write the complete run contract as pretty JSON."""
@@ -57,10 +60,15 @@ def render_markdown(result: HybridRunResult) -> str:
         "|---|---:|---:|---:|---:|---:|",
     ]
     lines.extend(_suite_rows(result))
-    lines.extend(["", "## Metric scores", "", "| Metric | Mean score |", "|---|---:|"])
-    lines.extend(_metric_rows(result))
+    lines.extend(["", "## Metric scores"])
+    for section in _metric_sections(result):
+        lines.extend(["", *section])
     lines.extend(["", "## Quality gates", "", "| Gate | Passed | Detail |", "|---|---|---|"])
     lines.extend(f"| {gate.name} | {'✅' if gate.passed else '❌'} | {gate.detail} |" for gate in result.quality_gates)
+    lines.extend(["", "## Warnings", ""])
+    lines.extend(f"- {warning}" for warning in result.warnings)
+    if not result.warnings:
+        lines.append("- none")
     lines.extend(["", "## Failed results", ""])
     failures = [r for r in result.results if r.status in {"failed", "error"}]
     lines.extend(f"- `{r.sample_id}` / `{r.metric}`: {r.status} — {r.reason}" for r in failures)
@@ -78,9 +86,61 @@ def _suite_rows(result: HybridRunResult) -> list[str]:
     ]
 
 
-def _metric_rows(result: HybridRunResult) -> list[str]:
-    """Render one markdown table row per metric summary entry."""
-    return [f"| {name} | {_fmt(value)} |" for name, value in sorted(result.metric_summary.items())]
+def _metric_sections(result: HybridRunResult) -> list[list[str]]:
+    """Render one metric-score table per suite so related metrics stay together."""
+    judge_counts = _judge_metric_counts(result)
+    sections: list[list[str]] = []
+    grouped: set[str] = set()
+    for suite in result.suite_scores:
+        grouped.update(suite.metric_scores)
+        if suite.metric_scores:
+            sections.append(_metric_section(result, suite.task, sorted(suite.metric_scores), judge_counts))
+    ungrouped = sorted(set(result.metric_summary) - grouped)
+    if ungrouped:
+        sections.append(_metric_section(result, "other", ungrouped, judge_counts))
+    return sections
+
+
+def _judge_metric_counts(result: HybridRunResult) -> dict[str, int]:
+    """Map each AI-judge metric to its scored-sample count (0 when none scored)."""
+    counts = {entry.metric: 0 for entry in result.results if entry.metric_type == "ai_judge"}
+    for entry in result.results:
+        if entry.metric_type == "ai_judge" and entry.score is not None:
+            counts[entry.metric] += 1
+    return counts
+
+
+def _metric_section(
+    result: HybridRunResult,
+    task: str,
+    names: list[str],
+    judge_counts: dict[str, int],
+) -> list[str]:
+    """Render one suite's metric-score table under its own heading."""
+    rows = _metric_rows(result, names, judge_counts)
+    return [f"### {task}", "", "| Metric | Mean score | Source |", "|---|---:|---|", *rows]
+
+
+def _metric_rows(result: HybridRunResult, names: list[str], judge_counts: dict[str, int]) -> list[str]:
+    """Render one markdown table row per metric name."""
+    return [
+        f"| {name} | {_scored(result.metric_summary.get(name), judge_counts.get(name))} "
+        f"| {_source(name, judge_counts)} |"
+        for name in names
+    ]
+
+
+def _source(name: str, judge_counts: dict[str, int]) -> str:
+    """Name the measurement lane: the AI judge or deterministic code."""
+    return "AI judge" if name in judge_counts else "code"
+
+
+def _scored(value: float | None, judge_count: int | None) -> str:
+    """Format a mean, noting thin judge samples so single-verdict means aren't over-read."""
+    text = _fmt(value)
+    if judge_count is not None and judge_count < _JUDGE_MIN_SAMPLES:
+        text += f" (n={judge_count})"
+    return text
 
 
 def _fmt(value: float | None) -> str:

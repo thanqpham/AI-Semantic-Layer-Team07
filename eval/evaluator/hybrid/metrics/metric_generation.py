@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from typing import Any
+
+import sqlglot
+from sqlglot import exp
+from sqlglot.errors import ParseError as SqlParseError
 
 from eval.evaluator.hybrid.catalog import MetricSpec
 from eval.evaluator.hybrid.contracts import MetricResult
@@ -18,8 +23,8 @@ from eval.evaluator.hybrid.metrics.base import (
 from eval.evaluator.hybrid.samples import EvaluationSample, MetricReference
 from eval.evaluator.metric_eval import _identity
 from eval.evaluator.schemas import CandidateMetricDefinition, CandidateMetricOutput
-from eval.evaluator.scoring import match_sets
-from eval.evaluator.sql_normalization import normalize_expression
+from eval.evaluator.scoring import match_allowed_dimensions
+from eval.evaluator.sql_normalization import normalize_expression, unwrap_declared_aggregation
 from eval.evaluator.text_similarity import compare_business_name
 
 
@@ -62,7 +67,8 @@ class MetricIdentityAccuracy(DeterministicMetric):
             reference, actual = _positive_payload(sample)
         except _NegativeCase as case:
             matched = case.expected_error is not None and case.expected_error == case.actual_error
-            return boolean_result(self.spec, sample.sample_id, matched, "outcome comparison")
+            details = None if matched else {"expected_error": case.expected_error, "actual_error": case.actual_error}
+            return boolean_result(self.spec, sample.sample_id, matched, "outcome comparison", details)
         return boolean_result(self.spec, sample.sample_id, _identity(reference.expected_metric) == _identity(actual))
 
 
@@ -81,9 +87,11 @@ class _PositiveOnlyMetric(DeterministicMetric):
 
 
 class FormulaEquivalence(_PositiveOnlyMetric):
-    """Compare business formulas with Vietnamese-aware similarity."""
+    """Compare business formulas, unless the field is a declared contract gap."""
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
+        if "business_formula" in context.contract_gap_fields.get("metric", frozenset()):
+            return not_applicable_result(self.spec, sample.sample_id, "contract gap (D6)")
         reference, actual = _positive_payload(sample)
         expected = reference.expected_metric
         result = await compare_business_name(
@@ -93,13 +101,43 @@ class FormulaEquivalence(_PositiveOnlyMetric):
 
 
 class SqlExpressionEquivalence(_PositiveOnlyMetric):
-    """Compare normalized SQL expressions."""
+    """Compare normalized SQL expressions, symmetric on aggregation wrappers.
+
+    Each side strips one top-level aggregation wrapper only when it matches
+    that side's own declared ``aggregation`` (golden and candidate both carry
+    it), so a wrapped golden ``SUM(x)`` and a bare candidate ``x`` compare
+    equal while contradicting wrappers still mismatch.
+    """
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
         reference, actual = _positive_payload(sample)
-        expected_sql = normalize_expression(reference.expected_metric.sql_expression)
-        actual_sql = normalize_expression(actual.sql_expression)
+        expected_sql = unwrap_declared_aggregation(
+            reference.expected_metric.sql_expression, reference.expected_metric.aggregation
+        )
+        actual_sql = unwrap_declared_aggregation(actual.sql_expression, actual.aggregation)
         return boolean_result(self.spec, sample.sample_id, expected_sql == actual_sql)
+
+
+def _normalize_filter_conditions(filters: Any) -> set[str]:
+    """Split AND-combined conditions into atomic canonical ones (legacy parity)."""
+    result: set[str] = set()
+    for f in filters:
+        cond = getattr(f, "condition", str(f))
+        try:
+            parsed = sqlglot.parse_one(cond)
+        except SqlParseError:
+            result.add(normalize_expression(cond))
+            continue
+        for atom in _conjunction_atoms(parsed):
+            result.add(normalize_expression(atom.sql()))
+    return result
+
+
+def _conjunction_atoms(node: exp.Expression) -> tuple[exp.Expression, ...]:
+    """Flatten one expression into its AND-connected atoms."""
+    if isinstance(node, exp.And):
+        return _conjunction_atoms(node.left) + _conjunction_atoms(node.right)
+    return (node,)
 
 
 class FilterAccuracy(_PositiveOnlyMetric):
@@ -107,15 +145,15 @@ class FilterAccuracy(_PositiveOnlyMetric):
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
         reference, actual = _positive_payload(sample)
-        expected = {normalize_expression(f.condition) for f in reference.expected_metric.default_filters}
-        received = {normalize_expression(f.condition) for f in actual.default_filters}
+        expected = _normalize_filter_conditions(reference.expected_metric.default_filters)
+        received = _normalize_filter_conditions(actual.default_filters)
         return boolean_result(self.spec, sample.sample_id, expected == received)
 
 
 class AllowedDimensionF1(_PositiveOnlyMetric):
-    """Set-match allowed dimensions."""
+    """Set-match allowed dimensions with soft tolerance for additional entity dimensions."""
 
     async def _score_positive(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult:
         reference, actual = _positive_payload(sample)
-        match = match_sets(reference.expected_metric.allowed_dimensions, actual.allowed_dimensions)
+        match = match_allowed_dimensions(reference.expected_metric.allowed_dimensions, actual.allowed_dimensions)
         return set_match_result(self.spec, sample.sample_id, match)

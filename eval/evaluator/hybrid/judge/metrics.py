@@ -44,6 +44,11 @@ def build_judge_metrics(specs: tuple[MetricSpec, ...]) -> dict[str, AiJudgeMetri
     return {spec.name: factory[spec.name](spec) for spec in specs if spec.name in factory}
 
 
+def _field_lines(fields: dict[str, str], gap_fields: frozenset[str]) -> str:
+    """Render 'key: value' lines, dropping fields declared as contract gaps."""
+    return "\n".join(f"{key}: {value}" for key, value in fields.items() if key not in gap_fields)
+
+
 class AiJudgeMetric:
     """Base: render prompts, run the judge lane, normalize to MetricResult."""
 
@@ -56,7 +61,7 @@ class AiJudgeMetric:
     def name(self) -> str:
         return self.spec.name
 
-    def _render(self, sample: EvaluationSample, model: str) -> tuple[JudgeRequest, dict]:
+    def _render(self, sample: EvaluationSample, model: str, gap_fields: frozenset[str]) -> tuple[JudgeRequest, dict]:
         """Build the blinded judge request; implemented per metric."""
         raise NotImplementedError
 
@@ -85,16 +90,15 @@ class AiJudgeMetric:
         if context.judge_runner is None:
             return not_applicable_result(self.spec, sample.sample_id, "judge runner unavailable")
         model = getattr(context.judge_runner.llm, "model_name", "unknown")
+        gap_fields = frozenset(context.contract_gap_fields.get("metric", frozenset()))
         try:
-            request, payload = self._render(sample, model)
+            request, payload = self._render(sample, model, gap_fields)
         except (CandidateFailure, TypeError) as exc:
             return not_applicable_result(self.spec, sample.sample_id, f"candidate not judgeable: {exc}")
         try:
             verdict = await context.judge_runner.evaluate(request)
         except Exception as exc:  # judge-lane crashes can never abort the run
             return error_result(self.spec, sample.sample_id, exc)
-        if verdict is None:
-            return error_result(self.spec, sample.sample_id, RuntimeError("JUDGE_FAILED"))
         return score_result(
             self.spec,
             sample.sample_id,
@@ -108,7 +112,7 @@ class AiJudgeMetric:
 class BusinessSemanticCorrectness(AiJudgeMetric):
     """Judge entity and dimension business names against golden labels."""
 
-    def _render(self, sample: EvaluationSample, model: str) -> tuple[JudgeRequest, dict]:
+    def _render(self, sample: EvaluationSample, model: str, gap_fields: frozenset[str]) -> tuple[JudgeRequest, dict]:
         reference = reference_as(sample, EnrichmentReference)
         response = response_as(sample, CandidateEnrichmentOutput)
         if response.entities is None:
@@ -141,18 +145,24 @@ class BusinessSemanticCorrectness(AiJudgeMetric):
 class BusinessDefinitionCorrectness(AiJudgeMetric):
     """Judge the business definition text of a generated metric."""
 
-    def _render(self, sample: EvaluationSample, model: str) -> tuple[JudgeRequest, dict]:
+    def _render(self, sample: EvaluationSample, model: str, gap_fields: frozenset[str]) -> tuple[JudgeRequest, dict]:
         reference = reference_as(sample, MetricReference)
         response = response_as(sample, CandidateMetricOutput)
         expected, actual = reference.expected_metric, response.metric
         if expected is None or actual is None:
             raise CandidateFailure("negative case")
+        reference = _field_lines(
+            {"description": expected.description, "business_formula": expected.business_formula}, gap_fields
+        )
+        response = _field_lines(
+            {"description": actual.description, "business_formula": actual.business_formula}, gap_fields
+        )
         user_prompt = judge_user_prompt(
             "Đánh giá mô tả nghiệp vụ của chỉ số",
             f"request: {sample.input!s}",
             f"target_entity: {expected.target_entity}; aggregation: {expected.aggregation}",
-            f"description: {expected.description}\nbusiness_formula: {expected.business_formula}",
-            f"description: {actual.description}\nbusiness_formula: {actual.business_formula}",
+            reference,
+            response,
         )
         return self._request(sample, user_prompt, model), {"metric": actual.name}
 
@@ -160,17 +170,25 @@ class BusinessDefinitionCorrectness(AiJudgeMetric):
 class FormulaSemanticCorrectness(AiJudgeMetric):
     """Judge formula and SQL-expression semantics of a generated metric."""
 
-    def _render(self, sample: EvaluationSample, model: str) -> tuple[JudgeRequest, dict]:
+    def _render(self, sample: EvaluationSample, model: str, gap_fields: frozenset[str]) -> tuple[JudgeRequest, dict]:
         reference = reference_as(sample, MetricReference)
         response = response_as(sample, CandidateMetricOutput)
         expected, actual = reference.expected_metric, response.metric
         if expected is None or actual is None:
             raise CandidateFailure("negative case")
+        reference = _field_lines(
+            {"business_formula": expected.business_formula, "sql_expression": expected.sql_expression},
+            gap_fields,
+        )
+        response = _field_lines(
+            {"business_formula": actual.business_formula, "sql_expression": actual.sql_expression},
+            gap_fields,
+        )
         user_prompt = judge_user_prompt(
             "Đánh giá ngữ nghĩa công thức của chỉ số",
             f"request: {sample.input!s}",
             f"source_table: {expected.source_table}; field: {expected.field}",
-            f"business_formula: {expected.business_formula}\nsql_expression: {expected.sql_expression}",
-            f"business_formula: {actual.business_formula}\nsql_expression: {actual.sql_expression}",
+            reference,
+            response,
         )
         return self._request(sample, user_prompt, model), {"metric": actual.name}

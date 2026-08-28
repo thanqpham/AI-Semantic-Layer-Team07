@@ -15,6 +15,7 @@ from src.models.metric_definition import (
     MetricGrain,
 )
 from src.services.metric_definitions import validate_metric_definition
+from src.services.metric_hygiene import hygiene_flag_filters
 
 _BINARY_KINDS: dict[type[exp.Expression], str] = {
     exp.Add: "add",
@@ -36,6 +37,13 @@ class MetricDefinitionResolver:
         table = await validate_metric_definition(self._db, db_id, definition)
         columns = await _load_columns(self._db, table.id)
         by_name = {column.column_name.lower(): column for column in columns}
+        definition.metric.filters = [
+            *definition.metric.filters,
+            *hygiene_flag_filters(
+                [(column.column_name, column.data_type) for column in columns],
+                {item.field for item in definition.metric.filters},
+            ),
+        ]
         formula = definition.metric.formula.model_copy(
             update={"expression_ast": _expression_tree(definition.metric.formula.expression, by_name)}
         )
