@@ -50,6 +50,7 @@ from src.models.schemas import (
     LiveDbConnectRequest,
     LiveDbResponse,
     LiveDbSummaryResponse,
+    MetricComparisonResponse,
     MetricCreate,
     MetricDimensionsResponse,
     MetricFilterColumnsResponse,
@@ -110,6 +111,7 @@ from src.services.live_db_service import (
     get_live_target_db,
     list_live_target_dbs,
 )
+from src.services.metric_comparison import compare_catalog_metrics
 from src.services.metric_context import MetricContextResult, build_data_context, build_metric_context
 from src.services.metric_dedupe import load_existing_for_dedupe
 from src.services.metric_request_service import (
@@ -1049,6 +1051,27 @@ async def list_metrics(
         )
         for m in metrics
     ]
+
+
+@router.get("/semantic/{db_id}/metrics/comparison", response_model=MetricComparisonResponse)
+async def compare_metrics(
+    db_id: int,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> MetricComparisonResponse:
+    """Return deterministic duplicate groups for visible active canonical metrics."""
+    semantic_db = await _owned_semantic_database(db, db_id, current_user.id, org_id)
+    if semantic_db is None:
+        raise HTTPException(status_code=404, detail="Semantic database not found")
+    metrics = await list_metrics(db_id, False, org_id, current_user, db)
+    groups = compare_catalog_metrics([item.model_dump(mode="json") for item in metrics])
+    return MetricComparisonResponse(
+        analyzed_metric_count=sum(item.definition is not None for item in metrics),
+        exact_duplicate_count=sum(group.group_type == "exact_duplicate" for group in groups),
+        near_duplicate_count=sum(group.group_type == "near_duplicate" for group in groups),
+        groups=groups,
+    )
 
 
 @router.get("/semantic/{db_id}/catalog", response_model=SemanticCatalogResponse)

@@ -70,6 +70,32 @@ export interface MetricRecord {
   pending_version_number?: number | null;
 }
 
+export interface MetricComparisonMember {
+  metric_id: number;
+  name: string;
+  status: string;
+  version: number;
+  function: MetricFunction;
+  expression: string;
+  base_entity: string;
+  filters: MetricFilter[];
+}
+
+export interface MetricComparisonGroup {
+  group_type: 'exact_duplicate' | 'near_duplicate';
+  core_formula: string;
+  base_entity: string;
+  members: MetricComparisonMember[];
+  differing_filters: MetricFilter[];
+}
+
+export interface MetricComparisonResponse {
+  analyzed_metric_count: number;
+  exact_duplicate_count: number;
+  near_duplicate_count: number;
+  groups: MetricComparisonGroup[];
+}
+
 export interface SemanticLayerData {
   id: string;
   db_name: string;
@@ -971,6 +997,12 @@ export async function listMetricsApi(
 ): Promise<MetricRecord[]> {
   const query = includeDeleted ? '?include_deleted=true' : '';
   return semanticRequest<MetricRecord[]>(`/api/v1/semantic/${dbId}/metrics${query}`);
+}
+
+export async function compareMetricsApi(dbId: number | string): Promise<MetricComparisonResponse> {
+  return semanticRequest<MetricComparisonResponse>(
+    `/api/v1/semantic/${dbId}/metrics/comparison`,
+  );
 }
 
 export async function restoreMetricApi(dbId: string, metricId: number): Promise<MetricRecord> {

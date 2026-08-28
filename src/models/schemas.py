@@ -813,6 +813,38 @@ class MetricListItem(BaseModel):
     pending_version_number: int | None = None
 
 
+class MetricComparisonMember(BaseModel):
+    """Catalog metric projection included in an audit group."""
+
+    metric_id: int
+    name: str
+    status: str
+    version: int
+    function: str
+    expression: str
+    base_entity: str
+    filters: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MetricComparisonGroup(BaseModel):
+    """A group of exact or filter-only duplicate catalog metrics."""
+
+    group_type: Literal["exact_duplicate", "near_duplicate"]
+    core_formula: str
+    base_entity: str
+    members: list[MetricComparisonMember]
+    differing_filters: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MetricComparisonResponse(BaseModel):
+    """Computed audit summary for active canonical catalog metrics."""
+
+    analyzed_metric_count: int
+    exact_duplicate_count: int
+    near_duplicate_count: int
+    groups: list[MetricComparisonGroup] = Field(default_factory=list)
+
+
 class MetricVersionItem(BaseModel):
     """One version entry in a metric's history."""
 

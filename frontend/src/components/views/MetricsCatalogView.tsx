@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 
 import { MetricCard } from '@/components/metrics/MetricCard';
+import { MetricAuditPanel } from '@/components/metrics/MetricAuditPanel';
 import { MetricHistoryDialog } from '@/components/metrics/MetricHistoryDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,7 +67,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
   const [requests, setRequests] = useState<MetricRequest[]>([]);
   const [editingRequestId, setEditingRequestId] = useState<number | null>(null);
   const [editedDefinition, setEditedDefinition] = useState('');
-  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'trash'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'trash' | 'audit'>('all');
   const canManage = Boolean(props.canManageMetrics);
   const canApprove = Boolean(props.canApproveMetrics);
   const isMemberSubmitter = props.canSubmitMetric === true && !canManage;
@@ -372,6 +373,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               label: 'Đã phê duyệt',
               count: approvedMetrics.length,
             },
+            { key: 'audit' as const, label: 'Audit', count: 0 },
             ...(canManage
               ? [
                 {
@@ -414,7 +416,14 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
 
       {/* Main Catalog Body */}
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        {filterTab === 'trash' ? (
+        {filterTab === 'audit' ? (
+          <MetricAuditPanel
+            dbId={props.dbId}
+            metrics={visibleMetrics}
+            canEdit={canManage}
+            onEdit={props.onEditMetric}
+          />
+        ) : filterTab === 'trash' ? (
           <div>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
               <div className="flex items-center gap-2">
