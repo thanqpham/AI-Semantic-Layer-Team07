@@ -76,6 +76,23 @@ async def test_node_returns_definition_without_sql() -> None:
     assert result["dedupe_performed"] is True
 
 
+async def test_node_retries_when_first_definition_references_unknown_schema() -> None:
+    """Schema-invalid structured output must receive one corrective retry."""
+    invalid = _definition(expression="unknown_amount")
+    structured = AsyncMock()
+    structured.ainvoke.side_effect = [MetricSuggestions(metrics=[invalid]), MetricSuggestions(metrics=[_definition()])]
+    llm = MagicMock()
+    llm.with_structured_output.return_value = structured
+    state = {"enriched_schema": _schema_with_order_items()}
+
+    with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
+        result = await on_demand_metric_suggest_node(state)
+
+    assert structured.ainvoke.await_count == 2
+    metric = result["suggested_metrics"][0]["definition"]["metric"]
+    assert metric["formula"]["expression"] == "amount"
+
+
 async def test_node_emits_notices_when_existing_duplicate() -> None:
     existing = [
         {

@@ -43,6 +43,14 @@ async def on_demand_metric_suggest_node(state: AgentState) -> dict[str, Any]:
         )
         definitions = _valid_definitions(definitions, valid_columns, decision)
         if not definitions:
+            retry_messages = _schema_retry_messages(messages, valid_columns)
+            definitions = await trace_action(
+                "metric_generation_retry",
+                {"reason": "schema_validation_failed"},
+                _generate_definitions_with_fallback(retry_messages),
+            )
+            definitions = _valid_definitions(definitions, valid_columns, decision)
+        if not definitions:
             raise ValueError("LLM failed to generate a schema-valid metric definition")
 
         # Format the response as MetricSuggestionItem to match the frontend expectations
@@ -84,6 +92,19 @@ def _valid_definitions(
     for item in valid:
         _apply_assumptions(item, assumptions)
     return valid[:1]
+
+
+def _schema_retry_messages(
+    messages: list[tuple[str, str]], valid_columns: dict[str, set[str]]
+) -> list[tuple[str, str]]:
+    """Add schema-validation feedback before retrying metric generation."""
+    available = "; ".join(f"{table}: {', '.join(sorted(columns))}" for table, columns in sorted(valid_columns.items()))
+    instruction = (
+        "Đề xuất trước không hợp lệ vì tham chiếu bảng hoặc cột ngoài schema. "
+        "Hãy trả lại đúng một Metric Definition chỉ dùng các bảng và cột sau: "
+        f"{available}. Không dùng tên bảng hoặc cột khác."
+    )
+    return [*messages, ("user", instruction)]
 
 
 def _apply_assumptions(definition: MetricDefinition, assumptions: list[str]) -> None:

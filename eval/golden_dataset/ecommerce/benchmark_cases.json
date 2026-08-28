@@ -5,6 +5,9 @@
       "suite": "pipeline",
       "fixture": "sqlite_ecommerce",
       "expected_terminal": "completed",
+      "request": {
+        "user_message": "Hãy đề xuất metric Tổng số đơn hàng, đếm các giá trị order_id trong bảng fact_orders."
+      },
       "constraints": {
         "required_nodes": ["introspect", "enrich", "metric_suggest"],
         "required_actions": ["schema_introspection", "llm_enrichment", "metric_generation", "query_compile", "sql_guardrail"],

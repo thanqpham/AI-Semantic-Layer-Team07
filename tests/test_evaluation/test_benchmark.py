@@ -85,9 +85,10 @@ async def test_artifact_bundle_is_replayable_without_secret(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_product_executor_uses_new_sqlite_sandbox_for_each_trial(tmp_path, monkeypatch) -> None:
     contexts: list[object] = []
+    report_dirs: list[object] = []
 
     async def fake_prepare(*_args):
-        context = object()
+        context = SimpleNamespace(run_dir=tmp_path / f"trial-{len(contexts) + 1}")
         contexts.append(context)
         return context
 
@@ -99,13 +100,15 @@ async def test_product_executor_uses_new_sqlite_sandbox_for_each_trial(tmp_path,
         return SimpleNamespace(overall_score=100.0, status="PASS")
 
     monkeypatch.setattr("eval.benchmark.product.prepare_run", fake_prepare)
-    monkeypatch.setattr("eval.benchmark.product.run_flow1_graph", lambda _context: _graph_state())
+    monkeypatch.setattr("eval.benchmark.product.run_flow1_graph", lambda _context, request: _graph_state())
     monkeypatch.setattr("eval.benchmark.product.collect_candidates", fake_collect)
     monkeypatch.setattr("eval.benchmark.product.run_hybrid_evaluation", fake_evaluate)
+    monkeypatch.setattr("eval.benchmark.product._write_hybrid_reports", lambda _result, path: report_dirs.append(path))
     executor = AgentRunnerBenchmarkExecutor(tmp_path, "ecommerce", tmp_path / "run", object())
     await executor.execute(_case())
     await executor.execute(_case())
     assert len(contexts) == 2
+    assert report_dirs == [tmp_path / "trial-1" / "reports", tmp_path / "trial-2" / "reports"]
 
 
 async def _graph_state() -> dict[str, object]:
@@ -129,6 +132,16 @@ async def test_flow_graph_adapter_invokes_real_graph_interface_with_encrypted_ur
     assert graph.state is not None
     assert graph.state["db_type"] == "sqlite"
     assert graph.state["conn_url_enc"] != context.target_url
+    assert graph.state["user_message"]
+
+
+@pytest.mark.asyncio
+async def test_flow_graph_adapter_uses_case_metric_request() -> None:
+    graph = _Graph()
+    context = SimpleNamespace(user_id=7, target_url="sqlite:///sandbox.sqlite")
+    await run_flow1_graph(context, graph, {"user_message": "Đếm order_id của fact_orders"})
+    assert graph.state is not None
+    assert graph.state["user_message"] == "Đếm order_id của fact_orders"
 
 
 @trace_node("introspect")

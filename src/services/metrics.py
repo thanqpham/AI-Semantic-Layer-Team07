@@ -201,7 +201,9 @@ def _requested_metric_rules() -> str:
     return """8. Đây là một metric được người dùng yêu cầu: chỉ trả đúng 1 Metric Definition.
 9. Nếu yêu cầu còn điều kiện nghiệp vụ chưa xác định, tạo baseline không có filter suy diễn,
 đặt confidence là \"low\" và ghi từng điều kiện đó vào excluded_notes với tiền tố
-\"Giả định cần xác nhận:\"."""
+\"Giả định cần xác nhận:\".
+10. Trước khi trả về, tự kiểm tra base_entity, formula.expression và mọi filter.field
+đều khớp chính xác một bảng/cột trong Schema; nếu không, hãy chọn lại từ Schema."""
 
 
 def _extract_json_from_text(text: str) -> Any:
