@@ -7,6 +7,7 @@ from pathlib import Path
 from eval.agent_runner.bootstrap import prepare_run
 from eval.agent_runner.collect import collect_candidates
 from eval.benchmark.contracts import BenchmarkCase, ScenarioExecution
+from eval.benchmark.graph_runner import run_flow1_graph
 from eval.dataset.loader import DomainDataset
 from eval.evaluator.hybrid import HybridRunRequest, run_hybrid_evaluation
 from eval.evaluator.schemas import EvaluationConfig
@@ -25,10 +26,11 @@ class AgentRunnerBenchmarkExecutor:
     async def execute(self, case: BenchmarkCase) -> ScenarioExecution:
         """Run one selected pipeline suite without using oracle query inputs."""
         context = await prepare_run(self._golden_root, self._domain, self._next_trial_dir(case.case_id))
+        graph_state = await run_flow1_graph(context) if case.suite == "pipeline" else {}
         candidates = await collect_candidates(context, self._dataset, query_mode="resolver", suites=_suites(case.suite))
         result = await run_hybrid_evaluation(_request(self._dataset, candidates))
         score = (result.overall_score or 0.0) / 100
-        terminal = "completed" if result.status not in {"FAIL", "INCOMPLETE"} else "failed"
+        terminal = _terminal(result.status, graph_state)
         return ScenarioExecution(terminal=terminal, outcome_score=score)
 
     def _next_trial_dir(self, case_id: str) -> Path:
@@ -36,6 +38,13 @@ class AgentRunnerBenchmarkExecutor:
         attempt = self._attempts.get(case_id, 0) + 1
         self._attempts[case_id] = attempt
         return self._run_dir / "trials" / case_id / f"trial-{attempt}"
+
+
+def _terminal(status: str, graph_state: dict[str, object]) -> str:
+    """Require both real graph execution and output evaluation to complete."""
+    if graph_state.get("error") or status in {"FAIL", "INCOMPLETE"}:
+        return "failed"
+    return "completed"
 
 
 def _suites(suite: str) -> frozenset[str] | None:

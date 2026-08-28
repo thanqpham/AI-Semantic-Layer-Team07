@@ -18,6 +18,10 @@ STATE_ALLOWLIST = frozenset(
         "introspection_warnings",
         "clarification",
         "interpretation",
+        "raw_schema",
+        "enriched_schema",
+        "global_glossary",
+        "suggested_metrics",
     }
 )
 
@@ -37,7 +41,7 @@ def redact_value(value: Any, key: str | None = None) -> Any:
 
 def redact_state_delta(value: Mapping[str, Any]) -> dict[str, Any]:
     """Keep only safe, observable state fields from a node update."""
-    return {key: redact_value(item, key) for key, item in value.items() if key in STATE_ALLOWLIST}
+    return {key: _state_summary(key, item) for key, item in value.items() if key in STATE_ALLOWLIST}
 
 
 def digest_observation(value: Any) -> str:
@@ -49,3 +53,20 @@ def digest_observation(value: Any) -> str:
 def _is_secret_key(key: str) -> bool:
     normalized = key.casefold().replace("-", "_")
     return normalized in SECRET_KEYS or normalized.endswith("_token") or normalized.endswith("_secret")
+
+
+def _state_summary(key: str, value: Any) -> Any:
+    """Keep structural evidence for large schema outputs without storing their contents."""
+    if key in {"raw_schema", "enriched_schema"}:
+        return {"table_count": _collection_size(value, "tables"), "digest": digest_observation(value)}
+    if key == "global_glossary":
+        return {"entry_count": len(value) if isinstance(value, Mapping) else 0, "digest": digest_observation(value)}
+    if key == "suggested_metrics":
+        return {"metric_count": len(value) if isinstance(value, list) else 0, "digest": digest_observation(value)}
+    return redact_value(value, key)
+
+
+def _collection_size(value: Any, key: str) -> int:
+    """Count a collection field on either dict or Pydantic-like outputs."""
+    items = value.get(key) if isinstance(value, Mapping) else getattr(value, key, None)
+    return len(items) if isinstance(items, (list, tuple)) else 0

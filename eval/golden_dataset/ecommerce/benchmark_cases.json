@@ -6,8 +6,10 @@
       "fixture": "sqlite_ecommerce",
       "expected_terminal": "completed",
       "constraints": {
+        "required_nodes": ["introspect", "enrich", "metric_suggest"],
         "required_actions": ["schema_introspection", "llm_enrichment", "metric_generation", "query_compile", "sql_guardrail"],
         "required_precedence": [["schema_introspection", "llm_enrichment"], ["llm_enrichment", "metric_generation"]],
+        "required_state_keys": ["raw_schema", "enriched_schema", "suggested_metrics"],
         "max_iterations": 50,
         "max_actions": 300
       }

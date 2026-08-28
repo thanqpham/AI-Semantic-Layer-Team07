@@ -18,6 +18,7 @@ class AgentTraceSink(Protocol):
 
 
 _SINK: ContextVar[AgentTraceSink | None] = ContextVar("agent_trace_sink", default=None)
+_NODE: ContextVar[str | None] = ContextVar("agent_trace_node", default=None)
 _T = TypeVar("_T")
 
 
@@ -45,7 +46,7 @@ def trace_transition(source: str, target: str) -> None:
 def trace_value(action: str, inputs: Mapping[str, Any], operation: Callable[[], _T]) -> _T:
     """Run a synchronous guardrail operation with optional action tracing."""
     started = time.perf_counter()
-    _emit("action_started", {"action": action, "inputs": dict(inputs)})
+    _emit("action_started", _action_started_payload(action, inputs))
     try:
         result = operation()
     except Exception as exc:
@@ -58,7 +59,7 @@ def trace_value(action: str, inputs: Mapping[str, Any], operation: Callable[[], 
 async def trace_action(action: str, inputs: Mapping[str, Any], operation: Awaitable[_T]) -> _T:
     """Await an operation and record its observable action boundary when enabled."""
     started = time.perf_counter()
-    _emit("action_started", {"action": action, "inputs": dict(inputs)})
+    _emit("action_started", _action_started_payload(action, inputs))
     try:
         result = await operation
     except Exception as exc:
@@ -76,12 +77,18 @@ def _action_payload(
     error: str | None = None,
 ) -> dict[str, Any]:
     return {
+        "node": _NODE.get(),
         "action": action,
         "inputs": dict(inputs),
         "observation": observation,
         "error_code": error,
         "latency_ms": (time.perf_counter() - started) * 1000,
     }
+
+
+def _action_started_payload(action: str, inputs: Mapping[str, Any]) -> dict[str, Any]:
+    """Attach the active graph node to a started action event."""
+    return {"node": _NODE.get(), "action": action, "inputs": dict(inputs)}
 
 
 def trace_node(
@@ -93,12 +100,15 @@ def trace_node(
         @wraps(function)
         async def wrapped(state: Mapping[str, Any], *args: Any, **kwargs: Any) -> dict[str, Any]:
             started = time.perf_counter()
+            node_token = _NODE.set(name)
             _emit("node_started", {"node": name, "state_before": dict(state)})
             try:
                 output = await function(state, *args, **kwargs)
             except Exception as exc:
                 _emit("node_failed", _node_payload(name, state, started, error=type(exc).__name__))
                 raise
+            finally:
+                _NODE.reset(node_token)
             kind = "node_failed" if output.get("error") else "node_finished"
             _emit(kind, _node_payload(name, state, started, output=output, error=output.get("error")))
             return output

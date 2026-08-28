@@ -9,6 +9,7 @@ import pytest
 
 from eval.benchmark import BenchmarkCase, BenchmarkProfile, BenchmarkRunRequest, run_benchmark
 from eval.benchmark.contracts import ScenarioExecution, TraceConstraints
+from eval.benchmark.graph_runner import run_flow1_graph
 from eval.benchmark.product import AgentRunnerBenchmarkExecutor
 from eval.benchmark.redaction import digest_observation, redact_state_delta, redact_value
 from eval.benchmark.reporting import write_artifacts, write_replay_input
@@ -96,12 +97,80 @@ async def test_product_executor_uses_new_sqlite_sandbox_for_each_trial(tmp_path,
         return SimpleNamespace(overall_score=100.0, status="PASS")
 
     monkeypatch.setattr("eval.benchmark.product.prepare_run", fake_prepare)
+    monkeypatch.setattr("eval.benchmark.product.run_flow1_graph", lambda _context: _graph_state())
     monkeypatch.setattr("eval.benchmark.product.collect_candidates", fake_collect)
     monkeypatch.setattr("eval.benchmark.product.run_hybrid_evaluation", fake_evaluate)
     executor = AgentRunnerBenchmarkExecutor(tmp_path, "ecommerce", tmp_path / "run", object())
     await executor.execute(_case())
     await executor.execute(_case())
     assert len(contexts) == 2
+
+
+async def _graph_state() -> dict[str, object]:
+    return {}
+
+
+class _Graph:
+    def __init__(self) -> None:
+        self.state: dict[str, object] | None = None
+
+    async def ainvoke(self, state: dict[str, object]) -> dict[str, object]:
+        self.state = state
+        return {"raw_schema": {"tables": []}}
+
+
+@pytest.mark.asyncio
+async def test_flow_graph_adapter_invokes_real_graph_interface_with_encrypted_url() -> None:
+    graph = _Graph()
+    context = SimpleNamespace(user_id=7, target_url="sqlite:///sandbox.sqlite")
+    await run_flow1_graph(context, graph)
+    assert graph.state is not None
+    assert graph.state["db_type"] == "sqlite"
+    assert graph.state["conn_url_enc"] != context.target_url
+
+
+@trace_node("introspect")
+async def _node_with_action(_state: dict[str, object]) -> dict[str, object]:
+    await trace_action("schema_introspection", {}, _value())
+    return {"raw_schema": {"tables": [{"table_name": "orders"}]}}
+
+
+class _NodeExecutor:
+    async def execute(self, case: BenchmarkCase) -> ScenarioExecution:
+        await _node_with_action({})
+        return ScenarioExecution(terminal=case.expected_terminal, outcome_score=1.0)
+
+
+@pytest.mark.asyncio
+async def test_node_action_and_state_are_traceable() -> None:
+    case = BenchmarkCase(
+        case_id="node_trace_001",
+        suite="flow1",
+        fixture="sqlite",
+        expected_terminal="completed",
+        constraints=TraceConstraints(
+            required_nodes=("introspect",),
+            required_actions=("schema_introspection",),
+            required_state_keys=("raw_schema",),
+        ),
+    )
+    result = await run_benchmark(
+        BenchmarkRunRequest("bench-node", BenchmarkProfile(model="m", provider="p", trials=1), (case,), _NodeExecutor())
+    )
+    action = next(event for event in result.events if event.action == "schema_introspection")
+    assert action.node == "introspect"
+    assert any(event.kind == "node_finished" and "raw_schema" in event.state_delta for event in result.events)
+    assert next(gate for gate in result.gates if gate.name == "required_trace_evidence").passed
+
+
+@pytest.mark.asyncio
+async def test_transition_label_cannot_satisfy_required_node() -> None:
+    case = _case().model_copy(update={"constraints": TraceConstraints(required_nodes=("introspect",))})
+    request = BenchmarkRunRequest(
+        "bench-transition", BenchmarkProfile(model="m", provider="p", trials=1), (case,), _LinearActionExecutor()
+    )
+    result = await run_benchmark(request)
+    assert not next(gate for gate in result.gates if gate.name == "required_trace_evidence").passed
 
 
 class _LinearActionExecutor:

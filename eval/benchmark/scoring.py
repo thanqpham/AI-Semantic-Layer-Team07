@@ -39,17 +39,13 @@ def benchmark_gates(
 ) -> tuple[BenchmarkGate, ...]:
     """Return non-negotiable policy and evidence decisions for one case."""
     rows = tuple(events)
-    names = _names(rows)
-    required = set(case.constraints.required_actions) | set(case.constraints.required_nodes)
-    seen = set(names)
-    forbidden = set(case.constraints.forbidden_actions) | set(case.constraints.forbidden_nodes)
+    actions = _action_names(rows)
+    nodes = _node_names(rows)
+    missing = (set(case.constraints.required_actions) - actions) | (set(case.constraints.required_nodes) - nodes)
+    forbidden = (set(case.constraints.forbidden_actions) & actions) | (set(case.constraints.forbidden_nodes) & nodes)
     return (
-        BenchmarkGate(
-            name="required_trace_evidence", passed=required <= seen, detail=f"missing={sorted(required - seen)}"
-        ),
-        BenchmarkGate(
-            name="forbidden_actions", passed=not (forbidden & seen), detail=f"observed={sorted(forbidden & seen)}"
-        ),
+        BenchmarkGate(name="required_trace_evidence", passed=not missing, detail=f"missing={sorted(missing)}"),
+        BenchmarkGate(name="forbidden_actions", passed=not forbidden, detail=f"observed={sorted(forbidden)}"),
         BenchmarkGate(
             name="terminal_condition", passed=execution.terminal == case.expected_terminal, detail=execution.terminal
         ),
@@ -80,13 +76,23 @@ def _names(events: Iterable[TraceEvent]) -> tuple[str, ...]:
     return tuple(item.action or item.node for item in events if item.action or item.node)
 
 
+def _action_names(events: Iterable[TraceEvent]) -> set[str]:
+    """Collect only action lifecycle events, excluding graph transition labels."""
+    return {item.action for item in events if item.kind.startswith("action_") and item.action is not None}
+
+
+def _node_names(events: Iterable[TraceEvent]) -> set[str]:
+    """Collect only real node lifecycle events, excluding synthetic transitions."""
+    return {item.node for item in events if item.kind.startswith("node_") and item.node is not None}
+
+
 def _transitions(case: BenchmarkCase, names: tuple[str, ...]) -> float:
     pairs = case.constraints.required_precedence
     return _ratio(sum(_precedes(names, first, second) for first, second in pairs), len(pairs))
 
 
 def _actions(case: BenchmarkCase, names: tuple[str, ...]) -> float:
-    required = set(case.constraints.required_actions) | set(case.constraints.required_nodes)
+    required = set(case.constraints.required_actions)
     return _ratio(len(required & set(names)), len(required))
 
 
