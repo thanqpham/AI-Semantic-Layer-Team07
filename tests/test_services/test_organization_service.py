@@ -19,6 +19,7 @@ from src.services.organization_service import (
     invalidate_membership_cache,
     list_members,
     list_organizations,
+    provision_personal_workspace,
     remove_member,
     require_permission,
     resolve_membership,
@@ -65,6 +66,7 @@ def test_admin_permissions_match_matrix():
         "can_use_data_assistant": True,
         "can_use_metric_studio": False,
         "can_view_pending_metrics": False,
+        "can_export": False,
     }
 
 
@@ -81,6 +83,7 @@ def test_data_lead_permissions_match_matrix():
         "can_use_data_assistant": True,
         "can_use_metric_studio": True,
         "can_view_pending_metrics": True,
+        "can_export": True,
     }
 
 
@@ -97,6 +100,7 @@ def test_member_permissions_match_matrix():
         "can_use_data_assistant": True,
         "can_use_metric_studio": False,
         "can_view_pending_metrics": False,
+        "can_export": False,
     }
 
 
@@ -105,9 +109,9 @@ def test_can_create_metrics_removed_from_matrix():
         assert "can_create_metrics" not in role_perms
 
 
-def test_each_role_has_exactly_11_permissions():
+def test_each_role_has_exactly_12_permissions():
     for role, perms in ROLE_PERMISSIONS.items():
-        assert len(perms) == 11, f"{role} has {len(perms)} permissions, expected 11"
+        assert len(perms) == 12, f"{role} has {len(perms)} permissions, expected 12"
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +148,7 @@ async def test_personal_workspace_provision_is_idempotent(async_session):
 @pytest.mark.asyncio
 async def test_personal_workspace_provision_reuses_existing_org(async_session):
     user = await _add_user(async_session, 11, "legacy@company.com")
-    organization = OrganizationModel(
-        name="Personal Workspace", slug="user-11", created_by=user.id
-    )
+    organization = OrganizationModel(name="Personal Workspace", slug="user-11", created_by=user.id)
     async_session.add(organization)
     await async_session.commit()
 
@@ -454,6 +456,66 @@ async def test_list_members_returns_workspace_members(async_session):
 
     members = await list_members(async_session, organization.id)
     assert {member.user_id for member in members} == {1, 2}
+
+
+# ---------------------------------------------------------------------------
+# 5b. Personal Workspace provisioning
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_organizations_repairs_legacy_user(async_session):
+    """A legacy user with zero memberships is repaired with a personal Workspace."""
+    user = await _add_user(async_session, 99, "legacy@company.com")
+
+    result = await list_organizations(async_session, user.id)
+
+    assert len(result) == 1
+    assert result[0].name == "Personal Workspace"
+    assert result[0].role == "admin"
+    # Idempotent: a second listing does not create a second Workspace.
+    result2 = await list_organizations(async_session, user.id)
+    assert len(result2) == 1
+
+
+@pytest.mark.asyncio
+async def test_provision_personal_workspace_idempotent(async_session):
+    """Provisioning twice for the same user yields one membership and one Workspace."""
+    user = await _add_user(async_session, 77, "idem@company.com")
+
+    first = await provision_personal_workspace(async_session, user.id)
+    second = await provision_personal_workspace(async_session, user.id)
+
+    assert first.org_id == second.org_id
+    memberships = list(
+        (await async_session.execute(select(OrganizationMemberModel).where(OrganizationMemberModel.user_id == user.id)))
+        .scalars()
+        .all()
+    )
+    assert len(memberships) == 1
+    orgs = list(
+        (await async_session.execute(select(OrganizationModel).where(OrganizationModel.id == memberships[0].org_id)))
+        .scalars()
+        .all()
+    )
+    assert len(orgs) == 1
+
+
+@pytest.mark.asyncio
+async def test_provision_personal_workspace_returns_existing_membership(async_session):
+    """Provisioning does not create a second Workspace when one already exists."""
+    user = await _add_user(async_session, 66, "existing@company.com")
+    organization = await create_organization(async_session, user.id, "Acme", "acme")
+
+    membership = await provision_personal_workspace(async_session, user.id)
+
+    assert membership.org_id == organization.id
+    memberships = list(
+        (await async_session.execute(select(OrganizationMemberModel).where(OrganizationMemberModel.user_id == user.id)))
+        .scalars()
+        .all()
+    )
+    assert len(memberships) == 1
 
 
 # ---------------------------------------------------------------------------

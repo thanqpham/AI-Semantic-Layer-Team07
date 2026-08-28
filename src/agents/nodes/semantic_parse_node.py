@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from pydantic import ValidationError
+
 from src.agents.state import AgentState
 from src.models.schemas import (
     ChatClarificationOption,
@@ -137,7 +139,6 @@ def _build_parse_prompt(
         role_desc = "Thành viên / Người xem (không có quyền tạo trực tiếp, có quyền gửi yêu cầu đề xuất lên Data Lead)"
         action_prompt = "gửi Data Lead đề xuất Business Metric mới"
         action_label = "Gửi Data Lead đề xuất chỉ số"
-
     return _PARSE_PROMPT.format(
         current_time=now_vn,
         role_description=role_desc,
@@ -211,7 +212,7 @@ def _parse_interpretation(
                     time_ranges=time_ranges,
                     rationale=raw.get("rationale"),
                 )
-    return _build_clarification_interpretation(raw, can_generate_metrics, user_message)
+    return _build_clarification_interpretation(raw, catalog, can_generate_metrics, user_message)
 
 
 def _build_spec(raw: dict[str, Any], catalog: dict[str, Any]) -> SemanticQuerySpec | None:
@@ -285,7 +286,7 @@ def _clean_missing_metric_prompt(prompt: str, user_message: str, can_generate_me
 
 
 def _build_clarification_interpretation(
-    raw: dict[str, Any], can_generate_metrics: bool = False, user_message: str = ""
+    raw: dict[str, Any], catalog: dict[str, Any], can_generate_metrics: bool = False, user_message: str = ""
 ) -> SemanticQueryInterpretation:
     """Build a needs_clarification interpretation from clarification payload."""
     clar_data = raw.get("clarification")
@@ -315,14 +316,20 @@ def _build_clarification_interpretation(
                 )
             )
         elif isinstance(raw_options, list):
+            valid_ids = {m["id"] for m in catalog.get("metrics", [])}
             for opt in raw_options:
                 if isinstance(opt, dict) and "id" in opt and "label" in opt:
                     spec_obj = None
-                    if isinstance(opt.get("spec"), dict) and "metric_ids" in opt["spec"]:
-                        try:
-                            spec_obj = SemanticQuerySpec(**opt["spec"])
-                        except Exception as exc:
-                            logger.debug("Skipping invalid option spec: %s", exc)
+                    spec = opt.get("spec")
+                    if isinstance(spec, dict) and spec.get("metric_ids"):
+                        if set(spec["metric_ids"]).issubset(valid_ids):
+                            try:
+                                spec_obj = SemanticQuerySpec(**spec)
+                            except ValidationError as exc:
+                                logger.debug("Skipping invalid option spec: %s", exc)
+                                continue
+                        else:
+                            logger.debug("Skipping option with metric IDs outside approved catalog")
                             continue
                     try:
                         options.append(
@@ -334,10 +341,9 @@ def _build_clarification_interpretation(
                                 action=opt.get("action"),
                             )
                         )
-                    except Exception as exc:
+                    except ValidationError as exc:
                         logger.debug("Skipping invalid option: %s", exc)
                         continue
-
     return SemanticQueryInterpretation(
         status="needs_clarification",
         clarification=ChatClarificationPayload(prompt=prompt, options=options[:3]),

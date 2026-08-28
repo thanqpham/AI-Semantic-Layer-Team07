@@ -28,7 +28,7 @@ from src.models.schemas import (
     UserRegisterRequest,
 )
 from src.services.database import get_db_session
-from src.services.organization_service import ensure_personal_workspace
+from src.services.organization_service import provision_personal_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ async def _ensure_unique_username(db: AsyncSession, username: str) -> str:
 
 
 async def _create_user(db: AsyncSession, email: str, username: str, password: str, full_name: str) -> UserModel:
-    """Create and persist a new UserModel."""
+    """Create a new UserModel, flushing (not committing) so the caller controls the transaction."""
     user = UserModel(
         email=email,
         username=username,
@@ -206,8 +206,6 @@ async def _create_user(db: AsyncSession, email: str, username: str, password: st
     )
     db.add(user)
     await db.flush()
-    await ensure_personal_workspace(db, user.id, commit=False)
-    await db.commit()
     await db.refresh(user)
     return user
 
@@ -247,6 +245,14 @@ async def register_user(
 
     username = await _ensure_unique_username(db, body.username)
     user = await _create_user(db, body.email, username, body.password, body.full_name or username)
+    try:
+        await provision_personal_workspace(db, user.id)
+    except Exception:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Workspace provisioning failed",
+        ) from None
     access_token, refresh_token = _issue_tokens(user)
     await _record_user_session(db, user.id, refresh_token, request)
     return _build_token_response(access_token, refresh_token, user)
@@ -285,7 +291,16 @@ async def _get_or_create_google_user(db: AsyncSession, email: str, name: str) ->
         return user
 
     username = email.split("@")[0].replace(".", "_")
-    return await _create_user(db, email, username, f"google_pwd_{time.time()}", name)
+    user = await _create_user(db, email, username, f"google_pwd_{time.time()}", name)
+    try:
+        await provision_personal_workspace(db, user.id)
+    except Exception:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Workspace provisioning failed",
+        ) from None
+    return user
 
 
 @auth_router.post("/google", response_model=dict)

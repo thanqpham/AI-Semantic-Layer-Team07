@@ -65,9 +65,7 @@ async def test_my_orgs_returns_existing_workspace(client, async_session):
     response = await client.get("/api/v1/org/my-orgs", headers=_headers(user))
 
     assert response.status_code == 200
-    assert [(item["id"], item["name"]) for item in response.json()] == [
-        (organization.id, "Existing Workspace")
-    ]
+    assert [(item["id"], item["name"]) for item in response.json()] == [(organization.id, "Existing Workspace")]
 
 
 @pytest.mark.asyncio

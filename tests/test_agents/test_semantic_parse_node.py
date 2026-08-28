@@ -292,3 +292,74 @@ async def test_forced_mismatch_intercepted_and_converted_to_clarification(sample
     assert result["clarification"]["options"][0]["id"] == "create_metric"
     assert "tỷ lệ giữ chân khách hàng" in result["clarification"]["options"][0]["label"].lower()
 
+
+@pytest.mark.asyncio
+async def test_invalid_option_spec_is_skipped(sample_catalog: dict) -> None:
+    """An option whose spec fails Pydantic validation is dropped, not executed as semantic query."""
+    llm_payload = {
+        "status": "needs_clarification",
+        "clarification": {
+            "prompt": "Bạn muốn xem doanh thu theo tiêu chí nào?",
+            "options": [
+                {
+                    "id": "opt_bad",
+                    "label": "Spec không hợp lệ",
+                    "spec": {"metric_ids": "not-a-list"},
+                }
+            ],
+        },
+        "rationale": "Cần làm rõ",
+    }
+
+    state = {
+        "user_message": "Cho tôi xem doanh thu",
+        "parser_catalog": sample_catalog,
+    }
+
+    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = llm_payload
+        result = await semantic_parse_node(state)
+
+    interp = result["interpretation"]
+    assert interp["status"] == "needs_clarification"
+    assert result["clarification"] is not None
+    assert result["clarification"]["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_stale_catalog_metric_id_dropped_from_options(sample_catalog: dict) -> None:
+    """Clarification options referencing metric IDs absent from the approved catalog are dropped."""
+    llm_payload = {
+        "status": "needs_clarification",
+        "clarification": {
+            "prompt": "Bạn muốn xem chỉ số nào?",
+            "options": [
+                {
+                    "id": "opt_stale",
+                    "label": "Chỉ số không tồn tại",
+                    "spec": {"metric_ids": [9999], "dimensions": [], "filters": [], "limit": 100},
+                },
+                {
+                    "id": "opt_ok",
+                    "label": "Doanh thu theo khách hàng",
+                    "spec": {"metric_ids": [1], "dimensions": [{"column_id": 10}], "filters": [], "limit": 100},
+                },
+            ],
+        },
+        "rationale": "Cần làm rõ",
+    }
+
+    state = {
+        "user_message": "Cho tôi xem số liệu",
+        "parser_catalog": sample_catalog,
+    }
+
+    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = llm_payload
+        result = await semantic_parse_node(state)
+
+    interp = result["interpretation"]
+    assert interp["status"] == "needs_clarification"
+    assert result["clarification"] is not None
+    kept = result["clarification"]["options"]
+    assert [o["id"] for o in kept] == ["opt_ok"]

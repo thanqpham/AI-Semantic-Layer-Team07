@@ -1,10 +1,12 @@
 """API Routes for Semantic Layer Flow 1, Business Metrics, Live DB, and HITL inline edits."""
 
+import asyncio
 import logging
 from typing import Any, NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -909,7 +911,7 @@ async def submit_metric_request(
     db: AsyncSession = Depends(get_db_session),
 ) -> MetricRequestResponse:
     """Submit one server-verified AI suggestion for Data Lead review."""
-    database = await _require_resource_permission(db, current_user.id, db_id, org_id, "can_use_data_assistant")
+    database = await _require_resource_permission(db, current_user.id, db_id, org_id, "can_submit_metric")
     if await _chat_can_generate_metrics(db, database, current_user.id):
         raise HTTPException(status_code=403, detail="Data Leads should save metrics directly")
     try:
@@ -1480,8 +1482,7 @@ async def export_semantic_layer(
     """Export approved Semantic Layer as JSON or YAML file download."""
     if format not in ("json", "yaml"):
         raise HTTPException(status_code=400, detail="format must be 'json' or 'yaml'")
-    if await _owned_semantic_database(db, db_id, current_user.id, org_id) is None:
-        raise HTTPException(status_code=404, detail="Semantic database not found")
+    await _require_resource_permission(db, current_user.id, db_id, org_id, "can_export")
 
     try:
         layer = await build_semantic_layer_dict(db, db_id)
@@ -1522,7 +1523,7 @@ async def _query_target(
     if check_drift:
         try:
             conn_url = decrypt_conn_url(live_db.conn_url_enc)
-            current_fp = fast_introspect_schema_fingerprint(conn_url, live_db.dialect)
+            current_fp = await asyncio.to_thread(fast_introspect_schema_fingerprint, conn_url, live_db.dialect)
             if semantic_db.schema_fingerprint and current_fp != semantic_db.schema_fingerprint:
                 logger.info("Schema drift detected before query on db_id=%d. Triggering self-healing...", db_id)
                 await execute_self_healing(db, db_id, trigger_type="instant_check")
@@ -1877,40 +1878,91 @@ async def _handle_clarification_selection(
 
     spec_dict = matched_option.get("spec")
     if isinstance(spec_dict, dict) and spec_dict.get("metric_ids"):
-        _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
         catalog = await build_parser_catalog(db, numeric_db_id)
-        spec = SemanticQuerySpec(**spec_dict)
-        query_result = await execute_natural_language_query(db, numeric_db_id, live_db, spec, catalog)
+        valid_ids = {m["id"] for m in catalog.get("metrics", [])}
+        if set(spec_dict["metric_ids"]).issubset(valid_ids):
+            _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+            try:
+                spec = SemanticQuerySpec(**spec_dict)
+            except ValidationError as exc:
+                logger.warning("Invalid clarification option spec: %s", exc)
+                return await _invalid_clarification_option_response(
+                    db, session, current_user, body, can_generate_metrics, org_id
+                )
+            try:
+                query_result = await execute_natural_language_query(db, numeric_db_id, live_db, spec, catalog)
+            except SemanticCompileError as exc:
+                logger.warning("Semantic compile error for clarification option: %s (%s)", exc.message, exc.code)
+                return await _invalid_clarification_option_response(
+                    db, session, current_user, body, can_generate_metrics, org_id
+                )
 
-        user_msg = await save_chat_message(
-            db, session.id, "user", body.message, client_message_id=body.client_message_id
-        )
-        resp_text = query_result.explanation
-        assistant = await save_chat_message(
-            db,
-            session.id,
-            "assistant",
-            resp_text,
-            intent="semantic_query",
-            metadata_json=_assistant_metadata(semantic_query_result=query_result.model_dump(mode="json")),
-            client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
-        )
-        refreshed = await get_chat_session_with_messages(db, session.id, current_user.id)
-        display_res = query_result if can_generate_metrics else query_result.model_copy(update={"sql": None})
-        return ChatResponse(
-            intent="semantic_query",
-            chat_response=resp_text,
-            semantic_query_result=display_res,
-            session_id=session.id,
-            user_message_id=user_msg.id,
-            assistant_message_id=assistant.id,
-            session=_session_summary(refreshed),
-        )
+            user_msg = await save_chat_message(
+                db, session.id, "user", body.message, client_message_id=body.client_message_id
+            )
+            resp_text = query_result.explanation
+            assistant = await save_chat_message(
+                db,
+                session.id,
+                "assistant",
+                resp_text,
+                intent="semantic_query",
+                metadata_json=_assistant_metadata(semantic_query_result=query_result.model_dump(mode="json")),
+                client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
+            )
+            refreshed = await get_chat_session_with_messages(db, session.id, current_user.id)
+            display_res = query_result if can_generate_metrics else query_result.model_copy(update={"sql": None})
+            return ChatResponse(
+                intent="semantic_query",
+                chat_response=resp_text,
+                semantic_query_result=display_res,
+                session_id=session.id,
+                user_message_id=user_msg.id,
+                assistant_message_id=assistant.id,
+                session=_session_summary(refreshed),
+            )
 
-    # When the option is to create/suggest a metric, delegate to standard chat flow
+    # When the option is to create/suggest a metric or is otherwise not a valid semantic
+    # execution spec, delegate to the standard chat flow.
     body_copy = body.model_copy(update={"clarification_selection": None})
     return await _process_standard_chat(
         db, session, current_user, numeric_db_id, body_copy, can_generate_metrics, org_id
+    )
+
+
+_INVALID_OPTION_NOTICE = (
+    "Lựa chọn không hợp lệ hoặc chỉ số được chọn không còn khả dụng trong danh mục "
+    "được phê duyệt. Vui lòng chọn một tùy chọn khác hoặc đặt câu hỏi mới."
+)
+
+
+async def _invalid_clarification_option_response(
+    db: AsyncSession,
+    session: ChatSessionModel,
+    current_user: UserModel,
+    body: ChatRequest,
+    can_generate_metrics: bool,
+    org_id: int | None = None,
+) -> ChatResponse:
+    """Persist and return the stable invalid-option Vietnamese notice for a bad clarification selection."""
+    user_msg = await save_chat_message(db, session.id, "user", body.message, client_message_id=body.client_message_id)
+    assistant = await save_chat_message(
+        db,
+        session.id,
+        "assistant",
+        _INVALID_OPTION_NOTICE,
+        intent="semantic_query",
+        metadata_json=_assistant_metadata(),
+        client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
+    )
+    refreshed = await get_chat_session_with_messages(db, session.id, current_user.id)
+    return ChatResponse(
+        intent="semantic_query",
+        chat_response=_INVALID_OPTION_NOTICE,
+        session_id=session.id,
+        user_message_id=user_msg.id,
+        assistant_message_id=assistant.id,
+        session=_session_summary(refreshed),
     )
 
 
