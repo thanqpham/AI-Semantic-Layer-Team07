@@ -7,7 +7,6 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
-from eval.agent_runner.bootstrap import prepare_run
 from eval.benchmark import BenchmarkProfile, BenchmarkRunRequest, run_benchmark
 from eval.benchmark.dataset import load_benchmark_cases
 from eval.benchmark.product import AgentRunnerBenchmarkExecutor
@@ -31,7 +30,6 @@ async def run(args: argparse.Namespace) -> int:
     run_dir = args.run_dir or _run_dir(args.domain)
     dataset = await load_domain_dataset(args.golden_root, args.domain)
     cases = await load_benchmark_cases(args.golden_root, args.domain)
-    context = await prepare_run(args.golden_root, args.domain, run_dir)
     config = _resolve_llm_config(get_settings())
     profile = (
         BenchmarkProfile.release(config.model, config.provider)
@@ -42,7 +40,7 @@ async def run(args: argparse.Namespace) -> int:
         run_id=run_dir.name,
         profile=profile,
         cases=cases,
-        executor=AgentRunnerBenchmarkExecutor(context, dataset),
+        executor=AgentRunnerBenchmarkExecutor(args.golden_root, args.domain, run_dir, dataset),
     )
     result = await run_benchmark(request)
     write_artifacts(result, run_dir, {"domain": args.domain, "profile": profile.model_dump(mode="json")})

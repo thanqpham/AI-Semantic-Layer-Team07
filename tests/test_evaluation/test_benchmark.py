@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from eval.benchmark import BenchmarkCase, BenchmarkProfile, BenchmarkRunRequest, run_benchmark
 from eval.benchmark.contracts import ScenarioExecution, TraceConstraints
+from eval.benchmark.product import AgentRunnerBenchmarkExecutor
 from eval.benchmark.redaction import digest_observation, redact_state_delta, redact_value
 from eval.benchmark.reporting import write_artifacts, write_replay_input
 from src.observability import trace_action, trace_node
@@ -75,3 +77,28 @@ async def test_artifact_bundle_is_replayable_without_secret(tmp_path) -> None:
     assert (tmp_path / "traces.jsonl").read_text(encoding="utf-8").count("\n") == len(result.events)
     assert json.loads((tmp_path / "results.json").read_text(encoding="utf-8"))["status"] == "PASS"
     assert (tmp_path / "replay-input.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_product_executor_uses_new_sqlite_sandbox_for_each_trial(tmp_path, monkeypatch) -> None:
+    contexts: list[object] = []
+
+    async def fake_prepare(*_args):
+        context = object()
+        contexts.append(context)
+        return context
+
+    async def fake_collect(context, *_args, **_kwargs):
+        assert contexts.count(context) == 1
+        return SimpleNamespace(discovery={}, enrichment={}, metrics={}, compiler={}, guardrail={})
+
+    async def fake_evaluate(_request):
+        return SimpleNamespace(overall_score=100.0, status="PASS")
+
+    monkeypatch.setattr("eval.benchmark.product.prepare_run", fake_prepare)
+    monkeypatch.setattr("eval.benchmark.product.collect_candidates", fake_collect)
+    monkeypatch.setattr("eval.benchmark.product.run_hybrid_evaluation", fake_evaluate)
+    executor = AgentRunnerBenchmarkExecutor(tmp_path, "ecommerce", tmp_path / "run", object())
+    await executor.execute(_case())
+    await executor.execute(_case())
+    assert len(contexts) == 2
