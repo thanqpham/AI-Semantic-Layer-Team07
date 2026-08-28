@@ -63,7 +63,7 @@ class BenchmarkTraceRecorder:
         )
 
     def _next_iteration(self, kind: str) -> int:
-        if kind.endswith("started"):
+        if kind == "node_started":
             self._iteration.set(self._iteration.get() + 1)
         return max(1, self._iteration.get())
 

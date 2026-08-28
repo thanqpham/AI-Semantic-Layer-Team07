@@ -9,7 +9,7 @@
         "required_actions": ["schema_introspection", "llm_enrichment", "metric_generation", "query_compile", "sql_guardrail"],
         "required_precedence": [["schema_introspection", "llm_enrichment"], ["llm_enrichment", "metric_generation"]],
         "max_iterations": 50,
-        "max_actions": 100
+        "max_actions": 300
       }
     }
   ]

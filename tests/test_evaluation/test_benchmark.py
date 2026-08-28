@@ -102,3 +102,21 @@ async def test_product_executor_uses_new_sqlite_sandbox_for_each_trial(tmp_path,
     await executor.execute(_case())
     await executor.execute(_case())
     assert len(contexts) == 2
+
+
+class _LinearActionExecutor:
+    async def execute(self, case: BenchmarkCase) -> ScenarioExecution:
+        for _ in range(3):
+            await trace_action("sql_guardrail", {}, _value())
+        return ScenarioExecution(terminal=case.expected_terminal, outcome_score=1.0)
+
+
+@pytest.mark.asyncio
+async def test_linear_actions_do_not_count_as_agent_iterations() -> None:
+    case = _case().model_copy(update={"constraints": TraceConstraints(max_iterations=1, max_actions=10)})
+    request = BenchmarkRunRequest(
+        "bench-linear", BenchmarkProfile(model="m", provider="p", trials=1), (case,), _LinearActionExecutor()
+    )
+    result = await run_benchmark(request)
+    gate = next(item for item in result.gates if item.name == "iteration_budget")
+    assert gate.passed
