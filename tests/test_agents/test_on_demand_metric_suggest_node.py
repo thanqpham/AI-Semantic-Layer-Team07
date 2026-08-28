@@ -74,6 +74,7 @@ async def test_node_returns_definition_without_sql() -> None:
     assert "sql_template" not in str(item)
     assert result["duplicate_notices"] == []
     assert result["dedupe_performed"] is True
+    llm.with_structured_output.assert_called_once_with(MetricSuggestions, method="function_calling")
 
 
 async def test_node_retries_when_first_definition_references_unknown_schema() -> None:
@@ -114,7 +115,7 @@ async def test_node_emits_notices_when_existing_duplicate() -> None:
     state = {"enriched_schema": _schema_with_order_items(), "existing_metrics": existing}
     with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
         result = await on_demand_metric_suggest_node(state)
-    llm.with_structured_output.assert_called_once_with(MetricSuggestions)
+    llm.with_structured_output.assert_called_once_with(MetricSuggestions, method="function_calling")
     assert result["suggested_metrics"] == []
     notices = result["duplicate_notices"]
     assert len(notices) == 1
@@ -127,7 +128,7 @@ async def test_node_without_existing_uses_v1() -> None:
     state = {"enriched_schema": _schema_with_order_items()}
     with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
         result = await on_demand_metric_suggest_node(state)
-    llm.with_structured_output.assert_called_once_with(MetricSuggestions)
+    llm.with_structured_output.assert_called_once_with(MetricSuggestions, method="function_calling")
     assert result["suggested_metrics"]
     assert result["duplicate_notices"] == []
 

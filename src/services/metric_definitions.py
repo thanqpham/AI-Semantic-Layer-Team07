@@ -13,7 +13,7 @@ from src.models.db import (
     SemanticColumnModel,
     SemanticTableModel,
 )
-from src.models.metric_definition import MetricDefinition, MetricStatus
+from src.models.metric_definition import MetricDefinition, MetricStatus, is_timestamp_diff_hours
 from src.models.review_mixin import REVIEW_STATUS_PENDING
 from src.models.schema_metadata import RawSchemaMetadata
 
@@ -144,6 +144,9 @@ def _validate_expression_columns(
         return
     parsed = sqlglot.parse_one(formula.expression)
     col_map_lower = {k.lower(): (k, v) for k, v in columns.items()}
+    if is_timestamp_diff_hours(parsed):
+        _validate_timestamp_difference(parsed, col_map_lower)
+        return
     names = {column.name.lower() for column in parsed.find_all(exp.Column)}
     missing = names - col_map_lower.keys()
     if missing:
@@ -152,6 +155,17 @@ def _validate_expression_columns(
         invalid = [col_map_lower[name][0] for name in names if not _is_numeric(col_map_lower[name][1].data_type)]
         if invalid:
             raise ValueError(f"{formula.function} requires numeric columns: {invalid}")
+
+
+def _validate_timestamp_difference(parsed: exp.Expression, columns: dict[str, tuple[str, SemanticColumnModel]]) -> None:
+    """Require both fixed timestamp-difference arguments to be known time columns."""
+    names = [item.name.lower() for item in parsed.expressions]
+    missing = set(names) - columns.keys()
+    if missing:
+        raise ValueError(f"Unknown expression columns: {sorted(missing)}")
+    invalid = [columns[name][0] for name in names if not _is_time(columns[name][1].data_type)]
+    if invalid:
+        raise ValueError(f"TIMESTAMP_DIFF_HOURS requires time columns: {invalid}")
 
 
 def _validate_filter_columns(
@@ -166,3 +180,7 @@ def _validate_filter_columns(
 
 def _is_numeric(data_type: str) -> bool:
     return any(token in data_type.upper() for token in _NUMERIC_TYPES)
+
+
+def _is_time(data_type: str) -> bool:
+    return any(token in data_type.upper() for token in ("DATE", "TIME", "TIMESTAMP", "DATETIME"))

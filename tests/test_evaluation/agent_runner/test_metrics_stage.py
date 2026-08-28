@@ -80,6 +80,16 @@ async def test_to_metric_candidate_derived():
     assert candidate.sql_expression == "total_amount / order_count"
 
 
+async def test_to_metric_candidate_translates_timestamp_difference_for_evaluation():
+    definition = _definition_with_formula("AVG", "TIMESTAMP_DIFF_HOURS(delivered_time, order_date)", "fact_orders")
+    candidate = to_metric_candidate(
+        definition, allowed_dimensions=[], source_table="fact_orders", resolver=await _ecommerce_resolver()
+    ).metric
+    assert candidate.metric_type == "derived"
+    assert candidate.field is None
+    assert candidate.sql_expression == "(julianday(delivered_time) - julianday(order_date)) * 24.0"
+
+
 async def test_metric_candidate_resolves_canonical_and_unwraps_expression(enriched):
     ctx, conn_id, _raw = enriched
     resolver = await _ecommerce_resolver()

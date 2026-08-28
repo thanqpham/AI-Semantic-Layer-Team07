@@ -13,6 +13,7 @@ from src.models.metric_definition import (
     MetricDiagnostic,
     MetricExpressionNode,
     MetricGrain,
+    is_timestamp_diff_hours,
 )
 from src.services.metric_definitions import validate_metric_definition
 from src.services.metric_hygiene import hygiene_flag_filters
@@ -98,6 +99,11 @@ def _expression_tree(
 
 
 def _node(node: exp.Expression, columns: dict[str, SemanticColumnModel]) -> MetricExpressionNode:
+    if is_timestamp_diff_hours(node):
+        return MetricExpressionNode(
+            kind="timestamp_diff_hours",
+            children=[_node(item, columns) for item in node.expressions],
+        )
     if isinstance(node, exp.Column):
         return MetricExpressionNode(kind="column", column_id=columns[node.name.lower()].id)
     if isinstance(node, exp.Literal):

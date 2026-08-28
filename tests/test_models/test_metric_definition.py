@@ -37,6 +37,11 @@ def test_definition_rejects_star_for_sum() -> None:
         MetricDefinition.model_validate(_payload("*"))
 
 
+def test_definition_accepts_safe_timestamp_difference_expression() -> None:
+    definition = MetricDefinition.model_validate(_payload("TIMESTAMP_DIFF_HOURS(delivered_time, order_date)"))
+    assert definition.metric.formula.expression == "TIMESTAMP_DIFF_HOURS(delivered_time, order_date)"
+
+
 @pytest.mark.parametrize("status", ["draft", "pending_approval", "approved", "needs_review", "unverified"])
 def test_definition_accepts_valid_statuses(status: str) -> None:
     """MetricSpec accepts all currently valid lifecycle statuses including unverified."""

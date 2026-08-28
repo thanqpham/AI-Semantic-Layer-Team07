@@ -280,6 +280,8 @@ def _compile_argument(
         return str(node.value)
     if node.kind == "neg":
         return f"-({_compile_argument(node.children[0], table, columns, dialect)})"
+    if node.kind == "timestamp_diff_hours":
+        return _compile_timestamp_difference(node, table, columns, dialect)
     left = _compile_argument(node.children[0], table, columns, dialect)
     right = _compile_argument(node.children[1], table, columns, dialect)
     if node.kind == "div":
@@ -288,6 +290,23 @@ def _compile_argument(
     if node.kind in operators:
         return f"({left} {operators[node.kind]} {right})"
     raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric expression contains an unknown column")
+
+
+def _compile_timestamp_difference(
+    node: MetricExpressionNode,
+    table: str,
+    columns: dict[int, str],
+    dialect: str,
+) -> str:
+    """Render the fixed timestamp-difference primitive for one SQL dialect."""
+    if len(node.children) != 2:
+        raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Timestamp difference requires two resolved columns")
+    end, start = (_compile_argument(item, table, columns, dialect) for item in node.children)
+    if dialect == "sqlite":
+        return f"(julianday({end}) - julianday({start})) * 24.0"
+    if dialect == "mysql":
+        return f"TIMESTAMPDIFF(SECOND, {start}, {end}) / 3600.0"
+    return f"EXTRACT(EPOCH FROM ({end} - {start})) / 3600.0"
 
 
 def _validated_join_condition(condition: str, dialect: str) -> str:

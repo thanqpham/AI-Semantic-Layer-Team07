@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+import sqlglot
 from sqlglot import exp
 
 from eval.agent_runner.canonical_resolver import CanonicalResolver
@@ -31,7 +32,7 @@ from eval.evaluator.sql_normalization import (
     parse_single_statement,
 )
 from src.models.db import CanonicalRelationshipModel, SemanticColumnModel, SemanticTableModel
-from src.models.metric_definition import MetricDefinition, MetricFilter
+from src.models.metric_definition import MetricDefinition, MetricFilter, is_timestamp_diff_hours
 from src.models.schema_metadata import (
     ColumnMetadata,
     ForeignKeyMetadata,
@@ -325,6 +326,7 @@ def to_metric_candidate(
     """
     spec = definition.metric
     expression = spec.formula.expression
+    sql_expression = _eval_sql_expression(expression)
     metric = CandidateMetricDefinition(
         name=spec.name,
         business_name=spec.name,
@@ -335,7 +337,7 @@ def to_metric_candidate(
         aggregation=spec.formula.function.lower(),
         field=expression if _BARE_IDENTIFIER.match(expression) else None,
         business_formula="",
-        sql_expression=expression,
+        sql_expression=sql_expression,
         default_filters=tuple(CandidateMetricFilter(condition=_render_filter(item)) for item in spec.filters),
         allowed_dimensions=tuple(resolver.resolve_dimension(item) for item in allowed_dimensions),
         # TimeGrain Literal has no empty value — "day" is schema-forced (contract gap, per D6).
@@ -347,7 +349,24 @@ def to_metric_candidate(
 
 def _metric_type(expression: str) -> str:
     """Classify a formula expression as derived when it contains arithmetic."""
-    return "derived" if _ARITHMETIC_OPERATOR.search(expression) else "simple"
+    return "derived" if _ARITHMETIC_OPERATOR.search(expression) or _is_timestamp_difference(expression) else "simple"
+
+
+def _eval_sql_expression(expression: str) -> str:
+    """Translate the fixed temporal primitive into SQLite golden-evaluation SQL."""
+    parsed = sqlglot.parse_one(expression)
+    if not is_timestamp_diff_hours(parsed):
+        return expression
+    end, start = (item.name for item in parsed.expressions)
+    return f"(julianday({end}) - julianday({start})) * 24.0"
+
+
+def _is_timestamp_difference(expression: str) -> bool:
+    """Return whether an expression uses the fixed temporal primitive."""
+    try:
+        return is_timestamp_diff_hours(sqlglot.parse_one(expression))
+    except sqlglot.errors.ParseError:
+        return False
 
 
 def _render_filter(item: MetricFilter) -> str:

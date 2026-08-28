@@ -17,6 +17,7 @@ MetricStatus = Literal["draft", "pending_approval", "approved", "needs_review", 
 MetricConfidence = Literal["low", "medium", "high"]
 FilterOperator = Literal["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "is_null", "is_not_null"]
 ExpressionKind = Literal["column", "literal", "add", "sub", "mul", "div", "neg"]
+TIMESTAMP_DIFF_HOURS = "TIMESTAMP_DIFF_HOURS"
 
 _ALLOWED_EXPRESSION_NODES = (
     exp.Column,
@@ -59,7 +60,7 @@ class MetricDiagnostic(BaseModel):
 class MetricExpressionNode(BaseModel):
     """Represent one typed node in a resolved arithmetic expression."""
 
-    kind: ExpressionKind
+    kind: ExpressionKind | Literal["timestamp_diff_hours"]
     column_id: int | None = None
     value: float | None = None
     children: list[MetricExpressionNode] = Field(default_factory=list)
@@ -96,7 +97,7 @@ class MetricFormula(BaseModel):
     @field_validator("expression")
     @classmethod
     def validate_expression(cls, value: str) -> str:
-        """Reject SQL statements, functions, strings, and qualified identifiers."""
+        """Accept arithmetic and the fixed safe timestamp-difference primitive."""
         cleaned = value.strip()
         if cleaned == "*":
             return cleaned
@@ -104,6 +105,8 @@ class MetricFormula(BaseModel):
             parsed = sqlglot.parse_one(cleaned)
         except sqlglot.errors.ParseError as exc:
             raise ValueError("Invalid metric expression") from exc
+        if is_timestamp_diff_hours(parsed):
+            return cleaned
         for node in parsed.walk():
             if not isinstance(node, _ALLOWED_EXPRESSION_NODES):
                 raise ValueError(f"Expression node {type(node).__name__} is not allowed")
@@ -117,6 +120,16 @@ class MetricFormula(BaseModel):
         if self.expression == "*" and self.function != "COUNT":
             raise ValueError("star is only valid with COUNT")
         return self
+
+
+def is_timestamp_diff_hours(node: exp.Expression) -> bool:
+    """Recognize the only supported temporal function in metric expressions."""
+    return (
+        isinstance(node, exp.Anonymous)
+        and node.name.upper() == TIMESTAMP_DIFF_HOURS
+        and len(node.expressions) == 2
+        and all(isinstance(item, exp.Column) and not item.table for item in node.expressions)
+    )
 
 
 _OP_MAP = {

@@ -51,6 +51,8 @@ async def _seed_table(db: AsyncSession, with_primary_key: bool = True) -> tuple[
                 ("quantity", "INTEGER"),
                 ("unit_price", "NUMERIC"),
                 ("status", "TEXT"),
+                ("order_date", "TIMESTAMP"),
+                ("delivered_time", "TIMESTAMP"),
             ]
         ]
     )
@@ -74,6 +76,27 @@ async def test_resolve_records_canonical_ids_expression_and_grain(async_session:
         resolved.metric.grain.column_ids[0] + 2,
     }
     assert resolved.metric.filters[0].column_id is not None
+
+
+@pytest.mark.asyncio
+async def test_resolve_builds_timestamp_difference_expression_tree(async_session: AsyncSession) -> None:
+    db_id, _ = await _seed_table(async_session)
+    draft = MetricDefinition.model_validate(
+        {
+            "metric": {
+                "name": "Thời gian giao hàng trung bình",
+                "formula": {"function": "AVG", "expression": "TIMESTAMP_DIFF_HOURS(delivered_time, order_date)"},
+                "base_entity": "order_items",
+                "filters": [],
+            }
+        }
+    )
+
+    resolved = await MetricDefinitionResolver(async_session).resolve(db_id, draft)
+
+    node = resolved.metric.formula.expression_ast
+    assert node is not None and node.kind == "timestamp_diff_hours"
+    assert len(node.children) == 2
 
 
 @pytest.mark.asyncio

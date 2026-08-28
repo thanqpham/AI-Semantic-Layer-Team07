@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
-from src.models.metric_definition import MetricDefinition, MetricFilter
-from src.services.query_compiler_sql import _residual_filters, _resolved_filter, _shared_filters
+from src.models.metric_definition import MetricDefinition, MetricExpressionNode, MetricFilter
+from src.services.query_compiler_sql import _compile_argument, _residual_filters, _resolved_filter, _shared_filters
 from src.services.semantic_compile_error import SemanticCompileError
 
 
@@ -116,3 +116,22 @@ def test_resolved_filter_allows_non_string_values() -> None:
     for value in (0, 1.5):
         item = MetricFilter(field="f", operator="eq", value=value, column_id=101)
         assert _resolved_filter(item, {101: "f"}).value == value
+
+
+@pytest.mark.parametrize(
+    ("dialect", "expected"),
+    [
+        ("sqlite", '(julianday("orders"."delivered_time") - julianday("orders"."order_date")) * 24.0'),
+        ("mysql", "TIMESTAMPDIFF(SECOND, `orders`.`order_date`, `orders`.`delivered_time`) / 3600.0"),
+        ("postgres", 'EXTRACT(EPOCH FROM ("orders"."delivered_time" - "orders"."order_date")) / 3600.0'),
+    ],
+)
+def test_compile_timestamp_difference_hours_for_each_dialect(dialect: str, expected: str) -> None:
+    node = MetricExpressionNode(
+        kind="timestamp_diff_hours",
+        children=[
+            MetricExpressionNode(kind="column", column_id=2),
+            MetricExpressionNode(kind="column", column_id=1),
+        ],
+    )
+    assert _compile_argument(node, "orders", {1: "order_date", 2: "delivered_time"}, dialect) == expected
