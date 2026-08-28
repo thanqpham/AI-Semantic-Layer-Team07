@@ -10,10 +10,12 @@ import pytest
 from eval.benchmark import BenchmarkCase, BenchmarkProfile, BenchmarkRunRequest, run_benchmark
 from eval.benchmark.contracts import ScenarioExecution, TraceConstraints
 from eval.benchmark.graph_runner import run_flow1_graph
+from eval.benchmark.pricing import load_pricing_catalog
 from eval.benchmark.product import AgentRunnerBenchmarkExecutor
 from eval.benchmark.redaction import digest_observation, redact_state_delta, redact_value
 from eval.benchmark.reporting import write_artifacts, write_replay_input
 from src.observability import trace_action, trace_node
+from src.observability.llm_usage import BenchmarkUsageCallback
 
 
 class _Executor:
@@ -189,3 +191,52 @@ async def test_linear_actions_do_not_count_as_agent_iterations() -> None:
     result = await run_benchmark(request)
     gate = next(item for item in result.gates if item.name == "iteration_budget")
     assert gate.passed
+
+
+def _llm_response(usage: dict[str, object] | None) -> SimpleNamespace:
+    message = SimpleNamespace(usage_metadata=usage, response_metadata={"model_name": "gpt-4o-mini"})
+    return SimpleNamespace(generations=[[SimpleNamespace(message=message)]], llm_output={})
+
+
+def test_usage_callback_records_provider_tokens_and_priced_cost() -> None:
+    from eval.benchmark.tracer import BenchmarkTraceRecorder
+    from src.observability import activate_trace
+
+    recorder = BenchmarkTraceRecorder("usage-run")
+    callback = BenchmarkUsageCallback("openai", "gpt-4o-mini")
+    with activate_trace(recorder), recorder.trial_context("usage-case", 1):
+        callback.on_llm_end(
+            _llm_response(
+                {
+                    "input_tokens": 1000,
+                    "output_tokens": 500,
+                    "input_token_details": {"cache_read": 200},
+                }
+            )
+        )
+    event = recorder.events[0]
+    assert event.input_tokens == 1000
+    assert event.cached_input_tokens == 200
+    assert event.output_tokens == 500
+    assert event.estimated_cost_usd == pytest.approx(0.000435)
+    assert event.cost_status == "estimated"
+
+
+def test_usage_callback_marks_missing_provider_metadata_unavailable() -> None:
+    from eval.benchmark.tracer import BenchmarkTraceRecorder
+    from src.observability import activate_trace
+
+    recorder = BenchmarkTraceRecorder("usage-run")
+    callback = BenchmarkUsageCallback("gemini", "gemini-test")
+    with activate_trace(recorder), recorder.trial_context("usage-case", 1):
+        callback.on_llm_end(_llm_response(None))
+    event = recorder.events[0]
+    assert event.input_tokens is None
+    assert event.estimated_cost_usd is None
+    assert event.cost_status == "unavailable"
+
+
+def test_pricing_catalog_does_not_guess_unknown_provider_cost() -> None:
+    estimate = load_pricing_catalog().estimate("mimo", "mimo-v2", 10, 10, None, None)
+    assert estimate.cost_usd is None
+    assert estimate.status == "unavailable"

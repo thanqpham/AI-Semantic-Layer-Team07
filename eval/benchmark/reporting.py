@@ -42,6 +42,7 @@ def render_markdown(result: BenchmarkRunResult) -> str:
     lines.extend(f"| {item.name} | {item.weight:.0%} | {item.score:.3f} |" for item in result.scores)
     lines.extend(["", "## Critical gates", "", "| Gate | Passed | Detail |", "|---|---|---|"])
     lines.extend(f"| {gate.name} | {'yes' if gate.passed else 'CRITICAL'} | {gate.detail} |" for gate in result.gates)
+    lines.extend(_usage_lines(result))
     if result.baseline is not None:
         lines.extend(["", "## Baseline", "", f"- {result.baseline.detail}"])
     if result.warnings:
@@ -62,7 +63,23 @@ def _write_traces(result: BenchmarkRunResult, path: Path) -> None:
 def _write_csv(result: BenchmarkRunResult, path: Path) -> None:
     with path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream)
-        writer.writerow(["case_id", "trial", "iteration", "kind", "node", "action", "status", "latency_ms"])
+        writer.writerow(
+            [
+                "case_id",
+                "trial",
+                "iteration",
+                "kind",
+                "node",
+                "action",
+                "status",
+                "latency_ms",
+                "provider",
+                "model",
+                "input_tokens",
+                "output_tokens",
+                "estimated_cost_usd",
+            ]
+        )
         for event in result.events:
             writer.writerow(
                 [
@@ -74,5 +91,29 @@ def _write_csv(result: BenchmarkRunResult, path: Path) -> None:
                     event.action,
                     event.status,
                     event.latency_ms,
+                    event.provider,
+                    event.model,
+                    event.input_tokens,
+                    event.output_tokens,
+                    event.estimated_cost_usd,
                 ]
             )
+
+
+def _usage_lines(result: BenchmarkRunResult) -> list[str]:
+    """Render totals from provider-reported usage events without inventing missing values."""
+    events = [event for event in result.events if event.kind == "llm_usage"]
+    if not events:
+        return ["", "## LLM usage", "", "- n/a (provider did not report usage metadata)"]
+    input_values = [event.input_tokens for event in events if event.input_tokens is not None]
+    output_values = [event.output_tokens for event in events if event.output_tokens is not None]
+    known_costs = [event.estimated_cost_usd for event in events if event.estimated_cost_usd is not None]
+    input_tokens = str(sum(input_values)) if input_values else "n/a"
+    output_tokens = str(sum(output_values)) if output_values else "n/a"
+    cost = f"${sum(known_costs):.6f}" if known_costs else "n/a"
+    return [
+        "",
+        "## LLM usage",
+        "",
+        f"- Requests: {len(events)}; input tokens: {input_tokens}; output tokens: {output_tokens}; estimated cost: {cost}",
+    ]

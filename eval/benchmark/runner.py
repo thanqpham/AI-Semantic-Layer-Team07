@@ -13,6 +13,7 @@ from eval.benchmark.contracts import (
     ScenarioExecution,
     TraceEvent,
 )
+from eval.benchmark.pricing import load_pricing_catalog
 from eval.benchmark.scoring import aggregate_scores, benchmark_gates, overall_score, score_case
 from eval.benchmark.tracer import BenchmarkTraceRecorder
 from src.observability import activate_trace
@@ -29,13 +30,24 @@ class _TrialResult:
 
 async def run_benchmark(request: BenchmarkRunRequest) -> BenchmarkRunResult:
     """Execute all cases and produce a deterministic trace benchmark result."""
-    recorder = BenchmarkTraceRecorder(request.run_id)
-    trials = await _run_trials(request, recorder)
-    scores = aggregate_scores(score_case(_case(request, row.case_id), row.events, row.execution) for row in trials)
-    gates = tuple(
-        gate for row in trials for gate in benchmark_gates(_case(request, row.case_id), row.events, row.execution)
+    priced_request = _with_pricing_version(request)
+    recorder = BenchmarkTraceRecorder(priced_request.run_id, load_pricing_catalog())
+    trials = await _run_trials(priced_request, recorder)
+    scores = aggregate_scores(
+        score_case(_case(priced_request, row.case_id), row.events, row.execution) for row in trials
     )
-    return _result(request, recorder.events, tuple(row.execution for row in trials), scores, gates)
+    gates = tuple(
+        gate
+        for row in trials
+        for gate in benchmark_gates(_case(priced_request, row.case_id), row.events, row.execution)
+    )
+    return _result(priced_request, recorder.events, tuple(row.execution for row in trials), scores, gates)
+
+
+def _with_pricing_version(request: BenchmarkRunRequest) -> BenchmarkRunRequest:
+    """Pin the local catalog version in every run before collecting evidence."""
+    profile = request.profile.model_copy(update={"pricing_version": load_pricing_catalog().version})
+    return BenchmarkRunRequest(request.run_id, profile, request.cases, request.executor, request.baseline)
 
 
 async def _run_trials(request: BenchmarkRunRequest, recorder: BenchmarkTraceRecorder) -> tuple[_TrialResult, ...]:

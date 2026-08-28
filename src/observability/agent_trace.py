@@ -19,6 +19,7 @@ class AgentTraceSink(Protocol):
 
 _SINK: ContextVar[AgentTraceSink | None] = ContextVar("agent_trace_sink", default=None)
 _NODE: ContextVar[str | None] = ContextVar("agent_trace_node", default=None)
+_ACTION: ContextVar[str | None] = ContextVar("agent_trace_action", default=None)
 _T = TypeVar("_T")
 
 
@@ -46,12 +47,15 @@ def trace_transition(source: str, target: str) -> None:
 def trace_value(action: str, inputs: Mapping[str, Any], operation: Callable[[], _T]) -> _T:
     """Run a synchronous guardrail operation with optional action tracing."""
     started = time.perf_counter()
+    action_token = _ACTION.set(action)
     _emit("action_started", _action_started_payload(action, inputs))
     try:
         result = operation()
     except Exception as exc:
         _emit("action_failed", _action_payload(action, inputs, started, error=type(exc).__name__))
         raise
+    finally:
+        _ACTION.reset(action_token)
     _emit("action_finished", _action_payload(action, inputs, started, observation=result))
     return result
 
@@ -59,14 +63,23 @@ def trace_value(action: str, inputs: Mapping[str, Any], operation: Callable[[], 
 async def trace_action(action: str, inputs: Mapping[str, Any], operation: Awaitable[_T]) -> _T:
     """Await an operation and record its observable action boundary when enabled."""
     started = time.perf_counter()
+    action_token = _ACTION.set(action)
     _emit("action_started", _action_started_payload(action, inputs))
     try:
         result = await operation
     except Exception as exc:
         _emit("action_failed", _action_payload(action, inputs, started, error=type(exc).__name__))
         raise
+    finally:
+        _ACTION.reset(action_token)
     _emit("action_finished", _action_payload(action, inputs, started, observation=result))
     return result
+
+
+def trace_llm_usage(payload: Mapping[str, Any]) -> None:
+    """Record normalized provider usage without retaining prompt or response content."""
+    event = {"node": _NODE.get(), "action": _ACTION.get() or "llm_invoke", **dict(payload)}
+    _emit("llm_usage", event)
 
 
 def _action_payload(

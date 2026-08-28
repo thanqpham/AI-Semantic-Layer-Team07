@@ -78,9 +78,17 @@ class TraceEvent(StrictEvaluationModel):
     evidence_actions: tuple[str, ...] = ()
     error_code: str | None = None
     latency_ms: float | None = Field(default=None, ge=0)
-    input_tokens: int = Field(default=0, ge=0)
-    output_tokens: int = Field(default=0, ge=0)
-    estimated_cost_usd: float = Field(default=0.0, ge=0)
+    provider: str | None = None
+    model: str | None = None
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    reasoning_tokens: int | None = Field(default=None, ge=0)
+    usage_source: Literal["provider_reported", "unavailable"] | None = None
+    token_precision: Literal["exact", "unavailable"] | None = None
+    estimated_cost_usd: float | None = Field(default=None, ge=0)
+    cost_status: Literal["estimated", "free", "unavailable"] | None = None
+    pricing_version: str | None = None
 
 
 class ScenarioExecution(StrictEvaluationModel):

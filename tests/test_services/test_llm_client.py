@@ -4,6 +4,7 @@ import pytest
 from langchain_openai import ChatOpenAI
 
 from src.config import Settings
+from src.observability.llm_usage import BenchmarkUsageCallback
 from src.services import llm as llm_module
 
 _BASE_FIELDS: dict[str, str] = {
@@ -72,6 +73,7 @@ def test_openai_protocol_builds_chat_openai(monkeypatch: pytest.MonkeyPatch) -> 
     assert isinstance(client, ChatOpenAI)
     assert client.model_name == "llama-3.3-70b-versatile"
     assert client.temperature == 0.0
+    assert any(isinstance(callback, BenchmarkUsageCallback) for callback in client.callbacks)
 
 
 def test_anthropic_protocol_builds_anthropic_client(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,0 +1,17 @@
+{
+  "version": "2026-08-28",
+  "rates": [
+    {
+      "provider": "openai",
+      "model_prefix": "gpt-4o-mini",
+      "input_per_million_usd": 0.15,
+      "cached_input_per_million_usd": 0.075,
+      "output_per_million_usd": 0.6
+    },
+    {
+      "provider": "local",
+      "model_prefix": "",
+      "cost_status": "free"
+    }
+  ]
+}

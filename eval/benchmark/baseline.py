@@ -25,6 +25,7 @@ def _compatible(current: BenchmarkRunResult, baseline: BenchmarkRunResult) -> bo
         current.contract_version == baseline.contract_version
         and current.profile.model == baseline.profile.model
         and current.profile.provider == baseline.profile.provider
+        and current.profile.pricing_version == baseline.profile.pricing_version
     )
 
 
@@ -39,5 +40,6 @@ def _mean_latency(result: BenchmarkRunResult) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def _total_cost(result: BenchmarkRunResult) -> float:
-    return sum(item.estimated_cost_usd for item in result.events)
+def _total_cost(result: BenchmarkRunResult) -> float | None:
+    values = [item.estimated_cost_usd for item in result.events if item.estimated_cost_usd is not None]
+    return sum(values) if values else None
