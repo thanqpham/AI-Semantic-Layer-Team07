@@ -145,6 +145,45 @@ async def test_resolved_nl_query_for_data_lead_includes_sql(
 @pytest.mark.asyncio
 @patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
 @patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+async def test_out_of_scope_chat_returns_without_context_or_metric_pipeline(
+    mock_agent: AsyncMock,
+    mock_orch: AsyncMock,
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    chat_mocks: SimpleNamespace,
+) -> None:
+    """Out-of-scope requests return a normal chat response without downstream services."""
+    mock_orch.return_value = {
+        "intent": "out_of_scope",
+        "chat_response": "Tôi chỉ hỗ trợ Semantic Layer và phân tích dữ liệu doanh nghiệp.",
+    }
+
+    with (
+        patch("src.api.routes.build_metric_context", new_callable=AsyncMock) as metric_context,
+        patch("src.api.routes.build_data_context", new_callable=AsyncMock) as data_context,
+        patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock) as dedupe,
+    ):
+        res = await client.post(
+            "/api/v1/semantic/101/chat",
+            json={"message": "Thời tiết hôm nay thế nào?"},
+            headers=auth_headers,
+        )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["intent"] == "out_of_scope"
+    assert body["chat_response"].startswith("Tôi chỉ hỗ trợ")
+    assert body["suggestions"] is None
+    assert body["semantic_query_result"] is None
+    metric_context.assert_not_awaited()
+    data_context.assert_not_awaited()
+    dedupe.assert_not_awaited()
+    mock_agent.ainvoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
+@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_resolved_nl_query_for_member_redacts_sql(
     mock_agent: AsyncMock,
     mock_orch: AsyncMock,

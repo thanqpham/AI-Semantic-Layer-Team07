@@ -1990,6 +1990,18 @@ async def _process_standard_chat(
     preclassified_intent = classification.get("intent", "data_question")
     preclassified_chat_response = classification.get("chat_response")
 
+    if preclassified_intent == "out_of_scope":
+        return await _build_out_of_scope_response(
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body,
+            user_message,
+            preclassified_chat_response,
+            org_id,
+        )
+
     parser_catalog: dict[str, Any] = {}
     if preclassified_intent == "semantic_query":
         await _query_target(db, numeric_db_id, current_user.id, org_id)
@@ -2025,6 +2037,33 @@ async def _process_standard_chat(
         dedupe_performed,
         context.diagnostic,
         parser_catalog,
+        org_id,
+    )
+
+
+async def _build_out_of_scope_response(
+    db: AsyncSession,
+    session: ChatSessionModel,
+    current_user: UserModel,
+    numeric_db_id: int,
+    body: ChatRequest,
+    user_message: ChatMessageModel,
+    response_text: str | None,
+    org_id: int | None,
+) -> ChatResponse:
+    """Persist an out-of-scope reply without touching schema, metric, or query services."""
+    return await _build_and_save_chat_response(
+        db,
+        session,
+        current_user,
+        numeric_db_id,
+        body,
+        user_message,
+        {"intent": "out_of_scope", "chat_response": response_text or "Tôi chỉ hỗ trợ dữ liệu doanh nghiệp."},
+        True,
+        True,
+        {"status": "ready", "tables": [], "relationship_count": 0},
+        {},
         org_id,
     )
 
