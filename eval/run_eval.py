@@ -16,16 +16,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from eval.agent_runner import (
+    AgentRunContext,
     ProductionGuardrailAdapter,
     collect_candidates,
     prepare_run,
     write_candidates,
+    write_resolver_diagnostics,
 )
 from eval.dataset.loader import load_domain_dataset
 from eval.evaluator import (
@@ -81,19 +84,43 @@ def _print_summary(result: DomainEvaluationResult) -> None:
         print(f"{name:<12}: F1={micro.f1:.3f}  P={micro.precision:.3f}  R={micro.recall:.3f}")
 
 
+#: Internal task names accepted as --suite aliases, mapped to their CLI spellings.
+_SUITE_ALIASES: dict[str, str] = {
+    "metric_generation": "metrics",
+    "query_compilation": "compiler",
+    "guardrail": "guardrails",
+}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse CLI arguments; the legacy engine stays the default."""
+    """Parse CLI arguments; the hybrid engine is the default."""
     parser = argparse.ArgumentParser(description="Run the evaluation framework on one domain.")
     parser.add_argument("--golden-root", type=Path, default=GOLDEN_ROOT, help="Golden Dataset root directory.")
     parser.add_argument("--domain", default="ecommerce", help="Domain identifier to evaluate.")
-    parser.add_argument("--engine", choices=("legacy", "hybrid"), default="legacy")
+    parser.add_argument(
+        "--engine",
+        choices=("legacy", "hybrid"),
+        default="hybrid",
+        help="scoring engine (legacy is deprecated: AND-gated case status and CQM path matching)",
+    )
     parser.add_argument("--source", choices=("smoke", "agent"), default="smoke")
     parser.add_argument("--query-mode", choices=("resolver", "oracle"), default="resolver")
     parser.add_argument(
         "--suite",
-        choices=("all", "discovery", "enrichment", "metrics", "compiler", "guardrails"),
+        choices=(
+            "all",
+            "discovery",
+            "enrichment",
+            "metrics",
+            "metric_generation",
+            "compiler",
+            "query_compilation",
+            "guardrails",
+            "guardrail",
+        ),
         default="all",
-        help="evaluate only a single suite (default: all)",
+        help="evaluate only a single suite (default: all); internal task names "
+        "(metric_generation, query_compilation, guardrail) are accepted as aliases",
     )
     parser.add_argument("--run-dir", type=Path, default=None)
     parser.add_argument("--run-type", choices=("smoke", "benchmark", "release"), default="smoke")
@@ -109,14 +136,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="RUN_DIR",
         help=(
-            "Re-score an existing run dir's candidates.json with the current engine (no LLM). "
+            "Re-score an existing run dir's candidates.json with the current engine "
+            "(no agent collection; agent LLM is not called). Add --judge to re-run the "
+            "AI-judge lane over the fixed candidates (A/B judge model/prompt changes). "
             "Uses the CURRENT CLI flags (e.g. --run-type), not the original run's — pass "
             "--run-type explicitly to match how the run was collected."
         ),
     )
     args = parser.parse_args(argv)
+    args.suite = _SUITE_ALIASES.get(args.suite, args.suite)
     if args.source == "agent" and args.engine != "hybrid":
         parser.error("--source agent requires --engine hybrid")
+    if args.engine == "legacy":
+        print(
+            "warning: --engine legacy is deprecated (case-level AND-gating and CQM path "
+            "matching are superseded by the hybrid engine) and will be removed.",
+            file=sys.stderr,
+        )
     return args
 
 
@@ -209,10 +245,21 @@ async def run_agent_engine(args: argparse.Namespace) -> int:
     """Collect real-agent candidates and run the hybrid engine over them."""
     run_dir = args.run_dir or Path(f"eval/runs/agent-{args.domain}-{_utc_timestamp()}")
     ctx = await prepare_run(args.golden_root, args.domain, run_dir)
+    try:
+        return await _collect_and_report(args, run_dir, ctx)
+    finally:
+        await ctx.aclose()
+
+
+async def _collect_and_report(args: argparse.Namespace, run_dir: Path, ctx: AgentRunContext) -> int:
+    """Collect candidates from the prepared context and emit hybrid reports."""
     dataset = await load_domain_dataset(args.golden_root, args.domain)
     suites = frozenset({args.suite}) if args.suite != "all" else None
     candidates = await collect_candidates(ctx, dataset, query_mode=args.query_mode, suites=suites)
     write_candidates(run_dir, candidates)
+    diagnostics_path = write_resolver_diagnostics(run_dir, candidates)
+    if diagnostics_path is not None:
+        print(f"resolver diagnostics: {diagnostics_path}")
     run_id = f"agent-{args.domain}"
     result = await run_hybrid_evaluation(_agent_request(dataset, candidates, args, run_id))
     _write_agent_reports(result, run_dir)
@@ -237,7 +284,7 @@ def _load_rescore_payload(run_dir: Path) -> tuple[dict[str, dict[str, object]], 
 
 
 async def run_rescore_engine(args: argparse.Namespace) -> int:
-    """Re-score an existing run's collected candidates (no LLM, no collection)."""
+    """Re-score an existing run's collected candidates (no collection, optional judge)."""
     dataset = await load_domain_dataset(args.golden_root, args.domain)
     config = EvaluationConfig()
     sections, manifest = _load_rescore_payload(args.rescore)
@@ -246,6 +293,7 @@ async def run_rescore_engine(args: argparse.Namespace) -> int:
             dataset=dataset,
             config=config,
             guardrail_adapter=ProductionGuardrailAdapter(config),
+            judge_runner=_build_judge_runner() if args.judge else None,
             run_id=f"rescore-{args.rescore.name}",
             run_type=args.run_type,
             candidate_source=str(manifest.get("candidate_source", "agent_live")),

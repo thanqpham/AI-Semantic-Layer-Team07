@@ -117,7 +117,9 @@ async def test_build_catalog_reads_approved_metrics(enriched):
     )
     dims = {f"{d.entity}.{d.column}" for d in catalog.dimensions}
     assert "fact_orders.order_status" in dims
-    assert "fact_orders.order_date" not in dims
+    # The eval resolver catalog re-adds time dimensions (needed for grain
+    # grouping like "doanh thu theo tháng") on top of the product rule.
+    assert "fact_orders.order_date" in dims
     assert "fact_orders.gross_amount" not in dims
 
 
@@ -256,3 +258,125 @@ def test_system_prompt_documents_abstain():
     from eval.agent_runner.resolver import SYSTEM_PROMPT
 
     assert "abstain" in SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# traces: per-attempt evidence for the resolver-diagnostics artifact
+# ---------------------------------------------------------------------------
+
+
+async def test_trace_records_failed_then_successful_attempt():
+    from eval.agent_runner.resolver import ResolverTrace
+
+    trace = ResolverTrace(question="số đơn theo kênh")
+    await resolve_question("số đơn theo kênh", SCOPE_CATALOG, llm=ScriptedLLM([CROSS_ENTITY, SAME_ENTITY]), trace=trace)
+    assert [attempt.error_code for attempt in trace.attempts] == ["RESOLVER_SCOPE_VIOLATION", None]
+    assert "dim_customers.channel" in trace.attempts[0].raw_output
+    assert trace.attempts[1].error_message == ""
+
+
+async def test_trace_records_validation_failure_with_final_error():
+    from eval.agent_runner.resolver import ResolverTrace
+
+    trace = ResolverTrace(question="?")
+    payload = '{"metrics": ["no_such"], "dimensions": [], "filters": [], "limit": 100}'
+    with pytest.raises(ResolverError) as err:
+        await resolve_question("?", CATALOG, llm=ScriptedLLM([payload]), trace=trace)
+    assert trace.attempts[0].error_code == err.value.code
+    assert "no_such" in trace.attempts[0].raw_output
+
+
+async def test_trace_records_llm_transport_failure():
+    from eval.agent_runner.resolver import ResolverTrace
+
+    class CrashingLLM:
+        async def ainvoke(self, messages):
+            raise TimeoutError("judge-style timeout")
+
+    trace = ResolverTrace(question="?")
+    with pytest.raises(TimeoutError):
+        await resolve_question("?", CATALOG, llm=CrashingLLM(), trace=trace)
+    assert trace.attempts[0].error_code == "RESOLVER_LLM_ERROR"
+    assert "TimeoutError" in trace.attempts[0].error_message
+
+
+async def test_trace_clips_oversized_raw_output():
+    from eval.agent_runner.resolver import MAX_TRACE_OUTPUT, ResolverTrace
+
+    trace = ResolverTrace(question="?")
+    with pytest.raises(ResolverError):
+        await resolve_question("?", CATALOG, llm=ScriptedLLM(["x" * (MAX_TRACE_OUTPUT + 1000)]), trace=trace)
+    assert len(trace.attempts[0].raw_output) == MAX_TRACE_OUTPUT
+
+
+async def test_trace_records_every_attempt_up_to_budget():
+    from eval.agent_runner.resolver import ResolverTrace
+
+    trace = ResolverTrace(question="số đơn theo kênh")
+    with pytest.raises(ResolverError):
+        await resolve_question("số đơn theo kênh", SCOPE_CATALOG, llm=ScriptedLLM([CROSS_ENTITY]), trace=trace)
+    assert len(trace.attempts) == 3
+    assert {attempt.error_code for attempt in trace.attempts} == {"RESOLVER_SCOPE_VIOLATION"}
+
+
+# ---------------------------------------------------------------------------
+# time_dimension reconciliation: a declared time grouping joins the dimensions
+# ---------------------------------------------------------------------------
+
+TIME_MONTHLY = (
+    '{"metrics": ["net_revenue"], "dimensions": [], '
+    '"time_dimension": "fact_orders.created_at", "time_grain": "month", "limit": 100}'
+)
+
+
+async def test_time_dimension_merged_into_empty_dimensions():
+    selection = await resolve_question("doanh thu theo tháng", CATALOG, llm=ScriptedLLM([TIME_MONTHLY]))
+    assert selection.dimensions == ("fact_orders.created_at",)
+    assert selection.time_dimension == "fact_orders.created_at"
+    assert selection.time_grain == "month"
+
+
+async def test_time_dimension_already_listed_not_duplicated():
+    payload = TIME_MONTHLY.replace('"dimensions": []', '"dimensions": ["fact_orders.created_at"]')
+    selection = await resolve_question("doanh thu theo tháng", CATALOG, llm=ScriptedLLM([payload]))
+    assert selection.dimensions == ("fact_orders.created_at",)
+    assert selection.time_grain == "month"
+
+
+async def test_no_time_keys_leaves_selection_without_time_pair():
+    selection = await resolve_question("tổng doanh thu", CATALOG, llm=ScriptedLLM([GOOD]))
+    assert selection.time_dimension is None
+    assert selection.time_grain is None
+    assert selection.dimensions == ("fact_orders.created_at",)
+
+
+async def test_invalid_time_grain_still_rejected():
+    payload = TIME_MONTHLY.replace('"time_grain": "month"', '"time_grain": "decade"')
+    with pytest.raises(ResolverError) as err:
+        await resolve_question("doanh thu theo thập kỷ", CATALOG, llm=ScriptedLLM([payload]))
+    assert err.value.code == "RESOLVER_INVALID_OUTPUT"
+
+
+async def test_unknown_time_dimension_still_rejected():
+    payload = TIME_MONTHLY.replace("fact_orders.created_at", "fact_orders.no_such")
+    with pytest.raises(ResolverError) as err:
+        await resolve_question("q", CATALOG, llm=ScriptedLLM([payload]))
+    assert err.value.code in {"UNKNOWN_DIMENSION", "AMBIGUOUS_DIMENSION"}
+
+
+def _unjoinable_time_catalog() -> ResolverCatalog:
+    """One metric on fact_orders whose only dimension lives on fact_sessions."""
+    return ResolverCatalog(
+        metrics=(CatalogMetric("net_revenue", "Doanh thu thuần", "fact_orders", "sum"),),
+        dimensions=(CatalogDimension("fact_sessions", "session_date", "Ngày phiên"),),
+    )
+
+
+async def test_unjoinable_time_dimension_raises_scope_violation():
+    """The merged time dimension still goes through the joinability scope check."""
+    payload = TIME_MONTHLY.replace("fact_orders.created_at", "fact_sessions.session_date")
+    llm = ScriptedLLM([payload])
+    with pytest.raises(ResolverError) as err:
+        await resolve_question("q", _unjoinable_time_catalog(), llm=llm)
+    assert err.value.code == "RESOLVER_SCOPE_VIOLATION"
+    assert llm.calls == 3  # scope violations stay retryable with feedback

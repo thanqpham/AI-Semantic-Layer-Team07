@@ -63,7 +63,8 @@ async def test_deterministic_exception_becomes_error_result() -> None:
     broken = FakeDeterministic(MetricSpec("entity_f1", "enrichment", "deterministic", 0.95, 0.5), "boom")
     results = await score_sample(_sample(), _specs(), {"entity_f1": broken}, EvaluationContext(EvaluationConfig()))
     assert results[0].status == "error"
-    assert results[0].reason == "RuntimeError"
+    assert results[0].reason == "RuntimeError: boom"
+    assert results[0].details == {"error": "boom"}
 
 
 async def test_judge_skipped_after_failed_prerequisite() -> None:

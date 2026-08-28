@@ -99,8 +99,6 @@ class AiJudgeMetric:
             verdict = await context.judge_runner.evaluate(request)
         except Exception as exc:  # judge-lane crashes can never abort the run
             return error_result(self.spec, sample.sample_id, exc)
-        if verdict is None:
-            return error_result(self.spec, sample.sample_id, RuntimeError("JUDGE_FAILED"))
         return score_result(
             self.spec,
             sample.sample_id,

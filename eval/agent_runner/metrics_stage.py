@@ -14,6 +14,7 @@ from eval.agent_runner.canonical_resolver import CanonicalResolver
 from eval.agent_runner.golden_view import MetricCaseView
 from eval.evaluator.schemas import CandidateMetricOutput
 from src.models.db import SemanticMetricModel, SemanticTableModel
+from src.models.metric_definition import MetricDefinition
 from src.models.schemas import MetricSuggestionItem
 from src.services.dimension_recommender import get_dimensions_for_metric
 from src.services.metrics import generate_metrics_from_prompt
@@ -71,26 +72,14 @@ async def _process_case(
             )
         except ValueError as exc:
             logger.warning("generation failed for case %s: %s", case.case_id, exc)
-            code = _infer_metric_error_code(case.request, schema_context)
-            return _failure(code), None, None
+            return _failure("AGENT_GENERATION_FAILED"), None, None
         if not suggestions:
-            code = _infer_metric_error_code(case.request, schema_context)
-            return _failure(code), None, None
+            return _failure("AGENT_GENERATION_FAILED"), None, None
         return await _persist_first(db, user_id, conn_id, suggestions[0], resolver)
     except Exception:
         logger.warning("case %s crashed unexpectedly", case.case_id, exc_info=True)
         await _safe_rollback(db)
         return _failure("AGENT_UNEXPECTED_ERROR"), None, None
-
-
-def _infer_metric_error_code(request: str, schema_context: dict[str, Any]) -> str:
-    """Infer stable error code for negative evaluation probes."""
-    req_lower = request.lower()
-    if any(term in req_lower for term in ("không có", "chưa có", "không tồn tại", "marketing", "cost")):
-        return "UNKNOWN_DIMENSION"
-    if any(term in req_lower for term in ("tốt nhất", "chung chung", "hiệu quả")):
-        return "AMBIGUOUS_METRIC_REQUEST"
-    return "AGENT_GENERATION_FAILED"
 
 
 def _failure(code: str) -> CandidateMetricOutput:
@@ -116,10 +105,14 @@ async def _persist_first(
     allowed = [
         f"{item.table_name}.{item.column_name}" for item in await get_dimensions_for_metric(db, conn_id, metric.id)
     ]
+    # Report the persisted (resolved) definition, not the LLM draft: the resolver
+    # normalizes identities and auto-attaches hygiene filters at save time, and
+    # the candidate contract must mirror what the system actually stored.
+    persisted = MetricDefinition.model_validate(metric.definition)
     candidate = to_metric_candidate(
-        suggestion.definition,
+        persisted,
         allowed_dimensions=allowed,
-        source_table=suggestion.definition.metric.base_entity,
+        source_table=persisted.metric.base_entity,
         resolver=resolver,
     )
     await db.commit()

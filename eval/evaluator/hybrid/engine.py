@@ -27,6 +27,14 @@ class EvaluationMetric(Protocol):
     async def score(self, sample: EvaluationSample, context: EvaluationContext) -> MetricResult: ...
 
 
+@dataclass(frozen=True)
+class ExecutionOutcome:
+    """One guarded execution attempt: rows on success, a reason on failure."""
+
+    rows: ExecutionResult | None
+    failure: str = ""
+
+
 @dataclass
 class EvaluationContext:
     """Carry configuration, providers, and caches through one evaluation run."""
@@ -36,7 +44,7 @@ class EvaluationContext:
     guardrail_adapter: GuardrailAdapter | None = None
     dataset: DomainDataset | None = None
     judge_runner: JudgeRunner | None = None
-    execution_cache: dict[str, ExecutionResult | None] = field(default_factory=dict)
+    execution_cache: dict[str, ExecutionOutcome] = field(default_factory=dict)
     contract_gap_fields: Mapping[str, frozenset[str]] = field(default_factory=dict)
 
 

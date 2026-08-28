@@ -2,8 +2,9 @@
 
 import json
 import logging
+from collections import Counter
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,10 +22,10 @@ from eval.agent_runner.golden_view import (
     iter_query_cases,
 )
 from eval.agent_runner.metrics_stage import MetricCollectResult, collect_metrics
-from eval.agent_runner.query_stage import OracleInput, collect_queries
-from eval.agent_runner.resolver import ResolverFilter
+from eval.agent_runner.query_stage import OracleInput, QueryCollectResult, collect_queries
+from eval.agent_runner.resolver import ResolverFilter, ResolverTrace
 from eval.dataset.loader import DomainDataset
-from eval.dataset.models import QueryCaseExpected, WhereConditionExpectation
+from eval.dataset.models import QueryCaseExpected, TimeFilterExpectation, WhereConditionExpectation
 from eval.evaluator.discovery_eval import CandidateDiscoveryOutput
 from eval.evaluator.schemas import (
     CandidateCompilerOutput,
@@ -33,11 +34,11 @@ from eval.evaluator.schemas import (
     CandidateMetricOutput,
     EvaluationConfig,
 )
-from src.observability import trace_action, trace_transition
 
 logger = logging.getLogger(__name__)
 
 CANDIDATES_FILENAME = "candidates.json"
+RESOLVER_DIAGNOSTICS_FILENAME = "resolver-diagnostics.json"
 DEFAULT_ORACLE_LIMIT = 100
 QUERY_MODES = frozenset({"resolver", "oracle"})
 
@@ -81,6 +82,8 @@ class AgentCandidates:
     metrics: dict[str, CandidateMetricOutput] = field(default_factory=dict)
     compiler: dict[str, CandidateCompilerOutput] = field(default_factory=dict)
     guardrail: dict[str, CandidateGuardrailOutput] = field(default_factory=dict)
+    resolver_diagnostics: dict[str, ResolverTrace] = field(default_factory=dict)
+    query_cases_total: int = 0
     manifest: dict[str, Any] = field(default_factory=dict)
 
 
@@ -95,14 +98,8 @@ async def collect_candidates(
     """Run discovery, enrichment, metrics, query, and guardrail collection."""
     if query_mode not in QUERY_MODES:
         raise ValueError(f"unknown query mode: {query_mode!r}")
-    trace_transition("benchmark", "introspect")
-    raw = await trace_action("schema_introspection", {"source": "sandbox"}, introspect_target(ctx))
-    trace_transition("introspect", "enrich")
-    conn_id = await trace_action(
-        "llm_enrichment",
-        {"table_count": _table_count(raw)},
-        run_enrichment_pipeline(ctx, raw, enrichment=enrichment_override),
-    )
+    raw = await introspect_target(ctx)
+    conn_id = await run_enrichment_pipeline(ctx, raw, enrichment=enrichment_override)
     entity_resolver = CanonicalResolver.from_dataset(dataset, {})
     discovery_ids = iter_discovery_ids(dataset)
     run_all = suites is None
@@ -113,37 +110,25 @@ async def collect_candidates(
         else {}
     )
     metric_result = (
-        await trace_action(
-            "metric_generation",
-            {"case_count": len(dataset.metric_cases)},
-            collect_metrics(ctx, conn_id, iter_metric_cases(dataset), entity_resolver),
-        )
+        await collect_metrics(ctx, conn_id, iter_metric_cases(dataset), entity_resolver)
         if run_all or "metrics" in suites
         else MetricCollectResult({}, {})
     )
     compiler: dict[str, CandidateCompilerOutput] = {}
+    query_result: QueryCollectResult | None = None
     if run_all or "compiler" in suites:
         compiler_resolver = CanonicalResolver.from_dataset(dataset, metric_result.metric_ids)
-        compiler = await trace_action(
-            "query_compile",
-            {"case_count": len(dataset.query_cases)},
-            _collect_compiler(ctx, conn_id, dataset, query_mode, metric_result, compiler_resolver),
-        )
-    guardrail = (
-        await trace_action(
-            "sql_guardrail",
-            {"case_count": len(dataset.guardrail_cases)},
-            collect_guardrails(iter_guardrail_cases(dataset)),
-        )
-        if run_all or "guardrails" in suites
-        else {}
-    )
+        query_result = await _collect_compiler(ctx, conn_id, dataset, query_mode, metric_result, compiler_resolver)
+        compiler = query_result.candidates
+    guardrail = await collect_guardrails(iter_guardrail_cases(dataset)) if run_all or "guardrails" in suites else {}
     return AgentCandidates(
         discovery=discovery,
         enrichment=enrichment,
         metrics=metric_result.candidates,
         compiler=compiler,
         guardrail=guardrail,
+        resolver_diagnostics=query_result.resolver_diagnostics if query_result else {},
+        query_cases_total=query_result.cases_total if query_result else 0,
         manifest=_manifest(
             ctx, query_mode, entity_resolver, CanonicalResolver.from_dataset(dataset, metric_result.metric_ids)
         ),
@@ -178,7 +163,7 @@ async def _collect_compiler(
     query_mode: str,
     metric_result: MetricCollectResult,
     resolver: CanonicalResolver,
-) -> dict[str, CandidateCompilerOutput]:
+) -> QueryCollectResult:
     """Compile query candidates in the requested mode, with oracle inputs."""
     oracle_inputs = _build_oracle_inputs(dataset, metric_result) if query_mode == "oracle" else None
     return await collect_queries(
@@ -189,6 +174,7 @@ async def _collect_compiler(
         metric_map=metric_result.metric_ids,
         oracle_inputs=oracle_inputs,
         resolver=resolver,
+        domain=dataset.manifest.domain,
     )
 
 
@@ -203,6 +189,30 @@ def write_candidates(run_dir: Path, candidates: AgentCandidates) -> Path:
         "guardrail": _dump(candidates.guardrail),
     }
     path = run_dir / CANDIDATES_FILENAME
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def write_resolver_diagnostics(run_dir: Path, candidates: AgentCandidates) -> Path | None:
+    """Serialize resolver failure evidence to its own artifact; None when empty.
+
+    Kept out of candidates.json — that file is the rescore engine's input
+    contract. Only cases with at least one rejected resolver attempt appear
+    (including ones the retry loop eventually recovered).
+    """
+    diagnostics = candidates.resolver_diagnostics
+    if not diagnostics:
+        return None
+    outcomes = Counter(trace.outcome for trace in diagnostics.values())
+    payload = {
+        "summary": {
+            "query_cases_total": candidates.query_cases_total,
+            "cases_with_failed_attempts": len(diagnostics),
+            "outcomes": dict(sorted(outcomes.items())),
+        },
+        "cases": {case_id: asdict(trace) for case_id, trace in sorted(diagnostics.items())},
+    }
+    path = run_dir / RESOLVER_DIAGNOSTICS_FILENAME
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
@@ -241,25 +251,18 @@ def _dedupe_logs(entries: Iterable[dict[str, str]]) -> list[dict[str, str]]:
     return unique
 
 
-def _table_count(raw: Any) -> int:
-    """Read table cardinality from either raw schema contract shape."""
-    tables = getattr(raw, "tables", None)
-    if tables is not None:
-        return len(tables)
-    return len(raw.get("tables", [])) if isinstance(raw, dict) else 0
-
-
 def _build_oracle_inputs(dataset: DomainDataset, metric_result: MetricCollectResult) -> dict[str, OracleInput]:
     """Derive ground-truth selections from expected cases (spec section 3 exception).
 
     This is the single sanctioned reader of ``expected`` outside the evaluator.
     Expected dimensions/filters carry canonical entity names; they are translated
     to physical ``table.column`` via the canonical registry before use.
+    Error-only cases (negative/L4) replay their expected error instead of compiling.
     """
     case_id_by_name = _metric_case_by_name(dataset)
     inputs: dict[str, OracleInput] = {}
     for case in dataset.query_cases:
-        oracle = _oracle_for_case(dataset, case.expected, case_id_by_name, metric_result)
+        oracle = _oracle_for_case(dataset, case.expected, case.expected_error, case_id_by_name, metric_result)
         if oracle is not None:
             inputs[case.case_id] = oracle
     return inputs
@@ -291,13 +294,16 @@ def _physical_dimension(dataset: DomainDataset, dotted: str) -> str | None:
 def _oracle_for_case(
     dataset: DomainDataset,
     expected: QueryCaseExpected | None,
+    expected_error: str | None,
     case_id_by_name: dict[str, str],
     metric_result: MetricCollectResult,
 ) -> OracleInput | None:
     """Map one expected canonical query onto an OracleInput; None when unmappable."""
-    canonical = getattr(expected, "canonical_query", None)
-    if canonical is None:
-        return None
+    if expected is None:
+        if expected_error is None:
+            return None
+        return OracleInput(metric_ids=(), dimensions=(), filters=(), replay_error=expected_error)
+    canonical = expected.canonical_query
     metric_ids = _expected_metric_ids(canonical.metrics, case_id_by_name, metric_result)
     dimensions = _physical_dimensions(dataset, canonical.dimensions)
     filters = _oracle_filters(dataset, canonical.where_conditions)
@@ -308,7 +314,22 @@ def _oracle_for_case(
         dimensions=dimensions,
         filters=filters,
         limit=getattr(canonical, "limit", None) or DEFAULT_ORACLE_LIMIT,
+        time_grains=_oracle_time_grains(dataset, dimensions, canonical.time_filters),
     )
+
+
+def _oracle_time_grains(
+    dataset: DomainDataset,
+    dimensions: tuple[str, ...],
+    time_filters: list[TimeFilterExpectation],
+) -> tuple[str | None, ...]:
+    """Pair expected time-filter granularities with their physical dimensions.
+
+    Expected time filters carry canonical names; each is translated through the
+    registry so it can match the physical ``table.field`` dimension list.
+    """
+    grains = {_physical_dimension(dataset, item.dimension): item.granularity for item in time_filters}
+    return tuple(grains.get(physical) for physical in dimensions)
 
 
 def _expected_metric_ids(

@@ -128,3 +128,52 @@ async def test_sql_ast_equivalence_ignores_guardrail_limit(mini_dataset) -> None
     sample = _compiler_sample(dataset, candidate)
     result = await metrics["sql_ast_equivalence"].score(sample, EvaluationContext(EvaluationConfig()))
     assert result.status == "passed" and result.score == 1.0
+
+
+async def test_ast_mismatch_details_carry_both_canonical_strings(mini_dataset) -> None:
+    dataset = _dataset_with_reference_sql(mini_dataset, "SELECT SUM(amount) FROM orders WHERE status = 'open'")
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    candidate = _candidate(sql="SELECT SUM(amount) FROM orders WHERE status = 'closed' LIMIT 100")
+    sample = _compiler_sample(dataset, candidate)
+    result = await metrics["sql_ast_equivalence"].score(sample, EvaluationContext(EvaluationConfig()))
+    assert result.status == "failed"
+    assert "'open'" in result.details["expected"]
+    assert "'closed'" in result.details["actual"]
+
+
+async def test_execution_mismatch_details_carry_columns_and_rows(mini_dataset, tmp_path) -> None:
+    sources = tmp_path / "sources" / "sqlite"
+    sources.mkdir(parents=True)
+    (sources / "schema.sql").write_text(
+        "CREATE TABLE orders (id INTEGER, amount REAL, order_month TEXT);", encoding="utf-8"
+    )
+    (sources / "seed_data.sql").write_text(
+        "INSERT INTO orders VALUES (1, 10.0, '2026-01');\nINSERT INTO orders VALUES (2, 20.0, '2026-02');",
+        encoding="utf-8",
+    )
+    dataset = mini_dataset.model_copy(
+        update={
+            "expected_query_results": {"query_001": [{"order_month": "2026-01", "total": 30.0}]},
+            "domain_dir": tmp_path,
+        }
+    )
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    sample = _compiler_sample(dataset, _candidate())
+    context = EvaluationContext(EvaluationConfig(), guardrail_adapter=FakeAdapter(), dataset=dataset)
+    result = await metrics["sql_execution_accuracy"].score(sample, context)
+    assert result.status == "failed"
+    assert result.details["expected_row_count"] == 1
+    assert result.details["actual_row_count"] == 2
+    assert result.details["expected_columns"] == ["order_month", "total"]
+    assert result.details["actual_rows_preview"][0]["total"] == 10.0
+
+
+async def test_outcome_mismatch_details_carry_both_error_codes(mini_dataset) -> None:
+    case = mini_dataset.query_cases[0]
+    negative = case.model_copy(update={"expected": None, "expected_error": "METRIC_NOT_FOUND"})
+    dataset = mini_dataset.model_copy(update={"query_cases": [negative]})
+    metrics = build_compiler_metrics(metrics_for_task("query_compilation"))
+    sample = _compiler_sample(dataset, CandidateCompilerOutput(error_code="UNKNOWN_METRIC"))
+    result = await metrics["invalid_selection_rejection"].score(sample, EvaluationContext(EvaluationConfig()))
+    assert result.status == "failed"
+    assert result.details == {"expected_error": "METRIC_NOT_FOUND", "actual_error": "UNKNOWN_METRIC"}

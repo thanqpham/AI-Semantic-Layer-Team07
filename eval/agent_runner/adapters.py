@@ -5,7 +5,6 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, cast
 
-import sqlglot
 from sqlglot import exp
 
 from eval.agent_runner.canonical_resolver import CanonicalResolver
@@ -21,10 +20,16 @@ from eval.evaluator.schemas import (
     CandidateMetricFilter,
     CandidateMetricOutput,
     CandidateRelationship,
+    CandidateTimeFilter,
     CandidateWhereCondition,
     EvaluationConfig,
 )
-from eval.evaluator.sql_normalization import SqlValidationError, effective_limit, parse_single_statement
+from eval.evaluator.sql_normalization import (
+    SqlValidationError,
+    effective_limit,
+    normalize_sql,
+    parse_single_statement,
+)
 from src.models.db import CanonicalRelationshipModel, SemanticColumnModel, SemanticTableModel
 from src.models.metric_definition import MetricDefinition, MetricFilter
 from src.models.schema_metadata import (
@@ -168,6 +173,12 @@ def _reject_code(sql: str, dialect: str, message: str) -> str:
 class ProductionGuardrailAdapter:
     """GuardrailAdapter backed by the product's real read-only validator.
 
+    The check is layered: the product validator first, then the framework's
+    own fail-closed sqlglot validation on top — the same check that guards
+    dataset validation and the execution lane. Under evaluation a statement
+    must pass both: classes the product validator currently misses (e.g.
+    locking reads ``FOR UPDATE``) still fail closed here.
+
     Satisfies the GuardrailAdapter protocol from eval.evaluator.compiler_eval.
     """
 
@@ -175,11 +186,15 @@ class ProductionGuardrailAdapter:
         self._config = config
 
     async def validate(self, sql: str, dialect: str) -> CandidateGuardrailOutput:
-        """Validate SQL with the product guardrail without ever executing it."""
+        """Validate SQL with the layered guardrail without ever executing it."""
         try:
             validate_read_only(sql)
         except ValueError as exc:
             return CandidateGuardrailOutput(accepted=False, error_code=_reject_code(sql, dialect, str(exc)))
+        try:
+            normalize_sql(sql, cast(Dialect, dialect))
+        except SqlValidationError as exc:
+            return CandidateGuardrailOutput(accepted=False, error_code=str(exc))
         try:
             effective = self._effective_limit(sql, dialect)
         except SqlValidationError as exc:
@@ -310,8 +325,6 @@ def to_metric_candidate(
     """
     spec = definition.metric
     expression = spec.formula.expression
-    aggregation = _resolve_aggregation(spec.formula.function.lower(), expression)
-    canon_sql = _canonicalize_eval_sql(expression, aggregation)
     metric = CandidateMetricDefinition(
         name=spec.name,
         business_name=spec.name,
@@ -319,11 +332,10 @@ def to_metric_candidate(
         metric_type=_metric_type(expression),
         target_entity=resolver.resolve_entity(spec.base_entity),
         source_table=source_table or spec.base_entity,
-        aggregation=aggregation,
+        aggregation=spec.formula.function.lower(),
         field=expression if _BARE_IDENTIFIER.match(expression) else None,
         business_formula="",
-        sql_expression=canon_sql,
-        dependencies=_resolve_dependencies(expression),
+        sql_expression=expression,
         default_filters=tuple(CandidateMetricFilter(condition=_render_filter(item)) for item in spec.filters),
         allowed_dimensions=tuple(resolver.resolve_dimension(item) for item in allowed_dimensions),
         # TimeGrain Literal has no empty value — "day" is schema-forced (contract gap, per D6).
@@ -331,61 +343,6 @@ def to_metric_candidate(
         status="approved" if spec.status == "approved" else "draft",
     )
     return CandidateMetricOutput(metric=metric)
-
-
-def _resolve_dependencies(expression: str) -> tuple[str, ...]:
-    """Infer canonical metric dependencies from arithmetic expressions."""
-    if "customer_order_seq" in expression:
-        return ("customer_count",)
-    if "cogs_amount" in expression:
-        return ("net_revenue",)
-    if "order_id" in expression and any(
-        kw in expression for kw in ("gross_amount", "discount_amount", "return_amount")
-    ):
-        return ("net_revenue", "order_count")
-    return ()
-
-
-def _resolve_aggregation(function: str, expression: str) -> str:
-    """Map function + expression to the canonical aggregation for eval scoring."""
-    if function == "avg":
-        return "avg"
-    if "/" in expression:
-        return "ratio"
-    return function
-
-
-def _canonicalize_eval_sql(expr_str: str, agg: str) -> str:
-    """Reconcile row-level formula with golden full-SQL conventions."""
-    cleaned = expr_str.strip()
-    if cleaned.startswith("(") and cleaned.endswith(")"):
-        parsed = sqlglot.parse_one(cleaned)
-        if isinstance(parsed, exp.Paren):
-            cleaned = parsed.this.sql()
-    if agg == "count" and cleaned == "order_id":
-        return "COUNT(DISTINCT order_id)"
-    if agg == "avg":
-        if "/" in cleaned:
-            parts = cleaned.split("/")
-            num = parts[0].strip()
-            if num.startswith("(") and num.endswith(")"):
-                num = num[1:-1].strip()
-            return f"SUM({num}) / COUNT(DISTINCT {parts[1].strip()})"
-        return f"SUM({cleaned}) / COUNT(DISTINCT order_id)"
-    if agg == "ratio":
-        if "cogs_amount" in cleaned:
-            return "(SUM(gross_amount - discount_amount - return_amount) - SUM(cogs_amount)) / SUM(gross_amount - discount_amount - return_amount)"
-        if "1 -" in cleaned:
-            return (
-                "1 - (COUNT(DISTINCT CASE WHEN checkout_completed = TRUE THEN cart_id END) / COUNT(DISTINCT cart_id))"
-            )
-        if "session_id" in cleaned:
-            return "COUNT(DISTINCT order_id) / COUNT(DISTINCT session_id)"
-        if "customer_order_seq" in cleaned:
-            return "COUNT(DISTINCT CASE WHEN customer_order_seq > 1 THEN customer_id END) / COUNT(DISTINCT customer_id)"
-        if "order_status" in cleaned:
-            return "COUNT(DISTINCT CASE WHEN order_status = 'returned' THEN order_id END) / COUNT(DISTINCT order_id)"
-    return cleaned
 
 
 def _metric_type(expression: str) -> str:
@@ -432,14 +389,16 @@ def to_compiler_candidate(
     filter_names: list[str],
     relationship_entities: tuple[str, ...] = (),
     resolver: CanonicalResolver,
+    domain: str = "",
+    time_grains: tuple[str | None, ...] = (),
 ) -> CandidateCompilerOutput:
     """Map one compiled semantic query onto the eval compiler candidate contract.
 
-    ``intent``/``domain`` stay empty (v1): the deterministic pipeline has no
-    classifier producing them. Metric names resolve through case provenance,
-    entity/dimension names through the golden registry, and output column
-    aliases are renamed from ``metric_<id>``/``dimension_<column_id>`` to the
-    canonical names the golden result columns use — this fixes
+    ``intent`` is fixed to ``metric_query`` (the only pipeline intent) and
+    ``domain`` comes from the dataset manifest. Metric names resolve through
+    case provenance, entity/dimension names through the golden registry, and
+    output column aliases are renamed from ``metric_<id>``/``dimension_<column_id>``
+    to the canonical names the golden result columns use — this fixes
     ``result_schema_accuracy``/``sql_execution_accuracy`` (executed column
     names); AST equivalence is already alias-insensitive because
     ``_canonicalize_aliases`` strips all aliases.
@@ -450,12 +409,14 @@ def to_compiler_candidate(
         **dict(zip((f"metric_{mid}" for mid in spec.metric_ids), canonical_names, strict=True)),
         **_dimension_alias_map(spec, dimension_names, resolver),
     }
+    resolved_dimensions = [resolver.resolve_dimension(name) for name in dimension_names]
     canonical = CandidateCanonicalQuery(
-        intent="",
-        domain="",
+        intent="metric_query",
+        domain=domain,
         primary_entity=resolver.resolve_entity(str(metadata.get("base_entity", ""))),
         metrics=canonical_names,
-        dimensions=tuple(resolver.resolve_dimension(name) for name in dimension_names),
+        dimensions=tuple(resolved_dimensions),
+        time_filters=_candidate_time_filters(dimension_names, time_grains, resolver),
         where_conditions=_compiled_where_conditions(spec, [resolver.resolve_dimension(f) for f in filter_names]),
         entities_in_path=tuple(resolver.resolve_entity(name) for name in relationship_entities),
     )
@@ -464,6 +425,23 @@ def to_compiler_candidate(
         alias_map,
     )
     return CandidateCompilerOutput(canonical_query=canonical, sql=sql)
+
+
+def _candidate_time_filters(
+    dimension_names: list[str],
+    time_grains: tuple[str | None, ...],
+    resolver: CanonicalResolver,
+) -> tuple[CandidateTimeFilter, ...]:
+    """Pair each grain-carrying dimension with an unbounded ``all`` range.
+
+    The deterministic pipeline filters no time range: a grain only changes the
+    projection (e.g. ``%Y-%m``), so the candidate declares the widest range.
+    """
+    return tuple(
+        CandidateTimeFilter(dimension=resolver.resolve_dimension(name), granularity=grain, range="all")
+        for name, grain in zip(dimension_names, time_grains, strict=False)
+        if grain is not None
+    )
 
 
 def _dimension_alias_map(

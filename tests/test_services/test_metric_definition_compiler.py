@@ -83,11 +83,11 @@ async def _seed(db: AsyncSession) -> tuple[int, int, int]:
 async def test_compile_definition_to_parameterized_sql(async_session: AsyncSession) -> None:
     db_id, metric_id, dimension_id = await _seed(async_session)
     result = await SemanticQueryCompiler(async_session).compile(db_id, [metric_id], [dimension_id])
-    assert 'SUM(CASE WHEN "order_items"."status" = :metric_0 THEN' in result.sql
-    assert '("order_items"."quantity" * "order_items"."unit_price") END)' in result.sql
+    assert 'SUM(("order_items"."quantity" * "order_items"."unit_price"))' in result.sql
+    assert "CASE WHEN" not in result.sql
+    assert 'WHERE "order_items"."status" = :fixed_0' in result.sql
     assert 'GROUP BY "order_items"."status"' in result.sql
-    assert result.parameters == {"metric_0": "completed"}
-    assert " WHERE " not in result.sql
+    assert result.parameters == {"fixed_0": "completed"}
     assert "LIMIT 100" in result.sql
 
 

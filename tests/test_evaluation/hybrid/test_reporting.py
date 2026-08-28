@@ -126,6 +126,45 @@ def test_markdown_contains_summary_sections(tmp_path) -> None:
     assert "# Evaluation Report" in markdown
     assert "eval-test" in markdown
     assert "table_f1" in markdown
+    assert "### discovery" in markdown  # metrics are grouped under their suite
     assert "quality gate" in markdown.lower()
+    assert "- none" in markdown  # empty warnings still render the section
     write_markdown_report(_mini_run(), tmp_path / "report.md")
     assert (tmp_path / "report.md").read_text(encoding="utf-8") == markdown
+
+
+def test_markdown_notes_thin_judge_sample_counts() -> None:
+    """Judge means computed from fewer than 3 samples carry an (n=...) note."""
+    base = _mini_run()
+    judge = MetricResult(
+        sample_id="disc_001",
+        metric="business_semantic_correctness",
+        metric_type="ai_judge",
+        status="passed",
+        score=0.755,
+        threshold=0.5,
+    )
+    results = (*base.results, judge)
+    run = base.model_copy(
+        update={
+            "results": results,
+            "suite_scores": build_suite_scores(results),
+            "metric_summary": {**base.metric_summary, "business_semantic_correctness": 0.755},
+        }
+    )
+    markdown = render_markdown(run)
+    assert "| business_semantic_correctness | 0.755 (n=1) | AI judge |" in markdown
+    assert "| table_f1 | 1.000 | code |" in markdown  # deterministic metrics say "code"
+
+
+def test_markdown_groups_metrics_under_their_suite_heading() -> None:
+    markdown = render_markdown(_discovery_case_run())
+    assert markdown.index("### discovery") < markdown.index("| table_f1") < markdown.index("### enrichment")
+    assert markdown.index("### enrichment") < markdown.index("| entity_f1") < markdown.index("## Quality gates")
+
+
+def test_markdown_renders_warnings(tmp_path) -> None:
+    run = _mini_run().model_copy(update={"warnings": ("judge metric m errored on 2 sample(s)",)})
+    markdown = render_markdown(run)
+    assert "## Warnings" in markdown
+    assert "- judge metric m errored on 2 sample(s)" in markdown

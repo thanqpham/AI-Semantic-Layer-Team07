@@ -15,6 +15,7 @@ from eval.agent_runner.resolver import (
     ResolverError,
     ResolverFilter,
     ResolverSelection,
+    ResolverTrace,
     build_catalog,
     resolve_question,
 )
@@ -43,6 +44,8 @@ class OracleInput:
     dimensions: tuple[str, ...]  # "entity.column"
     filters: tuple[ResolverFilter, ...]
     limit: int = 100
+    time_grains: tuple[str | None, ...] = ()  # positional pairing with dimensions
+    replay_error: str | None = None  # expected error to replay instead of compiling
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,16 @@ class _Selection:
     dimensions: tuple[str, ...]
     filters: tuple[ResolverFilter, ...]
     limit: int
+    time_grains: tuple[str | None, ...] = ()  # positional pairing with dimensions
+
+
+@dataclass(frozen=True)
+class QueryCollectResult:
+    """Compiled candidates plus resolver diagnostics evidence for the run dir."""
+
+    candidates: dict[str, CandidateCompilerOutput]
+    resolver_diagnostics: dict[str, ResolverTrace]
+    cases_total: int
 
 
 async def collect_queries(
@@ -64,7 +77,8 @@ async def collect_queries(
     metric_map: dict[str, int] | None = None,
     oracle_inputs: dict[str, OracleInput] | None = None,
     resolver: CanonicalResolver,
-) -> dict[str, CandidateCompilerOutput]:
+    domain: str = "",
+) -> QueryCollectResult:
     """Compile one candidate per query case; a crashing case never kills the run.
 
     ``metric_map`` is accepted for orchestrator interface symmetry only:
@@ -73,11 +87,20 @@ async def collect_queries(
     if mode not in {"resolver", "oracle"}:
         raise ValueError(f"unknown mode: {mode!r}")
     outputs: dict[str, CandidateCompilerOutput] = {}
+    diagnostics: dict[str, ResolverTrace] = {}
     oracles = oracle_inputs or {}
     async with ctx.session_maker() as db:
         for case in cases:
-            outputs[case.case_id] = await _collect_one(db, conn_id, case, mode, oracles, resolver)
-    return outputs
+            candidate, trace = await _collect_one(db, conn_id, case, mode, oracles, resolver, domain)
+            outputs[case.case_id] = candidate
+            if _has_failed_attempt(trace):
+                diagnostics[case.case_id] = trace
+    return QueryCollectResult(outputs, diagnostics, len(cases))
+
+
+def _has_failed_attempt(trace: ResolverTrace) -> bool:
+    """Report whether any recorded resolver attempt was rejected."""
+    return any(attempt.error_code is not None for attempt in trace.attempts)
 
 
 async def _collect_one(
@@ -87,18 +110,25 @@ async def _collect_one(
     mode: str,
     oracles: dict[str, OracleInput],
     resolver: CanonicalResolver,
-) -> CandidateCompilerOutput:
-    """Run one case; map every failure to a stable error code."""
+    domain: str,
+) -> tuple[CandidateCompilerOutput, ResolverTrace]:
+    """Run one case; map every failure to a stable error code and a trace."""
+    trace = ResolverTrace(question=case.question)
     try:
-        return await _run_case(db, conn_id, case, mode, oracles, resolver)
+        candidate = await _run_case(db, conn_id, case, mode, oracles, resolver, domain, trace)
     except ResolverError as exc:
-        return _failure(exc.code)
+        trace.outcome = exc.code
+        return _failure(exc.code), trace
     except SemanticCompileError as exc:
-        return _failure(exc.code)
+        trace.outcome = exc.code
+        return _failure(exc.code), trace
     except Exception:
         logger.warning("query case %s crashed unexpectedly", case.case_id, exc_info=True)
         await _safe_rollback(db)
-        return _failure("AGENT_UNEXPECTED_ERROR")
+        trace.outcome = "AGENT_UNEXPECTED_ERROR"
+        return _failure("AGENT_UNEXPECTED_ERROR"), trace
+    trace.outcome = "passed" if candidate.error_code is None else candidate.error_code or ""
+    return candidate, trace
 
 
 async def _run_case(
@@ -108,15 +138,19 @@ async def _run_case(
     mode: str,
     oracles: dict[str, OracleInput],
     resolver: CanonicalResolver,
+    domain: str,
+    trace: ResolverTrace,
 ) -> CandidateCompilerOutput:
     """Get the selection, build the spec, compile with the real compiler, adapt."""
     if mode == "oracle":
         oracle = oracles.get(case.case_id)
         if oracle is None:
             return _failure("ORACLE_INPUT_MISSING")
+        if oracle.replay_error is not None:
+            return _failure(oracle.replay_error)
         selection = _oracle_selection(oracle)
     else:
-        selection = await _resolver_selection(db, conn_id, case)
+        selection = await _resolver_selection(db, conn_id, case, trace)
     spec = await _build_spec(db, conn_id, selection)
     compiled = await SemanticQueryCompiler(db).compile(conn_id, spec)
     entities = await _path_entities(db, conn_id, compiled)
@@ -127,6 +161,8 @@ async def _run_case(
         filter_names=[item.dimension for item in selection.filters],
         relationship_entities=entities,
         resolver=resolver,
+        domain=domain,
+        time_grains=selection.time_grains,
     )
 
 
@@ -136,15 +172,28 @@ def _oracle_selection(oracle: OracleInput) -> _Selection:
         if item.operator not in ALLOWED_OPERATORS:
             raise ResolverError("UNKNOWN_OPERATOR", f"{item.operator!r} is not an allowed operator")
     limit = min(max(oracle.limit, MIN_LIMIT), MAX_LIMIT)
-    return _Selection(oracle.metric_ids, oracle.dimensions, oracle.filters, limit)
+    return _Selection(oracle.metric_ids, oracle.dimensions, oracle.filters, limit, oracle.time_grains)
 
 
-async def _resolver_selection(db: AsyncSession, conn_id: int, case: QueryCaseView) -> _Selection:
+async def _resolver_selection(
+    db: AsyncSession,
+    conn_id: int,
+    case: QueryCaseView,
+    trace: ResolverTrace,
+) -> _Selection:
     """Resolve the question via the Task 7 LLM-only-chooses step, then map ids."""
     catalog = await build_catalog(db, conn_id)
-    resolved: ResolverSelection = await resolve_question(case.question, catalog)
+    trace.catalog_size = {
+        "metrics": len(catalog.metrics),
+        "dimensions": len(catalog.dimensions),
+        "relationships": len(catalog.relationships),
+    }
+    resolved: ResolverSelection = await resolve_question(case.question, catalog, trace=trace)
     metric_ids = await _approved_metric_ids(db, conn_id, resolved.metric_names)
-    return _Selection(metric_ids, resolved.dimensions, resolved.filters, resolved.limit)
+    grains = tuple(
+        resolved.time_grain if dimension == resolved.time_dimension else None for dimension in resolved.dimensions
+    )
+    return _Selection(metric_ids, resolved.dimensions, resolved.filters, resolved.limit, grains)
 
 
 async def _approved_metric_ids(
@@ -176,7 +225,11 @@ async def _build_spec(db: AsyncSession, conn_id: int, selection: _Selection) -> 
     """Map selection names onto canonical ids inside one SemanticQuerySpec."""
     dimension_ids = await _column_ids(db, conn_id, selection.dimensions)
     filter_ids = await _column_ids(db, conn_id, tuple(item.dimension for item in selection.filters))
-    dimensions = [DimensionSelection(column_id=column_id, time_grain=None) for column_id in dimension_ids]
+    grains = selection.time_grains + (None,) * (len(dimension_ids) - len(selection.time_grains))
+    dimensions = [
+        DimensionSelection(column_id=column_id, time_grain=grain)
+        for column_id, grain in zip(dimension_ids, grains, strict=True)
+    ]
     filters = [
         SemanticQueryFilter(column_id=column_id, operator=item.operator, value=item.value)
         for column_id, item in zip(filter_ids, selection.filters, strict=True)

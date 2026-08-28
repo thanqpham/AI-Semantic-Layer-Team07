@@ -2,7 +2,12 @@
 
 from eval.agent_runner.adapters import ProductionGuardrailAdapter
 from eval.agent_runner.bootstrap import AgentRunContext, prepare_run
-from eval.agent_runner.collect import AgentCandidates, collect_candidates, write_candidates
+from eval.agent_runner.collect import (
+    AgentCandidates,
+    collect_candidates,
+    write_candidates,
+    write_resolver_diagnostics,
+)
 
 __all__ = [
     "AgentCandidates",
@@ -11,4 +16,5 @@ __all__ = [
     "collect_candidates",
     "prepare_run",
     "write_candidates",
+    "write_resolver_diagnostics",
 ]

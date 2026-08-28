@@ -84,6 +84,25 @@ async def test_judge_unavailable_without_runner(mini_dataset) -> None:
     assert result.status == "not_applicable"
 
 
+class ExhaustedLLM:
+    """Always fail to parse, exhausting every judge attempt."""
+
+    async def invoke(self, system: str, user: str) -> str:
+        return "not json"
+
+
+async def test_judge_error_keeps_failure_cause(mini_dataset) -> None:
+    runner = JudgeRunner(ExhaustedLLM(), MemoryJudgeCache(), max_attempts=2)
+    metrics = build_judge_metrics(metrics_for_task("enrichment"))
+    context = EvaluationContext(EvaluationConfig(), judge_runner=runner)
+    result = await metrics["business_semantic_correctness"].score(_enrichment_sample(mini_dataset), context)
+    assert result.status == "error"
+    assert "JudgeEvaluationError" in result.reason
+    assert "2 attempts" in result.reason
+    assert "1)" in result.reason  # per-attempt cause notes survive into the report
+    assert result.details.get("error")
+
+
 async def test_prompt_blinds_judge_to_scores_and_models(mini_dataset) -> None:
     llm = ScriptedLLM(
         {"business_meaning": 1.0, "reference_alignment": 1.0, "unsupported_assumptions": 1.0, "clarity": 1.0}
@@ -145,9 +164,9 @@ async def test_judge_prompt_shows_gap_fields_when_not_declared(mini_dataset) -> 
     assert "business_formula" in prompt
 
 
-async def test_judge_prompt_version_bumped_for_gap_awareness() -> None:
+async def test_judge_prompt_versions_bumped_for_output_caps() -> None:
     from eval.evaluator.hybrid.judge.prompts import PROMPT_VERSIONS
 
-    assert PROMPT_VERSIONS["business_definition_correctness"] == "business-definition-v2"
-    assert PROMPT_VERSIONS["formula_semantic_correctness"] == "formula-semantics-v2"
-    assert PROMPT_VERSIONS["business_semantic_correctness"] == "business-semantics-v1"
+    assert PROMPT_VERSIONS["business_definition_correctness"] == "business-definition-v3"
+    assert PROMPT_VERSIONS["formula_semantic_correctness"] == "formula-semantics-v3"
+    assert PROMPT_VERSIONS["business_semantic_correctness"] == "business-semantics-v2"

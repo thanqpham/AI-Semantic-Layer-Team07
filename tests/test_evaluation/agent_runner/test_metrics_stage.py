@@ -126,6 +126,30 @@ async def test_collect_metrics_creates_and_maps(enriched, monkeypatch):
     assert result.metric_ids["m1"] > 0
 
 
+async def test_collect_metrics_candidate_reports_persisted_definition(enriched, monkeypatch):
+    """Candidate must mirror the persisted (resolved) definition, not the LLM draft.
+
+    The resolver auto-attaches the ``is_test_order`` hygiene filter at save time
+    (metric_hygiene); compiled SQL already carries it, so the reported candidate
+    must carry it too — otherwise filter scoring measures the draft, not the system.
+    """
+    ctx, conn_id, _raw = enriched
+
+    async def fake_generate(prompt, dialect, schema_dict=None, **kwargs):
+        return [_suggestion(_definition("m_hygiene", expression="gross_amount"))], []
+
+    monkeypatch.setattr("eval.agent_runner.metrics_stage.generate_metrics_from_prompt", fake_generate)
+    cases = [MetricCaseView(case_id="m1", request="tổng doanh thu", canonical_context={}, tags=())]
+    result = await collect_metrics(ctx, conn_id, cases, await _ecommerce_resolver())
+
+    metric = result.candidates["m1"].metric
+    assert metric is not None
+    conditions = [item.condition for item in metric.default_filters]
+    # SQL boolean literals render uppercase (golden convention); the comparison
+    # side canonicalizes booleans to 0/1 anyway.
+    assert "is_test_order = FALSE" in conditions
+
+
 async def test_collect_metrics_generation_failure(enriched, monkeypatch):
     ctx, conn_id, _raw = enriched
 

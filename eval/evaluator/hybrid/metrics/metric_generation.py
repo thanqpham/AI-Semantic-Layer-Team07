@@ -7,6 +7,7 @@ from typing import Any
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.errors import ParseError as SqlParseError
 
 from eval.evaluator.hybrid.catalog import MetricSpec
 from eval.evaluator.hybrid.contracts import MetricResult
@@ -66,7 +67,8 @@ class MetricIdentityAccuracy(DeterministicMetric):
             reference, actual = _positive_payload(sample)
         except _NegativeCase as case:
             matched = case.expected_error is not None and case.expected_error == case.actual_error
-            return boolean_result(self.spec, sample.sample_id, matched, "outcome comparison")
+            details = None if matched else {"expected_error": case.expected_error, "actual_error": case.actual_error}
+            return boolean_result(self.spec, sample.sample_id, matched, "outcome comparison", details)
         return boolean_result(self.spec, sample.sample_id, _identity(reference.expected_metric) == _identity(actual))
 
 
@@ -117,19 +119,25 @@ class SqlExpressionEquivalence(_PositiveOnlyMetric):
 
 
 def _normalize_filter_conditions(filters: Any) -> set[str]:
-    result = set()
+    """Split AND-combined conditions into atomic canonical ones (legacy parity)."""
+    result: set[str] = set()
     for f in filters:
         cond = getattr(f, "condition", str(f))
         try:
             parsed = sqlglot.parse_one(cond)
-            if isinstance(parsed, exp.And):
-                result.add(normalize_expression(parsed.left.sql()))
-                result.add(normalize_expression(parsed.right.sql()))
-            else:
-                result.add(normalize_expression(cond))
-        except Exception:
+        except SqlParseError:
             result.add(normalize_expression(cond))
+            continue
+        for atom in _conjunction_atoms(parsed):
+            result.add(normalize_expression(atom.sql()))
     return result
+
+
+def _conjunction_atoms(node: exp.Expression) -> tuple[exp.Expression, ...]:
+    """Flatten one expression into its AND-connected atoms."""
+    if isinstance(node, exp.And):
+        return _conjunction_atoms(node.left) + _conjunction_atoms(node.right)
+    return (node,)
 
 
 class FilterAccuracy(_PositiveOnlyMetric):

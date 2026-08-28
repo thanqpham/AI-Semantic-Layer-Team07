@@ -10,7 +10,9 @@ from eval.agent_runner import (
     collect_candidates,
     prepare_run,
     write_candidates,
+    write_resolver_diagnostics,
 )
+from eval.agent_runner.resolver import ResolverAttempt, ResolverTrace
 from eval.dataset.loader import DomainDataset, load_domain_dataset
 from eval.evaluator.hybrid import run_hybrid_evaluation
 from eval.evaluator.hybrid.runner import HybridRunRequest
@@ -193,9 +195,11 @@ async def test_collect_candidates_oracle_mode(tmp_path, monkeypatch):
     )
     assert candidates.manifest["query_mode"] == "oracle"
     assert len(candidates.compiler) == 39
-    error_cases = {case.case_id for case in dataset.query_cases if case.expected_error is not None}
-    for case_id in error_cases:
-        assert candidates.compiler[case_id].error_code == "ORACLE_INPUT_MISSING"
+    for case in dataset.query_cases:
+        if case.expected_error is None:
+            continue
+        got = candidates.compiler[case.case_id].error_code
+        assert got != "ORACLE_INPUT_MISSING", case.case_id
     codes = [item.error_code for item in candidates.compiler.values() if item.error_code]
     assert "UNKNOWN_DIMENSION" not in codes  # canonical->physical gap is closed
     with_sql = [item for item in candidates.compiler.values() if item.sql]
@@ -258,3 +262,35 @@ def test_oracle_filters_translate_dimensions_and_operators():
         [WhereConditionExpectation(dimension="ghost.col", operator="=", value=1)],
     )
     assert unknown is None
+
+
+def _failed_trace(question: str) -> ResolverTrace:
+    """One trace whose single attempt was rejected as invalid output."""
+    trace = ResolverTrace(question=question, catalog_size={"metrics": 2, "dimensions": 1, "relationships": 0})
+    trace.attempts.append(
+        ResolverAttempt(raw_output="not json", error_code="RESOLVER_INVALID_OUTPUT", error_message="JSON parse failed")
+    )
+    trace.outcome = "RESOLVER_INVALID_OUTPUT"
+    return trace
+
+
+def test_write_resolver_diagnostics_round_trip(tmp_path):
+    candidates = AgentCandidates(resolver_diagnostics={"ecommerce_query_002": _failed_trace("?")}, query_cases_total=3)
+    path = write_resolver_diagnostics(tmp_path, candidates)
+    assert path == tmp_path / "resolver-diagnostics.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["summary"] == {
+        "query_cases_total": 3,
+        "cases_with_failed_attempts": 1,
+        "outcomes": {"RESOLVER_INVALID_OUTPUT": 1},
+    }
+    case = payload["cases"]["ecommerce_query_002"]
+    assert case["question"] == "?"
+    assert case["catalog_size"] == {"metrics": 2, "dimensions": 1, "relationships": 0}
+    assert case["attempts"][0]["raw_output"] == "not json"
+    assert case["outcome"] == "RESOLVER_INVALID_OUTPUT"
+
+
+def test_write_resolver_diagnostics_empty_writes_nothing(tmp_path):
+    assert write_resolver_diagnostics(tmp_path, AgentCandidates()) is None
+    assert not (tmp_path / "resolver-diagnostics.json").exists()

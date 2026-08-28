@@ -15,6 +15,7 @@ from src.models.metric_definition import (
     MetricGrain,
 )
 from src.services.metric_definitions import validate_metric_definition
+from src.services.metric_hygiene import hygiene_flag_filters
 
 _BINARY_KINDS: dict[type[exp.Expression], str] = {
     exp.Add: "add",
@@ -36,6 +37,13 @@ class MetricDefinitionResolver:
         table = await validate_metric_definition(self._db, db_id, definition)
         columns = await _load_columns(self._db, table.id)
         by_name = {column.column_name.lower(): column for column in columns}
+        definition.metric.filters = [
+            *definition.metric.filters,
+            *hygiene_flag_filters(
+                [(column.column_name, column.data_type) for column in columns],
+                {item.field for item in definition.metric.filters},
+            ),
+        ]
         formula = definition.metric.formula.model_copy(
             update={"expression_ast": _expression_tree(definition.metric.formula.expression, by_name)}
         )
@@ -91,16 +99,9 @@ def _expression_tree(
 
 def _node(node: exp.Expression, columns: dict[str, SemanticColumnModel]) -> MetricExpressionNode:
     if isinstance(node, exp.Column):
-        col_name = node.name.lower()
-        col = columns.get(col_name)
-        col_id = col.id if col else None
-        return MetricExpressionNode(kind="column", column_id=col_id)
+        return MetricExpressionNode(kind="column", column_id=columns[node.name.lower()].id)
     if isinstance(node, exp.Literal):
-        try:
-            val = float(node.this)
-        except (ValueError, TypeError):
-            val = 1.0
-        return MetricExpressionNode(kind="literal", value=val)
+        return MetricExpressionNode(kind="literal", value=float(node.this))
     if isinstance(node, exp.Paren):
         return _node(node.this, columns)
     if isinstance(node, exp.Neg):
@@ -109,19 +110,4 @@ def _node(node: exp.Expression, columns: dict[str, SemanticColumnModel]) -> Metr
         if isinstance(node, node_type):
             children = [_node(node.this, columns), _node(node.expression, columns)]
             return MetricExpressionNode(kind=kind, children=children)
-    if isinstance(node, exp.Case):
-        for when in node.args.get("whens", []):
-            then_expr = when.args.get("then") or when.this
-            if then_expr:
-                target = next((c for c in then_expr.find_all(exp.Column) if c.name.lower() in columns), None)
-                if target:
-                    return MetricExpressionNode(kind="column", column_id=columns[target.name.lower()].id)
-        default_expr = node.args.get("default")
-        if default_expr:
-            target = next((c for c in default_expr.find_all(exp.Column) if c.name.lower() in columns), None)
-            if target:
-                return MetricExpressionNode(kind="column", column_id=columns[target.name.lower()].id)
-    first_col = next((c for c in node.find_all(exp.Column) if c.name.lower() in columns), None)
-    if first_col:
-        return MetricExpressionNode(kind="column", column_id=columns[first_col.name.lower()].id)
-    return MetricExpressionNode(kind="literal", value=1.0)
+    raise ValueError(f"Unsupported expression node: {type(node).__name__}")

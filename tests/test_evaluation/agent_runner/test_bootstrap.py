@@ -53,3 +53,20 @@ async def test_prepare_run_accepts_empty_existing_run_dir(tmp_path):
     run_dir.mkdir()
     ctx = await prepare_run(GOLDEN_ROOT, "ecommerce", run_dir)
     assert (ctx.run_dir / "target.sqlite").exists()
+
+
+async def test_context_aclose_disposes_engine(tmp_path, monkeypatch):
+    """aclose() must dispose the metadata engine exactly once per run."""
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
+    ctx = await prepare_run(GOLDEN_ROOT, "ecommerce", tmp_path / "run")
+    disposed: list[bool] = []
+    original = AsyncEngine.dispose
+
+    async def spy(self: AsyncEngine) -> None:
+        disposed.append(True)
+        await original(self)
+
+    monkeypatch.setattr(AsyncEngine, "dispose", spy)
+    await ctx.aclose()
+    assert disposed == [True]

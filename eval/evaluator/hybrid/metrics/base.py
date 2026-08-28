@@ -50,14 +50,16 @@ class DeterministicMetric(ABC):
 
 
 def error_result(spec: MetricSpec, sample_id: str, exc: Exception) -> MetricResult:
-    """Build an ``error`` result that records the exception class name."""
+    """Build an ``error`` result recording the exception type, message, and cause."""
+    message = " ".join(str(exc).split()) or type(exc).__name__
     return MetricResult(
         sample_id=sample_id,
         metric=spec.name,
         metric_type=spec.metric_type,
         status="error",
         threshold=spec.threshold,
-        reason=type(exc).__name__,
+        reason=clip_text(f"{type(exc).__name__}: {message}"),
+        details={"error": clip_text(message, 1000)},
     )
 
 
@@ -73,7 +75,13 @@ def not_applicable_result(spec: MetricSpec, sample_id: str, reason: str) -> Metr
     )
 
 
-def boolean_result(spec: MetricSpec, sample_id: str, matched: bool, reason: str = "") -> MetricResult:
+def boolean_result(
+    spec: MetricSpec,
+    sample_id: str,
+    matched: bool,
+    reason: str = "",
+    details: dict[str, JsonValue] | None = None,
+) -> MetricResult:
     """Build a passed/failed result from one boolean decision."""
     return MetricResult(
         sample_id=sample_id,
@@ -83,7 +91,13 @@ def boolean_result(spec: MetricSpec, sample_id: str, matched: bool, reason: str 
         score=float(matched),
         threshold=spec.threshold,
         reason=reason,
+        details=details or {},
     )
+
+
+def clip_text(text: str, limit: int = 300) -> str:
+    """Clip one diagnostic string, marking truncation with an ellipsis."""
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def score_result(

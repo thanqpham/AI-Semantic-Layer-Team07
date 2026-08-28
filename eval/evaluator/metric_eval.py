@@ -8,6 +8,7 @@ from typing import Any
 import sqlglot
 from pydantic import JsonValue
 from sqlglot import exp
+from sqlglot.errors import ParseError as SqlParseError
 
 from eval.dataset.loader import DomainDataset
 from eval.dataset.models import ExpectedMetricDefinition, MetricDefinitionCase
@@ -239,19 +240,31 @@ def _identity(metric: ExpectedMetricDefinition | CandidateMetricDefinition) -> t
 
 
 def _filter_set(items: Any) -> set[str]:
-    result = set()
+    """Split AND-combined filter conditions into atomic, canonical conditions.
+
+    ``a AND b`` declared as one condition and ``a``/``b`` declared as two
+    filters are the same semantics; golden uses the former, the product
+    persists the latter. Chained conjunctions split recursively via sqlglot;
+    unparsable text falls back to whole-string canonicalization.
+    """
+    result: set[str] = set()
     for item in items:
         cond = getattr(item, "condition", str(item))
         try:
             parsed = sqlglot.parse_one(cond)
-            if isinstance(parsed, exp.And):
-                result.add(normalize_expression(parsed.left.sql()))
-                result.add(normalize_expression(parsed.right.sql()))
-            else:
-                result.add(normalize_expression(cond))
-        except Exception:
+        except SqlParseError:
             result.add(normalize_expression(cond))
+            continue
+        for atom in _conjunction_atoms(parsed):
+            result.add(normalize_expression(atom.sql()))
     return result
+
+
+def _conjunction_atoms(node: exp.Expression) -> tuple[exp.Expression, ...]:
+    """Flatten one expression into its AND-connected atoms."""
+    if isinstance(node, exp.And):
+        return _conjunction_atoms(node.left) + _conjunction_atoms(node.right)
+    return (node,)
 
 
 def _filter(value: str) -> str:

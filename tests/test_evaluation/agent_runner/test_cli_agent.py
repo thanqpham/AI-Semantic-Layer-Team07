@@ -21,19 +21,31 @@ def test_parse_accepts_agent_source():
     assert args.engine == "hybrid"
 
 
+class _StubContext:
+    """Minimal AgentRunContext stand-in that records aclose() calls."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
 async def test_run_agent_engine_wires_hybrid_request(tmp_path, monkeypatch):
     """Engine wiring: collect -> candidates.json -> hybrid request -> reports."""
     collected: dict = {}
     saved: dict = {}
     requests: dict = {}
     guardrail = {"guardrail_001": CandidateGuardrailOutput(accepted=False, error_code="NON_SELECT_STATEMENT")}
+    ctx = _StubContext()
 
     async def fake_prepare_run(golden_root, domain, run_dir):
         collected["prepare"] = (golden_root, domain, run_dir)
-        return object()  # opaque ctx
+        return ctx
 
     async def fake_collect(ctx, dataset, *, query_mode, enrichment_override=None, suites=None):
         collected["query_mode"] = query_mode
+        collected["suites"] = suites
         return AgentCandidates(manifest={"candidate_source": "agent_live"}, guardrail=guardrail)
 
     def fake_write_candidates(run_dir, candidates):
@@ -67,6 +79,7 @@ async def test_run_agent_engine_wires_hybrid_request(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     assert collected["prepare"] == (args.golden_root, "ecommerce", run_dir)
     assert collected["query_mode"] == "resolver"
+    assert collected["suites"] is None  # default --suite all
     assert saved["candidates"].manifest["candidate_source"] == "agent_live"
     request = requests["request"]
     assert isinstance(request, HybridRunRequest)
@@ -79,13 +92,15 @@ async def test_run_agent_engine_wires_hybrid_request(tmp_path, monkeypatch):
     assert collected["json"] == run_dir / "reports" / "report.json"
     assert collected["csv"] == run_dir / "reports" / "report.csv"
     assert collected["md"] == run_dir / "reports" / "report.md"
+    assert ctx.closed is True  # engine disposed after the run
 
 
 async def test_run_agent_engine_exits_one_on_fail(tmp_path, monkeypatch):
     """FAIL status maps to exit code 1 (PASS/WARN map to 0)."""
+    ctx = _StubContext()
 
     async def fake_prepare_run(golden_root, domain, run_dir):
-        return object()
+        return ctx
 
     async def fake_collect(ctx, dataset, *, query_mode, enrichment_override=None, suites=None):
         return AgentCandidates()
@@ -109,3 +124,24 @@ async def test_run_agent_engine_exits_one_on_fail(tmp_path, monkeypatch):
         ["--engine", "hybrid", "--source", "agent", "--domain", "ecommerce", "--run-dir", str(tmp_path / "run")]
     )
     assert await run_eval.run_agent_engine(args) == 1
+    assert ctx.closed is True  # disposed even when the run ends FAIL
+
+
+async def test_run_agent_engine_disposes_context_when_collection_fails(tmp_path, monkeypatch):
+    """A crashing collection still disposes the engine before the error propagates."""
+    ctx = _StubContext()
+
+    async def fake_prepare_run(golden_root, domain, run_dir):
+        return ctx
+
+    async def fake_collect(ctx, dataset, *, query_mode, enrichment_override=None, suites=None):
+        raise RuntimeError("collection boom")
+
+    monkeypatch.setattr(run_eval, "prepare_run", fake_prepare_run)
+    monkeypatch.setattr(run_eval, "collect_candidates", fake_collect)
+    args = run_eval.parse_args(
+        ["--engine", "hybrid", "--source", "agent", "--domain", "ecommerce", "--run-dir", str(tmp_path / "run")]
+    )
+    with pytest.raises(RuntimeError, match="collection boom"):
+        await run_eval.run_agent_engine(args)
+    assert ctx.closed is True

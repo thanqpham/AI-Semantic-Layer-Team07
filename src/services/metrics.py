@@ -158,33 +158,19 @@ _V2_OUTPUT_FORMAT = """Trả về kết quả ở định dạng JSON thuần t�
 Cả hai mảng "duplicates" và "conflicts" đều được phép rỗng [] nếu không có mục nào."""
 _BASE_RULES = """Quy tắc BẮT BUỘC:
 0. MỌI nội dung hiển thị cho người dùng (metric.name, excluded_notes, diagnostics) PHẢI bằng tiếng Việt; chỉ giữ nguyên tên bảng/cột và mã kỹ thuật trong Schema.
-1. formula.function chỉ dùng: SUM, COUNT, COUNT_DISTINCT, AVG, MIN, MAX.
-2. formula.expression chỉ gồm tên cột của base_entity, số và các toán tử (+, -, *, /).
+1. formula.function chỉ dùng: SUM, COUNT, COUNT_DISTINCT, AVG, MIN, MAX. Khi đếm số lượng thực thể (đơn hàng, khách hàng, sản phẩm…): bắt buộc dùng COUNT_DISTINCT trên khóa thực thể tương ứng; COUNT chỉ dùng để đếm dòng hoặc tổng số lượng (ví dụ số lượng bán = SUM(quantity)).
+2. formula.expression chỉ gồm cột của base_entity, số và các toán tử (+, -, *, /). Không viết SQL, subquery, alias.
 3. base_entity và các cột phải tồn tại chính xác trong Schema dưới đây.
 4. Ưu tiên base_entity có PK/grain rõ ràng; không giả định quan hệ hoặc ý nghĩa không có trong schema.
-5. Filter chỉ dùng cột của base_entity và giá trị hợp lệ.
+5. Filter chỉ dùng cột của base_entity, tuân thủ chuẩn mực dữ liệu: (a) cờ test/bot (cột boolean kiểu is_test_order, is_bot_traffic) được hệ thống tự đính kèm filter loại trừ khi lưu (data hygiene) — KHÔNG tự khai filter loại trừ cờ test/bot trong đề xuất, chỉ khai filter nghiệp vụ thực sự cần cho định nghĩa chỉ số. (b) chỉ khai filter trạng thái khi tên hoặc mô tả nghiệp vụ của chỉ số nêu rõ hoạt động hoàn tất (ví dụ "đơn hàng hoàn tất", "giao thành công"); khi loại thì dùng phép loại trừ trạng thái vô hiệu lối cuối (ví dụ order_status <> 'cancelled' theo danh sách values của cột), TUYỆT ĐỐI KHÔNG dùng phép gồm một trạng thái duy nhất (= 'completed') vì sẽ bỏ sót đơn đang xử lý/đang giao. Giá trị tuân thủ quy tắc 6–7. Không bịa filter khi schema không có cờ tương ứng. (c) giá trị filter phải là literal (số/chuỗi/ngày); TUYỆT ĐỐI KHÔNG dùng tên cột hay tham chiếu cột (bảng.cột) làm giá trị — điều kiện join không thuộc filter, quan hệ giữa các thực thể đã nằm trong relationship.
 6. Khi dùng filter trên cột có values: [...] trong Schema, PHẢI dùng đúng 1 giá trị trong danh sách values. Không tự tạo giá trị mới.
-7. Khi bảng có các cờ dữ liệu rác/kiểm thử (như is_test_order, is_test, is_bot_traffic), BẮT BUỘC thêm filter để loại trừ (ví dụ: field "is_test_order", operator "eq", value false hoặc field "is_bot_traffic", operator "eq", value false) trừ khi người dùng yêu cầu rõ ràng ngược lại. Khi yêu cầu nói "hợp lệ", "không tính đơn hủy" hoặc ngụ ý loại trừ đơn hủy, PHẢI thêm filter trên cột trạng thái (ví dụ: field "order_status", operator "neq", value "cancelled") nếu cột đó tồn tại.
-8. formula.function SUM và AVG CHỈ áp dụng cho các cột kiểu số (INT, DECIMAL, FLOAT, NUMERIC,...). TUYỆT ĐỐI KHÔNG dùng SUM/AVG cho cột kiểu BOOLEAN (ví dụ: is_canceled, is_active) hay TEXT. Để đếm các bản ghi thoả mãn cờ boolean hoặc trạng thái, PHẢI dùng function "COUNT" (expression "*" hoặc cột ID) kết hợp với "filters" (ví dụ: field "is_canceled", operator "eq", value true).
-9. Khi yêu cầu đề cập đến trường/cột/khái niệm KHÔNG tồn tại trong Schema (ví dụ: "marketing_cost" nhưng schema không có), PHẢI trả metrics: [] (rỗng). TUYỆT ĐỐI KHÔNG bịa cột không có trong schema.
-10. Khi yêu cầu quá mơ hồ, chung chung (ví dụ: "chỉ số tốt nhất", "hiệu quả nhất") mà không xác định được công thức cụ thể, PHẢI trả metrics: [] (rỗng).
-11. Chọn base_entity chính xác theo thực thể gốc:
-- Phiên truy cập cửa hàng / Tỷ lệ chuyển đổi phiên $\to$ base_entity là `fact_sessions`.
-- Giỏ hàng / Tỷ lệ bỏ giỏ hàng $\to$ base_entity là `fact_carts`.
-- Đơn hàng / Doanh thu / AOV / Khách hàng mua lại $\to$ base_entity là `fact_orders`.
-- Chi tiết đơn hàng / Số lượng sản phẩm (SKU) bán ra $\to$ base_entity là `fact_order_items`.
-12. QUY TẮC BẮT BUỘC ĐỐI VỚI METRIC TÍNH TỶ LỆ / PHẦN TRĂM (Rate, Ratio, Percentage, Tỷ lệ, Tỉ lệ):
-- Khi yêu cầu hoặc tên metric chứa từ "Tỷ lệ", "Tỉ lệ", "Rate", "Percentage", "Tỷ trọng": BẮT BUỘC formula.expression phải là PHÉP CHIA (dấu '/') giữa cột tử số và cột mẫu số (ví dụ: `id / id` hoặc `customer_id / customer_id`). TUYỆT ĐỐI KHÔNG sinh expression chỉ gồm 1 cột đơn lẻ.
-- Mẫu chuẩn cho các metric tỷ lệ:
-  + Tỷ lệ trả hàng / hoàn trả: base_entity bảng đơn hàng (`order_header` hoặc `fact_orders`), function "COUNT_DISTINCT", expression "id / id", filters: [field "return_required", operator "eq", value "1"].
-  + Tỷ lệ khách hàng quay lại mua hàng: base_entity bảng đơn hàng, function "COUNT_DISTINCT", expression "customer_id / customer_id", filters: [field "customer_order_seq", operator "gt", value 1].
-  + Tỷ lệ hủy đơn hàng: base_entity bảng đơn hàng, function "COUNT_DISTINCT", expression "id / id", filters: [field "is_canceled", operator "eq", value 1] hoặc [field "order_status", operator "eq", value "cancelled"].
-  + Tỷ lệ chuyển đổi: base_entity `fact_sessions`, function "COUNT_DISTINCT", expression "order_id / session_id".
-  + Tỷ lệ bỏ giỏ hàng: base_entity `fact_carts`, function "COUNT_DISTINCT", expression "1 - (cart_id / cart_id)".
-  + Biên lợi nhuận gộp: base_entity `fact_orders`, function "SUM", expression "(gross_amount - discount_amount - return_amount - cogs_amount) / (gross_amount - discount_amount - return_amount)".
+7. Không tự thêm filter cho trạng thái hoàn thành, hoàn tiền, kích hoạt hoặc bất kỳ điều kiện nghiệp vụ nào người dùng chưa nêu rõ.
+8. formula.function SUM và AVG CHỈ áp dụng cho các cột kiểu số (INT, DECIMAL, FLOAT, NUMERIC,...). TUYỆT ĐỐI KHÔNG dùng SUM/AVG cho cột kiểu BOOLEAN (ví dụ: is_canceled, is_active) hay TEXT. Để đếm các bản ghi thoả mãn cờ boolean hoặc trạng thái, PHẢI dùng function "COUNT" (expression "*" hoặc cột ID) kết hợp với "filters" (ví dụ: field "is_canceled", operator "eq", value true). Giá trị filter trên cờ nhị phân (is_*, has_*, flag) khi cột KHÔNG có danh sách values: cột kiểu số (INT/BIT) dùng giá trị số 1 cho trạng thái Hoàn thành / Kích hoạt / Bật và 0 cho Chưa xong / Tắt; cột kiểu BOOLEAN dùng true/false; cột kiểu ký tự (VARCHAR/CHAR) dùng chuỗi "1"/"0". TUYỆT ĐỐI KHÔNG tự bịa ra 'Y', 'N', 'TRUE', 'true'.
+9. Với metric tỷ lệ/phần trăm (Rate, Ratio, Percentage, Tỷ lệ, Tỉ lệ, Tỷ trọng), formula.expression BẮT BUỘC là phép chia giữa tử số và mẫu số; không sinh expression chỉ có một cột. Dùng đúng base entity theo thực thể gốc: phiên là `fact_sessions`, giỏ hàng là `fact_carts`, đơn hàng/doanh thu là `fact_orders`, chi tiết đơn hàng là `fact_order_items`.
+10. Mẫu metric tỷ lệ phải phản ánh đúng mẫu số: tỷ lệ chuyển đổi dùng `order_id / session_id`, tỷ lệ bỏ giỏ dùng `1 - (cart_id / cart_id)`, tỷ lệ hủy dùng `id / id` kèm filter hủy, và tỷ lệ khách hàng quay lại dùng `customer_id / customer_id` kèm filter thứ tự mua hàng. Không dùng rule tỷ lệ để tự ý suy diễn column không có trong Schema.
 """
 
-_DEDUPE_RULES = """8. Trước khi trả về, so sánh mỗi metric đề xuất với danh sách metric đang tồn tại. Nếu một metric đề xuất **cùng ý nghĩa nghiệp vụ và cùng logic tính toán ≥90%** với một metric đã có (bỏ qua hoa/thường, khoảng trắng, khác biệt cú pháp SQL vô nghĩa): KHÔNG đưa metric đó vào `metrics`; thêm mục vào `duplicates` với `proposed_metric_name` đúng bằng tên metric đề xuất bị coi là trùng (để hệ thống tự loại nếu vẫn lọt vào `metrics`), `user_message` tiếng Việt giải thích và `similarity_reason` nêu điểm giống. Nếu metric đã có ở trạng thái `approved`, nhấn mạnh rằng đã có metric chuẩn và không cần tạo mới. Chỉ xếp vào `duplicates` khi hai metric THAY THẾ ĐƯỢC CHO NHAU HOÀN TOÀN — cùng ý nghĩa VÀ cùng công thức sau chuẩn hóa. Nếu công thức/logic khác nhau (kể cả khi ý nghĩa gần giống hoặc tên gần trùng): đó là `conflicts` theo quy tắc 9, TUYỆT ĐỐI KHÔNG xếp vào `duplicates`. Các metric tính tỷ lệ/trung bình (như AOV, Tỷ lệ chuyển đổi, Tỷ lệ mua lại, Tỷ lệ bỏ giỏ) là các metric phái sinh độc lập, TUYỆT ĐỐI KHÔNG xếp vào `duplicates`.
+_DEDUPE_RULES = """8. Trước khi trả về, so sánh mỗi metric đề xuất với danh sách metric đang tồn tại. Nếu một metric đề xuất **cùng ý nghĩa nghiệp vụ và cùng logic tính toán ≥90%** với một metric đã có (bỏ qua hoa/thường, khoảng trắng, khác biệt cú pháp SQL vô nghĩa): KHÔNG đưa metric đó vào `metrics`; thêm mục vào `duplicates` với `proposed_metric_name` đúng bằng tên metric đề xuất bị coi là trùng (để hệ thống tự loại nếu vẫn lọt vào `metrics`), `user_message` tiếng Việt giải thích và `similarity_reason` nêu điểm giống. Nếu metric đã có ở trạng thái `approved`, nhấn mạnh rằng đã có metric chuẩn và không cần tạo mới. Chỉ xếp vào `duplicates` khi hai metric THAY THẾ ĐƯỢC CHO NHAU HOÀN TOÀN — cùng ý nghĩa VÀ cùng công thức sau chuẩn hóa. Nếu công thức/logic khác nhau (kể cả khi ý nghĩa gần giống hoặc tên gần trùng): đó là `conflicts` theo quy tắc 9, TUYỆT ĐỐI KHÔNG xếp vào `duplicates`.
 9. Nếu metric đề xuất **trùng hoặc gần trùng tên** (sau khi bỏ qua hoa/thường và khoảng trắng) với metric đã có nhưng **khác logic tính toán**: vẫn đưa vào `metrics`, đồng thời thêm mục vào `conflicts` với `proposed_metric_name` đúng bằng tên đã đề xuất, `suggested_name` là tên thay thế gợi ý (tiếng Việt, tự nhiên, mô tả rõ sự khác biệt về logic, chưa trùng metric nào), và `clarify_question` là câu hỏi tiếng Việt cho người dùng. TUYỆT ĐỐI KHÔNG bịa metric đã có không nằm trong danh sách được cung cấp."""
 
 
@@ -307,30 +293,16 @@ def _references_schema(definition: MetricDefinition, valid: dict[str, set[str]])
     """Check if the metric formula and filters reference existing schema tables and columns."""
     valid_lower = {k.lower(): (k, v) for k, v in valid.items()}
     entity_key = definition.metric.base_entity.strip().lower()
-    match_key = None
-    if entity_key in valid_lower:
-        match_key = entity_key
-    else:
-        clean_key = entity_key.replace("fact_", "").rstrip("s")
-        for k in valid_lower:
-            if k.replace("fact_", "").rstrip("s") == clean_key:
-                match_key = k
-                break
-    if match_key is None:
+    if entity_key not in valid_lower:
         return False
-    actual_table_name, columns = valid_lower[match_key]
+    actual_table_name, columns = valid_lower[entity_key]
     definition.metric.base_entity = actual_table_name
     col_lower = {c.lower(): c for c in columns}
     try:
-        expr = definition.metric.formula.expression.strip()
-        if expr == "*":
-            referenced = set()
-        else:
-            parsed = sqlglot.parse_one(expr)
-            referenced = {col.name.lower() for col in parsed.find_all(exp.Column)}
+        parsed = sqlglot.parse_one(definition.metric.formula.expression)
+        referenced = {col.name.lower() for col in parsed.find_all(exp.Column)}
         for item in definition.metric.filters:
-            field_name = item.field.lower().split(".")[-1]
-            referenced.add(field_name)
+            referenced.add(item.field.lower())
         return referenced.issubset(set(col_lower.keys()))
     except Exception:
         return False
@@ -348,8 +320,6 @@ def validate_metric_definitions(
     if target_tables:
         schema = {name: value for name, value in schema.items() if name in target_tables}
     valid, _ = extract_schema_summary(schema)
-    if not valid:
-        return definitions
     return [item for item in definitions if _references_schema(item, valid)]
 
 
@@ -371,7 +341,10 @@ async def generate_metrics_from_prompt(
     existing_text = format_existing_metrics_context(existing_metrics) if use_v2 else None
     _, schema_text = extract_schema_summary(schema)
     messages = [
-        {"role": "system", "content": build_metric_system_prompt(schema_text, existing_text, requested_metric=True)},
+        {
+            "role": "system",
+            "content": build_metric_system_prompt(schema_text, existing_text, requested_metric=True),
+        },
         {"role": "user", "content": normalize_prompt(prompt)},
     ]
     definitions, llm_duplicates, llm_conflicts = await generate_definitions_v2(messages, use_v2)

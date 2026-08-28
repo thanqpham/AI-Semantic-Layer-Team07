@@ -4,13 +4,10 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import date, datetime
 from typing import Any
 
-import sqlglot
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlglot import exp
 
 from src.models.db import (
     CanonicalRelationshipModel,
@@ -19,10 +16,23 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
-from src.models.metric_definition import MetricDefinition, MetricExpressionNode, MetricFilter
+from src.models.metric_definition import MetricDefinition
 from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQuerySpec
-from src.observability import trace_action, trace_value
+from src.observability import trace_action
+from src.services.query_compiler_sql import (
+    _assemble_sql,
+    _column_info,
+    _dimension_expressions,
+    _fixed_predicates,
+    _metric_expressions,
+    _raw_qualified,
+    _residual_filters,
+    _shared_filters,
+    validate_read_only,
+)
 from src.services.semantic_compile_error import SemanticCompileError
+
+__all__ = ["CompiledQuery", "SemanticQueryCompiler", "validate_read_only"]
 
 
 @dataclass
@@ -59,35 +69,6 @@ def _reject_duplicate_selections(spec: SemanticQuerySpec) -> None:
     dimension_ids = [item.column_id for item in spec.dimensions]
     if len(metric_ids) != len(set(metric_ids)) or len(dimension_ids) != len(set(dimension_ids)):
         raise SemanticCompileError("DUPLICATE_SELECTION", "Semantic selections must be unique")
-
-
-def validate_read_only(sql: str) -> bool:
-    """Require exactly one SELECT without write-capable AST nodes."""
-    return trace_value("sql_guardrail", {"sql_length": len(sql)}, lambda: _validate_read_only(sql))
-
-
-def _validate_read_only(sql: str) -> bool:
-    """Validate the SQL AST without coupling parsing to tracing."""
-    try:
-        statements = sqlglot.parse(sql, error_level=sqlglot.ErrorLevel.RAISE)
-    except sqlglot.errors.ParseError as exc:
-        raise ValueError(f"Invalid SQL: {exc}") from exc
-    if len(statements) != 1:
-        raise ValueError("Multi-statement queries are not allowed")
-    if not isinstance(statements[0], exp.Select):
-        raise ValueError(f"Only SELECT statements are allowed, got {type(statements[0]).__name__}")
-    parsed = statements[0]
-    if parsed.find(exp.Into):
-        raise ValueError("SELECT INTO is not allowed")
-    dml = (exp.Insert, exp.Update, exp.Delete)
-    if any(isinstance(node, dml) for node in parsed.walk()):
-        raise ValueError("CTE containing DML is not allowed")
-    ddl = (exp.Drop, exp.Alter, exp.TruncateTable)
-    if any(isinstance(node, ddl) for node in parsed.walk()):
-        raise ValueError("DDL is not allowed")
-    if parsed.find(exp.Lock):
-        raise ValueError("Locking clauses (FOR UPDATE/SHARE) are not allowed")
-    return True
 
 
 class SemanticQueryCompiler:
@@ -170,9 +151,9 @@ class SemanticQueryCompiler:
         result = await self._db.execute(select(SemanticTableModel).where(SemanticTableModel.db_id == db_id))
         return list(result.scalars().all())
 
-    async def _load_base_columns(self, table_id: int) -> dict[int, str]:
+    async def _load_base_columns(self, table_id: int) -> dict[int, tuple[str, str]]:
         result = await self._db.execute(select(SemanticColumnModel).where(SemanticColumnModel.table_id == table_id))
-        return {column.id: column.column_name for column in result.scalars().all()}
+        return {c.id: (c.column_name, c.data_type or "") for c in result.scalars().all()}
 
     async def _load_dimensions(self, db_id: int, ids: list[int]) -> list[dict[str, Any]]:
         if not ids:
@@ -253,17 +234,22 @@ class SemanticQueryCompiler:
         metrics: list[SemanticMetricModel],
         definitions: list[MetricDefinition],
         base: SemanticTableModel,
-        base_columns: dict[int, str],
+        base_columns: dict[int, tuple[str, str]],
         dimensions: list[dict[str, Any]],
         joins: list[dict[str, Any]],
         runtime_filters: list[dict[str, Any]],
         limit: int,
     ) -> CompiledQuery:
         parameters: dict[str, Any] = {}
+        names = {cid: name for cid, (name, _) in base_columns.items()}
+        types = {cid: dt for cid, (_, dt) in base_columns.items()}
         dimensions_sql, group_sql = _dimension_expressions(dimensions, dialect)
-        metrics_sql = _metric_expressions(metrics, definitions, base, base_columns, dialect, parameters)
+        shared = _shared_filters(definitions)
+        residuals = [_residual_filters(d, shared) for d in definitions]
+        fixed = _fixed_predicates(shared, names, types, base.table_name, dialect, parameters)
+        metrics_sql = _metric_expressions(metrics, definitions, base, names, types, dialect, parameters, residuals)
         sql = _assemble_sql(
-            dimensions_sql + metrics_sql, base, joins, runtime_filters, group_sql, dialect, parameters, limit
+            dimensions_sql + metrics_sql, base, joins, runtime_filters, group_sql, dialect, parameters, limit, fixed
         )
         validate_read_only(sql)
         metadata = _compiled_metadata(base, metrics, dimensions, joins)
@@ -320,60 +306,6 @@ def _safe_join_path(
     return paths[0]
 
 
-def _dimension_expressions(dimensions: list[dict[str, Any]], dialect: str) -> tuple[list[str], list[str]]:
-    group_sql = [_dimension_sql(item, dialect) for item in dimensions]
-    select_sql = [
-        f"{expression} AS {_quoted(_dimension_alias(item), dialect)}"
-        for expression, item in zip(group_sql, dimensions, strict=True)
-    ]
-    return select_sql, group_sql
-
-
-def _metric_expressions(
-    metrics: list[SemanticMetricModel],
-    definitions: list[MetricDefinition],
-    base: SemanticTableModel,
-    columns: dict[int, str],
-    dialect: str,
-    parameters: dict[str, Any],
-) -> list[str]:
-    return [
-        _compile_metric(definition, base.table_name, columns, dialect, parameters, f"metric_{metric.id}")
-        for metric, definition in zip(metrics, definitions, strict=True)
-    ]
-
-
-def _assemble_sql(
-    selections: list[str],
-    base: SemanticTableModel,
-    joins: list[dict[str, Any]],
-    filters: list[dict[str, Any]],
-    groups: list[str],
-    dialect: str,
-    parameters: dict[str, Any],
-    limit: int,
-) -> str:
-    columns_clause = ",\n  ".join(selections)
-    parts = [f"SELECT\n  {columns_clause}", f"FROM {_table_sql(base, dialect)}"]
-    for join in joins:
-        parts.append(_join_sql(join, dialect).strip())
-    predicates = _runtime_predicates(filters, dialect, parameters)
-    if predicates:
-        where_clause = " AND\n  ".join(predicates)
-        parts.append(f"WHERE\n  {where_clause}")
-    if groups:
-        groups_clause = ", ".join(groups)
-        parts.append(f"GROUP BY {groups_clause}")
-    parts.append(f"LIMIT {limit}")
-    return "\n".join(parts)
-
-
-def _join_sql(join: dict[str, Any], dialect: str) -> str:
-    condition = _validated_join_condition(join["condition"], dialect)
-    table = _table_name(join["physical_schema"], join["table_name"], dialect)
-    return f" JOIN {table} ON {condition}"
-
-
 def _compiled_metadata(
     base: SemanticTableModel,
     metrics: list[SemanticMetricModel],
@@ -385,19 +317,6 @@ def _compiled_metadata(
         "metrics": {f"metric_{item.id}": item.name for item in metrics},
         "dimensions": {f"dimension_{item['column_id']}": item["business_name"] for item in dimensions},
         "relationship_ids": [item["relationship_id"] for item in joins],
-    }
-
-
-def _column_info(column: SemanticColumnModel, table: SemanticTableModel) -> dict[str, Any]:
-    dt = (column.data_type or "").upper()
-    is_time = column.is_time_dimension or any(t in dt for t in ("DATE", "TIME", "TIMESTAMP", "DATETIME"))
-    return {
-        "column_id": column.id,
-        "column_name": column.column_name,
-        "business_name": column.business_name,
-        "is_time_dimension": is_time,
-        "table_id": table.id,
-        "table_name": table.table_name,
     }
 
 
@@ -460,223 +379,3 @@ def _relationship_condition(
         "Relationship does not contain canonical column pairs",
         {"relationship_id": relationship.id},
     )
-
-
-def _raw_qualified(column: tuple[str, str]) -> str:
-    return f"{column[0]}.{column[1]}"
-
-
-def _quoted(name: str, dialect: str) -> str:
-    return exp.to_identifier(name, quoted=True).sql(dialect=dialect)
-
-
-def _qualified(table: str, column: str, dialect: str) -> str:
-    return exp.column(column, table=table, quoted=True).sql(dialect=dialect)
-
-
-def _table_sql(table: SemanticTableModel, dialect: str) -> str:
-    return _table_name(table.physical_schema, table.table_name, dialect)
-
-
-def _table_name(schema: str | None, table: str, dialect: str) -> str:
-    if schema:
-        return f"{_quoted(schema, dialect)}.{_quoted(table, dialect)}"
-    return _quoted(table, dialect)
-
-
-def _dimension_sql(item: dict[str, Any], dialect: str) -> str:
-    column = _qualified(item["table_name"], item["column_name"], dialect)
-    grain = item.get("time_grain")
-    if not grain:
-        return column
-    if dialect == "sqlite":
-        formats = {"day": "%Y-%m-%d", "week": "%Y-%W", "month": "%Y-%m", "year": "%Y"}
-        if grain == "quarter":
-            return f"strftime('%Y', {column}) || '-Q' || ((cast(strftime('%m', {column}) as integer) + 2) / 3)"
-        return f"strftime('{formats[grain]}', {column})"
-    if dialect == "mysql":
-        formats = {"day": "%Y-%m-%d", "week": "%x-%v", "month": "%Y-%m", "year": "%Y"}
-        if grain == "quarter":
-            return f"CONCAT(YEAR({column}), '-Q', QUARTER({column}))"
-        return f"DATE_FORMAT({column}, '{formats[grain]}')"
-    return f"DATE_TRUNC('{grain}', {column})"
-
-
-def _dimension_alias(item: dict[str, Any]) -> str:
-    return f"dimension_{item['column_id']}"
-
-
-def _is_ratio_node(
-    node: MetricExpressionNode | None,
-) -> tuple[bool, MetricExpressionNode | None, MetricExpressionNode | None, float]:
-    """Identify if the expression tree represents a ratio or scaled ratio."""
-    if node is None:
-        return False, None, None, 1.0
-    if node.kind == "div" and len(node.children) == 2:
-        return True, node.children[0], node.children[1], 100.0
-    if node.kind == "mul" and len(node.children) == 2:
-        c0, c1 = node.children[0], node.children[1]
-        if c0.kind == "div" and len(c0.children) == 2 and c1.kind == "literal":
-            return True, c0.children[0], c0.children[1], float(c1.value or 100.0)
-        if c1.kind == "div" and len(c1.children) == 2 and c0.kind == "literal":
-            return True, c1.children[0], c1.children[1], float(c0.value or 100.0)
-    return False, None, None, 1.0
-
-
-def _compile_metric(
-    definition: MetricDefinition,
-    table: str,
-    columns: dict[int, str],
-    dialect: str,
-    parameters: dict[str, Any],
-    alias: str,
-) -> str:
-    formula = definition.metric.formula
-    is_ratio, left_node, right_node, scale = _is_ratio_node(formula.expression_ast)
-    predicates = [
-        _predicate(table, _resolved_filter(item, columns), dialect, parameters, "metric")
-        for item in definition.metric.filters
-    ]
-    condition = " AND ".join(predicates)
-
-    if is_ratio and left_node is not None and right_node is not None:
-        left_arg = _compile_argument(left_node, table, columns, dialect)
-        right_arg = _compile_argument(right_node, table, columns, dialect)
-        left_cond = f"CASE WHEN {condition} THEN {left_arg if left_arg != '*' else '1'} END" if condition else left_arg
-        right_cond = right_arg if right_arg != "*" else "1"
-        if formula.function == "COUNT_DISTINCT":
-            num_agg = f"COUNT(DISTINCT {left_cond})"
-            den_agg = f"COUNT(DISTINCT {right_cond})"
-        else:
-            num_agg = f"{formula.function}({left_cond})"
-            den_agg = f"{formula.function}({right_cond})"
-        cast_type = "REAL" if dialect == "sqlite" else "NUMERIC"
-        aggregate = f"ROUND((CAST({num_agg} AS {cast_type}) * {scale} / NULLIF({den_agg}, 0)), 2)"
-        return f"{aggregate} AS {_quoted(alias, dialect)}"
-
-    argument = _compile_argument(formula.expression_ast, table, columns, dialect)
-    conditional = f"CASE WHEN {condition} THEN {argument if argument != '*' else '1'} END" if condition else argument
-    if formula.function == "COUNT_DISTINCT":
-        aggregate = f"COUNT(DISTINCT {conditional})"
-    else:
-        aggregate = f"{formula.function}({conditional})"
-    return f"{aggregate} AS {_quoted(alias, dialect)}"
-
-
-def _resolved_filter(item: MetricFilter, columns: dict[int, str]) -> MetricFilter:
-    if item.column_id not in columns:
-        raise SemanticCompileError(
-            "UNKNOWN_REFERENCE",
-            "Metric filter contains an unknown column",
-            {"column_id": item.column_id},
-        )
-    return item.model_copy(update={"field": columns[item.column_id]})
-
-
-def _compile_argument(
-    node: MetricExpressionNode | None,
-    table: str,
-    columns: dict[int, str],
-    dialect: str,
-) -> str:
-    if node is None:
-        raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric expression is not resolved")
-    if node.kind == "column" and node.column_id in columns:
-        return _qualified(table, columns[node.column_id], dialect)
-    if node.kind == "literal":
-        return str(node.value)
-    if node.kind == "neg":
-        return f"-({_compile_argument(node.children[0], table, columns, dialect)})"
-    left = _compile_argument(node.children[0], table, columns, dialect)
-    right = _compile_argument(node.children[1], table, columns, dialect)
-    if node.kind == "div":
-        return f"(CAST({left} AS DECIMAL) / NULLIF({right}, 0))"
-    operators = {"add": "+", "sub": "-", "mul": "*"}
-    if node.kind in operators:
-        return f"({left} {operators[node.kind]} {right})"
-    raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric expression contains an unknown column")
-
-
-def _validated_join_condition(condition: str, dialect: str) -> str:
-    parsed = sqlglot.parse_one(condition, read=dialect)
-    allowed = (exp.EQ, exp.Column, exp.Identifier)
-    if any(not isinstance(node, allowed) for node in parsed.walk()):
-        raise ValueError("Unsafe join condition in semantic metadata")
-    for column in parsed.find_all(exp.Column):
-        column.set("this", exp.to_identifier(column.name, quoted=True))
-        column.set("table", exp.to_identifier(column.table, quoted=True))
-    return parsed.sql(dialect=dialect)
-
-
-def _fixed_predicates(
-    definitions: list[MetricDefinition],
-    table: str,
-    dialect: str,
-    parameters: dict[str, Any],
-) -> list[str]:
-    predicates: list[str] = []
-    seen: set[tuple[str, str, str]] = set()
-    for definition in definitions:
-        for item in definition.metric.filters:
-            key = (item.field, item.operator, repr(item.value))
-            if key not in seen:
-                seen.add(key)
-                predicates.append(_predicate(table, item, dialect, parameters, "metric"))
-    return predicates
-
-
-def _runtime_predicates(filters: list[dict[str, Any]], dialect: str, parameters: dict[str, Any]) -> list[str]:
-    return [
-        _predicate(
-            item["table_name"],
-            MetricFilter(field=item["column_name"], operator=item["operator"], value=item["value"]),
-            dialect,
-            parameters,
-            "runtime",
-        )
-        for item in filters
-    ]
-
-
-def _predicate(
-    table: str,
-    item: MetricFilter,
-    dialect: str,
-    parameters: dict[str, Any],
-    prefix: str,
-) -> str:
-    column = _qualified(table, item.field, dialect)
-    if item.operator == "is_null":
-        return f"{column} IS NULL"
-    if item.operator == "is_not_null":
-        return f"{column} IS NOT NULL"
-    if item.operator in {"in", "not_in"}:
-        names = [_bind(parameters, prefix, value) for value in item.value]
-        keyword = "IN" if item.operator == "in" else "NOT IN"
-        return f"{column} {keyword} ({', '.join(names)})"
-    symbols = {"eq": "=", "neq": "<>", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
-    return f"{column} {symbols[item.operator]} {_bind(parameters, prefix, item.value)}"
-
-
-def _normalize_value(value: Any) -> Any:
-    """Coerce ISO date/datetime strings to date/datetime objects for strict DB drivers."""
-    if not isinstance(value, str):
-        return value
-    val = value.strip()
-    if len(val) == 10 and val[4] == "-" and val[7] == "-":
-        try:
-            return date.fromisoformat(val)
-        except ValueError:
-            return value
-    if len(val) >= 19 and val[4] == "-" and val[7] == "-" and (val[10] in ("T", " ")):
-        try:
-            return datetime.fromisoformat(val.replace("Z", "+00:00"))
-        except ValueError:
-            return value
-    return value
-
-
-def _bind(parameters: dict[str, Any], prefix: str, value: Any) -> str:
-    name = f"{prefix}_{len(parameters)}"
-    parameters[name] = _normalize_value(value)
-    return f":{name}"

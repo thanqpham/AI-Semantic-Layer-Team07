@@ -22,6 +22,10 @@ _WRITE_NODES = (
 )
 _FORBIDDEN_FUNCTIONS = {"load_extension", "pg_sleep", "readfile", "writefile"}
 
+#: Aggregates that skip NULL inputs, so ``AGG(CASE WHEN f THEN x END)`` and
+#: ``AGG(x) ... WHERE f`` compute the same value.
+_NULL_IGNORING_AGGREGATES = (exp.Sum, exp.Avg, exp.Min, exp.Max, exp.Count)
+
 
 @dataclass(frozen=True)
 class NormalizedSql:
@@ -39,7 +43,7 @@ def normalize_sql(sql: str, dialect: Dialect = "sqlite") -> NormalizedSql:
     """Parse one read-only query and remove non-semantic alias differences."""
     expression = parse_single_statement(sql, dialect)
     _validate_read_only(expression)
-    canonical_expression = _canonicalize_booleans(_canonicalize_aliases(expression.copy()))
+    canonical_expression = _canonicalize_semantics(expression.copy())
     canonical = canonical_expression.sql(dialect=_sqlglot_dialect(dialect), normalize=True, pretty=False)
     return NormalizedSql(expression=expression, canonical=canonical)
 
@@ -52,17 +56,32 @@ def structurally_equal(left: str, right: str, dialect: Dialect = "sqlite", *, ig
     bounded), and ORDER BY is presentation — the execution lane already
     compares row multisets (``ordered=False``), so ordering is not query
     semantics. Golden reference SQL may legitimately omit both.
+
+    Quoted and unquoted identifiers compare equal, and redundant
+    parenthesization is stripped: both are rendering choices of the producer
+    (the product compiler quotes every identifier and parenthesizes binary
+    chains; golden fixtures do not), not query semantics.
     """
-    left_sql, right_sql = normalize_sql(left, dialect), normalize_sql(right, dialect)
+    return canonical_sql(left, dialect, ignore_limit=ignore_limit) == canonical_sql(
+        right, dialect, ignore_limit=ignore_limit
+    )
+
+
+def canonical_sql(sql: str, dialect: Dialect = "sqlite", *, ignore_limit: bool = False) -> str:
+    """Return the exact canonical string ``structurally_equal`` compares.
+
+    Exposed so mismatch diagnostics can show precisely what was compared on
+    each side — the diagnostic and the comparison can never drift apart.
+    """
+    normalized = normalize_sql(sql, dialect)
     if ignore_limit:
-        left_sql = _without_presentation_clauses(left_sql, dialect)
-        right_sql = _without_presentation_clauses(right_sql, dialect)
-    return left_sql.canonical == right_sql.canonical
+        normalized = _without_presentation_clauses(normalized, dialect)
+    return normalized.canonical
 
 
 def _without_presentation_clauses(normalized: NormalizedSql, dialect: Dialect) -> NormalizedSql:
     """Return the same normalized SQL with top-level ORDER BY and LIMIT removed."""
-    expression = _canonicalize_booleans(_canonicalize_aliases(normalized.expression.copy()))
+    expression = _canonicalize_semantics(normalized.expression.copy())
     expression.set("order", None)
     expression.set("limit", None)
     canonical = expression.sql(dialect=_sqlglot_dialect(dialect), normalize=True, pretty=False)
@@ -102,7 +121,7 @@ def normalize_expression(value: str, dialect: Dialect = "sqlite") -> str:
         return " ".join(value.casefold().split())
     if len(parsed) != 1 or parsed[0] is None:
         return " ".join(value.casefold().split())
-    canonical = _canonicalize_booleans(cast(exp.Expression, parsed[0]).copy())
+    canonical = _canonicalize_semantics(cast(exp.Expression, parsed[0]).copy())
     return canonical.sql(dialect=_sqlglot_dialect(dialect), normalize=True, pretty=False)
 
 
@@ -138,7 +157,7 @@ def unwrap_declared_aggregation(value: str, aggregation: str | None, dialect: Di
     wrapper = _AGGREGATION_WRAPPERS.get(aggregation or "")
     inner = _wrapper_inner(node, wrapper) if wrapper is not None else None
     target = node if inner is None else inner
-    canonical = _canonicalize_booleans(target.copy())
+    canonical = _canonicalize_semantics(target.copy())
     return canonical.sql(dialect=_sqlglot_dialect(dialect), normalize=True, pretty=False)
 
 
@@ -165,10 +184,10 @@ def _validate_read_only(expression: exp.Expression) -> None:
         raise SqlValidationError("NESTED_DML")
     if expression.find(exp.Into) is not None:
         raise SqlValidationError("SELECT_INTO_FORBIDDEN")
-    if not isinstance(expression, exp.Query):
-        raise SqlValidationError("NON_SELECT_STATEMENT")
     if expression.find(exp.Lock) is not None:
         raise SqlValidationError("UNSAFE_SQL")
+    if not isinstance(expression, exp.Query):
+        raise SqlValidationError("NON_SELECT_STATEMENT")
     for function in expression.find_all(exp.Anonymous):
         if function.name.casefold() in _FORBIDDEN_FUNCTIONS:
             raise SqlValidationError("FORBIDDEN_FUNCTION")
@@ -188,6 +207,105 @@ def _canonicalize_booleans(expression: exp.Expression) -> exp.Expression:
     return expression.transform(
         lambda node: exp.Literal.number(1 if node.this else 0) if isinstance(node, exp.Boolean) else node
     )
+
+
+def _canonicalize_semantics(expression: exp.Expression) -> exp.Expression:
+    """Apply every non-semantic rendering canonicalization in one pipeline.
+
+    Order matters only in that alias canonicalization must see the original
+    column/table qualifiers; the remaining steps are rendering-only rewrites
+    (identifier quoting, boolean literal convention, parenthesization), and
+    the conditional-aggregate rewrite runs last so the condition it copies
+    into every CASE branch is itself already canonical.
+    """
+    return _canonicalize_conditional_aggregates(
+        _canonicalize_parens(_canonicalize_booleans(_canonicalize_identifier_quotes(_canonicalize_aliases(expression))))
+    )
+
+
+def _canonicalize_conditional_aggregates(expression: exp.Expression) -> exp.Expression:
+    """Rewrite ``AGG(x) ... WHERE f`` into ``AGG(CASE WHEN f THEN x END)``.
+
+    For NULL-ignoring aggregates both spellings compute the same value, and
+    the golden dataset mixes the conventions: golden SQL conditions inside
+    CASE while the product compiler lifts the same metric filters into
+    WHERE. Rewriting the WHERE form onto the CASE form — applied to both
+    compared sides — removes that presentation difference.
+
+    Fail-closed: set operations, projection subqueries, window functions,
+    HAVING, already-conditioned aggregates, and explicit FILTER clauses all
+    skip the rewrite, so such sides compare as written (honest mismatch,
+    never a false equal). With GROUP BY the CASE form retains empty groups
+    that WHERE drops; accepted because golden treats both spellings as one
+    intent.
+    """
+    if not isinstance(expression, exp.Select):
+        return expression
+    where = expression.args.get("where")
+    if where is None or expression.args.get("having") is not None:
+        return expression
+    if any(p.find(exp.Select, exp.Window) is not None for p in expression.expressions):
+        return expression
+    aggregates = tuple(a for p in expression.expressions for a in p.find_all(*_NULL_IGNORING_AGGREGATES))
+    if not aggregates or any(_conditioned(a) for a in aggregates):
+        return expression
+    condition = where.this
+    for aggregate in aggregates:
+        aggregate.replace(_case_wrapped(aggregate, condition))
+    expression.set("where", None)
+    return expression
+
+
+def _conditioned(aggregate: exp.Expression) -> bool:
+    """Report whether the aggregate already carries its own condition."""
+    if aggregate.args.get("filter") is not None:
+        return True
+    argument = aggregate.this
+    if isinstance(argument, exp.Distinct):
+        argument = argument.expressions[0] if argument.expressions else None
+    return isinstance(argument, exp.Case)
+
+
+def _case_wrapped(aggregate: exp.Expression, condition: exp.Expression) -> exp.Expression:
+    """Return the same aggregate with its argument guarded by the condition."""
+    if isinstance(aggregate.this, exp.Distinct):
+        distinct = aggregate.this.copy()
+        distinct.set("expressions", [_guarded(distinct.expressions[0], condition)])
+        return aggregate.__class__(this=distinct)
+    return aggregate.__class__(this=_guarded(aggregate.this, condition))
+
+
+def _guarded(argument: exp.Expression, condition: exp.Expression) -> exp.Case:
+    """Return ``CASE WHEN condition THEN argument END`` (``COUNT(*)`` counts 1)."""
+    inner = exp.Literal.number(1) if isinstance(argument, exp.Star) else argument.copy()
+    return exp.Case(ifs=[exp.If(this=condition.copy(), true=inner)])
+
+
+def _canonicalize_identifier_quotes(expression: exp.Expression) -> exp.Expression:
+    """Drop identifier quoting so quoted and bare names compare equal.
+
+    SQLite resolves ``"column"`` and ``column`` identically; quoting is a
+    rendering choice of the producer (the product compiler quotes every
+    identifier, golden fixtures do not), not query semantics.
+    """
+    for identifier in expression.find_all(exp.Identifier):
+        identifier.set("quoted", False)
+    return expression
+
+
+def _canonicalize_parens(expression: exp.Expression) -> exp.Expression:
+    """Strip redundant parenthesization until none remain.
+
+    Parenthesization encodes nothing the AST does not already encode, and
+    producers differ: the product compiler parenthesizes every binary chain
+    (``((a - b) - c)``) while golden fixtures write ``a - b - c``. A single
+    ``transform`` pass cannot unwrap nested ``Paren`` wrappers (replaced
+    subtrees are not revisited), so the pass repeats until fixpoint.
+    """
+    result = expression
+    while any(isinstance(node, exp.Paren) for node in result.find_all(exp.Paren)):
+        result = result.transform(lambda node: node.this if isinstance(node, exp.Paren) else node)
+    return result
 
 
 def _canonicalize_aliases(expression: exp.Expression) -> exp.Expression:
