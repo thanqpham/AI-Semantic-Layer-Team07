@@ -39,9 +39,20 @@ Trong các doanh nghiệp hiện nay, dữ liệu lưu trữ tại cơ sở dữ
 
 ### ❌ Out-of-Scope (v1.0)
 
-- Không thực thi câu lệnh SQL SELECT trên Target DB.
-- Không hỗ trợ NL2SQL Chatbot / Natural Language Query (dành cho v2.0+).
+- Không hỗ trợ truy vấn dữ liệu từ SQL Dump; SQL Dump chỉ dùng để đọc schema metadata.
 - Không dùng Vector Database (ChromaDB, FAISS).
+
+### ✅ Trạng thái triển khai hiện tại
+
+- **Flow 1:** Introspect schema → 2-Pass enrichment → đề xuất metric → HITL review → lưu Semantic Layer.
+- **Flow 2:** Chỉ hỗ trợ Live DB; câu hỏi được parse theo approved Metrics/Dimensions rồi biên dịch qua `SemanticQueryCompiler`.
+- **AI Studio:** Có các nhánh `orchestrator`, `chitchat`, `data_assistant`, `metric_suggest` và `semantic_parse`; request ngoài phạm vi được trả lời trực tiếp và không đi qua pipeline metric/query.
+- **Dedupe:** Metric đã lưu và chưa bị soft-delete được đưa vào đối chiếu trước khi đề xuất metric mới.
+- **Schema Sync:** Có endpoint kiểm tra drift, trigger sync và xem sync logs.
+- **Read-only guardrails:** Chỉ cho phép `SELECT`, tự giới hạn kết quả tối đa 1000 dòng và timeout 15 giây.
+
+Tài liệu kiểm thử UI: [AI Studio Manual Test Cases](docs/AI_STUDIO_TEST_CASES.md).
+Tài liệu benchmark/evaluation: [eval/README.md](eval/README.md).
 
 ---
 

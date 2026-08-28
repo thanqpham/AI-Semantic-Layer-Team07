@@ -5,6 +5,26 @@ trên **Golden Dataset** ở `eval/golden_dataset/<domain>/`. Tài liệu này g
 luồng chạy chính và danh mục suite/metric; chi tiết kiến trúc xem
 `docs/EVALUATION_FRAMEWORK_PLAN.md` và docstring từng module trong `eval/`.
 
+## Trạng thái và phạm vi benchmark
+
+Benchmark hiện đánh giá các stage chính của agent trên Golden Dataset `ecommerce`:
+
+1. Discovery — trích xuất schema và quan hệ.
+2. Enrichment — tên nghiệp vụ, dimension và relationship.
+3. Metric generation — định nghĩa metric, công thức và filter.
+4. Query compilation — canonical query, SQL AST và kết quả thực thi.
+5. Guardrail — read-only SQL, giới hạn dòng, timeout và error code.
+
+Benchmark không dùng dữ liệu production và không query Target DB thật. Query execution trong evaluation chạy trên SQLite fixture cô lập; các lời gọi LLM phải dùng mock/cache hoặc provider được cấu hình rõ ràng.
+
+Tài liệu liên quan:
+
+- [AI Studio Manual Test Cases](../docs/AI_STUDIO_TEST_CASES.md) — kiểm thử trực tiếp trên giao diện.
+- [Project README](../README.md) — cài đặt, Docker và quick start.
+- Kết quả từng run nằm trong `eval/runs/`; không commit API key, `.env`, SQL dump chứa dữ liệu thật hoặc report có PII.
+
+Quy ước đọc kết quả: dùng `report.md` để review, `report.json` cho máy đọc và `report.csv` cho tổng hợp; luôn ghi lại commit/config/dataset version khi so sánh hai run.
+
 ## Yêu cầu trước
 
 - Chạy từ **thư mục gốc repo**, dùng venv của project.
