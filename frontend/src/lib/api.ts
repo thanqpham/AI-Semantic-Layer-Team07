@@ -794,6 +794,7 @@ export async function sendChatOrchestratorApi(
   sessionId?: string | null,
   clientMessageId?: string,
   clarificationSelection?: ChatClarificationSelection | null,
+  reuseMetricId?: number | null,
 ): Promise<ChatOrchestratorResponse> {
   return chatRequest<ChatOrchestratorResponse>(`${API_BASE}/api/v1/semantic/${dbId}/chat`, {
     method: 'POST',
@@ -802,6 +803,7 @@ export async function sendChatOrchestratorApi(
       session_id: sessionId || null,
       client_message_id: clientMessageId,
       clarification_selection: clarificationSelection || null,
+      ...(reuseMetricId != null ? { reuse_metric_id: reuseMetricId } : {}),
     }),
   });
 }

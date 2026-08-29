@@ -473,7 +473,7 @@ function MessageBubble({
                   onClick={() => onSelectClarification?.(message.id, opt.id, opt.label)}
                   className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/20 hover:border-primary/50 transition-all cursor-pointer shadow-2xs"
                 >
-                  <span>👉 {opt.label}</span>
+                  <span>{opt.label}</span>
                 </button>
               ))}
             </div>

@@ -139,7 +139,7 @@ export function AIStudioView({
     void listMetricRequestsApi(String(semanticDbId)).then(setMetricRequests).catch(() => setMetricRequests([]));
   }, [canGenerateMetrics, semanticDbId, refreshKey]);
 
-  const send = async (prompt: string, _targetTables: string[]) => {
+  const send = async (prompt: string, _targetTables: string[], reuseMetricId?: number) => {
     const clientMessageId = crypto.randomUUID();
     const requestSessionId = activeSessionId;
 
@@ -155,12 +155,16 @@ export function AIStudioView({
     }
     setLoading(true);
     try {
-      const response = await sendChatOrchestratorApi(
-        String(semanticDbId),
-        prompt,
-        requestSessionId,
-        clientMessageId,
-      );
+      const response = reuseMetricId
+        ? await sendChatOrchestratorApi(
+            String(semanticDbId),
+            prompt,
+            requestSessionId,
+            clientMessageId,
+            null,
+            reuseMetricId,
+          )
+        : await sendChatOrchestratorApi(String(semanticDbId), prompt, requestSessionId, clientMessageId);
       if (requestSessionId && activeSessionId !== requestSessionId) return;
       if (response.session_id) {
         setActiveSessionId?.(response.session_id);
@@ -310,24 +314,21 @@ export function AIStudioView({
     const targetMetricName = notice?.existing_metric_name || '';
     const isApproved = notice?.existing_metric_status === 'approved' || !notice?.existing_metric_status;
 
-    updateMessage(messageId, (message) => {
-      if (!message.duplicates?.[index]) return message;
-      const duplicates = message.duplicates.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, resolved: true } : item,
-      );
-      return { ...message, duplicates };
-    });
-
     if (targetMetricName) {
-      if (isApproved) {
-        setTimeout(() => {
-          void send(`Cho tôi xem kết quả chỉ số "${targetMetricName}"`, []);
-        }, 150);
-      } else {
+      if (!isApproved || !notice?.existing_metric_id) {
         onNotify?.(
           `Chỉ số "${targetMetricName}" đang ở trạng thái chờ duyệt. Vui lòng phê duyệt trong Catalog trước khi truy vấn.`,
         );
+        return;
       }
+      updateMessage(messageId, (message) => {
+        if (!message.duplicates?.[index]) return message;
+        const duplicates = message.duplicates.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, resolved: true } : item,
+        );
+        return { ...message, duplicates };
+      });
+      void send(`Tính kết quả từ chỉ số "${targetMetricName}"`, [], notice.existing_metric_id);
     }
   };
 

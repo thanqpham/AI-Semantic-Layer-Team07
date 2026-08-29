@@ -130,10 +130,10 @@ describe('AIStudioView', () => {
     fireEvent.click(screen.getByRole('button', { name: /Send message/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/👉 Theo khách hàng/i)).toBeInTheDocument();
+      expect(screen.getByText(/Theo khách hàng/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText(/👉 Theo khách hàng/i));
+    fireEvent.click(screen.getByRole('button', { name: 'Theo khách hàng' }));
 
     await waitFor(() => {
       expect(api.sendChatOrchestratorApi).toHaveBeenCalledWith(
@@ -145,6 +145,80 @@ describe('AIStudioView', () => {
       );
       expect(screen.getByText('Alpha')).toBeInTheDocument();
       expect(screen.getByText('1,000,000')).toBeInTheDocument();
+    });
+  });
+
+  it('calculates an existing duplicate metric with its stable metric id', async () => {
+    vi.mocked(api.sendChatOrchestratorApi)
+      .mockResolvedValueOnce({
+        intent: 'metric_query',
+        chat_response: 'Metric này đã tồn tại.',
+        duplicates: [
+          {
+            existing_metric_id: 7,
+            existing_metric_name: 'AOV',
+            existing_metric_status: 'approved',
+            user_message: 'Metric AOV đã tồn tại trong hệ thống.',
+            similarity_reason: 'Trùng công thức.',
+            existing_definition: {
+              metric: {
+                name: 'AOV',
+                formula: { function: 'AVG', expression: 'order_total' },
+                base_entity: 'orders',
+                filters: [],
+                status: 'approved',
+                excluded_notes: '',
+              },
+            },
+            existing_yaml: 'metric:\n  name: AOV',
+          },
+        ],
+        session_id: 'sess-1',
+        user_message_id: 'u-1',
+        assistant_message_id: 'a-1',
+      })
+      .mockResolvedValueOnce({
+        intent: 'semantic_query',
+        chat_response: 'Kết quả AOV',
+        semantic_query_result: {
+          spec: { metric_ids: [7], dimensions: [], filters: [], limit: 100 },
+          columns: ['aov'],
+          rows: [[250000]],
+          row_count: 1,
+          explanation: 'Kết quả từ metric AOV',
+        },
+        session_id: 'sess-1',
+        user_message_id: 'u-2',
+        assistant_message_id: 'a-2',
+      });
+
+    render(
+      <AIStudioView
+        layer={mockLayer}
+        theme="light"
+        mode="data_assistant"
+        onMetricsChanged={vi.fn()}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Hỏi về schema/i);
+    fireEvent.change(textarea, { target: { value: 'AOV' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send message/i }));
+
+    await waitFor(() => expect(screen.getByText('Metric AOV đã tồn tại trong hệ thống.')).toBeInTheDocument());
+    expect(screen.getByText('Metric có sẵn (YAML)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Tính kết quả từ chỉ số này/i }));
+
+    await waitFor(() => {
+      expect(api.sendChatOrchestratorApi).toHaveBeenLastCalledWith(
+        '101',
+        'Tính kết quả từ chỉ số "AOV"',
+        null,
+        expect.any(String),
+        null,
+        7,
+      );
+      expect(screen.getByText('250,000')).toBeInTheDocument();
     });
   });
 });

@@ -106,6 +106,27 @@ def chat_mocks():
 
 
 @pytest.mark.asyncio
+async def test_reuse_metric_id_executes_existing_metric_without_llm(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    chat_mocks: SimpleNamespace,
+) -> None:
+    """The calculate action must execute the selected approved metric deterministically."""
+    response = await client.post(
+        "/api/v1/semantic/101/chat",
+        json={"message": 'Tính kết quả từ chỉ số "revenue"', "reuse_metric_id": 1},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["intent"] == "semantic_query"
+    assert body["semantic_query_result"]["rows"] == [[101, 1500000], [102, 2300000]]
+    chat_mocks.mock_exec.assert_awaited_once()
+    assert chat_mocks.mock_exec.call_args.args[3].metric_ids == [1]
+
+
+@pytest.mark.asyncio
 @patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
 @patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_resolved_nl_query_for_data_lead_includes_sql(

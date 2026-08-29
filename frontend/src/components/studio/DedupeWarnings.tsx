@@ -61,7 +61,7 @@ export function ConflictWarningStrip({ conflict, onRename, onUseExisting }: Conf
           onClick={onUseExisting}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-amber-500/40 bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs transition-all hover:bg-accent"
         >
-          📊 Tính kết quả từ chỉ số này
+          Tính kết quả từ chỉ số này
         </button>
       </div>
     </div>
@@ -85,7 +85,7 @@ interface DuplicateNoticeCardProps {
 }
 
 export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: DuplicateNoticeCardProps) {
-  const [showExisting, setShowExisting] = useState(false);
+  const [showExisting, setShowExisting] = useState(true);
 
   if (notice.resolved) {
     return (
@@ -96,9 +96,6 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
           <div className="space-y-1">
             <p className="font-medium leading-relaxed">
               Đang tính toán kết quả từ chỉ số &quot;{notice.existing_metric_name}&quot;...
-            </p>
-            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-              🎯 Kết quả truy vấn đã được tải bên dưới!
             </p>
           </div>
         </div>
@@ -144,7 +141,7 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
           onClick={() => onUseExisting?.()}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary shadow-xs transition-all hover:bg-primary hover:text-primary-foreground"
         >
-          📊 Tính kết quả từ chỉ số này
+          Tính kết quả từ chỉ số này
         </button>
       </div>
     </div>
@@ -175,7 +172,7 @@ interface ExistingMetricPreviewProps {
 }
 
 function ExistingMetricPreview({ definition, yaml, status }: ExistingMetricPreviewProps) {
-  const [showYaml, setShowYaml] = useState(false);
+  const [showYaml, setShowYaml] = useState(true);
   const metric = definition.metric;
   return (
     <div className="mt-2.5 ml-6 space-y-2.5 rounded-lg border border-border bg-background p-3">

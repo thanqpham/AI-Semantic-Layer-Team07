@@ -946,6 +946,11 @@ class ChatRequest(BaseModel):
     session_id: str | None = Field(default=None, min_length=36, max_length=36)
     client_message_id: str | None = Field(default=None, min_length=1, max_length=100)
     clarification_selection: ChatClarificationSelection | None = None
+    reuse_metric_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Approved metric ID to calculate directly from an existing duplicate notice",
+    )
 
 
 class ChatMessageResponse(BaseModel):

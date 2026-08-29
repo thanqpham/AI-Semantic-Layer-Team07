@@ -1861,6 +1861,10 @@ async def chat_orchestrator(
         replay = await _replay_chat_response(db, session, current_user.id, body.client_message_id, can_generate_metrics)
         if replay is not None:
             return replay
+        if body.reuse_metric_id is not None:
+            return await _reuse_existing_metric(
+                db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id
+            )
         if body.clarification_selection:
             return await _handle_clarification_selection(
                 db,
@@ -1877,6 +1881,79 @@ async def chat_orchestrator(
         )
     except ChatAuthorizationError as exc:
         raise HTTPException(status_code=404, detail="Chat session or database not found") from exc
+
+
+async def _reuse_existing_metric(
+    db: AsyncSession,
+    session: ChatSessionModel,
+    current_user: UserModel,
+    numeric_db_id: int,
+    body: ChatRequest,
+    can_generate_metrics: bool,
+    org_id: int | None,
+) -> ChatResponse:
+    """Calculate one approved existing metric without another LLM classification pass."""
+    catalog = await build_parser_catalog(db, numeric_db_id)
+    metric_ids = {item["id"] for item in catalog.get("metrics", [])}
+    if body.reuse_metric_id not in metric_ids:
+        raise HTTPException(status_code=400, detail="Metric không tồn tại hoặc chưa được phê duyệt")
+    _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+    spec = SemanticQuerySpec(metric_ids=[body.reuse_metric_id], dimensions=[], filters=[], limit=100)
+    try:
+        result = await execute_natural_language_query(db, numeric_db_id, live_db, spec, catalog)
+    except SemanticCompileError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+    return await _save_reused_metric_response(
+        db, session, current_user, body, result, can_generate_metrics
+    )
+
+
+async def _save_reused_metric_response(
+    db: AsyncSession,
+    session: ChatSessionModel,
+    current_user: UserModel,
+    body: ChatRequest,
+    result: ChatSemanticQueryResult,
+    can_generate_metrics: bool,
+) -> ChatResponse:
+    """Persist and format the deterministic result for a reused metric."""
+    user_message = await save_chat_message(
+        db, session.id, "user", body.message, client_message_id=body.client_message_id
+    )
+    assistant = await save_chat_message(
+        db,
+        session.id,
+        "assistant",
+        result.explanation,
+        intent="semantic_query",
+        metadata_json=_assistant_metadata(semantic_query_result=result.model_dump(mode="json")),
+        client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
+    )
+    refreshed = await get_chat_session_with_messages(db, session.id, current_user.id)
+    return _format_reused_metric_response(
+        session, user_message, assistant, refreshed, result, can_generate_metrics
+    )
+
+
+def _format_reused_metric_response(
+    session: ChatSessionModel,
+    user_message: ChatMessageModel,
+    assistant: ChatMessageModel,
+    refreshed: ChatSessionModel,
+    result: ChatSemanticQueryResult,
+    can_generate_metrics: bool,
+) -> ChatResponse:
+    """Format the persisted reused-metric result with role-aware SQL visibility."""
+    display_result = result if can_generate_metrics else result.model_copy(update={"sql": None})
+    return ChatResponse(
+        intent="semantic_query",
+        chat_response=result.explanation,
+        semantic_query_result=display_result,
+        session_id=session.id,
+        user_message_id=user_message.id,
+        assistant_message_id=assistant.id,
+        session=_session_summary(refreshed),
+    )
 
 
 async def _handle_clarification_selection(
