@@ -148,6 +148,78 @@ describe('AIStudioView', () => {
     });
   });
 
+  it('renders generated suggestions after metric clarification selection', async () => {
+    vi.mocked(api.sendChatOrchestratorApi)
+      .mockResolvedValueOnce({
+        intent: 'semantic_query',
+        chat_response: 'Chưa có metric phù hợp',
+        clarification: {
+          prompt: 'Bạn có muốn tạo metric không?',
+          options: [
+            {
+              id: 'create_metric',
+              label: 'Tạo Business Metric',
+              spec: null,
+              action: 'create_metric',
+            },
+          ],
+        },
+        session_id: 'sess-1',
+        user_message_id: 'u-1',
+        assistant_message_id: 'a-1',
+      })
+      .mockResolvedValueOnce({
+        intent: 'metric_query',
+        chat_response: null,
+        suggestions: [
+          {
+            definition: {
+              schema_version: 2,
+              metric: {
+                name: 'Doanh thu theo chi nhánh',
+                formula: { function: 'SUM', expression: 'total_amount' },
+                base_entity: 'orders',
+                filters: [],
+                status: 'unverified',
+                confidence: 'medium',
+                excluded_notes: '',
+              },
+            },
+            yaml_preview: 'metric: doanh thu theo chi nhánh',
+          },
+        ],
+        suggestion_action: 'submit_metric_request',
+        duplicates: [],
+        session_id: 'sess-1',
+        user_message_id: 'u-2',
+        assistant_message_id: 'a-2',
+      });
+
+    render(
+      <AIStudioView
+        layer={mockLayer}
+        theme="light"
+        mode="data_assistant"
+        onMetricsChanged={vi.fn()}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText(/Hỏi về schema/i);
+    fireEvent.change(textarea, { target: { value: 'Doanh thu theo chi nhánh' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send message/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Tạo Business Metric' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo Business Metric' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Doanh thu theo chi nhánh' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Gửi Data Lead xem xét' })).toBeInTheDocument();
+    });
+  });
+
   it('calculates an existing duplicate metric with its stable metric id', async () => {
     vi.mocked(api.sendChatOrchestratorApi)
       .mockResolvedValueOnce({

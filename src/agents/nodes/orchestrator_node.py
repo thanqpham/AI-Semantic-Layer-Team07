@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import unicodedata
 from typing import Any
 
 from src.agents.state import AgentState
@@ -45,6 +46,7 @@ Câu hỏi trước đây:
 Latest request: {user_message}"""
 
 _INTENTS = {"chitchat", "semantic_query", "data_question", "metric_query", "out_of_scope"}
+_METRIC_ACTION_MARKERS = ("gui data lead de xuat chi so", "tao business metric", "tao metric")
 
 
 @trace_node("orchestrator")
@@ -65,6 +67,8 @@ async def orchestrator_node(state: AgentState) -> dict[str, Any]:
     user_message = state.get("user_message", "").strip()
     if not user_message:
         return {"intent": "chitchat", "chat_response": "Bạn chưa nhập câu hỏi. Tôi có thể giúp gì?"}
+    if _is_metric_action_message(user_message):
+        return {"intent": "metric_query"}
     try:
         response = await get_llm().ainvoke(_classification_prompt(state, user_message))
         raw = (response.content if hasattr(response, "content") else str(response)).strip().lower()
@@ -102,6 +106,14 @@ def _parse_intent(raw: str) -> str:
     if "chitchat" in cleaned:
         return "chitchat"
     return "data_question"
+
+
+def _is_metric_action_message(message: str) -> bool:
+    """Recognize metric action labels before an LLM can misclassify them."""
+    normalized = "".join(
+        char for char in unicodedata.normalize("NFKD", message.casefold()) if not unicodedata.combining(char)
+    ).replace("đ", "d")
+    return any(marker in normalized for marker in _METRIC_ACTION_MARKERS)
 
 
 def _format_history(history: list[dict[str, str]]) -> str:

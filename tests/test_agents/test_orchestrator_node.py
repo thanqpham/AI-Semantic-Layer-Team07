@@ -30,6 +30,22 @@ async def test_classifies_metric_request_for_direct_generation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_metric_action_label_cannot_be_classified_as_out_of_scope() -> None:
+    """A clarification action label remains a metric request if selection metadata is lost."""
+    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+        llm = AsyncMock()
+        llm.ainvoke.return_value = _response("out_of_scope")
+        mock_get_llm.return_value = llm
+
+        result = await orchestrator_node(
+            {"user_message": "Gửi Data Lead đề xuất chỉ số 'Tổng doanh thu theo khách hàng năm 2024'"}
+        )
+
+    assert result["intent"] == "metric_query"
+    llm.ainvoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_classifies_metric_calculation_prompt() -> None:
     """Computing or defining a metric KPI formula routes to metric_query."""
     with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:

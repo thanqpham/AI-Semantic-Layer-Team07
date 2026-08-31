@@ -2022,8 +2022,20 @@ async def _handle_clarification_selection(
                 session=_session_summary(refreshed),
             )
 
-    # When the option is to create/suggest a metric or is otherwise not a valid semantic
-    # execution spec, delegate to the standard chat flow.
+    if matched_option.get("action") == "create_metric" or matched_option.get("id") == "create_metric":
+        body_copy = body.model_copy(update={"clarification_selection": None})
+        return await _process_standard_chat(
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body_copy,
+            can_generate_metrics,
+            org_id,
+            intent_override="metric_query",
+        )
+
+    # Other non-query options delegate to the standard chat flow.
     body_copy = body.model_copy(update={"clarification_selection": None})
     return await _process_standard_chat(
         db, session, current_user, numeric_db_id, body_copy, can_generate_metrics, org_id
@@ -2074,6 +2086,7 @@ async def _process_standard_chat(
     body: ChatRequest,
     can_generate_metrics: bool,
     org_id: int | None = None,
+    intent_override: str | None = None,
 ) -> ChatResponse:
     """Process a standard chat query through the graph and execution layer."""
     from src.agents.chat_graph import chat_agent
@@ -2086,7 +2099,11 @@ async def _process_standard_chat(
     if session.title == "Cuộc trò chuyện mới":
         await update_chat_session_title(db, session.id, current_user.id, auto_generate_session_title(body.message))
     approved_metrics = await _load_approved_metric_context(db, numeric_db_id)
-    classification = await orchestrator_node({"user_message": body.message, "chat_history": history})
+    classification = (
+        {"intent": intent_override}
+        if intent_override
+        else await orchestrator_node({"user_message": body.message, "chat_history": history})
+    )
     preclassified_intent = classification.get("intent", "data_question")
     preclassified_chat_response = classification.get("chat_response")
 
@@ -2234,9 +2251,7 @@ async def _build_and_save_chat_response(
     )
     return ChatResponse(
         intent=intent,
-        chat_response=response_text
-        if intent in {"chitchat", "data_question", "out_of_scope", "semantic_query"}
-        else None,
+        chat_response=response_text or None,
         suggestions=raw_metrics if intent == "metric_query" else None,
         duplicates=notices if intent == "metric_query" else [],
         dedupe_performed=performed,

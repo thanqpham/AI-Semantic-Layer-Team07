@@ -362,7 +362,11 @@ async def test_clarification_selection_for_create_metric_delegates_to_standard_c
         },
     )
     mock_get_msg.return_value = prev_msg
-    mock_orch.return_value = {"intent": "metric_query"}
+    chat_mocks.mock_can.return_value = False  # Member role
+    mock_orch.return_value = {
+        "intent": "out_of_scope",
+        "chat_response": "Tôi chỉ hỗ trợ Semantic Layer và phân tích dữ liệu doanh nghiệp.",
+    }
     mock_agent.ainvoke.return_value = {
         "intent": "metric_query",
         "chat_response": "Tôi đề xuất tạo metric Tỷ lệ giữ chân khách hàng.",
@@ -383,6 +387,9 @@ async def test_clarification_selection_for_create_metric_delegates_to_standard_c
     assert res.status_code == 200
     body = res.json()
     assert body["intent"] == "metric_query"
+    assert body["suggestions"] is not None
+    assert body["chat_response"]
+    mock_orch.assert_not_awaited()
 
 
 @pytest.mark.asyncio

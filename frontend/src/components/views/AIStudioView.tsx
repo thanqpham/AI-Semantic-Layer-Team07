@@ -5,6 +5,7 @@ import { MessageSquare, Plus } from 'lucide-react';
 
 import {
   ChatMessageItem,
+  ChatOrchestratorResponse,
   ChatSessionItem,
   createMetricApi,
   getChatSessionDetailApi,
@@ -271,7 +272,11 @@ export function AIStudioView({
         {
           id: response.assistant_message_id || crypto.randomUUID(),
           sender: 'assistant',
-          text: response.chat_response || '',
+          text: response.chat_response || metricResponseFallback(response),
+          suggestions: response.suggestions || undefined,
+          duplicates: response.duplicates,
+          dedupeSkipped: response.dedupe_performed === false,
+          suggestionAction: response.suggestion_action,
           queryResult: response.semantic_query_result,
           clarification: response.clarification,
           timestamp: now(),
@@ -492,4 +497,16 @@ function appendError(
 
 function now(): string {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function metricResponseFallback(
+  response: Pick<ChatOrchestratorResponse, 'chat_response' | 'suggestions' | 'duplicates'>,
+): string {
+  if (response.suggestions?.length) {
+    return `Dựa trên schema của bạn, tôi đề xuất ${response.suggestions.length} Metric Definition dưới đây.`;
+  }
+  if (response.duplicates?.length) {
+    return 'Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer.';
+  }
+  return 'Tôi chưa tìm thấy cấu trúc dữ liệu phù hợp trong hệ thống để tự động đề xuất chỉ số này.';
 }
