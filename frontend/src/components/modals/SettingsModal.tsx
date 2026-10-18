@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { History, Key, Moon, RefreshCw, ShieldCheck, Sparkles, Sun, Zap } from 'lucide-react';
+import { History, Moon, ShieldCheck, Sun, Zap } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -16,7 +16,6 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { cn } from '@/lib/utils';
 import { LanguageSwitch } from '@/components/ui/language-switch';
 import { useLanguage } from '@/context/LanguageContext';
 import { Translated } from '@/components/ui/translated';
@@ -60,7 +59,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-background sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-1 overflow-y-auto bg-background sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl"><Translated text={"Settings"} /></DialogTitle>
           <DialogDescription>
@@ -68,7 +67,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2 text-xs">
+        <div className="min-w-0 space-y-4 py-2 text-xs">
           {/* Account Card */}
           <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 shadow-2xs">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary font-mono text-sm font-bold text-primary-foreground">
@@ -81,7 +80,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <p className="truncate font-mono text-[11px] text-muted-foreground">
                 {user?.email || 'guest@optimus.io'} <Translated text={"· Workspace member"} /></p>
             </div>
-            <span className="rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
+            <span className="shrink-0 rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
               {role ? workspaceRoleLabels[role] : 'Chưa có vai trò'}
             </span>
           </div>
@@ -118,9 +117,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Auto-Sync & Self-Healing Card */}
           <div className="rounded-lg border border-border bg-card p-3 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-amber-500" />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <Zap className="h-4 w-4 shrink-0 text-amber-500" />
                 <Label className="text-sm font-medium"><Translated text={"Tự động đồng bộ & Tự vá schema"} /></Label>
               </div>
               <span className="flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
@@ -140,7 +139,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClose();
                     onOpenSyncLogs();
                   }}
-                  className="h-7 gap-1.5 font-mono text-[11px]"
+                  className="h-auto min-h-7 max-w-full whitespace-normal gap-1.5 font-mono text-[11px]"
                 >
                   <History className="h-3.5 w-3.5" />
                   <Translated text={"Xem lịch sử đồng bộ (Audit Logs)"} />
@@ -192,9 +191,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* API Info */}
           <div className="rounded-lg border border-border bg-secondary/20 p-2.5 font-mono text-[10px] text-muted-foreground space-y-1">
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-3">
               <span><Translated text={"Engine:"} /></span>
-              <span className="text-foreground font-semibold"><Translated text={"LangGraph + SemanticQueryCompiler"} /></span>
+              <span className="min-w-0 break-words text-right text-foreground font-semibold"><Translated text={"LangGraph + SemanticQueryCompiler"} /></span>
             </div>
             {token && (
               <div className="flex justify-between truncate">
