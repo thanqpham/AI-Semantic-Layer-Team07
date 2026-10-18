@@ -378,3 +378,11 @@ async def test_delete_live_target_db_cascades_all_related_models(async_session: 
     assert await async_session.get(SemanticDatabaseModel, sem_db_id) is None
     assert await async_session.get(SemanticTableModel, table_id) is None
     assert await async_session.get(SemanticMetricModel, metric_id) is None
+
+
+def test_plain_postgresql_url_uses_installed_sync_driver():
+    """Plain PostgreSQL URLs must use psycopg2 and preserve connection options."""
+    from src.services.live_db_service import _sync_introspection_url
+
+    url = "postgresql://user:p%40ss@localhost:5432/example?sslmode=require"
+    assert _sync_introspection_url(url) == url.replace("postgresql://", "postgresql+psycopg2://", 1)

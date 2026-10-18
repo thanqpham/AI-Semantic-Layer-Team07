@@ -72,3 +72,11 @@ def test_fast_introspect_schema_fingerprint(tmp_path):
     fp = fast_introspect_schema_fingerprint(conn_url, "sqlite")
     assert isinstance(fp, str)
     assert len(fp) == 32
+
+
+def test_plain_postgresql_url_uses_installed_sync_driver():
+    """Plain PostgreSQL URLs must use psycopg2 and preserve connection options."""
+    from src.services.schema_fingerprint import _sync_url
+
+    url = "postgresql://user:p%40ss@localhost:5432/example?sslmode=require"
+    assert _sync_url(url) == url.replace("postgresql://", "postgresql+psycopg2://", 1)
