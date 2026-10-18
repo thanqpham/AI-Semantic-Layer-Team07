@@ -2,6 +2,7 @@
 
 import { ArrowUpRight } from "lucide-react";
 import { AnimatedWave } from "./animated-wave";
+import { Translated } from '@/components/ui/translated';
 
 const footerLinks = {
   "Sản phẩm": [
@@ -39,8 +40,7 @@ export function FooterSection() {
               </a>
 
               <p className="text-muted-foreground leading-relaxed mb-8 max-w-xs">
-                Nền tảng quản trị semantic layer với AI Agent. Tự động
-                introspect, đề xuất và biên dịch metrics cho data team.
+                <Translated text={"Nền tảng quản trị semantic layer với AI Agent. Tự động introspect, đề xuất và biên dịch metrics cho data team."} />
               </p>
 
               {/* Social Links */}
@@ -51,7 +51,7 @@ export function FooterSection() {
                     href={link.href}
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 group"
                   >
-                    {link.name}
+                    <Translated text={link.name} />
                     <ArrowUpRight className="w-3 h-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                   </a>
                 ))}
@@ -61,7 +61,7 @@ export function FooterSection() {
             {/* Link Columns */}
             {Object.entries(footerLinks).map(([title, links]) => (
               <div key={title}>
-                <h3 className="text-sm font-medium mb-6">{title}</h3>
+                <h3 className="text-sm font-medium mb-6"><Translated text={title} /></h3>
                 <ul className="space-y-4">
                   {links.map((link) => (
                     <li key={link.name}>
@@ -69,7 +69,7 @@ export function FooterSection() {
                         href={link.href}
                         className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-2"
                       >
-                        {link.name}
+                        <Translated text={link.name} />
                       </a>
                     </li>
                   ))}
@@ -82,7 +82,7 @@ export function FooterSection() {
         {/* Bottom Bar */}
         <div className="py-8 border-t border-foreground/10 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            2026 AI Semantic Layer Agent. All rights reserved.
+            <Translated text={"2026 AI Semantic Layer Agent. All rights reserved."} />
           </p>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground">

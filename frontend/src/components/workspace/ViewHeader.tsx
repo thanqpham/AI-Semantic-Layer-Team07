@@ -1,9 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { Bell, History, ShieldCheck, Sparkles } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EngineIcon, engineLabels, type WorkspaceDatabase } from './shared';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface ViewHeaderProps {
   eyebrow?: string;
@@ -24,6 +26,7 @@ export function ViewHeader({
   onOpenSyncLogs,
   hasHealedLogs,
 }: ViewHeaderProps) {
+  const { translate } = useLanguage();
   return (
     <header className="view-header-container relative overflow-hidden border-b border-border px-4 py-5 sm:px-6">
       {/* Editorial grid backdrop */}
@@ -34,12 +37,12 @@ export function ViewHeader({
           {eyebrow && (
             <span className="ws-reveal mb-2 inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
               <span className="h-px w-7 bg-foreground/30" />
-              {eyebrow}
+              {translate(eyebrow)}
             </span>
           )}
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="ws-reveal font-display text-3xl leading-none tracking-tight text-foreground [animation-delay:60ms]">
-              {title}
+              {translate(title)}
             </h1>
             {database && (
               <span className="ws-reveal inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-1 font-mono text-[11px] text-secondary-foreground [animation-delay:120ms]">
@@ -60,7 +63,7 @@ export function ViewHeader({
                 variant="outline"
                 size="sm"
                 onClick={onOpenSyncLogs}
-                title="Lịch sử đồng bộ & tự phục hồi schema"
+                title={translate("Lịch sử đồng bộ & tự phục hồi schema")}
                 className="ws-reveal h-7 gap-1.5 rounded-full border-border/80 px-2.5 font-mono text-[11px] text-muted-foreground hover:text-foreground [animation-delay:140ms]"
               >
                 <div className="relative flex items-center justify-center">
@@ -69,12 +72,12 @@ export function ViewHeader({
                     <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-background" />
                   )}
                 </div>
-                <span className="hidden sm:inline">Auto-Sync</span>
+                <span className="hidden sm:inline"><Translated text={"Auto-Sync"} /></span>
               </Button>
             )}
           </div>
           <p className="ws-reveal mt-1.5 max-w-2xl text-pretty text-sm text-muted-foreground [animation-delay:160ms]">
-            {description}
+            {translate(description)}
           </p>
         </div>
         {actions && (

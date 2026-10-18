@@ -115,11 +115,11 @@ describe('AuthForm', () => {
       const passwordInput = screen.getByPlaceholderText('Nhập mật khẩu');
       expect(passwordInput.getAttribute('type')).toBe('password');
 
-      const toggleButton = screen.getByLabelText('Show password');
+      const toggleButton = screen.getByLabelText('Hiện mật khẩu');
       fireEvent.click(toggleButton);
       expect(passwordInput.getAttribute('type')).toBe('text');
 
-      fireEvent.click(screen.getByLabelText('Hide password'));
+      fireEvent.click(screen.getByLabelText('Ẩn mật khẩu'));
       expect(passwordInput.getAttribute('type')).toBe('password');
     });
 

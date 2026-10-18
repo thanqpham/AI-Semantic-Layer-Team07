@@ -443,7 +443,7 @@ describe('MetricsDashboardView — edit, add, delete', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa' }));
     fireEvent.click(screen.getByRole('button', { name: 'Thêm widget' }));
 
-    const metricSelect = await screen.findByLabelText('Metric');
+    const metricSelect = await screen.findByLabelText('Chỉ số');
     fireEvent.change(metricSelect, { target: { value: '5' } });
     const dateSelect = await screen.findByLabelText('Cột lọc ngày');
     fireEvent.change(dateSelect, { target: { value: '15' } });

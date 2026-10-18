@@ -4,6 +4,7 @@ import type { AppNotification, ChatSessionItem } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { ViewId, WorkspaceDatabase } from '@/components/workspace/shared';
 import { WorkspaceSidebar } from '@/components/workspace/WorkspaceSidebar';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface WorkspaceAppProps {
   databases: WorkspaceDatabase[];
@@ -80,10 +81,11 @@ export function WorkspaceApp({
   onRenameChatSession,
   children,
 }: WorkspaceAppProps) {
+  const { translate } = useLanguage();
   return (
     <div
       role="region"
-      aria-label="Workspace"
+      aria-label={translate("Workspace")}
       className={cn(
         theme === 'dark' ? 'dark' : '',
         'flex h-screen w-full overflow-hidden bg-background text-foreground',

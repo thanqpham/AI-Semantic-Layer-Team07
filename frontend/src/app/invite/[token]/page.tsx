@@ -7,10 +7,13 @@ import { ArrowRight, CheckCircle2, Clock3, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { acceptWorkspaceInviteApi, previewWorkspaceInviteApi, WorkspaceInvitePreview } from '@/lib/api';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 const roleLabels = { admin: 'Admin', member: 'Member', data_lead: 'Data Lead' } as const;
 
 export default function InvitePage() {
+  const { locale, t } = useLanguage();
   const params = useParams<{ token: string }>();
   const router = useRouter();
   const { token: authToken } = useAuth();
@@ -23,7 +26,7 @@ export default function InvitePage() {
     if (!params.token) return;
     void previewWorkspaceInviteApi(params.token)
       .then(setInvite)
-      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Invitation không hợp lệ'))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'invalid_invitation'))
       .finally(() => setLoading(false));
   }, [params.token]);
 
@@ -52,45 +55,45 @@ export default function InvitePage() {
       <section className="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl sm:p-8">
         <div className="mb-8 flex items-center justify-between">
           <span className="font-display text-xl tracking-tight">AI Semantic Layer</span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Invitation</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground"><Translated text={"Invitation"} /></span>
         </div>
 
-        {loading && <p className="text-sm text-muted-foreground">Đang kiểm tra link mời...</p>}
+        {loading && <p className="text-sm text-muted-foreground"><Translated text={"Đang kiểm tra link mời..."} /></p>}
         {error && (
           <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-            {error}
+            {error === 'invalid_invitation' ? t('Invalid invitation', 'Lời mời không hợp lệ') : error}
           </div>
         )}
 
         {invite && (
           <div className="space-y-6">
             <div>
-              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Workspace access</p>
-              <h1 className="font-display text-4xl leading-none tracking-tight">Tham gia Workspace.</h1>
+              <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground"><Translated text={"Workspace access"} /></p>
+              <h1 className="font-display text-4xl leading-none tracking-tight"><Translated text={"Tham gia Workspace."} /></h1>
               <p className="mt-3 text-sm text-muted-foreground">
-                Bạn được mời vào Workspace <strong className="text-foreground">{invite.organization_name}</strong>.
+                <Translated text={"Bạn được mời vào Workspace"} after /><strong className="text-foreground">{invite.organization_name}</strong>.
               </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-border bg-secondary/30 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="h-4 w-4" /> Vai trò</div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="h-4 w-4" /> <Translated text={"Vai trò"} /></div>
                 <p className="mt-2 text-sm font-semibold">{roleLabels[invite.role]}</p>
               </div>
               <div className="rounded-xl border border-border bg-secondary/30 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-4 w-4" /> Có hiệu lực đến</div>
-                <p className="mt-2 text-sm font-semibold">{new Date(invite.expires_at).toLocaleDateString('vi-VN')}</p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-4 w-4" /> <Translated text={"Có hiệu lực đến"} /></div>
+                <p className="mt-2 text-sm font-semibold">{new Date(invite.expires_at).toLocaleDateString(locale)}</p>
               </div>
             </div>
 
             <Button type="button" onClick={() => void accept()} disabled={accepting} className="h-11 w-full rounded-full">
-              {accepting ? 'Đang tham gia...' : authToken ? 'Tham gia ngay' : 'Đăng nhập để tham gia'}
+              <Translated text={accepting ? 'Đang tham gia...' : authToken ? 'Tham gia ngay' : 'Đăng nhập để tham gia'} />
               {!accepting && <ArrowRight className="h-4 w-4" />}
             </Button>
 
             <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              Invitation chỉ có thể được sử dụng một lần.
+              <Translated text={"Invitation chỉ có thể được sử dụng một lần."} />
             </p>
           </div>
         )}

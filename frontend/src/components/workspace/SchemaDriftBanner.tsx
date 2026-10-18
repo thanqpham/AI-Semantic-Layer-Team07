@@ -17,6 +17,8 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { triggerSyncApi, type SchemaSyncStatus } from '@/lib/api';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface SchemaDriftBannerProps {
   databaseId: string | number;
@@ -33,6 +35,7 @@ export const SchemaDriftBanner: React.FC<SchemaDriftBannerProps> = ({
   onOpenSyncModal,
   onSyncComplete,
 }) => {
+  const { translate } = useLanguage();
   const [dismissed, setDismissed] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState<number>(0);
@@ -86,7 +89,7 @@ export const SchemaDriftBanner: React.FC<SchemaDriftBannerProps> = ({
 
   return (
     <aside
-      aria-label="Cảnh báo thay đổi cấu trúc bảng"
+      aria-label={translate("Cảnh báo thay đổi cấu trúc bảng")}
       className="relative mb-4 overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-zinc-950/60 p-4 shadow-lg backdrop-blur-md transition-all duration-300"
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -97,16 +100,16 @@ export const SchemaDriftBanner: React.FC<SchemaDriftBannerProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold text-amber-200">
-                Phát hiện thay đổi cấu trúc Database ({databaseName})
+                <Translated text={"Phát hiện thay đổi cấu trúc Database ("} />{databaseName})
               </h2>
               <span className="rounded-full border border-amber-500/40 bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
-                Thay đổi cấu trúc
+                <Translated text={"Thay đổi cấu trúc"} />
               </span>
             </div>
             <p className="mt-0.5 text-xs text-zinc-300">
               {preview?.renamed_columns && preview.renamed_columns.length > 0 ? (
                 <>
-                  Phát hiện đổi tên cột tại bảng{' '}
+                  <Translated text={"Phát hiện đổi tên cột tại bảng"} />{' '}
                   <strong className="text-amber-300 font-mono">
                     {preview.renamed_columns[0].table_name}
                   </strong>
@@ -123,8 +126,7 @@ export const SchemaDriftBanner: React.FC<SchemaDriftBannerProps> = ({
                 </>
               ) : addedTableCount > 0 || droppedTableCount > 0 ? (
                 <>
-                  Có thay đổi về bảng ({addedTableCount} bảng mới, {droppedTableCount} bảng đã xóa). Bạn có muốn đồng bộ ngay?
-                </>
+                  <Translated text={"Có thay đổi về bảng ("} />{addedTableCount} <Translated text={"bảng mới,"} after />{droppedTableCount} <Translated text={"bảng đã xóa). Bạn có muốn đồng bộ ngay?"} /></>
               ) : (
                 'Cấu trúc bảng trong Database vừa có sự thay đổi. Bạn có muốn áp dụng Tự Phục Hồi để cập nhật lại chỉ số không?'
               )}
@@ -141,7 +143,7 @@ export const SchemaDriftBanner: React.FC<SchemaDriftBannerProps> = ({
             className="h-8 border-zinc-700/80 bg-zinc-900/60 text-xs text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white"
           >
             <History className="mr-1.5 h-3.5 w-3.5 text-zinc-400" />
-            Chi tiết
+            <Translated text={"Chi tiết"} />
           </Button>
 
           <Button
@@ -153,20 +155,20 @@ export const SchemaDriftBanner: React.FC<SchemaDriftBannerProps> = ({
             {isSyncing ? (
               <>
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                Đang tự vá...
+                <Translated text={"Đang tự vá..."} />
               </>
             ) : (
               <>
                 <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-200" />
-                Cập nhật ngay
+                <Translated text={"Cập nhật ngay"} />
               </>
             )}
           </Button>
 
           <button
             onClick={() => setDismissed(true)}
-            aria-label="Để sau"
-            title="Để sau"
+            aria-label={translate("Để sau")}
+            title={translate("Để sau")}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
           >
             <X className="h-4 w-4" />
@@ -180,9 +182,9 @@ export const SchemaDriftBanner: React.FC<SchemaDriftBannerProps> = ({
           <div className="mb-2 flex items-center justify-between text-[11px] font-medium text-amber-300">
             <span className="flex items-center gap-1.5">
               <RefreshCw className="h-3 w-3 animate-spin text-amber-400" />
-              Tiến trình đồng bộ & tự vá:
+              <Translated text={"Tiến trình đồng bộ & tự vá:"} />
             </span>
-            <span>Bước {Math.min(syncStep, 4)} / 4</span>
+            <span><Translated text={"Bước"} after />{Math.min(syncStep, 4)} / 4</span>
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">

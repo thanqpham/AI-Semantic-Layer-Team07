@@ -183,7 +183,7 @@ function choose(label: string, value: string): void {
 }
 
 async function loadMetaForApprovedMetric(): Promise<void> {
-  choose('Metric', '5');
+  choose('Chỉ số', '5');
   const dateSelect = await screen.findByLabelText('Cột lọc ngày');
   await waitFor(() =>
     expect(within(dateSelect).getByRole('option', { name: 'Ngày tạo đơn' })).toBeInTheDocument(),
@@ -210,7 +210,7 @@ describe('WidgetConfigModal', () => {
   it('lists only approved canonical-v2 metrics and searches them by name', async () => {
     renderModal();
 
-    const metricSelect = selectByLabel('Metric');
+    const metricSelect = selectByLabel('Chỉ số');
     const optionNames = within(metricSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
@@ -219,11 +219,11 @@ describe('WidgetConfigModal', () => {
     expect(screen.queryByText('Metric legacy')).not.toBeInTheDocument();
     expect(screen.queryByText('Metric lỗi grain')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Tìm metric'), { target: { value: 'zzz-không-có' } });
+    fireEvent.change(screen.getByLabelText('Tìm chỉ số'), { target: { value: 'zzz-không-có' } });
     expect(within(metricSelect).queryAllByRole('option')).toHaveLength(0);
     expect(screen.getByText('Không có metric đã duyệt nào.')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Tìm metric'), { target: { value: 'doanh' } });
+    fireEvent.change(screen.getByLabelText('Tìm chỉ số'), { target: { value: 'doanh' } });
     expect(within(metricSelect).getByRole('option', { name: 'Doanh thu thuần' })).toBeInTheDocument();
   });
 
@@ -423,7 +423,7 @@ describe('WidgetConfigModal', () => {
     };
     const first = renderModal({ editingWidget });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).toBeEnabled());
-    expect(selectByLabel('Metric').value).toBe('5');
+    expect(selectByLabel('Chỉ số').value).toBe('5');
     expect(selectByLabel('Chiều dữ liệu').value).toBe('31');
     expect(selectByLabel('Cột lọc ngày').value).toBe('15');
 

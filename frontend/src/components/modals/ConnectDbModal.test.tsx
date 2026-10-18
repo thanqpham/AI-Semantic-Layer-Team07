@@ -25,7 +25,7 @@ describe('ConnectDbModal authentication', () => {
 
   it('uses a persisted access token while AuthContext is still hydrating', async () => {
     render(<ConnectDbModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
-    fireEvent.change(screen.getByPlaceholderText('e.g. E-Commerce Production DB'), { target: { value: 'Sales' } });
+    fireEvent.change(screen.getByPlaceholderText('Ví dụ: CSDL thương mại điện tử'), { target: { value: 'Sales' } });
     fireEvent.change(screen.getByPlaceholderText(/postgresql\+asyncpg/), { target: { value: 'postgresql+asyncpg://user:pass@localhost/sales' } });
     fireEvent.click(screen.getByText('Bắt Đầu Kết Nối & Introspect'));
     await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Sales', 'auto', 'postgresql+asyncpg://user:pass@localhost/sales', 'stored-access-token'));

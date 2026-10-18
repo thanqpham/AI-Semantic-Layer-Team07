@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { Translated } from '@/components/ui/translated';
 
 const integrations = [
   { name: "PostgreSQL", category: "Live DB" },
@@ -42,17 +43,14 @@ export function IntegrationsSection() {
         >
           <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
             <span className="w-8 h-px bg-foreground/30" />
-            Tích hợp
-            <span className="w-8 h-px bg-foreground/30" />
+            <Translated text={"Tích hợp"} after /><span className="w-8 h-px bg-foreground/30" />
           </span>
           <h2 className="text-4xl lg:text-6xl font-display tracking-tight mb-6">
-            Hỗ trợ các nguồn dữ liệu
-            <br />
-            bạn đang sử dụng.
+            <Translated text={"Hỗ trợ các nguồn dữ liệu"} after /><br />
+            <Translated text={"bạn đang sử dụng."} />
           </h2>
           <p className="text-xl text-muted-foreground">
-            Kết nối Live DB (PostgreSQL, MySQL, SQLite) hoặc ingest SQL Dump.
-            Xuất semantic layer sang JSON hoặc YAML.
+            <Translated text={"Kết nối Live DB (PostgreSQL, MySQL, SQLite) hoặc ingest SQL Dump. Xuất semantic layer sang JSON hoặc YAML."} />
           </p>
         </div>
       </div>

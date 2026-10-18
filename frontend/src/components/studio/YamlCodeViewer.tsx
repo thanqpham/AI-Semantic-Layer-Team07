@@ -2,6 +2,7 @@
 
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
+import { Translated } from '@/components/ui/translated';
 
 interface YamlCodeViewerProps {
   yaml: string;
@@ -23,7 +24,7 @@ export function YamlCodeViewer({ yaml, title = 'Metric definition (YAML)' }: Yam
         <span className='text-[11px] font-semibold text-slate-300'>{title}</span>
         <button type='button' onClick={copy} className='flex items-center gap-1 text-[11px] text-slate-400 hover:text-white'>
           {copied ? <Check className='h-3.5 w-3.5 text-emerald-400' /> : <Copy className='h-3.5 w-3.5' />}
-          {copied ? 'Đã sao chép' : 'Sao chép'}
+          <Translated text={copied ? 'Đã sao chép' : 'Sao chép'} />
         </button>
       </div>
       <pre className='max-h-80 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-5 text-emerald-300'>{yaml}</pre>

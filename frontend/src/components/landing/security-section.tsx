@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { Shield, Lock, Eye, FileCheck } from "lucide-react";
+import { Translated } from '@/components/ui/translated';
 
 const securityFeatures = [
   {
@@ -64,16 +65,14 @@ export function SecuritySection() {
           >
             <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
               <span className="w-8 h-px bg-foreground/30" />
-              Bảo mật
+              <Translated text={"Bảo mật"} />
             </span>
             <h2 className="text-4xl lg:text-6xl font-display tracking-tight mb-8">
-              An toàn là
-              <br />
-              ưu tiên tuyệt đối.
+              <Translated text={"An toàn là"} after /><br />
+              <Translated text={"ưu tiên tuyệt đối."} />
             </h2>
             <p className="text-xl text-muted-foreground leading-relaxed mb-12">
-              Guardrails đa lớp đảm bảo dữ liệu khách hàng luôn được bảo vệ.
-              Không có ngoại lệ, không có lỗ hổng.
+              <Translated text={"Guardrails đa lớp đảm bảo dữ liệu khách hàng luôn được bảo vệ. Không có ngoại lệ, không có lỗ hổng."} />
             </p>
 
             {/* Certifications */}
@@ -114,9 +113,9 @@ export function SecuritySection() {
                   </div>
                   <div>
                     <h3 className="text-lg font-medium mb-1 group-hover:translate-x-1 transition-transform duration-300">
-                      {feature.title}
+                      <Translated text={feature.title} />
                     </h3>
-                    <p className="text-muted-foreground">{feature.description}</p>
+                    <p className="text-muted-foreground"><Translated text={feature.description} /></p>
                   </div>
                 </div>
               </div>

@@ -5,6 +5,8 @@ import { MetricRecord } from '@/lib/api';
 import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
 import { StatusPill } from '@/components/workspace/shared';
 import { metricName, renderMetricYaml } from '@/lib/metrics';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface MetricCardProps {
   metric: MetricRecord;
@@ -29,6 +31,7 @@ export function MetricCard({
   onApprove,
   onRestore,
 }: MetricCardProps) {
+  const { translate } = useLanguage();
   const definition = metric.definition;
   const isDeleted = Boolean(metric.is_deleted);
   const isPending = metric.status !== 'approved';
@@ -66,17 +69,17 @@ export function MetricCard({
                       ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                       : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
                   }`}
-                  title={metric.source === 'manual' ? 'Tạo thủ công' : 'AI đề xuất'}
+                  title={translate(metric.source === 'manual' ? 'Tạo thủ công' : 'AI đề xuất')}
                 >
                   {metric.source === 'manual' ? (
                     <>
                       <User className="h-2.5 w-2.5" />
-                      Thủ công
+                      <Translated text={"Thủ công"} />
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-2.5 w-2.5" />
-                      AI
+                      <Translated text={"AI"} />
                     </>
                   )}
                 </span>
@@ -89,14 +92,13 @@ export function MetricCard({
           <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
             {isDeleted ? (
               <span className="inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive border border-destructive/30">
-                Đã xóa
+                <Translated text={"Đã xóa"} />
               </span>
             ) : (
               <>
                 {metric.has_pending_version && (
                   <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-500 border border-amber-500/30">
-                    ⚡ v{metric.pending_version_number || (metric.version || 1) + 1} chờ duyệt
-                  </span>
+                    ⚡ v{metric.pending_version_number || (metric.version || 1) + 1} <Translated text={"chờ duyệt"} /></span>
                 )}
                 <StatusPill status={metric.status} />
               </>
@@ -119,7 +121,7 @@ export function MetricCard({
             )}
             <details className="text-xs pt-1">
               <summary className="cursor-pointer font-mono text-[11px] text-muted-foreground hover:text-foreground">
-                Xem YAML definition
+                <Translated text={"Xem YAML definition"} />
               </summary>
               <div className="mt-2 overflow-hidden rounded-md border border-border">
                 <YamlCodeViewer yaml={renderMetricYaml(definition)} />
@@ -129,7 +131,7 @@ export function MetricCard({
         ) : (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-600 dark:text-amber-400">
             <ShieldAlert className="mr-1 inline h-3.5 w-3.5" />
-            Metric legacy chưa có canonical definition.
+            <Translated text={"Metric legacy chưa có canonical definition."} />
           </div>
         )}
       </div>
@@ -144,7 +146,7 @@ export function MetricCard({
               e.stopPropagation();
               void onHistory(metric.metric_id);
             }}
-            title="Xem lịch sử phiên bản"
+            title={translate("Xem lịch sử phiên bản")}
           >
             <History className="h-3.5 w-3.5" />
           </Button>
@@ -160,7 +162,7 @@ export function MetricCard({
               }}
             >
               <Edit2 className="h-3 w-3" />
-              {definition ? 'Chỉnh sửa' : 'Chuẩn hóa'}
+              <Translated text={definition ? 'Chỉnh sửa' : 'Chuẩn hóa'} />
             </Button>
           )}
 
@@ -175,7 +177,7 @@ export function MetricCard({
                   void onDelete(metric.metric_id);
                 }
               }}
-              title="Chuyển vào Thùng rác"
+              title={translate("Chuyển vào Thùng rác")}
               aria-label={`Delete ${metricName(metric)}`}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -196,10 +198,10 @@ export function MetricCard({
                     void onPermanentDelete(metric.metric_id);
                   }
                 }}
-                title="Xóa vĩnh viễn khỏi hệ thống"
+                title={translate("Xóa vĩnh viễn khỏi hệ thống")}
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Xóa vĩnh viễn
+                <Translated text={"Xóa vĩnh viễn"} />
               </Button>
             )}
             {onRestore && (
@@ -211,10 +213,10 @@ export function MetricCard({
                   e.stopPropagation();
                   void onRestore(metric.metric_id);
                 }}
-                title="Khôi phục metric"
+                title={translate("Khôi phục metric")}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Khôi phục
+                <Translated text={"Khôi phục"} />
               </Button>
             )}
           </div>
@@ -228,10 +230,10 @@ export function MetricCard({
               e.stopPropagation();
               void onApprove(metric.metric_id);
             }}
-            title="Phê duyệt chỉ số này"
+            title={translate("Phê duyệt chỉ số này")}
           >
             <Check className="h-3.5 w-3.5" />
-            Duyệt chỉ số này
+            <Translated text={"Duyệt chỉ số này"} />
           </Button>
         )}
       </div>

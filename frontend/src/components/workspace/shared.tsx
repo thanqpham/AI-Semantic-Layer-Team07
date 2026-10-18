@@ -1,6 +1,7 @@
 import type { MetricStatus } from '@/lib/api';
 import { Database, HardDrive, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Translated } from '@/components/ui/translated';
 
 export type ViewId = 'ai-studio' | 'schema' | 'catalog' | 'explorer' | 'dashboard' | 'export';
 
@@ -43,7 +44,7 @@ export function StatusPill({ status }: { status: MetricStatus | string }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[11px] text-secondary-foreground">
       <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', meta.dot)} />
-      {meta.label}
+      <Translated text={meta.label} />
     </span>
   );
 }

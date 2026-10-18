@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { Copy, Check, Code2 } from 'lucide-react';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface SqlCodeViewerProps {
   sql: string;
@@ -31,6 +33,7 @@ export const SqlCodeViewer: React.FC<SqlCodeViewerProps> = ({
   title = 'SQL Template (Read-only)',
   theme = 'light',
 }) => {
+  const { translate } = useLanguage();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -138,17 +141,17 @@ export const SqlCodeViewer: React.FC<SqlCodeViewerProps> = ({
         <button
           onClick={handleCopy}
           className="inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-2 py-1 transition-all cursor-pointer border border-border bg-card hover:bg-accent text-foreground shadow-2xs"
-          title="Sao chép câu lệnh SQL"
+          title={translate("Sao chép câu lệnh SQL")}
         >
           {copied ? (
             <>
               <Check className="w-3 h-3 text-emerald-500" />
-              <span className="text-emerald-500 font-semibold">Đã chép</span>
+              <span className="text-emerald-500 font-semibold"><Translated text={"Đã chép"} /></span>
             </>
           ) : (
             <>
               <Copy className="w-3 h-3 text-muted-foreground" />
-              <span>Copy SQL</span>
+              <span><Translated text={"Copy SQL"} /></span>
             </>
           )}
         </button>

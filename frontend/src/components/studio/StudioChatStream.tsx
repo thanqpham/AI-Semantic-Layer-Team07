@@ -29,6 +29,8 @@ import {
 } from '@/components/studio/DedupeWarnings';
 import { ChatSemanticQueryResult, ChatClarificationPayload } from '@/lib/api';
 import { ChatQueryResultCard } from '@/components/studio/ChatQueryResultCard';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface ChatMessage {
   id: string;
@@ -123,6 +125,7 @@ const DATA_ASSISTANT_SUGGESTIONS: PromptSuggestionItem[] = [
 ];
 
 export function StudioChatStream(props: StudioChatStreamProps) {
+  const { translate } = useLanguage();
   const mode = props.mode || 'metric_studio';
   const canGenerateMetrics = mode === 'metric_studio';
   const [input, setInput] = useState(props.activePromptText || '');
@@ -245,7 +248,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
         <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
           {!canGenerateMetrics && (
             <div role="status" className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
-              Bạn không có quyền tạo, sửa hoặc lưu metric trực tiếp. Bạn có thể tra cứu dữ liệu qua các metric đã duyệt (chỉ áp dụng cho kết nối Live DB) hoặc yêu cầu AI tạo Business Metric mới. Metric sau khi tạo sẽ được lưu vào Semantic Layer ở trạng thái chờ Data Lead phê duyệt.
+              <Translated text={"Bạn không có quyền tạo, sửa hoặc lưu metric trực tiếp. Bạn có thể tra cứu dữ liệu qua các metric đã duyệt (chỉ áp dụng cho kết nối Live DB) hoặc yêu cầu AI tạo Business Metric mới. Metric sau khi tạo sẽ được lưu vào Semantic Layer ở trạng thái chờ Data Lead phê duyệt."} />
             </div>
           )}
           {props.messages.map((message) => (
@@ -278,9 +281,9 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                 <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                   <Sparkles className="h-3.5 w-3.5 animate-spin text-primary" />
                   <span>
-                    {canGenerateMetrics
+                    <Translated text={canGenerateMetrics
                       ? 'AI đang phân tích cấu trúc Schema & quan hệ...'
-                      : 'AI đang đọc semantic layer và metric đã phê duyệt...'}
+                      : 'AI đang đọc semantic layer và metric đã phê duyệt...'} />
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 pt-1">
@@ -304,12 +307,11 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               <div className="flex items-center gap-2">
                 <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
                 <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {canGenerateMetrics ? 'GỢI Ý CÂU HỎI TẠO METRIC' : 'GỢI Ý CÂU HỎI VỀ DỮ LIỆU'}
+                  <Translated text={canGenerateMetrics ? 'GỢI Ý CÂU HỎI TẠO METRIC' : 'GỢI Ý CÂU HỎI VỀ DỮ LIỆU'} />
                 </span>
                 {showSuggestions && (
                   <span className="font-mono text-[10px] text-muted-foreground/70">
-                    ({contextualSuggestions.length} mẫu)
-                  </span>
+                    ({contextualSuggestions.length} <Translated text={"mẫu)"} /></span>
                 )}
               </div>
 
@@ -320,7 +322,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                   onChange={toggleShowSuggestions}
                   className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
                 />
-                <span>{showSuggestions ? 'Hiển thị gợi ý' : 'Đã ẩn (Tick để hiện)'}</span>
+                <span><Translated text={showSuggestions ? 'Hiển thị gợi ý' : 'Đã ẩn (Tick để hiện)'} /></span>
               </label>
             </div>
 
@@ -337,11 +339,11 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => handleSelectSuggestion(item.prompt)}
+                    onClick={() => handleSelectSuggestion(translate(item.prompt))}
                     className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-secondary hover:text-foreground cursor-pointer shrink-0"
                   >
                     <span>{item.icon}</span>
-                    <span>{item.title}</span>
+                    <span><Translated text={item.title} /></span>
                   </button>
                 ))}
               </div>
@@ -355,11 +357,11 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={2}
-              placeholder={
+              placeholder={translate(
                 canGenerateMetrics
                   ? 'Mô tả chỉ số bạn muốn tạo hoặc đặt câu hỏi về schema...'
                   : 'Hỏi về schema, metric đã duyệt hoặc cách chọn dữ liệu...'
-              }
+              )}
               className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <Button
@@ -367,15 +369,15 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               className="h-9 w-9 shrink-0 rounded-lg cursor-pointer"
               onClick={() => void send()}
               disabled={!input.trim() || props.isLoading}
-              aria-label="Send message"
+              aria-label={translate("Send message")}
             >
               <ArrowUp className="h-4 w-4" />
             </Button>
           </div>
           <p className="text-center font-mono text-[10px] text-muted-foreground">
-            {canGenerateMetrics
+            <Translated text={canGenerateMetrics
               ? 'AI can make mistakes. Every generated metric requires human approval before use.'
-              : 'AI chỉ trả lời dựa trên semantic layer và metric đã được cấp quyền.'}
+              : 'AI chỉ trả lời dựa trên semantic layer và metric đã được cấp quyền.'} />
           </p>
         </div>
       </div>
@@ -434,7 +436,7 @@ function MessageBubble({
       <div className={cn('min-w-0 flex-1 space-y-3', isUser && 'flex flex-col items-end')}>
         <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
           <span className="font-semibold text-foreground">
-            {isUser ? 'Bạn' : 'AI Semantic Agent'}
+            <Translated text={isUser ? 'Bạn' : 'AI Semantic Agent'} />
           </span>
           <span>·</span>
           <span>{message.timestamp}</span>
@@ -485,7 +487,7 @@ function MessageBubble({
             role="status"
             className="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 font-mono text-[11px] text-amber-700 dark:text-amber-300"
           >
-            ⚠️ Không kiểm tra được trùng lặp (dedupe unavailable) — danh sách chưa so với metric đã lưu.
+            <Translated text={"⚠️ Không kiểm tra được trùng lặp (dedupe unavailable) — danh sách chưa so với metric đã lưu."} />
           </div>
         )}
 
@@ -695,15 +697,15 @@ function SuggestionCard({
             <h3 className="font-semibold text-foreground text-sm">{def.name}</h3>
             <StatusPill status={def.status || 'pending_approval'} />
             <span className="font-mono text-[10px] text-muted-foreground">
-              Chờ phê duyệt
+              <Translated text={"Chờ phê duyệt"} />
             </span>
             <span className="rounded bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-              Độ tin cậy: {def.confidence === 'high' ? 'Cao' : def.confidence === 'medium' ? 'Trung bình' : 'Thấp'}
+              <Translated text={"Độ tin cậy:"} after /><Translated text={def.confidence === 'high' ? 'Cao' : def.confidence === 'medium' ? 'Trung bình' : 'Thấp'} />
             </span>
           </div>
           <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-            Bảng: <span className="text-foreground">{def.base_entity}</span>
-            <span className="ml-2 opacity-60">YAML preview sẵn sàng</span>
+            <Translated text={"Bảng:"} after /><span className="text-foreground">{def.base_entity}</span>
+            <span className="ml-2 opacity-60"><Translated text={"YAML preview sẵn sàng"} /></span>
           </p>
         </div>
 
@@ -715,7 +717,7 @@ function SuggestionCard({
             onClick={() => setShowYaml(!showYaml)}
           >
             <Code2 className="h-3.5 w-3.5" />
-            {showYaml ? 'Ẩn mã YAML' : 'Hiển thị mã YAML'}
+            <Translated text={showYaml ? 'Ẩn mã YAML' : 'Hiển thị mã YAML'} />
           </Button>
           {onRefine && (
             <Button
@@ -725,7 +727,7 @@ function SuggestionCard({
               onClick={onRefine}
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Nhờ AI tinh chỉnh
+              <Translated text={"Nhờ AI tinh chỉnh"} />
             </Button>
           )}
           {onEdit && (
@@ -736,7 +738,7 @@ function SuggestionCard({
               onClick={onEdit}
             >
               <Edit3 className="h-3.5 w-3.5" />
-              Chỉnh sửa thủ công
+              <Translated text={"Chỉnh sửa thủ công"} />
             </Button>
           )}
         </div>
@@ -747,7 +749,7 @@ function SuggestionCard({
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Công thức tính
+              <Translated text={"Công thức tính"} />
             </span>
             <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
               <span className="text-primary font-bold">{def.formula.function}</span>(
@@ -756,7 +758,7 @@ function SuggestionCard({
           </div>
           <div className="rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Dựa vào bảng gốc
+              <Translated text={"Dựa vào bảng gốc"} />
             </span>
             <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
               {def.base_entity}
@@ -767,7 +769,7 @@ function SuggestionCard({
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Cột dữ liệu sử dụng
+              <Translated text={"Cột dữ liệu sử dụng"} />
             </span>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
               {def.formula.expression}
@@ -775,7 +777,7 @@ function SuggestionCard({
           </div>
           <div className="rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Bộ lọc điều kiện
+              <Translated text={"Bộ lọc điều kiện"} />
             </span>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
               {def.filters && def.filters.length > 0
@@ -788,7 +790,7 @@ function SuggestionCard({
         {def.excluded_notes && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5">
             <span className="font-mono text-[10px] uppercase text-amber-700 dark:text-amber-300 font-semibold">
-              Giả định cần xác nhận
+              <Translated text={"Giả định cần xác nhận"} />
             </span>
             <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
               {def.excluded_notes}
@@ -800,7 +802,7 @@ function SuggestionCard({
         {showYaml && (
           <div className="mt-3 overflow-hidden rounded-md border border-border bg-secondary/20">
             <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-              <span className="font-mono text-[11px] text-muted-foreground">YAML preview</span>
+              <span className="font-mono text-[11px] text-muted-foreground"><Translated text={"YAML preview"} /></span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -808,7 +810,7 @@ function SuggestionCard({
                 onClick={copyYaml}
               >
                 {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                {copied ? 'Đã copy' : 'Copy YAML'}
+                <Translated text={copied ? 'Đã copy' : 'Copy YAML'} />
               </Button>
             </div>
             <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed text-foreground">
@@ -821,9 +823,9 @@ function SuggestionCard({
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 border-t border-border bg-secondary/20 px-4 py-2.5">
         <span className="font-mono text-[11px] text-muted-foreground">
-          {suggestion.conflict
+          <Translated text={suggestion.conflict
             ? 'Xử lý cảnh báo trùng tên trước khi lưu'
-            : 'Pending status · Phê duyệt trong catalog trước khi truy vấn'}
+            : 'Pending status · Phê duyệt trong catalog trước khi truy vấn'} />
         </span>
 
         {/* ⛔ No Save/Submit while the conflict strip is unresolved — user must clarify first */}
@@ -837,7 +839,7 @@ function SuggestionCard({
                 disabled
               >
                 <Check className="h-3.5 w-3.5" />
-                Đã được Data Lead duyệt
+                <Translated text={"Đã được Data Lead duyệt"} />
               </Button>
             ) : isSubmitted ? (
               <Button
@@ -847,7 +849,7 @@ function SuggestionCard({
                 disabled
               >
                 <Check className="h-3.5 w-3.5" />
-                Đã gửi cho Data Lead
+                <Translated text={"Đã gửi cho Data Lead"} />
               </Button>
             ) : (
               <Button
@@ -857,7 +859,7 @@ function SuggestionCard({
                 disabled={saving}
               >
                 <Save className="h-3.5 w-3.5" />
-                {saving ? 'Đang gửi...' : 'Gửi Data Lead xem xét'}
+                <Translated text={saving ? 'Đang gửi...' : 'Gửi Data Lead xem xét'} />
               </Button>
             )
           ) : isSaved ? (
@@ -868,7 +870,7 @@ function SuggestionCard({
               onClick={onOpenCatalog}
             >
               <Check className="h-3.5 w-3.5" />
-              Đã lưu — mở catalog
+              <Translated text={"Đã lưu — mở catalog"} />
             </Button>
           ) : (
             <Button
@@ -878,7 +880,7 @@ function SuggestionCard({
               disabled={saving}
             >
               <Save className="h-3.5 w-3.5" />
-              {saving ? 'Đang lưu...' : 'Lưu vào Semantic Layer'}
+              <Translated text={saving ? 'Đang lưu...' : 'Lưu vào Semantic Layer'} />
             </Button>
           ))}
       </div>

@@ -17,6 +17,9 @@ import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { cn } from '@/lib/utils';
+import { LanguageSwitch } from '@/components/ui/language-switch';
+import { useLanguage } from '@/context/LanguageContext';
+import { Translated } from '@/components/ui/translated';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -42,6 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const { user, token } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { role } = useWorkspace();
+  const { t } = useLanguage();
 
   if (!isOpen) return null;
 
@@ -58,9 +62,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="bg-background sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Settings</DialogTitle>
+          <DialogTitle className="font-display text-2xl"><Translated text={"Settings"} /></DialogTitle>
           <DialogDescription>
-            Manage your workspace, account, and appearance.
+            <Translated text={"Manage your workspace, account, and appearance."} />
           </DialogDescription>
         </DialogHeader>
 
@@ -75,8 +79,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {user?.name || 'Guest User'}
               </p>
               <p className="truncate font-mono text-[11px] text-muted-foreground">
-                {user?.email || 'guest@optimus.io'} · Workspace member
-              </p>
+                {user?.email || 'guest@optimus.io'} <Translated text={"· Workspace member"} /></p>
             </div>
             <span className="rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
               {role ? workspaceRoleLabels[role] : 'Chưa có vai trò'}
@@ -92,17 +95,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Sun className="h-4 w-4 text-amber-500" />
               )}
               <div>
-                <Label className="text-sm font-medium">Appearance</Label>
+                <Label className="text-sm font-medium"><Translated text={"Appearance"} /></Label>
                 <p className="font-mono text-[11px] text-muted-foreground">
-                  {theme === 'dark' ? 'Dark mode' : 'Light mode'}
+                  {theme === 'dark' ? t('Dark mode', 'Chế độ tối') : t('Light mode', 'Chế độ sáng')}
                 </p>
               </div>
             </div>
             <Switch
               checked={theme === 'dark'}
               onCheckedChange={toggleTheme}
-              aria-label="Toggle dark mode"
+              aria-label={t('Toggle dark mode', 'Bật hoặc tắt chế độ tối')}
             />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border border-border bg-card p-3 shadow-2xs">
+            <div>
+              <Label className="text-sm font-medium">{t('Language', 'Ngôn ngữ')}</Label>
+              <p className="font-mono text-[11px] text-muted-foreground">{t('Interface language', 'Ngôn ngữ giao diện')}</p>
+            </div>
+            <LanguageSwitch />
           </div>
 
           {/* Auto-Sync & Self-Healing Card */}
@@ -110,15 +121,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-amber-500" />
-                <Label className="text-sm font-medium">Tự động đồng bộ & Tự vá schema</Label>
+                <Label className="text-sm font-medium"><Translated text={"Tự động đồng bộ & Tự vá schema"} /></Label>
               </div>
               <span className="flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Daily 02:00 AM
+                <Translated text={"Daily 02:00 AM"} />
               </span>
             </div>
             <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-              Phát hiện thay đổi schema (đổi tên/thêm/xóa cột) & tự động viết lại AST metric formula.
+              <Translated text={"Phát hiện thay đổi schema (đổi tên/thêm/xóa cột) & tự động viết lại AST metric formula."} />
             </p>
             {onOpenSyncLogs && (
               <div className="mt-2.5 pt-2 border-t border-border/50 flex justify-end">
@@ -132,7 +143,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="h-7 gap-1.5 font-mono text-[11px]"
                 >
                   <History className="h-3.5 w-3.5" />
-                  Xem lịch sử đồng bộ (Audit Logs)
+                  <Translated text={"Xem lịch sử đồng bộ (Audit Logs)"} />
                 </Button>
               </div>
             )}
@@ -141,24 +152,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Guardrails Card */}
           <div className="rounded-lg border border-border bg-card p-3 shadow-2xs">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Query guardrails</Label>
+              <Label className="text-sm font-medium"><Translated text={"Query guardrails"} /></Label>
               <span className="flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Active
+                <Translated text={"Active"} />
               </span>
             </div>
             <div className="mt-2 space-y-1.5 font-mono text-[11px] text-muted-foreground">
               <div className="flex items-center justify-between">
-                <span>Read-only enforcement</span>
-                <span className="text-emerald-500 font-semibold">Enabled</span>
+                <span><Translated text={"Read-only enforcement"} /></span>
+                <span className="text-emerald-500 font-semibold"><Translated text={"Enabled"} /></span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Row limit (default / max)</span>
+                <span><Translated text={"Row limit (default / max)"} /></span>
                 <span className="text-foreground">100 / 1.000</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Statement timeout</span>
-                <span className="text-foreground">15s</span>
+                <span><Translated text={"Statement timeout"} /></span>
+                <span className="text-foreground"><Translated text={"15s"} /></span>
               </div>
             </div>
           </div>
@@ -168,13 +179,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="rounded-lg border border-border bg-card p-3 shadow-2xs">
               <p className="font-display text-2xl text-foreground tabular-nums">{databaseCount}</p>
               <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                Data sources
+                <Translated text={"Data sources"} />
               </p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 shadow-2xs">
               <p className="font-display text-2xl text-foreground tabular-nums">{metricCount}</p>
               <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                Metrics
+                <Translated text={"Metrics"} />
               </p>
             </div>
           </div>
@@ -182,12 +193,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* API Info */}
           <div className="rounded-lg border border-border bg-secondary/20 p-2.5 font-mono text-[10px] text-muted-foreground space-y-1">
             <div className="flex justify-between">
-              <span>Engine:</span>
-              <span className="text-foreground font-semibold">LangGraph + SemanticQueryCompiler</span>
+              <span><Translated text={"Engine:"} /></span>
+              <span className="text-foreground font-semibold"><Translated text={"LangGraph + SemanticQueryCompiler"} /></span>
             </div>
             {token && (
               <div className="flex justify-between truncate">
-                <span>Token:</span>
+                <span><Translated text={"Token:"} /></span>
                 <span className="text-foreground truncate max-w-[200px]">{token.slice(0, 16)}...</span>
               </div>
             )}

@@ -29,6 +29,8 @@ import { clearDashboardPayloadCache } from '@/components/dashboard/useDashboardW
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { WorkspaceDatabase } from '@/components/workspace/shared';
 import { Button } from '@/components/ui/button';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 const DATE_PRESET_LABELS: Record<DashboardDatePreset, string> = {
   last_7_days: '7 ngày qua',
@@ -50,6 +52,7 @@ export interface MetricsDashboardViewProps {
 }
 
 export function MetricsDashboardView(props: MetricsDashboardViewProps) {
+  const { translate } = useLanguage();
   const { dbId, metrics, catalog, database, canEdit = true, onOpenCatalog, onDrillDown } = props;
   const querySupported = catalog?.query_supported ?? false;
   const executable = useMemo(() => selectExecutableMetrics(metrics), [metrics]);
@@ -200,30 +203,30 @@ export function MetricsDashboardView(props: MetricsDashboardViewProps) {
     <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
       <ViewHeader
         eyebrow="Bảng điều khiển"
-        title="Bảng điều khiển chỉ số"
+        title={translate("Bảng điều khiển chỉ số")}
         description="Theo dõi các chỉ số đã duyệt qua các widget có thể sắp xếp."
         database={database}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={handleRefreshAll}>
               <RefreshCw className="h-4 w-4" />
-              Làm mới tất cả
+              <Translated text={"Làm mới tất cả"} />
             </Button>
             {canEdit && (
               <Button type="button" variant="outline" size="sm" onClick={() => setEditMode((v) => !v)}>
                 <Pencil className="h-4 w-4" />
-                {editMode ? 'Xong' : 'Chỉnh sửa'}
+                <Translated text={editMode ? 'Xong' : 'Chỉnh sửa'} />
               </Button>
             )}
             {canEdit && editMode && (
               <>
                 <Button type="button" size="sm" onClick={() => { setEditingWidget(null); setModalOpen(true); }}>
                   <Plus className="h-4 w-4" />
-                  Thêm widget
+                  <Translated text={"Thêm widget"} />
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={handleReset}>
                   <RotateCcw className="h-4 w-4" />
-                  Đặt lại
+                  <Translated text={"Đặt lại"} />
                 </Button>
               </>
             )}
@@ -295,17 +298,18 @@ function LoadingState() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-12 text-center text-muted-foreground">
       <span className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-primary" />
-      <p className="text-sm">Đang tải bảng điều khiển…</p>
+      <p className="text-sm"><Translated text={"Đang tải bảng điều khiển…"} /></p>
     </div>
   );
 }
 
 function SqlDumpState() {
+  const { translate } = useLanguage();
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
       <ViewHeader
         eyebrow="Bảng điều khiển"
-        title="Bảng điều khiển chỉ số"
+        title={translate("Bảng điều khiển chỉ số")}
         description="Theo dõi các chỉ số đã duyệt qua các widget có thể sắp xếp."
       />
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">
@@ -313,9 +317,9 @@ function SqlDumpState() {
           <AlertTriangle className="h-6 w-6" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Chế độ xem Technical Preview</h2>
+          <h2 className="text-sm font-semibold text-foreground"><Translated text={"Chế độ xem Technical Preview"} /></h2>
           <p className="mt-1 max-w-md text-xs text-muted-foreground">
-            SQL Dump chỉ chứa metadata DDL và không hỗ trợ query. Hãy chọn Live DB.
+            <Translated text={"SQL Dump chỉ chứa metadata DDL và không hỗ trợ query. Hãy chọn Live DB."} />
           </p>
         </div>
       </div>
@@ -329,13 +333,13 @@ function NoMetricsState({ onOpenCatalog }: { onOpenCatalog?: () => void }) {
       <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-secondary text-muted-foreground">
         <AlertTriangle className="h-6 w-6" />
       </div>
-      <h2 className="text-sm font-semibold text-foreground">Chưa có chỉ số đã duyệt</h2>
+      <h2 className="text-sm font-semibold text-foreground"><Translated text={"Chưa có chỉ số đã duyệt"} /></h2>
       <p className="max-w-md text-xs text-muted-foreground">
-        Bảng điều khiển cần ít nhất một chỉ số đã duyệt (canonical v2, không lỗi) để hiển thị dữ liệu.
+        <Translated text={"Bảng điều khiển cần ít nhất một chỉ số đã duyệt (canonical v2, không lỗi) để hiển thị dữ liệu."} />
       </p>
       {onOpenCatalog && (
         <Button type="button" variant="outline" size="sm" onClick={onOpenCatalog}>
-          Đi tới Catalog
+          <Translated text={"Đi tới Catalog"} />
         </Button>
       )}
     </div>
@@ -347,7 +351,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
     <div role="alert" className="flex flex-col items-center justify-center gap-3 p-12 text-center">
       <p className="text-sm text-destructive">{message}</p>
       <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-        Thử lại
+        <Translated text={"Thử lại"} />
       </Button>
     </div>
   );
@@ -364,11 +368,11 @@ function EmptyDashboardState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 p-12 text-center text-muted-foreground">
-      <p className="text-sm">Chưa có widget nào trên bảng điều khiển.</p>
+      <p className="text-sm"><Translated text={"Chưa có widget nào trên bảng điều khiển."} /></p>
       {canEdit && editMode && (
         <Button type="button" size="sm" onClick={onAdd}>
           <Plus className="h-4 w-4" />
-          Thêm widget đầu tiên
+          <Translated text={"Thêm widget đầu tiên"} />
         </Button>
       )}
     </div>
@@ -390,15 +394,13 @@ function ConflictBanner({
       className="mx-4 mt-3 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
     >
       <p className="text-amber-700 dark:text-amber-300">
-        Bảng điều khiển đã bị thay đổi bởi người khác
-        {conflictVersion !== null ? ` (phiên bản ${conflictVersion}).` : '.'} Thay đổi của bạn chưa được ghi.
-      </p>
+        <Translated text={"Bảng điều khiển đã bị thay đổi bởi người khác"} after />{conflictVersion !== null ? ` (phiên bản ${conflictVersion}).` : '.'} <Translated text={"Thay đổi của bạn chưa được ghi."} /></p>
       <div className="flex shrink-0 gap-2">
         <Button type="button" variant="outline" size="sm" onClick={onLoadNew}>
-          Tải phiên bản mới
+          <Translated text={"Tải phiên bản mới"} />
         </Button>
         <Button type="button" size="sm" onClick={onOverwrite}>
-          Thử ghi đè sau khi tải/áp dụng lại
+          <Translated text={"Thử ghi đè sau khi tải/áp dụng lại"} />
         </Button>
       </div>
     </div>
@@ -418,19 +420,20 @@ function GlobalControls({
   updatedAt: string | null;
   updatedBy: number | null;
 }) {
+  const { translate } = useLanguage();
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 text-sm">
       <label className="flex items-center gap-2">
-        <span className="text-muted-foreground">Khoảng thời gian</span>
+        <span className="text-muted-foreground"><Translated text={"Khoảng thời gian"} /></span>
         <select
-          aria-label="Khoảng thời gian"
+          aria-label={translate("Khoảng thời gian")}
           className="h-8 rounded-md border border-border bg-background px-2 text-sm"
           value={datePreset ?? ''}
           onChange={(e) => setDatePreset((e.target.value || null) as DashboardDatePreset | null)}
         >
-          <option value="">Không áp dụng</option>
+          <option value="">{translate('Không áp dụng')}</option>
           {(Object.keys(DATE_PRESET_LABELS) as DashboardDatePreset[]).map((preset) => (
-            <option key={preset} value={preset}>{DATE_PRESET_LABELS[preset]}</option>
+            <option key={preset} value={preset}>{translate(DATE_PRESET_LABELS[preset])}</option>
           ))}
         </select>
       </label>
@@ -448,16 +451,17 @@ function LayoutMetadata({
   updatedAt: string | null;
   updatedBy: number | null;
 }) {
+  const { locale, t } = useLanguage();
   return (
     <div className="ml-auto flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
       {lastDataRefresh && (
         <span data-testid="last-data-refresh">
-          Dữ liệu làm mới lúc {lastDataRefresh.toLocaleTimeString('vi-VN')}
+          <Translated text={"Dữ liệu làm mới lúc"} after />{lastDataRefresh.toLocaleTimeString(locale)}
         </span>
       )}
       <span data-testid="layout-metadata" data-updated-at={updatedAt ?? ''} data-updated-by={String(updatedBy ?? '')}>
-        {updatedAt ? `Cập nhật lần cuối: ${updatedAt}` : 'Chưa lưu'}
-        {updatedBy ? ` · bởi #${updatedBy}` : ''}
+        {updatedAt ? `${t('Last updated:', 'Cập nhật lần cuối:')} ${updatedAt}` : t('Not saved', 'Chưa lưu')}
+        {updatedBy ? ` · ${t('by', 'bởi')} #${updatedBy}` : ''}
       </span>
     </div>
   );

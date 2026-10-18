@@ -34,6 +34,8 @@ import {
 import { getStoredToken } from '@/lib/jwt';
 import { cn } from '@/lib/utils';
 import { DbEngine, EngineIcon, engineLabels } from '@/components/workspace/shared';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ConnectDbModalProps {
   isOpen: boolean;
@@ -48,6 +50,7 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { translate } = useLanguage();
   const { token } = useAuth();
   const [engine, setEngine] = useState<DbEngine>('postgresql');
   const [dbName, setDbName] = useState('');
@@ -153,9 +156,9 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="bg-background sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Connect a data source</DialogTitle>
+          <DialogTitle className="font-display text-2xl"><Translated text={"Connect a data source"} /></DialogTitle>
           <DialogDescription>
-            Point Optimus at a live database or upload a SQL dump. Credentials are read-only.
+            <Translated text={"Point Optimus at a live database or upload a SQL dump. Credentials are read-only."} />
           </DialogDescription>
         </DialogHeader>
 
@@ -163,7 +166,7 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           {/* Engine Selector */}
           <div>
             <Label className="mb-2 block font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-              Engine
+              <Translated text={"Engine"} />
             </Label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {engines.map((e) => (
@@ -188,13 +191,13 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           {/* Connection Name */}
           <div>
             <Label htmlFor="db-name" className="mb-1.5 block text-sm">
-              Connection name
+              <Translated text={"Connection name"} />
             </Label>
             <Input
               id="db-name"
               value={dbName}
               onChange={(e) => setDbName(e.target.value)}
-              placeholder="e.g. E-Commerce Production DB"
+              placeholder={translate("e.g. E-Commerce Production DB")}
               required
             />
           </div>
@@ -203,7 +206,7 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           {!isDump ? (
             <div>
               <Label htmlFor="db-host" className="mb-1.5 block text-sm">
-                Host / connection string
+                <Translated text={"Host / connection string"} />
               </Label>
               <Input
                 id="db-host"
@@ -216,7 +219,7 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           ) : (
             <div>
               <Label htmlFor="db-file" className="mb-1.5 block text-sm">
-                Tệp SQL Dump (.sql)
+                <Translated text={"Tệp SQL Dump (.sql)"} />
               </Label>
               <Input
                 id="db-file"
@@ -232,13 +235,13 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           {/* Description */}
           <div>
             <Label htmlFor="db-desc" className="mb-1.5 block text-sm">
-              Description
+              <Translated text={"Description"} />
             </Label>
             <Input
               id="db-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Mô tả mục đích hoặc nội dung của nguồn dữ liệu này"
+              placeholder={translate("Mô tả mục đích hoặc nội dung của nguồn dữ liệu này")}
             />
           </div>
 
@@ -246,13 +249,13 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs">
             <div className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
               <ShieldCheck className="h-4 w-4" />
-              <span>Bảo vệ an toàn dữ liệu:</span>
+              <span><Translated text={"Bảo vệ an toàn dữ liệu:"} /></span>
             </div>
             <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-muted-foreground">
-              <li>• Chỉ dành cho Live DB.</li>
-              <li>• Truy vấn SELECT-only, được biên dịch deterministic.</li>
-              <li>• Mặc định 100 dòng · Tối đa 1.000 dòng.</li>
-              <li>• Timeout 15 giây.</li>
+              <li><Translated text={"• Chỉ dành cho Live DB."} /></li>
+              <li><Translated text={"• Truy vấn SELECT-only, được biên dịch deterministic."} /></li>
+              <li><Translated text={"• Mặc định 100 dòng · Tối đa 1.000 dòng."} /></li>
+              <li><Translated text={"• Timeout 15 giây."} /></li>
             </ul>
           </div>
 
@@ -264,15 +267,15 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={handleClose}>
-              Hủy
+              <Translated text={"Hủy"} />
             </Button>
             <Button type="submit" disabled={!dbName.trim() || isProcessing} className="gap-1.5">
               {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isProcessing
+              <Translated text={isProcessing
                 ? 'Đang xử lý...'
                 : isDump
                   ? 'Tải lên & Khởi tạo Schema'
-                  : 'Bắt Đầu Kết Nối & Introspect'}
+                  : 'Bắt Đầu Kết Nối & Introspect'} />
             </Button>
           </DialogFooter>
         </form>

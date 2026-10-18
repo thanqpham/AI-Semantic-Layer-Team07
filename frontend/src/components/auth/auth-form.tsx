@@ -8,6 +8,9 @@ import { GoogleLogin } from '@react-oauth/google';
 import { ArrowRight, Eye, EyeOff, Lock, LockKeyhole, Mail, Sparkles, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedSphere } from '@/components/landing/animated-sphere';
+import { LanguageSwitch } from '@/components/ui/language-switch';
+import { useLanguage } from '@/context/LanguageContext';
+import { Translated } from '@/components/ui/translated';
 
 type AuthMode = 'login' | 'register';
 
@@ -18,6 +21,8 @@ function getPostAuthPath(): string {
 }
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
+  const { translate } = useLanguage();
+  const { t } = useLanguage();
   const router = useRouter();
   const { token, isLoading, login, register, loginWithGoogle } = useAuth();
   const isRegister = mode === 'register';
@@ -39,7 +44,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   if (isLoading || token) {
     return (
       <div className="h-screen flex items-center justify-center bg-background text-xs font-semibold text-muted-foreground">
-        Đang chuyển hướng đến workspace...
+        {t('Redirecting to workspace...', 'Đang chuyển hướng đến workspace...')}
       </div>
     );
   }
@@ -50,16 +55,16 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
     if (isRegister) {
       if (!name || !email || !password) {
-        setError('Vui lòng nhập đầy đủ thông tin');
+        setError(t('Please complete all fields', 'Vui lòng nhập đầy đủ thông tin'));
         return;
       }
       if (password !== confirmPassword) {
-        setError('Mật khẩu xác nhận không khớp');
+        setError(t('Passwords do not match', 'Mật khẩu xác nhận không khớp'));
         return;
       }
     } else {
       if (!email || !password) {
-        setError('Vui lòng nhập đầy đủ email và mật khẩu');
+        setError(t('Please enter your email and password', 'Vui lòng nhập đầy đủ email và mật khẩu'));
         return;
       }
     }
@@ -77,8 +82,8 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         err instanceof Error
           ? err.message
           : isRegister
-            ? 'Đăng ký thất bại. Vui lòng thử lại.'
-            : 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'
+            ? t('Registration failed. Please try again.', 'Đăng ký thất bại. Vui lòng thử lại.')
+            : t('Login failed. Please check your details.', 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.')
       );
     } finally {
       setLoading(false);
@@ -95,18 +100,17 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         </div>
         <div className="auth-reveal relative z-10 max-w-lg pb-4" style={{ animationDelay: '260ms' }}>
           <p className="mb-4 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.22em] text-background/50">
-            <Sparkles className="h-3.5 w-3.5" /> Nền tảng quản trị chỉ số
-          </p>
+            <Sparkles className="h-3.5 w-3.5" /> <Translated text={"Nền tảng quản trị chỉ số"} /></p>
           <h1 className="font-display text-5xl leading-[0.95] tracking-tight xl:text-6xl">
-            Xây dựng Semantic Layer <span className="text-background/45">cho doanh nghiệp.</span>
+            <Translated text={"Xây dựng Semantic Layer"} after /><span className="text-background/45"><Translated text={"cho doanh nghiệp."} /></span>
           </h1>
           <p className="mt-6 max-w-md text-sm leading-relaxed text-background/60">
-            Introspect schema, đề xuất tên nghiệp vụ và quản trị Business Metrics với HITL Workflow an toàn, chính xác.
+            <Translated text={"Introspect schema, đề xuất tên nghiệp vụ và quản trị Business Metrics với HITL Workflow an toàn, chính xác."} />
           </p>
         </div>
         <div className="relative z-10 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-background/40">
           <span>AI Semantic Layer / 2026</span>
-          <span>Define with intent</span>
+          <span><Translated text={"Define with intent"} /></span>
         </div>
         <div className="auth-sphere absolute -right-40 -top-16 w-[56rem] h-[56rem] lg:w-[64rem] lg:h-[64rem] xl:w-[70rem] xl:h-[70rem] opacity-80 pointer-events-none" aria-hidden="true">
           <AnimatedSphere color="255, 255, 255" />
@@ -118,15 +122,16 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       {/* Form Panel */}
       <section className="flex h-full max-h-screen flex-col justify-between overflow-y-auto px-6 py-5 sm:px-10 lg:px-16 xl:px-24">
         {/* Top Header */}
-        <div className="auth-reveal shrink-0 flex items-center justify-between lg:justify-end" style={{ animationDelay: '80ms' }}>
+        <div className="auth-reveal shrink-0 flex items-center justify-between gap-4 lg:justify-end" style={{ animationDelay: '80ms' }}>
           <Link href="/" className="font-display text-xl tracking-tight lg:hidden">AI Semantic Layer</Link>
+          <LanguageSwitch />
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'}{' '}
+            {isRegister ? t('Already have an account?', 'Đã có tài khoản?') : t('New here?', 'Chưa có tài khoản?')}{' '}
             <Link
               href={isRegister ? '/login' : '/register'}
               className="font-medium text-foreground underline underline-offset-4 hover:text-muted-foreground"
             >
-              {isRegister ? 'Đăng nhập' : 'Tạo tài khoản mới'}
+              {isRegister ? t('Log in', 'Đăng nhập') : t('Create an account', 'Tạo tài khoản mới')}
             </Link>
           </p>
         </div>
@@ -135,15 +140,15 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <div className="auth-form-content mx-auto my-auto flex w-full max-w-md flex-col justify-center py-2">
           <div className="mb-4 sm:mb-5">
             <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              {isRegister ? '01 / Tham gia nền tảng' : '01 / Chào mừng trở lại'}
+              {isRegister ? t('01 / Join the platform', '01 / Tham gia nền tảng') : t('01 / Welcome back', '01 / Chào mừng trở lại')}
             </p>
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl tracking-tight">
-              {isRegister ? 'Bắt đầu tạo tài khoản.' : 'Chào mừng trở lại.'}
+              {isRegister ? t('Create your account.', 'Bắt đầu tạo tài khoản.') : t('Welcome back.', 'Chào mừng trở lại.')}
             </h2>
             <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
               {isRegister
-                ? 'Tạo tài khoản và bắt đầu quản trị Semantic Layer của bạn.'
-                : 'Đăng nhập để tiếp tục xây dựng và quản trị chỉ số.'}
+                ? t('Create an account to manage your Semantic Layer.', 'Tạo tài khoản và bắt đầu quản trị Semantic Layer của bạn.')
+                : t('Log in to continue building and managing metrics.', 'Đăng nhập để tiếp tục xây dựng và quản trị chỉ số.')}
             </p>
           </div>
 
@@ -157,12 +162,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                     await loginWithGoogle(credentialResponse.credential);
                     router.push(getPostAuthPath());
                   } catch (err: unknown) {
-                    setError(err instanceof Error ? err.message : 'Đăng nhập Google thất bại');
+                    setError(err instanceof Error ? err.message : t('Google login failed', 'Đăng nhập Google thất bại'));
                   }
                 }
               }}
               onError={() => {
-                setError('Google OAuth chưa được cấu hình Client ID chính thức trong .env.local');
+                setError(t('Google OAuth has not been configured with a production Client ID in .env.local', 'Google OAuth chưa được cấu hình Client ID chính thức trong .env.local'));
               }}
               theme="filled_black"
               shape="pill"
@@ -172,8 +177,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
           <div className="my-3 sm:my-4 flex items-center gap-4 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
             <span className="h-px flex-1 bg-foreground/10" />
-            hoặc tiếp tục với email
-            <span className="h-px flex-1 bg-foreground/10" />
+            <Translated text={"hoặc tiếp tục với email"} after /><span className="h-px flex-1 bg-foreground/10" />
           </div>
 
           {/* Error Message */}
@@ -187,13 +191,13 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           <form className="space-y-3 sm:space-y-3.5" onSubmit={handleSubmit}>
             {isRegister && (
               <label className="block space-y-1">
-                <span className="text-xs font-medium">Họ và Tên</span>
+                <span className="text-xs font-medium"><Translated text={"Họ và Tên"} /></span>
                 <span className="relative block">
                   <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     required
                     className="h-10 sm:h-11 w-full rounded-xl border border-foreground/15 bg-transparent pl-10 pr-4 text-xs sm:text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
-                    placeholder="Nguyễn Văn A"
+                    placeholder={translate("Nguyễn Văn A")}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
@@ -202,7 +206,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             )}
 
             <label className="block space-y-1">
-              <span className="text-xs font-medium">Email</span>
+              <span className="text-xs font-medium"><Translated text={"Email"} /></span>
               <span className="relative block">
                 <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -217,7 +221,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             </label>
 
             <label className="block space-y-1">
-              <span className="text-xs font-medium">Mật khẩu</span>
+              <span className="text-xs font-medium"><Translated text={"Mật khẩu"} /></span>
               <span className="relative block">
                 <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -225,7 +229,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   type={showPassword ? 'text' : 'password'}
                   minLength={8}
                   className="h-10 sm:h-11 w-full rounded-xl border border-foreground/15 bg-transparent pl-10 pr-10 text-xs sm:text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
-                  placeholder={isRegister ? 'Ít nhất 8 ký tự' : 'Nhập mật khẩu'}
+                    placeholder={isRegister ? t('At least 8 characters', 'Ít nhất 8 ký tự') : t('Enter password', 'Nhập mật khẩu')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -233,7 +237,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? t('Hide password', 'Ẩn mật khẩu') : t('Show password', 'Hiện mật khẩu')}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -242,7 +246,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
             {isRegister && (
               <label className="block space-y-1">
-                <span className="text-xs font-medium">Xác nhận Mật khẩu</span>
+                <span className="text-xs font-medium"><Translated text={"Xác nhận Mật khẩu"} /></span>
                 <span className="relative block">
                   <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
@@ -250,7 +254,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                     type={showPassword ? 'text' : 'password'}
                     minLength={8}
                     className="h-10 sm:h-11 w-full rounded-xl border border-foreground/15 bg-transparent pl-10 pr-4 text-xs sm:text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
-                    placeholder="Nhập lại mật khẩu"
+                    placeholder={t('Confirm password', 'Nhập lại mật khẩu')}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
@@ -261,7 +265,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             {!isRegister && (
               <div className="flex justify-end">
                 <Link href="#" className="text-[11px] text-muted-foreground underline underline-offset-4 hover:text-foreground">
-                  Quên mật khẩu?
+                  <Translated text={"Quên mật khẩu?"} />
                 </Link>
               </div>
             )}
@@ -272,21 +276,21 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               disabled={loading}
             >
               {loading
-                ? isRegister ? 'Đang tạo tài khoản...' : 'Đang xử lý...'
-                : isRegister ? 'Tạo tài khoản' : 'Đăng nhập'}
+                ? isRegister ? t('Creating account...', 'Đang tạo tài khoản...') : t('Processing...', 'Đang xử lý...')
+                : isRegister ? t('Create account', 'Tạo tài khoản') : t('Log in', 'Đăng nhập')}
               <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
           </form>
 
           <p className="mt-3 text-center text-[10px] sm:text-xs text-muted-foreground">
-            Bằng cách tiếp tục, bạn đồng ý với điều khoản của AI Semantic Layer.
+            <Translated text={"Bằng cách tiếp tục, bạn đồng ý với điều khoản của AI Semantic Layer."} />
           </p>
         </div>
 
         {/* Bottom Footer */}
         <div className="shrink-0 flex justify-between border-t border-foreground/10 pt-3 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
-          <span>Bảo mật an toàn</span>
-          <Link href="/" className="hover:text-foreground">Về trang chủ</Link>
+          <span><Translated text={"Bảo mật an toàn"} /></span>
+          <Link href="/" className="hover:text-foreground"><Translated text={"Về trang chủ"} /></Link>
         </div>
       </section>
     </main>

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 
 import { DashboardChart } from './DashboardChart';
 import { useDashboardWidgetData } from './useDashboardWidgetData';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface DashboardCardProps {
   widget: DashboardWidgetConfig;
@@ -191,12 +192,13 @@ function CardHeader({
 }
 
 function DrillDownButton({ onDrillDown }: { onDrillDown: () => void }) {
+  const { translate } = useLanguage();
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label="Xem chi tiết"
+      aria-label={translate("Xem chi tiết")}
       onClick={onDrillDown}
       className="h-7 w-7 text-muted-foreground hover:text-foreground"
     >
@@ -241,17 +243,18 @@ function ResizeHandle({
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   resizingSpan: { colSpan: number; rowSpan: number } | null;
 }) {
+  const { translate } = useLanguage();
   if (!editMode) return null;
 
   return (
     <div
       role="button"
       tabIndex={-1}
-      aria-label="Kéo để thay đổi kích thước"
+      aria-label={translate("Kéo để thay đổi kích thước")}
       onPointerDown={onPointerDown}
       onClick={(e) => e.stopPropagation()}
       className="absolute bottom-1 right-1 flex h-4 w-4 items-center justify-center cursor-se-resize select-none opacity-80 hover:opacity-100 transition-opacity"
-      title="Kéo góc để thu phóng"
+      title={translate("Kéo góc để thu phóng")}
     >
       {/* Sleek Cube Dev corner icon `┘` */}
       <svg

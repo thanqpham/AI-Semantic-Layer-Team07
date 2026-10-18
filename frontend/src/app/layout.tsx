@@ -4,13 +4,13 @@ import './globals.css';
 import { Providers } from './providers';
 
 const instrumentSans = Instrument_Sans({
-  subsets: ['latin'],
+  subsets: ['latin', 'latin-ext'],
   variable: '--font-instrument',
   display: 'swap',
 });
 
 const instrumentSerif = Instrument_Serif({
-  subsets: ['latin'],
+  subsets: ['latin', 'latin-ext'],
   weight: '400',
   variable: '--font-instrument-serif',
   display: 'swap',

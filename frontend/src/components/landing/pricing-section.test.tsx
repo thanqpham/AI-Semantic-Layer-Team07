@@ -28,7 +28,7 @@ describe('PricingSection', () => {
     render(<PricingSection />);
     expect(screen.getAllByText(/PostgreSQL/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Fernet/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/SELECT-only/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Chỉ cho phép SELECT/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders CTA button', () => {

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Copy, Check } from "lucide-react";
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 const codeExamples = [
   {
@@ -90,6 +92,7 @@ const codeAnimationStyles = `
 `;
 
 export function DevelopersSection() {
+  const { translate } = useLanguage();
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -132,16 +135,14 @@ export function DevelopersSection() {
           >
             <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
               <span className="w-8 h-px bg-foreground/30" />
-              Dành cho nhà phát triển
+              <Translated text={"Dành cho nhà phát triển"} />
             </span>
             <h2 className="text-4xl lg:text-6xl font-display tracking-tight mb-8">
-              Thiết kế cho
-              <br />
-              <span className="text-muted-foreground">nhà phát triển.</span>
+              <Translated text={"Thiết kế cho"} after /><br />
+              <span className="text-muted-foreground"><Translated text={"nhà phát triển."} /></span>
             </h2>
             <p className="text-xl text-muted-foreground mb-12 leading-relaxed">
-              API trực quan và tài liệu chi tiết. Kết nối semantic layer trong
-              vài dòng code.
+              <Translated text={"API trực quan và tài liệu chi tiết. Kết nối semantic layer trong vài dòng code."} />
             </p>
 
             {/* Features */}
@@ -156,9 +157,9 @@ export function DevelopersSection() {
                   }`}
                   style={{ transitionDelay: `${index * 50 + 200}ms` }}
                 >
-                  <h3 className="font-medium mb-1">{feature.title}</h3>
+                  <h3 className="font-medium mb-1"><Translated text={feature.title} /></h3>
                   <p className="text-sm text-muted-foreground">
-                    {feature.description}
+                    <Translated text={feature.description} />
                   </p>
                 </div>
               ))}
@@ -187,7 +188,7 @@ export function DevelopersSection() {
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {example.label}
+                    <Translated text={example.label} />
                     {activeTab === idx && (
                       <span className="absolute bottom-0 left-0 right-0 h-px bg-foreground" />
                     )}
@@ -198,7 +199,7 @@ export function DevelopersSection() {
                   type="button"
                   onClick={handleCopy}
                   className="px-4 py-4 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label="Copy code"
+                  aria-label={translate("Copy code")}
                 >
                   {copied ? (
                     <Check className="w-4 h-4 text-green-600" />
@@ -241,7 +242,7 @@ export function DevelopersSection() {
             {/* Links */}
             <div className="mt-6 flex items-center gap-6 text-sm">
               <span className="text-muted-foreground">
-                Tài liệu tham khảo trong project
+                <Translated text={"Tài liệu tham khảo trong project"} />
               </span>
             </div>
           </div>

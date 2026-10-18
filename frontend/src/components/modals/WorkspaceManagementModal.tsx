@@ -24,6 +24,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 const inviteRoleLabels: Record<WorkspaceInvite['role'], string> = {
   admin: 'Admin',
@@ -32,6 +34,7 @@ const inviteRoleLabels: Record<WorkspaceInvite['role'], string> = {
 };
 
 export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { locale, translate } = useLanguage();
   const { user } = useAuth();
   const { permissions, reloadWorkspaces } = useWorkspace();
   const canManageMembers = Boolean(permissions.can_manage_members);
@@ -151,10 +154,9 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
       <DialogContent className="max-h-[90vh] overflow-y-auto bg-background sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-display text-2xl">
-            <UserPlus className="h-5 w-5" /> Quản lý Workspace
-          </DialogTitle>
+            <UserPlus className="h-5 w-5" /> <Translated text={"Quản lý Workspace"} /></DialogTitle>
           <DialogDescription>
-            Tạo link mời, quản lý vai trò và kiểm soát các invitation đang hoạt động.
+            <Translated text={"Tạo link mời, quản lý vai trò và kiểm soát các invitation đang hoạt động."} />
           </DialogDescription>
         </DialogHeader>
 
@@ -171,19 +173,19 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
               <Link2 className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold">Mời thành viên bằng link</h3>
+              <h3 className="text-sm font-semibold"><Translated text={"Mời thành viên bằng link"} /></h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Tạo link dùng một lần và gửi link cho thành viên cần tham gia Workspace.
+                <Translated text={"Tạo link dùng một lần và gửi link cho thành viên cần tham gia Workspace."} />
               </p>
             </div>
           </div>
 
           <form className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={invite}>
             <label className="space-y-1.5">
-              <span className="text-sm font-medium">Vai trò</span>
+              <span className="text-sm font-medium"><Translated text={"Vai trò"} /></span>
               <select
                 id="invite-role"
-                aria-label="Vai trò lời mời"
+                aria-label={translate("Vai trò lời mời")}
                 value={role}
                 onChange={(event) => setRole(event.target.value as WorkspaceRole)}
                 disabled={inviting}
@@ -196,15 +198,15 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
             </label>
             <Button type="submit" disabled={inviting} className="h-9">
               <Link2 className="h-4 w-4" />
-              {inviting ? 'Đang tạo...' : 'Tạo link mời'}
+              <Translated text={inviting ? 'Đang tạo...' : 'Tạo link mời'} />
             </Button>
           </form>
 
           {inviteUrl && (
             <div className="mt-4 space-y-3 rounded-lg border border-border bg-secondary/30 p-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold">Link mời vừa tạo</p>
-                <span className="text-xs text-muted-foreground">Có thể mở và copy</span>
+                <p className="text-xs font-semibold"><Translated text={"Link mời vừa tạo"} /></p>
+                <span className="text-xs text-muted-foreground"><Translated text={"Có thể mở và copy"} /></span>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <a
@@ -217,7 +219,7 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
                 </a>
                 <Button type="button" variant="outline" size="sm" onClick={() => void copyInviteUrl()}>
                   {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                  {copied ? 'Đã copy' : 'Copy'}
+                  <Translated text={copied ? 'Đã copy' : 'Copy'} />
                 </Button>
               </div>
             </div>
@@ -236,15 +238,15 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
               className="group flex min-w-0 items-center gap-2 text-left text-sm font-semibold"
             >
               <Shield className="h-4 w-4" />
-              <span>Thành viên</span>
+              <span><Translated text={"Thành viên"} /></span>
               <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${membersExpanded ? 'rotate-180' : ''}`} />
             </button>
-            {loading && <span className="text-xs text-muted-foreground">Đang tải...</span>}
+            {loading && <span className="text-xs text-muted-foreground"><Translated text={"Đang tải..."} /></span>}
           </div>
           {membersExpanded && (
             <div id="workspace-members-panel" className="divide-y divide-border rounded-xl border border-border bg-card">
               <p className="border-b border-border bg-secondary/30 px-3 py-2 text-xs text-muted-foreground">
-                Workspace luôn phải còn ít nhất một Admin. Nếu đổi vai trò hoặc xóa chính bạn, quyền quản lý có thể mất ngay.
+                <Translated text={"Workspace luôn phải còn ít nhất một Admin. Nếu đổi vai trò hoặc xóa chính bạn, quyền quản lý có thể mất ngay."} />
               </p>
               {members.map((member) => (
                 <div key={member.user_id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
@@ -264,12 +266,11 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
                       <option value="member">Member</option>
                     </select>
                     <Button type="button" variant="ghost" size="sm" onClick={() => void remove(member)} className="text-destructive hover:text-destructive">
-                      <X className="h-3.5 w-3.5" /> Xóa
-                    </Button>
+                      <X className="h-3.5 w-3.5" /> <Translated text={"Xóa"} /></Button>
                   </div>
                 </div>
               ))}
-              {!loading && members.length === 0 && <p className="p-4 text-xs text-muted-foreground">Chưa có thành viên.</p>}
+              {!loading && members.length === 0 && <p className="p-4 text-xs text-muted-foreground"><Translated text={"Chưa có thành viên."} /></p>}
             </div>
           )}
           </section>
@@ -286,13 +287,12 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
               className="group flex min-w-0 items-center gap-2 text-left"
             >
               <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <Link2 className="h-4 w-4" /> Invitation
-              </h3>
+                <Link2 className="h-4 w-4" /> <Translated text={"Invitation"} /></h3>
               <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${invitesExpanded ? 'rotate-180' : ''}`} />
             </button>
             <div className="flex items-center gap-2">
               <p className="mt-1 text-xs text-muted-foreground">
-                Link chưa sử dụng sẽ tự hết hạn sau 7 ngày.
+                <Translated text={"Link chưa sử dụng sẽ tự hết hạn sau 7 ngày."} />
               </p>
               <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-secondary-foreground">
                 {invites.length}
@@ -302,9 +302,9 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
 
           {invitesExpanded && <div id="workspace-invites-panel" className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="hidden grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-border bg-secondary/30 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid">
-              <span>Vai trò</span>
-              <span>Hết hạn</span>
-              <span className="text-right">Thao tác</span>
+              <span><Translated text={"Vai trò"} /></span>
+              <span><Translated text={"Hết hạn"} /></span>
+              <span className="text-right"><Translated text={"Thao tác"} /></span>
             </div>
             <div className="divide-y divide-border">
               {invites.map((item) => (
@@ -315,12 +315,12 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
                     </span>
                     <div className="min-w-0">
                       <p className="font-semibold">{inviteRoleLabels[item.role]}</p>
-                      <p className="truncate font-mono text-[10px] text-muted-foreground">Link mời #{item.id}</p>
+                      <p className="truncate font-mono text-[10px] text-muted-foreground"><Translated text={"Link mời #"} />{item.id}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-muted-foreground sm:justify-self-end">
                     <CalendarClock className="h-3.5 w-3.5" />
-                    <span>Hết hạn {new Date(item.expires_at).toLocaleDateString('vi-VN')}</span>
+                    <span><Translated text={"Hết hạn"} after />{new Date(item.expires_at).toLocaleDateString(locale)}</span>
                   </div>
                   <Button
                     type="button"
@@ -330,13 +330,13 @@ export function WorkspaceManagementModal({ isOpen, onClose }: { isOpen: boolean;
                     onClick={() => void revoke(item.id)}
                     className="justify-self-start px-2 text-destructive hover:text-destructive sm:justify-self-end"
                   >
-                    {revokingId === item.id ? 'Đang thu hồi...' : 'Thu hồi'}
+                    <Translated text={revokingId === item.id ? 'Đang thu hồi...' : 'Thu hồi'} />
                   </Button>
                 </div>
               ))}
               {!loading && invites.length === 0 && (
                 <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-                  Chưa có invitation đang mở.
+                  <Translated text={"Chưa có invitation đang mở."} />
                 </div>
               )}
             </div>

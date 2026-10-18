@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { Translated } from '@/components/ui/translated';
 
 const metrics = [
   {
@@ -86,13 +87,11 @@ export function MetricsSection() {
         >
           <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
             <span className="w-8 h-px bg-foreground/30" />
-            Hiệu suất
-            <span className="w-8 h-px bg-foreground/30" />
+            <Translated text={"Hiệu suất"} after /><span className="w-8 h-px bg-foreground/30" />
           </span>
           <h2 className="text-4xl lg:text-6xl font-display tracking-tight mb-6">
-            Số liệu nói
-            <br />
-            lên tất cả.
+            <Translated text={"Số liệu nói"} after /><br />
+            <Translated text={"lên tất cả."} />
           </h2>
         </div>
 
@@ -112,10 +111,10 @@ export function MetricsSection() {
                 {countedValues[index]}
               </span>
               <span className="block text-lg font-medium mb-1">
-                {metric.label}
+                <Translated text={metric.label} />
               </span>
               <span className="block text-sm text-muted-foreground">
-                {metric.description}
+                <Translated text={metric.description} />
               </span>
             </div>
           ))}

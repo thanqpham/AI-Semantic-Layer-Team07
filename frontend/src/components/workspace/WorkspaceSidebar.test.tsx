@@ -1,6 +1,7 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceSidebar } from '@/components/workspace/WorkspaceSidebar';
+import { LanguageProvider } from '@/context/LanguageContext';
 import type { WorkspaceDatabase, ViewId } from '@/components/workspace/shared';
 import type { WorkspaceRole } from '@/lib/api';
 
@@ -15,6 +16,9 @@ const workspaceState = vi.hoisted(() => ({
     can_export: true,
   } as Record<string, boolean>,
 }));
+
+const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: LanguageProvider });
+beforeEach(() => window.localStorage.setItem('app_language', 'en'));
 
 vi.mock('@/context/WorkspaceContext', () => ({
   useWorkspace: () => ({
@@ -134,7 +138,7 @@ describe('WorkspaceSidebar', () => {
       render(<WorkspaceSidebar {...defaultProps} userName="alice" onLogout={onLogout} collapsed={false} />);
 
       expect(screen.getByText('alice')).toBeInTheDocument();
-      expect(screen.getByTitle('Đăng xuất')).toBeInTheDocument();
+      expect(screen.getByTitle('Log out')).toBeInTheDocument();
     });
   });
 
@@ -156,7 +160,7 @@ describe('WorkspaceSidebar', () => {
     render(<WorkspaceSidebar {...defaultProps} onCreateWorkspace={onCreateWorkspace} />);
 
     fireEvent.click(screen.getByText('Risk Analytics'));
-    fireEvent.click(screen.getByRole('button', { name: 'Tạo Workspace mới' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a new Workspace' }));
 
     expect(onCreateWorkspace).toHaveBeenCalledOnce();
   });
@@ -167,14 +171,14 @@ describe('WorkspaceSidebar', () => {
     render(<WorkspaceSidebar {...defaultProps} />);
 
     fireEvent.click(screen.getByText('Risk Analytics'));
-    expect(screen.getByText('Đang tải Workspace...')).toBeInTheDocument();
-    expect(screen.getByText('Chưa có vai trò')).toBeInTheDocument();
+    expect(screen.getByText('Loading workspaces...')).toBeInTheDocument();
+    expect(screen.getByText('No role')).toBeInTheDocument();
     expect(screen.queryByText('Member')).not.toBeInTheDocument();
 
     workspaceState.isLoading = false;
     const { unmount } = render(<WorkspaceSidebar {...defaultProps} />);
     fireEvent.click(screen.getAllByText('Risk Analytics')[1]);
-    expect(screen.getByText('Chưa có Workspace')).toBeInTheDocument();
+    expect(screen.getByText('No workspaces')).toBeInTheDocument();
     unmount();
   });
 
@@ -227,7 +231,7 @@ describe('WorkspaceSidebar', () => {
       expect(buttons[2]).toHaveAttribute('aria-label', 'Metric Explorer');
       expect(buttons[3]).toHaveAttribute('aria-label', 'Metrics Dashboard');
       expect(buttons[4]).toHaveAttribute('aria-label', 'Export Playground');
-      expect(buttons[5]).toHaveAttribute('aria-label', 'Mở lịch sử trò chuyện');
+      expect(buttons[5]).toHaveAttribute('aria-label', 'Open chat history');
     });
   });
 
@@ -332,7 +336,7 @@ describe('WorkspaceSidebar', () => {
       ['member', false],
       ['data_lead', true],
     ])('shows schema controls for %s only when can_manage_schema is %s', (role, canManageSchema) => {
-      workspaceState.role = role;
+      workspaceState.role = role as WorkspaceRole;
       workspaceState.permissions = { can_manage_schema: canManageSchema };
       const onConnectDatabase = vi.fn();
       const onRemoveDatabase = vi.fn();
@@ -375,7 +379,7 @@ describe('WorkspaceSidebar', () => {
       ['member', false],
       ['data_lead', true],
     ])('shows Export Playground only when can_export is %s for %s', (role, canExport) => {
-      workspaceState.role = role;
+      workspaceState.role = role as WorkspaceRole;
       workspaceState.permissions = { can_export: canExport };
 
       render(<WorkspaceSidebar {...defaultProps} />);
@@ -410,7 +414,7 @@ describe('WorkspaceSidebar', () => {
         />,
       );
 
-      expect(screen.getByText('Lịch sử trò chuyện')).toBeInTheDocument();
+      expect(screen.getByText('Chat history')).toBeInTheDocument();
       expect(screen.getByText('Doanh thu Q1')).toBeInTheDocument();
     });
 
@@ -444,7 +448,7 @@ describe('WorkspaceSidebar', () => {
         />,
       );
 
-      const historyBtn = screen.getByLabelText('Mở lịch sử trò chuyện');
+      const historyBtn = screen.getByLabelText('Open chat history');
       expect(historyBtn).toBeInTheDocument();
       fireEvent.click(historyBtn);
       expect(onSelectView).toHaveBeenCalledWith('ai-studio');
@@ -474,7 +478,7 @@ describe('WorkspaceSidebar', () => {
         />,
       );
 
-      expect(screen.getByText('Lịch sử trò chuyện')).toBeInTheDocument();
+      expect(screen.getByText('Chat history')).toBeInTheDocument();
       expect(screen.getByText('Doanh thu Q1')).toBeInTheDocument();
     });
 
@@ -508,7 +512,7 @@ describe('WorkspaceSidebar', () => {
         />,
       );
 
-      const historyBtn = screen.getByLabelText('Mở lịch sử trò chuyện');
+      const historyBtn = screen.getByLabelText('Open chat history');
       expect(historyBtn).toBeInTheDocument();
       fireEvent.click(historyBtn);
       expect(onSelectView).toHaveBeenCalledWith('ai-studio');

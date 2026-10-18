@@ -18,6 +18,8 @@ import { useState } from 'react';
 import { DuplicateMetricNotice, MetricConflictInfo, MetricDefinition } from '@/lib/api';
 import { statusLabel } from '@/lib/metrics';
 import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 // ---------------------------------------------------------------------------
 // ⚠️ Conflict clarify strip (same name as a saved metric, different formula)
@@ -40,10 +42,10 @@ export function ConflictWarningStrip({ conflict, onRename, onUseExisting }: Conf
             {conflict.clarify_question || 'Tên metric bị trùng với metric đã có'}
           </p>
           <p className="text-[11px] text-amber-700 dark:text-amber-300">
-            Metric đang lưu:{' '}
+            <Translated text={"Metric đang lưu:"} />{' '}
             <strong>&quot;{conflict.existing_metric_name}&quot;</strong>
             {conflict.existing_metric_status ? ` (trạng thái: ${statusLabel(conflict.existing_metric_status)})` : ''}
-            {suggestedName ? <> — gợi ý tên mới: <strong>&quot;{suggestedName}&quot;</strong></> : null}
+            {suggestedName ? <> <Translated text={"— gợi ý tên mới:"} after /><strong>&quot;{suggestedName}&quot;</strong></> : null}
           </p>
         </div>
       </div>
@@ -54,14 +56,14 @@ export function ConflictWarningStrip({ conflict, onRename, onUseExisting }: Conf
           onClick={onRename}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-amber-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Đổi tên
+          <Translated text={"Đổi tên"} />
         </button>
         <button
           type="button"
           onClick={onUseExisting}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-amber-500/40 bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs transition-all hover:bg-accent"
         >
-          Tính kết quả từ chỉ số này
+          <Translated text={"Tính kết quả từ chỉ số này"} />
         </button>
       </div>
     </div>
@@ -95,7 +97,7 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <div className="space-y-1">
             <p className="font-medium leading-relaxed">
-              Đang tính toán kết quả từ chỉ số &quot;{notice.existing_metric_name}&quot;...
+              <Translated text={"Đang tính toán kết quả từ chỉ số &quot;"} />{notice.existing_metric_name}&quot;...
             </p>
           </div>
         </div>
@@ -132,7 +134,7 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
           >
             <Eye className="h-3.5 w-3.5 text-primary" />
-            <span>{showExisting ? 'Ẩn định nghĩa' : 'Xem định nghĩa'}</span>
+            <span><Translated text={showExisting ? 'Ẩn định nghĩa' : 'Xem định nghĩa'} /></span>
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showExisting ? 'rotate-180' : ''}`} />
           </button>
         ) : null}
@@ -141,7 +143,7 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
           onClick={() => onUseExisting?.()}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary shadow-xs transition-all hover:bg-primary hover:text-primary-foreground"
         >
-          Tính kết quả từ chỉ số này
+          <Translated text={"Tính kết quả từ chỉ số này"} />
         </button>
       </div>
     </div>
@@ -149,11 +151,12 @@ export function DuplicateNoticeCard({ notice, onDismiss, onUseExisting }: Duplic
 }
 
 function DismissNoticeButton({ onDismiss }: { onDismiss: () => void }) {
+  const { translate } = useLanguage();
   return (
     <button
       type="button"
       onClick={onDismiss}
-      aria-label="Đóng thông báo trùng lặp"
+      aria-label={translate("Đóng thông báo trùng lặp")}
       className="absolute right-2.5 top-2.5 inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
     >
       <X className="h-3.5 w-3.5" />
@@ -172,13 +175,14 @@ interface ExistingMetricPreviewProps {
 }
 
 function ExistingMetricPreview({ definition, yaml, status }: ExistingMetricPreviewProps) {
+  const { translate } = useLanguage();
   const [showYaml, setShowYaml] = useState(true);
   const metric = definition.metric;
   return (
     <div className="mt-2.5 ml-6 space-y-2.5 rounded-lg border border-border bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-          Metric có sẵn trong hệ thống
+          <Translated text={"Metric có sẵn trong hệ thống"} />
         </p>
         <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
           {statusLabel(status ?? metric.status)}
@@ -223,12 +227,12 @@ function ExistingMetricPreview({ definition, yaml, status }: ExistingMetricPrevi
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
           >
             <Code2 className="h-3.5 w-3.5 text-primary" />
-            <span>{showYaml ? 'Ẩn mã YAML' : 'Xem mã YAML'}</span>
+            <span><Translated text={showYaml ? 'Ẩn mã YAML' : 'Xem mã YAML'} /></span>
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showYaml ? 'rotate-180' : ''}`} />
           </button>
           {showYaml ? (
             <div className="mt-2">
-              <YamlCodeViewer yaml={yaml} title="Metric có sẵn (YAML)" />
+              <YamlCodeViewer yaml={yaml} title={translate("Metric có sẵn (YAML)")} />
             </div>
           ) : null}
         </div>

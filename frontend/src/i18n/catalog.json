@@ -1,0 +1,3074 @@
+{
+  "Invitation": {
+    "vi": "Lời mời",
+    "en": "Invitation"
+  },
+  "Đang kiểm tra link mời...": {
+    "vi": "Đang kiểm tra link mời...",
+    "en": "Checking the invitation link..."
+  },
+  "Workspace access": {
+    "vi": "Quyền truy cập không gian làm việc",
+    "en": "Workspace access"
+  },
+  "Tham gia Workspace.": {
+    "vi": "Tham gia Workspace.",
+    "en": "Join workspace."
+  },
+  "Bạn được mời vào Workspace": {
+    "vi": "Bạn được mời vào Workspace",
+    "en": "You are invited to Workspace"
+  },
+  "Vai trò": {
+    "vi": "Vai trò",
+    "en": "Role"
+  },
+  "Có hiệu lực đến": {
+    "vi": "Có hiệu lực đến",
+    "en": "Valid until"
+  },
+  "Invitation chỉ có thể được sử dụng một lần.": {
+    "vi": "Invitation chỉ có thể được sử dụng một lần.",
+    "en": "Invitation can only be used once."
+  },
+  "Đang tải Trình khám phá chỉ số...": {
+    "vi": "Đang tải Trình khám phá chỉ số...",
+    "en": "Loading Metric Explorer..."
+  },
+  "Đang tải Xuất dữ liệu...": {
+    "vi": "Đang tải Xuất dữ liệu...",
+    "en": "Loading Exporting data..."
+  },
+  "Đang tải Schema Review...": {
+    "vi": "Đang tải Schema Review...",
+    "en": "Loading Schema Review..."
+  },
+  "Đang tải Bảng điều khiển chỉ số...": {
+    "vi": "Đang tải Bảng điều khiển chỉ số...",
+    "en": "Loading Metrics Dashboard..."
+  },
+  "Đang xác thực tài khoản...": {
+    "vi": "Đang xác thực tài khoản...",
+    "en": "Verifying account..."
+  },
+  "bảng và": {
+    "vi": "bảng và",
+    "en": "table and"
+  },
+  "cột đang chờ review tên nghiệp vụ.": {
+    "vi": "cột đang chờ review tên nghiệp vụ.",
+    "en": "column waiting for review of business name."
+  },
+  "chỉ số đang chờ duyệt để chính thức sử dụng.": {
+    "vi": "chỉ số đang chờ duyệt để chính thức sử dụng.",
+    "en": "The metric is awaiting approval for official use."
+  },
+  "Review Schema (": {
+    "vi": "Xem lại lược đồ (",
+    "en": "Review Schema ("
+  },
+  "Duyệt": {
+    "vi": "Duyệt",
+    "en": "Approve"
+  },
+  "Chỉ số": {
+    "vi": "Chỉ số",
+    "en": "Metrics"
+  },
+  "Chưa chọn Target Database": {
+    "vi": "Chưa chọn Target Database",
+    "en": "Target Database has not been selected"
+  },
+  "Kết nối tới Live Database hoặc tải lên tệp SQL Dump để tự động tạo Semantic Layer và định nghĩa các chỉ số.": {
+    "vi": "Kết nối tới Live Database hoặc tải lên tệp SQL Dump để tự động tạo Semantic Layer và định nghĩa các chỉ số.",
+    "en": "Connect to a Live Database or upload a SQL Dump file to automatically create a Semantic Layer and define metrics."
+  },
+  "Thêm kết nối Database": {
+    "vi": "Thêm kết nối Database",
+    "en": "Add Database connection"
+  },
+  "Đang chuyển hướng đến workspace...": {
+    "vi": "Đang chuyển hướng đến workspace...",
+    "en": "Redirecting to workspace..."
+  },
+  "Nền tảng quản trị chỉ số": {
+    "vi": "Nền tảng quản trị chỉ số",
+    "en": "Metric management platform"
+  },
+  "Xây dựng Semantic Layer": {
+    "vi": "Xây dựng Semantic Layer",
+    "en": "Build Semantic Layer"
+  },
+  "cho doanh nghiệp.": {
+    "vi": "cho doanh nghiệp.",
+    "en": "for businesses."
+  },
+  "Introspect schema, đề xuất tên nghiệp vụ và quản trị Business Metrics với HITL Workflow an toàn, chính xác.": {
+    "vi": "Introspect schema, đề xuất tên nghiệp vụ và quản trị Business Metrics với HITL Workflow an toàn, chính xác.",
+    "en": "Introspect schema, propose business names and manage Business Metrics with safe, accurate HITL Workflow."
+  },
+  "Define with intent": {
+    "vi": "Định nghĩa có chủ đích",
+    "en": "Define with intent"
+  },
+  "hoặc tiếp tục với email": {
+    "vi": "hoặc tiếp tục với email",
+    "en": "or continue with email"
+  },
+  "Họ và Tên": {
+    "vi": "Họ và Tên",
+    "en": "Full Name"
+  },
+  "Email": {
+    "vi": "E-mail",
+    "en": "Email"
+  },
+  "Mật khẩu": {
+    "vi": "Mật khẩu",
+    "en": "Password"
+  },
+  "Xác nhận Mật khẩu": {
+    "vi": "Xác nhận Mật khẩu",
+    "en": "Confirm Password"
+  },
+  "Quên mật khẩu?": {
+    "vi": "Quên mật khẩu?",
+    "en": "Forgot password?"
+  },
+  "Bằng cách tiếp tục, bạn đồng ý với điều khoản của AI Semantic Layer.": {
+    "vi": "Bằng cách tiếp tục, bạn đồng ý với điều khoản của AI Semantic Layer.",
+    "en": "By continuing, you agree to the AI ​​Semantic Layer terms."
+  },
+  "Bảo mật an toàn": {
+    "vi": "Bảo mật an toàn",
+    "en": "Safe and secure"
+  },
+  "Về trang chủ": {
+    "vi": "Về trang chủ",
+    "en": "Back to home page"
+  },
+  "Đang tải": {
+    "vi": "Đang tải",
+    "en": "Loading"
+  },
+  "Thử lại": {
+    "vi": "Thử lại",
+    "en": "Retry"
+  },
+  "Chưa có dữ liệu cho phạm vi đã chọn.": {
+    "vi": "Chưa có dữ liệu cho phạm vi đã chọn.",
+    "en": "No data is available for the selected range."
+  },
+  "Truy vấn không khả dụng cho nguồn dữ liệu này.": {
+    "vi": "Truy vấn không khả dụng cho nguồn dữ liệu này.",
+    "en": "Query is not available for this data source."
+  },
+  "Tổng trong kỳ": {
+    "vi": "Tổng trong kỳ",
+    "en": "Total for the period"
+  },
+  "Mục": {
+    "vi": "Mục",
+    "en": "Item"
+  },
+  "mục khác không hiển thị": {
+    "vi": "mục khác không hiển thị",
+    "en": "Other items are not displayed"
+  },
+  "Cấu hình widget từ metric đã duyệt. Dữ liệu chỉ được truy vấn khi bấm “Xem trước”.": {
+    "vi": "Cấu hình widget từ metric đã duyệt. Dữ liệu chỉ được truy vấn khi bấm “Xem trước”.",
+    "en": "Configure widgets from approved metrics. Data is only queried when “Preview” is clicked."
+  },
+  "Hủy": {
+    "vi": "Hủy",
+    "en": "Cancel"
+  },
+  "Lưu": {
+    "vi": "Lưu",
+    "en": "Save"
+  },
+  "Không có metric đã duyệt nào.": {
+    "vi": "Không có metric đã duyệt nào.",
+    "en": "There are no approved metrics."
+  },
+  "— Chọn —": {
+    "vi": "— Chọn —",
+    "en": "— Select —"
+  },
+  "Đề xuất:": {
+    "vi": "Đề xuất:",
+    "en": "Propose:"
+  },
+  "Không áp dụng": {
+    "vi": "Không áp dụng",
+    "en": "Not applicable"
+  },
+  "Xem trước": {
+    "vi": "Xem trước",
+    "en": "Preview"
+  },
+  "Nguồn SQL Dump chỉ chứa metadata cấu trúc và không hỗ trợ truy vấn trực tiếp. Không thể xem trước dữ liệu Live DB cho nguồn này.": {
+    "vi": "Nguồn SQL Dump chỉ chứa metadata cấu trúc và không hỗ trợ truy vấn trực tiếp. Không thể xem trước dữ liệu Live DB cho nguồn này.",
+    "en": "The SQL Dump source only contains structural metadata and does not support direct querying. Live DB data cannot be previewed for this source."
+  },
+  "Dữ liệu mẫu truy vấn trực tiếp từ Live DB (tối đa 100 dòng).": {
+    "vi": "Dữ liệu mẫu truy vấn trực tiếp từ Live DB (tối đa 100 dòng).",
+    "en": "Query sample data directly from Live DB (maximum 100 rows)."
+  },
+  "Hoàn tất cấu hình hợp lệ rồi nhấn “Xem trước” để chạy truy vấn mẫu.": {
+    "vi": "Hoàn tất cấu hình hợp lệ rồi nhấn “Xem trước” để chạy truy vấn mẫu.",
+    "en": "Complete the valid configuration and then click “Preview” to run the sample query."
+  },
+  "Tính năng": {
+    "vi": "Tính năng",
+    "en": "Features"
+  },
+  "Mọi thứ bạn cần": {
+    "vi": "Mọi thứ bạn cần",
+    "en": "Everything you need"
+  },
+  "để quản trị dữ liệu.": {
+    "vi": "để quản trị dữ liệu.",
+    "en": "for data management."
+  },
+  "Từ introspect schema đến biên dịch metrics, tất cả trong một nền tảng duy nhất.": {
+    "vi": "Từ introspect schema đến biên dịch metrics, tất cả trong một nền tảng duy nhất.",
+    "en": "From introspect schema to compiling metrics, all in a single platform."
+  },
+  "Sẵn sàng xây dựng": {
+    "vi": "Sẵn sàng xây dựng",
+    "en": "Ready to build"
+  },
+  "Bắt đầu quản trị semantic layer với AI Agent. Kết nối database, introspect schema và định nghĩa metrics ngay hôm nay.": {
+    "vi": "Bắt đầu quản trị semantic layer với AI Agent. Kết nối database, introspect schema và định nghĩa metrics ngay hôm nay.",
+    "en": "Start managing the semantic layer with AI Agent. Connect your database, introduce schema and define metrics today."
+  },
+  "Bắt đầu miễn phí": {
+    "vi": "Bắt đầu miễn phí",
+    "en": "Get started for free"
+  },
+  "Đăng nhập": {
+    "vi": "Đăng nhập",
+    "en": "Log in"
+  },
+  "Không cần thẻ tín dụng": {
+    "vi": "Không cần thẻ tín dụng",
+    "en": "No credit card required"
+  },
+  "Dành cho nhà phát triển": {
+    "vi": "Dành cho nhà phát triển",
+    "en": "For developers"
+  },
+  "Thiết kế cho": {
+    "vi": "Thiết kế cho",
+    "en": "Designed for"
+  },
+  "nhà phát triển.": {
+    "vi": "nhà phát triển.",
+    "en": "developer."
+  },
+  "API trực quan và tài liệu chi tiết. Kết nối semantic layer trong vài dòng code.": {
+    "vi": "API trực quan và tài liệu chi tiết. Kết nối semantic layer trong vài dòng code.",
+    "en": "Intuitive API and detailed documentation. Connect semantic layers in a few lines of code."
+  },
+  "Tài liệu tham khảo trong project": {
+    "vi": "Tài liệu tham khảo trong project",
+    "en": "References in the project"
+  },
+  "Nền tảng quản trị semantic layer với AI Agent. Tự động introspect, đề xuất và biên dịch metrics cho data team.": {
+    "vi": "Nền tảng quản trị semantic layer với AI Agent. Tự động introspect, đề xuất và biên dịch metrics cho data team.",
+    "en": "Semantic layer management platform with AI Agent. Automatically introspect, recommend and compile metrics for the data team."
+  },
+  "2026 AI Semantic Layer Agent. All rights reserved.": {
+    "vi": "2026 AI Semantic Layer Agent. Bảo lưu mọi quyền.",
+    "en": "2026 AI Semantic Layer Agent. All rights reserved."
+  },
+  "Nền tảng AI Semantic Layer Agent": {
+    "vi": "Nền tảng AI Semantic Layer Agent",
+    "en": "Semantic Layer Agent AI Platform"
+  },
+  "Nền tảng": {
+    "vi": "Nền tảng",
+    "en": "Foundation"
+  },
+  "để": {
+    "vi": "để",
+    "en": "to"
+  },
+  "Tự động chuyển đổi DB schema kỹ thuật thành ngôn ngữ nghiệp vụ thống nhất. Xây dựng, quản trị và biên dịch chỉ số với độ chính xác tuyệt đối.": {
+    "vi": "Tự động chuyển đổi DB schema kỹ thuật thành ngôn ngữ nghiệp vụ thống nhất. Xây dựng, quản trị và biên dịch chỉ số với độ chính xác tuyệt đối.",
+    "en": "Automatically convert technical DB schema into unified business language. Build, manage and compile metrics with absolute accuracy."
+  },
+  "Dùng thử miễn phí": {
+    "vi": "Dùng thử miễn phí",
+    "en": "Try it for free"
+  },
+  "Cách hoạt động": {
+    "vi": "Cách hoạt động",
+    "en": "How it works"
+  },
+  "Bốn bước": {
+    "vi": "Bốn bước",
+    "en": "Four steps"
+  },
+  "đến semantic layer.": {
+    "vi": "đến semantic layer.",
+    "en": "to the semantic layer."
+  },
+  "Từ kết nối database đến truy vấn metrics, quy trình hoàn toàn tự động với con người phê duyệt.": {
+    "vi": "Từ kết nối database đến truy vấn metrics, quy trình hoàn toàn tự động với con người phê duyệt.",
+    "en": "From database connection to metrics query, the process is completely automated with human approval."
+  },
+  "Hạ tầng": {
+    "vi": "Hạ tầng",
+    "en": "Infrastructure"
+  },
+  "Xây dựng trên": {
+    "vi": "Xây dựng trên",
+    "en": "Build on"
+  },
+  "nền tảng vững chắc.": {
+    "vi": "nền tảng vững chắc.",
+    "en": "solid foundation."
+  },
+  "Kiến trúc bảo mật đa lớp, mã hóa end-to-end, và guardrails ngăn chặn mọi truy vấn nguy hiểm.": {
+    "vi": "Kiến trúc bảo mật đa lớp, mã hóa end-to-end, và guardrails ngăn chặn mọi truy vấn nguy hiểm.",
+    "en": "Multi-layered security architecture, end-to-end encryption, and guardrails prevent any malicious queries."
+  },
+  "Tích hợp": {
+    "vi": "Tích hợp",
+    "en": "Integration"
+  },
+  "Hỗ trợ các nguồn dữ liệu": {
+    "vi": "Hỗ trợ các nguồn dữ liệu",
+    "en": "Supports data sources"
+  },
+  "bạn đang sử dụng.": {
+    "vi": "bạn đang sử dụng.",
+    "en": "you are using."
+  },
+  "Kết nối Live DB (PostgreSQL, MySQL, SQLite) hoặc ingest SQL Dump. Xuất semantic layer sang JSON hoặc YAML.": {
+    "vi": "Kết nối Live DB (PostgreSQL, MySQL, SQLite) hoặc ingest SQL Dump. Xuất semantic layer sang JSON hoặc YAML.",
+    "en": "Connect to Live DB (PostgreSQL, MySQL, SQLite) or ingest SQL Dump. Export semantic layer to JSON or YAML."
+  },
+  "Hiệu suất": {
+    "vi": "Hiệu suất",
+    "en": "Efficiency"
+  },
+  "Số liệu nói": {
+    "vi": "Số liệu nói",
+    "en": "Figures say"
+  },
+  "lên tất cả.": {
+    "vi": "lên tất cả.",
+    "en": "up all."
+  },
+  "SemanticLayer": {
+    "vi": "SemanticLayer",
+    "en": "SemanticLayer"
+  },
+  "Beta": {
+    "vi": "bản thử nghiệm",
+    "en": "Beta"
+  },
+  "Sẵn sàng": {
+    "vi": "Sẵn sàng",
+    "en": "Ready"
+  },
+  "sử dụng.": {
+    "vi": "sử dụng.",
+    "en": "use."
+  },
+  "Semantic Layer Agent hiện đang trong giai đoạn beta. Tất cả tính năng cốt lõi đều sẵn sàng sử dụng miễn phí.": {
+    "vi": "Semantic Layer Agent hiện đang trong giai đoạn beta. Tất cả tính năng cốt lõi đều sẵn sàng sử dụng miễn phí.",
+    "en": "Semantic Layer Agent is currently in beta. All core features are available for free."
+  },
+  "Miễn phí": {
+    "vi": "Miễn phí",
+    "en": "Free of charge"
+  },
+  "Tất cả tính năng cốt lõi đều sẵn sàng trong giai đoạn beta.": {
+    "vi": "Tất cả tính năng cốt lõi đều sẵn sàng trong giai đoạn beta.",
+    "en": "All core features are available in beta."
+  },
+  "/tháng": {
+    "vi": "/tháng",
+    "en": "/month"
+  },
+  "Tất cả bao gồm mã hóa Fernet, audit log, và bảo mật Read-Only. Chỉ hỗ trợ SELECT statements, không cho phép thay đổi dữ liệu.": {
+    "vi": "Tất cả bao gồm mã hóa Fernet, audit log, và bảo mật Read-Only. Chỉ hỗ trợ SELECT statements, không cho phép thay đổi dữ liệu.",
+    "en": "All include Fernet encryption, audit log, and Read-Only security. Only SELECT statements are supported, data changes are not allowed."
+  },
+  "Bảo mật": {
+    "vi": "Bảo mật",
+    "en": "Security"
+  },
+  "An toàn là": {
+    "vi": "An toàn là",
+    "en": "Safety is"
+  },
+  "ưu tiên tuyệt đối.": {
+    "vi": "ưu tiên tuyệt đối.",
+    "en": "absolute priority."
+  },
+  "Guardrails đa lớp đảm bảo dữ liệu khách hàng luôn được bảo vệ. Không có ngoại lệ, không có lỗ hổng.": {
+    "vi": "Guardrails đa lớp đảm bảo dữ liệu khách hàng luôn được bảo vệ. Không có ngoại lệ, không có lỗ hổng.",
+    "en": "Multi-layered Guardrails ensure customer data is always protected. No exceptions, no loopholes."
+  },
+  "Phản hồi từ người dùng": {
+    "vi": "Phản hồi từ người dùng",
+    "en": "Feedback from users"
+  },
+  "Kết quả nổi bật": {
+    "vi": "Kết quả nổi bật",
+    "en": "Outstanding results"
+  },
+  "Các khả năng chính": {
+    "vi": "Các khả năng chính",
+    "en": "Key capabilities"
+  },
+  "Làm mới": {
+    "vi": "Làm mới",
+    "en": "Refresh"
+  },
+  "Đang phân tích Catalog...": {
+    "vi": "Đang phân tích Catalog...",
+    "en": "Analyzing Catalog..."
+  },
+  "metric": {
+    "vi": "thước đo",
+    "en": "metric"
+  },
+  "Cùng công thức lõi, khác bộ lọc nghiệp vụ. Hãy xác nhận các filter này có thực sự là định nghĩa riêng.": {
+    "vi": "Cùng công thức lõi, khác bộ lọc nghiệp vụ. Hãy xác nhận các filter này có thực sự là định nghĩa riêng.",
+    "en": "Same core formula, different business filters. Please confirm that these filters are truly individual definitions."
+  },
+  "Sửa": {
+    "vi": "Sửa",
+    "en": "Fix"
+  },
+  "Không phát hiện nhóm metric trùng hoặc gần trùng.": {
+    "vi": "Không phát hiện nhóm metric trùng hoặc gần trùng.",
+    "en": "No duplicate or nearly duplicate metric groups detected."
+  },
+  "Thủ công": {
+    "vi": "Thủ công",
+    "en": "Handmade"
+  },
+  "AI": {
+    "vi": "trí tuệ nhân tạo",
+    "en": "AI"
+  },
+  "Đã xóa": {
+    "vi": "Đã xóa",
+    "en": "Deleted"
+  },
+  "chờ duyệt": {
+    "vi": "chờ duyệt",
+    "en": "waiting for approval"
+  },
+  ") · Bảng:": {
+    "vi": ") · Bảng:",
+    "en": ") · Board:"
+  },
+  "Xem YAML definition": {
+    "vi": "Xem định nghĩa YAML",
+    "en": "Xem YAML definition"
+  },
+  "Metric legacy chưa có canonical definition.": {
+    "vi": "Metric legacy chưa có canonical definition.",
+    "en": "Metric legacy does not have a canonical definition yet."
+  },
+  "Xóa vĩnh viễn": {
+    "vi": "Xóa vĩnh viễn",
+    "en": "Delete permanently"
+  },
+  "Khôi phục": {
+    "vi": "Khôi phục",
+    "en": "Restore"
+  },
+  "Duyệt chỉ số này": {
+    "vi": "Duyệt chỉ số này",
+    "en": "Approve this metric"
+  },
+  "Lịch sử ·": {
+    "vi": "Lịch sử ·",
+    "en": "History ·"
+  },
+  "Chỉnh sửa định nghĩa": {
+    "vi": "Chỉnh sửa định nghĩa",
+    "en": "Edit definition"
+  },
+  "Hãy chọn hai phiên bản khác nhau để so sánh.": {
+    "vi": "Hãy chọn hai phiên bản khác nhau để so sánh.",
+    "en": "Please choose two different versions to compare."
+  },
+  "Bản sửa": {
+    "vi": "Bản sửa",
+    "en": "Edit"
+  },
+  "đang chờ phê duyệt. Định nghĩa": {
+    "vi": "đang chờ phê duyệt. Định nghĩa",
+    "en": "pending approval. Define"
+  },
+  "vẫn đang phục vụ truy vấn cho tới khi bản sửa được duyệt.": {
+    "vi": "vẫn đang phục vụ truy vấn cho tới khi bản sửa được duyệt.",
+    "en": "query is still being served until the fix is ​​approved."
+  },
+  "Người sửa:": {
+    "vi": "Người sửa:",
+    "en": "Editor:"
+  },
+  "Phê duyệt bản sửa": {
+    "vi": "Phê duyệt bản sửa",
+    "en": "Approve the edit"
+  },
+  "Từ chối": {
+    "vi": "Từ chối",
+    "en": "Refuse"
+  },
+  "⚠️ Vui lòng nhập lý do từ chối trước khi bấm Từ chối.": {
+    "vi": "⚠️ Vui lòng nhập lý do từ chối trước khi bấm Từ chối.",
+    "en": "⚠️ Please enter the reason for refusal before clicking Refuse."
+  },
+  "Bạn không có quyền phê duyệt bản sửa này.": {
+    "vi": "Bạn không có quyền phê duyệt bản sửa này.",
+    "en": "You do not have permission to approve this edit."
+  },
+  "Đưa metric trở lại định nghĩa của": {
+    "vi": "Đưa metric trở lại định nghĩa của",
+    "en": "Bring the metric back to the definition of"
+  },
+  "bằng cách ghi thêm một phiên bản mới — lịch sử cũ được giữ nguyên.": {
+    "vi": "bằng cách ghi thêm một phiên bản mới — lịch sử cũ được giữ nguyên.",
+    "en": "by adding a new version — the old history is preserved."
+  },
+  "Khôi phục phiên bản này": {
+    "vi": "Khôi phục phiên bản này",
+    "en": "Restore this version"
+  },
+  "Tạo/Sửa lúc:": {
+    "vi": "Tạo/Sửa lúc:",
+    "en": "Created/Edited at:"
+  },
+  "bởi": {
+    "vi": "bởi",
+    "en": "by"
+  },
+  "· dựa trên v": {
+    "vi": "· dựa trên v",
+    "en": "· based on v"
+  },
+  "Đã duyệt bởi": {
+    "vi": "Đã duyệt bởi",
+    "en": "Approved by"
+  },
+  "lúc": {
+    "vi": "lúc",
+    "en": "at the time"
+  },
+  "Đã từ chối bởi": {
+    "vi": "Đã từ chối bởi",
+    "en": "Rejected by"
+  },
+  "Xử lý bởi": {
+    "vi": "Xử lý bởi",
+    "en": "Handled by"
+  },
+  "Version": {
+    "vi": "Phiên bản",
+    "en": "Version"
+  },
+  "Đang publish": {
+    "vi": "Đang publish",
+    "en": "Publishing"
+  },
+  "Phiên bản legacy không có definition.": {
+    "vi": "Phiên bản legacy không có definition.",
+    "en": "The legacy version has no definition."
+  },
+  "Xác nhận khôi phục phiên bản": {
+    "vi": "Xác nhận khôi phục phiên bản",
+    "en": "Confirm version restore"
+  },
+  "Bạn sẽ khôi phục metric “": {
+    "vi": "Bạn sẽ khôi phục metric “",
+    "en": "You will restore the metric “"
+  },
+  "” về phiên bản v": {
+    "vi": "” về phiên bản v",
+    "en": "” about version v"
+  },
+  "Mọi phiên bản mới hơn v": {
+    "vi": "Mọi phiên bản mới hơn v",
+    "en": "Any version newer than v"
+  },
+  "sẽ bị xóa vĩnh viễn và không thể hoàn tác.": {
+    "vi": "sẽ bị xóa vĩnh viễn và không thể hoàn tác.",
+    "en": "will be permanently deleted and cannot be undone."
+  },
+  "Không thể so sánh: một trong hai phiên bản là bản legacy không có definition.": {
+    "vi": "Không thể so sánh: một trong hai phiên bản là bản legacy không có definition.",
+    "en": "Cannot compare: one of the two versions is a legacy version without definition."
+  },
+  "Connect a data source": {
+    "vi": "Kết nối nguồn dữ liệu",
+    "en": "Connect a data source"
+  },
+  "Point Optimus at a live database or upload a SQL dump. Credentials are read-only.": {
+    "vi": "Trỏ Optimus vào cơ sở dữ liệu trực tiếp hoặc tải lên kết xuất SQL. Thông tin xác thực chỉ đọc.",
+    "en": "Point Optimus at a live database or upload a SQL dump. Credentials are read-only."
+  },
+  "Engine": {
+    "vi": "Động cơ",
+    "en": "Engine"
+  },
+  "Connection name": {
+    "vi": "Tên kết nối",
+    "en": "Connection name"
+  },
+  "Host / connection string": {
+    "vi": "Chuỗi máy chủ/kết nối",
+    "en": "Host / connection string"
+  },
+  "Tệp SQL Dump (.sql)": {
+    "vi": "Kết xuất tệp SQL (.sql)",
+    "en": "Tệp SQL Dump (.sql)"
+  },
+  "Description": {
+    "vi": "Mô tả",
+    "en": "Description"
+  },
+  "Bảo vệ an toàn dữ liệu:": {
+    "vi": "Bảo vệ an toàn dữ liệu:",
+    "en": "Data security protection:"
+  },
+  "• Chỉ dành cho Live DB.": {
+    "vi": "• Chỉ dành cho Live DB.",
+    "en": "• Live DB only."
+  },
+  "• Truy vấn SELECT-only, được biên dịch deterministic.": {
+    "vi": "• Truy vấn SELECT-only, được biên dịch deterministic.",
+    "en": "• SELECT-only queries, compiled deterministic."
+  },
+  "• Mặc định 100 dòng · Tối đa 1.000 dòng.": {
+    "vi": "• Mặc định 100 dòng · Tối đa 1.000 dòng.",
+    "en": "• Default 100 lines · Maximum 1,000 lines."
+  },
+  "• Timeout 15 giây.": {
+    "vi": "• Timeout 15 giây.",
+    "en": "• Timeout 15 seconds."
+  },
+  "Tạo Workspace mới": {
+    "vi": "Tạo Workspace mới",
+    "en": "Create a new Workspace"
+  },
+  "Tạo một Workspace để quản lý dữ liệu và thành viên.": {
+    "vi": "Tạo một Workspace để quản lý dữ liệu và thành viên.",
+    "en": "Create a Workspace to manage data and members."
+  },
+  "Tên Workspace": {
+    "vi": "Tên Workspace",
+    "en": "Workspace name"
+  },
+  "Tên metric": {
+    "vi": "Tên metric",
+    "en": "Metric name"
+  },
+  "Base entity": {
+    "vi": "Thực thể gốc",
+    "en": "Base entity"
+  },
+  "Hàm tổng hợp": {
+    "vi": "Hàm tổng hợp",
+    "en": "Aggregate function"
+  },
+  "Biểu thức công thức": {
+    "vi": "Biểu thức công thức",
+    "en": "Formula expression"
+  },
+  "Ghi chú loại trừ": {
+    "vi": "Ghi chú loại trừ",
+    "en": "Exclusion notes"
+  },
+  "Lý do thay đổi": {
+    "vi": "Lý do thay đổi",
+    "en": "Reason for change"
+  },
+  "Chỉ số đang publish sẽ giữ nguyên. Bản sửa được lưu thành phiên bản mới chờ phê duyệt.": {
+    "vi": "Chỉ số đang publish sẽ giữ nguyên. Bản sửa được lưu thành phiên bản mới chờ phê duyệt.",
+    "en": "The published metric will remain the same. The edit is saved as a new version awaiting approval."
+  },
+  "Metric sẽ có trạng thái Chưa được xác minh sau khi gửi.": {
+    "vi": "Metric sẽ có trạng thái Chưa được xác minh sau khi gửi.",
+    "en": "Metric will have a status of Unverified after submission."
+  },
+  "Preview chỉ đọc (YAML spec):": {
+    "vi": "Preview chỉ đọc (YAML spec):",
+    "en": "Read-only preview (YAML spec):"
+  },
+  "Phê duyệt metric": {
+    "vi": "Phê duyệt metric",
+    "en": "Approve metrics"
+  },
+  "Đã có trong Semantic Layer": {
+    "vi": "Đã có trong Semantic Layer",
+    "en": "Already in the Semantic Layer"
+  },
+  "Chưa có lịch sử phiên bản.": {
+    "vi": "Chưa có lịch sử phiên bản.",
+    "en": "No version history yet."
+  },
+  "current": {
+    "vi": "hiện hành",
+    "en": "current"
+  },
+  "Bộ lọc cố định": {
+    "vi": "Bộ lọc cố định",
+    "en": "Fixed filter"
+  },
+  "Thêm": {
+    "vi": "Thêm",
+    "en": "More"
+  },
+  "Settings": {
+    "vi": "Cài đặt",
+    "en": "Settings"
+  },
+  "Manage your workspace, account, and appearance.": {
+    "vi": "Quản lý không gian làm việc, tài khoản và giao diện của bạn.",
+    "en": "Manage your workspace, account, and appearance."
+  },
+  "· Workspace member": {
+    "vi": "· Thành viên không gian làm việc",
+    "en": "· Workspace member"
+  },
+  "Appearance": {
+    "vi": "Vẻ bề ngoài",
+    "en": "Appearance"
+  },
+  "Daily 02:00 AM": {
+    "vi": "02:00 sáng hàng ngày",
+    "en": "Daily 02:00 AM"
+  },
+  "Xem lịch sử đồng bộ (Audit Logs)": {
+    "vi": "Xem lịch sử đồng bộ (Audit Logs)",
+    "en": "View sync history (Audit Logs)"
+  },
+  "Query guardrails": {
+    "vi": "Lan can truy vấn",
+    "en": "Query guardrails"
+  },
+  "Active": {
+    "vi": "Tích cực",
+    "en": "Active"
+  },
+  "Read-only enforcement": {
+    "vi": "Thực thi chỉ đọc",
+    "en": "Read-only enforcement"
+  },
+  "Enabled": {
+    "vi": "Đã bật",
+    "en": "Enabled"
+  },
+  "Row limit (default / max)": {
+    "vi": "Giới hạn hàng (mặc định / tối đa)",
+    "en": "Row limit (default / max)"
+  },
+  "Statement timeout": {
+    "vi": "Hết thời gian chờ báo cáo",
+    "en": "Statement timeout"
+  },
+  "15s": {
+    "vi": "15 giây",
+    "en": "15s"
+  },
+  "Data sources": {
+    "vi": "Nguồn dữ liệu",
+    "en": "Data sources"
+  },
+  "Metrics": {
+    "vi": "Chỉ số",
+    "en": "Metrics"
+  },
+  "Engine:": {
+    "vi": "Động cơ:",
+    "en": "Engine:"
+  },
+  "LangGraph + SemanticQueryCompiler": {
+    "vi": "LangGraph + Trình biên dịch ngữ nghĩa",
+    "en": "LangGraph + SemanticQueryCompiler"
+  },
+  "Token:": {
+    "vi": "Mã thông báo:",
+    "en": "Token:"
+  },
+  "Daily Cron 02:00 AM": {
+    "vi": "Cron hàng ngày 02:00 sáng",
+    "en": "Daily Cron 02:00 AM"
+  },
+  "Đã tự vá (Healed)": {
+    "vi": "Đã tự vá (Healed)",
+    "en": "Healed"
+  },
+  "Thành công": {
+    "vi": "Thành công",
+    "en": "Success"
+  },
+  "Không đổi": {
+    "vi": "Không đổi",
+    "en": "Unchanged"
+  },
+  "Thất bại": {
+    "vi": "Thất bại",
+    "en": "Failure"
+  },
+  "Cơ sở dữ liệu:": {
+    "vi": "Cơ sở dữ liệu:",
+    "en": "Database:"
+  },
+  "Làm mới danh sách": {
+    "vi": "Làm mới danh sách",
+    "en": "Refresh the list"
+  },
+  "Tổng số lần quét": {
+    "vi": "Tổng số lần quét",
+    "en": "Total number of scans"
+  },
+  "Lần tự vá (Self-healed)": {
+    "vi": "Lần tự vá (Self-healed)",
+    "en": "Self-healed"
+  },
+  "Quét lần cuối": {
+    "vi": "Quét lần cuối",
+    "en": "Final scan"
+  },
+  "Bước": {
+    "vi": "Bước",
+    "en": "Step"
+  },
+  "Đang tải lịch sử đồng bộ...": {
+    "vi": "Đang tải lịch sử đồng bộ...",
+    "en": "Loading sync history..."
+  },
+  "Chưa có lịch sử đồng bộ nào.": {
+    "vi": "Chưa có lịch sử đồng bộ nào.",
+    "en": "There is no sync history yet."
+  },
+  "Cột được đổi tên trong Database:": {
+    "vi": "Cột được đổi tên trong Database:",
+    "en": "Renamed column in Database:"
+  },
+  "Công thức chỉ số đã được tự động cập nhật:": {
+    "vi": "Công thức chỉ số đã được tự động cập nhật:",
+    "en": "The metric formula has been automatically updated:"
+  },
+  "chỉ số": {
+    "vi": "chỉ số",
+    "en": "metric"
+  },
+  "bảng:": {
+    "vi": "bảng:",
+    "en": "board:"
+  },
+  "CÔNG THỨC CŨ": {
+    "vi": "CÔNG THỨC CŨ",
+    "en": "OLD RECIPE"
+  },
+  "Cũ": {
+    "vi": "Cũ",
+    "en": "Old"
+  },
+  "CÔNG THỨC MỚI": {
+    "vi": "CÔNG THỨC MỚI",
+    "en": "NEW FORMULA"
+  },
+  "Mới": {
+    "vi": "Mới",
+    "en": "New"
+  },
+  "Câu lệnh SQL Query hoàn chỉnh:": {
+    "vi": "Câu lệnh SQL Query hoàn chỉnh:",
+    "en": "Complete SQL Query statement:"
+  },
+  "Bảng được đổi tên trong Database:": {
+    "vi": "Bảng được đổi tên trong Database:",
+    "en": "Renamed table in Database:"
+  },
+  "Chỉ số cần rà soát (do mất cột nguồn):": {
+    "vi": "Chỉ số cần rà soát (do mất cột nguồn):",
+    "en": "Metric to review (due to loss of source column):"
+  },
+  "Cột": {
+    "vi": "Cột",
+    "en": "Column"
+  },
+  "trong bảng": {
+    "vi": "trong bảng",
+    "en": "in the table"
+  },
+  "đã bị xóa.": {
+    "vi": "đã bị xóa.",
+    "en": "has been deleted."
+  },
+  "Chờ rà soát": {
+    "vi": "Chờ rà soát",
+    "en": "Wait for review"
+  },
+  "Cột thay đổi kiểu dữ liệu:": {
+    "vi": "Cột thay đổi kiểu dữ liệu:",
+    "en": "Column changes data type:"
+  },
+  "Bảng mới phát hiện:": {
+    "vi": "Bảng mới phát hiện:",
+    "en": "Newly discovered table:"
+  },
+  "Không có thay đổi cấu trúc bảng hoặc công thức metric nào cần vá.": {
+    "vi": "Không có thay đổi cấu trúc bảng hoặc công thức metric nào cần vá.",
+    "en": "There are no table structure or metric formula changes that need patching."
+  },
+  "Mã phiên bản cấu trúc:": {
+    "vi": "Mã phiên bản cấu trúc:",
+    "en": "Structure version code:"
+  },
+  "Quản lý Workspace": {
+    "vi": "Quản lý Workspace",
+    "en": "Workspace Management"
+  },
+  "Tạo link mời, quản lý vai trò và kiểm soát các invitation đang hoạt động.": {
+    "vi": "Tạo link mời, quản lý vai trò và kiểm soát các invitation đang hoạt động.",
+    "en": "Create invitation links, manage roles, and control active invitations."
+  },
+  "Mời thành viên bằng link": {
+    "vi": "Mời thành viên bằng link",
+    "en": "Invite members by link"
+  },
+  "Tạo link dùng một lần và gửi link cho thành viên cần tham gia Workspace.": {
+    "vi": "Tạo link dùng một lần và gửi link cho thành viên cần tham gia Workspace.",
+    "en": "Create a one-time link and send it to members who need to join the Workspace."
+  },
+  "Admin": {
+    "vi": "Quản trị viên",
+    "en": "Admin"
+  },
+  "Member": {
+    "vi": "Thành viên",
+    "en": "Member"
+  },
+  "Data Lead": {
+    "vi": "Dẫn dữ liệu",
+    "en": "Data Lead"
+  },
+  "Link mời vừa tạo": {
+    "vi": "Link mời vừa tạo",
+    "en": "Invitation link just created"
+  },
+  "Có thể mở và copy": {
+    "vi": "Có thể mở và copy",
+    "en": "Can open and copy"
+  },
+  "Thành viên": {
+    "vi": "Thành viên",
+    "en": "Member"
+  },
+  "Đang tải...": {
+    "vi": "Đang tải...",
+    "en": "Loading..."
+  },
+  "Workspace luôn phải còn ít nhất một Admin. Nếu đổi vai trò hoặc xóa chính bạn, quyền quản lý có thể mất ngay.": {
+    "vi": "Workspace luôn phải còn ít nhất một Admin. Nếu đổi vai trò hoặc xóa chính bạn, quyền quản lý có thể mất ngay.",
+    "en": "Workspace must always have at least one Admin. If you change roles or remove yourself, management rights may be lost immediately."
+  },
+  "Xóa": {
+    "vi": "Xóa",
+    "en": "Erase"
+  },
+  "Chưa có thành viên.": {
+    "vi": "Chưa có thành viên.",
+    "en": "No members yet."
+  },
+  "Link chưa sử dụng sẽ tự hết hạn sau 7 ngày.": {
+    "vi": "Link chưa sử dụng sẽ tự hết hạn sau 7 ngày.",
+    "en": "Unused links will expire after 7 days."
+  },
+  "Hết hạn": {
+    "vi": "Hết hạn",
+    "en": "Expired"
+  },
+  "Thao tác": {
+    "vi": "Thao tác",
+    "en": "Operation"
+  },
+  "Link mời #": {
+    "vi": "Link mời #",
+    "en": "Invitation link #"
+  },
+  "Chưa có invitation đang mở.": {
+    "vi": "Chưa có invitation đang mở.",
+    "en": "There are no open invitations yet."
+  },
+  "Giải thích số liệu (Semantic Explanation):": {
+    "vi": "Giải thích số liệu (Semantic Explanation):",
+    "en": "Semantic Explanation:"
+  },
+  "Hiển thị": {
+    "vi": "Hiển thị",
+    "en": "Show"
+  },
+  "kết quả": {
+    "vi": "kết quả",
+    "en": "result"
+  },
+  "LIMIT": {
+    "vi": "LIMIT",
+    "en": "LIMIT"
+  },
+  "applied": {
+    "vi": "đã áp dụng",
+    "en": "applied"
+  },
+  "Read-only": {
+    "vi": "Chỉ đọc",
+    "en": "Read-only"
+  },
+  "Không có dữ liệu phù hợp": {
+    "vi": "Không có dữ liệu phù hợp",
+    "en": "There is no suitable data"
+  },
+  "Truy vấn đã thực thi thành công nhưng trả về 0 dòng kết quả.": {
+    "vi": "Truy vấn đã thực thi thành công nhưng trả về 0 dòng kết quả.",
+    "en": "The query executed successfully but returned 0 rows of results."
+  },
+  "Cuộc trò chuyện mới": {
+    "vi": "Cuộc trò chuyện mới",
+    "en": "New chat"
+  },
+  "Lịch sử trò chuyện": {
+    "vi": "Lịch sử trò chuyện",
+    "en": "Chat history"
+  },
+  "Chưa có cuộc trò chuyện nào": {
+    "vi": "Chưa có cuộc trò chuyện nào",
+    "en": "There have been no conversations yet"
+  },
+  "Bắt đầu cuộc trò chuyện mới": {
+    "vi": "Bắt đầu cuộc trò chuyện mới",
+    "en": "Start a new conversation"
+  },
+  "Không tìm thấy hội thoại": {
+    "vi": "Không tìm thấy hội thoại",
+    "en": "No conversation found"
+  },
+  "Xóa đoạn chat này?": {
+    "vi": "Xóa đoạn chat này?",
+    "en": "Delete this chat?"
+  },
+  "tin nhắn": {
+    "vi": "tin nhắn",
+    "en": "message"
+  },
+  "Metric đang lưu:": {
+    "vi": "Metric đang lưu:",
+    "en": "Metrics are saving:"
+  },
+  "— gợi ý tên mới:": {
+    "vi": "— gợi ý tên mới:",
+    "en": "— new name suggestion:"
+  },
+  "Đổi tên": {
+    "vi": "Đổi tên",
+    "en": "Rename"
+  },
+  "Tính kết quả từ chỉ số này": {
+    "vi": "Tính kết quả từ chỉ số này",
+    "en": "Calculate the results from this metric"
+  },
+  "Metric có sẵn trong hệ thống": {
+    "vi": "Metric có sẵn trong hệ thống",
+    "en": "Metric is available in the system"
+  },
+  "Đã chép": {
+    "vi": "Đã chép",
+    "en": "Copied"
+  },
+  "Copy SQL": {
+    "vi": "Sao chép SQL",
+    "en": "Copy SQL"
+  },
+  "Bạn không có quyền tạo, sửa hoặc lưu metric trực tiếp. Bạn có thể tra cứu dữ liệu qua các metric đã duyệt (chỉ áp dụng cho kết nối Live DB) hoặc yêu cầu AI tạo Business Metric mới. Metric sau khi tạo sẽ được lưu vào Semantic Layer ở trạng thái chờ Data Lead phê duyệt.": {
+    "vi": "Bạn không có quyền tạo, sửa hoặc lưu metric trực tiếp. Bạn có thể tra cứu dữ liệu qua các metric đã duyệt (chỉ áp dụng cho kết nối Live DB) hoặc yêu cầu AI tạo Business Metric mới. Metric sau khi tạo sẽ được lưu vào Semantic Layer ở trạng thái chờ Data Lead phê duyệt.",
+    "en": "You do not have permission to create, edit, or save metrics directly. You can look up data through approved metrics (only applies to Live DB connections) or ask AI to create new Business Metrics. Once created, Metric will be saved to the Semantic Layer in a state waiting for Data Lead approval."
+  },
+  "mẫu)": {
+    "vi": "mẫu)",
+    "en": "sample)"
+  },
+  "⚠️ Không kiểm tra được trùng lặp (dedupe unavailable) — danh sách chưa so với metric đã lưu.": {
+    "vi": "⚠️ Không kiểm tra được trùng lặp (dedupe unavailable) — danh sách chưa so với metric đã lưu.",
+    "en": "⚠️ Unable to check for duplicates (dedupe unavailable) — the list has not been compared to the saved metrics."
+  },
+  "Chờ phê duyệt": {
+    "vi": "Chờ phê duyệt",
+    "en": "Wait for approval"
+  },
+  "Độ tin cậy:": {
+    "vi": "Độ tin cậy:",
+    "en": "Reliability:"
+  },
+  "Bảng:": {
+    "vi": "Bảng:",
+    "en": "Board:"
+  },
+  "YAML preview sẵn sàng": {
+    "vi": "YAML preview sẵn sàng",
+    "en": "YAML preview ready"
+  },
+  "Nhờ AI tinh chỉnh": {
+    "vi": "Nhờ AI tinh chỉnh",
+    "en": "Thanks to AI fine-tuning"
+  },
+  "Chỉnh sửa thủ công": {
+    "vi": "Chỉnh sửa thủ công",
+    "en": "Manual editing"
+  },
+  "Công thức tính": {
+    "vi": "Công thức tính",
+    "en": "Calculation formula"
+  },
+  "Dựa vào bảng gốc": {
+    "vi": "Dựa vào bảng gốc",
+    "en": "Based on the original table"
+  },
+  "Cột dữ liệu sử dụng": {
+    "vi": "Cột dữ liệu sử dụng",
+    "en": "Usage data column"
+  },
+  "Bộ lọc điều kiện": {
+    "vi": "Bộ lọc điều kiện",
+    "en": "Condition filter"
+  },
+  "Giả định cần xác nhận": {
+    "vi": "Giả định cần xác nhận",
+    "en": "Assumptions need confirmation"
+  },
+  "YAML preview": {
+    "vi": "Xem trước YAML",
+    "en": "YAML preview"
+  },
+  "Đã được Data Lead duyệt": {
+    "vi": "Đã được Data Lead duyệt",
+    "en": "Approved by Data Lead"
+  },
+  "Đã gửi cho Data Lead": {
+    "vi": "Đã gửi cho Data Lead",
+    "en": "Sent to Data Lead"
+  },
+  "Đã lưu — mở catalog": {
+    "vi": "Đã lưu — mở catalog",
+    "en": "Saved — opens catalog"
+  },
+  "Tiếng Việt": {
+    "vi": "Tiếng Việt",
+    "en": "Vietnamese"
+  },
+  "English": {
+    "vi": "Tiếng Anh",
+    "en": "English"
+  },
+  "Đoạn chat mới": {
+    "vi": "Đoạn chat mới",
+    "en": "New chat"
+  },
+  "Yêu cầu của bạn:": {
+    "vi": "Yêu cầu của bạn:",
+    "en": "Your request:"
+  },
+  "chờ xử lý ·": {
+    "vi": "chờ xử lý ·",
+    "en": "pending ·"
+  },
+  "đã duyệt.": {
+    "vi": "đã duyệt.",
+    "en": "approved."
+  },
+  "Tải file": {
+    "vi": "Tải file",
+    "en": "Download files"
+  },
+  "Đang tải export...": {
+    "vi": "Đang tải export...",
+    "en": "Loading export..."
+  },
+  "semantic_layer.": {
+    "vi": "ngữ nghĩa_layer.",
+    "en": "semantic_layer."
+  },
+  "Đang tải semantic catalog...": {
+    "vi": "Đang tải semantic catalog...",
+    "en": "Loading semantic catalog..."
+  },
+  "Chế độ xem Technical Preview": {
+    "vi": "Chế độ xem Technical Preview",
+    "en": "Technical Preview view"
+  },
+  "SQL Dump chỉ chứa metadata DDL và không hỗ trợ query. Hãy chọn Live DB.": {
+    "vi": "SQL Dump chỉ chứa metadata DDL và không hỗ trợ query. Hãy chọn Live DB.",
+    "en": "SQL Dump only contains DDL metadata and does not support queries. Please select Live DB."
+  },
+  "CÂU HỎI PHÂN TÍCH HIỆN TẠI": {
+    "vi": "CÂU HỎI PHÂN TÍCH HIỆN TẠI",
+    "en": "CURRENT ANALYSIS QUESTIONS"
+  },
+  "Đặt lại": {
+    "vi": "Đặt lại",
+    "en": "Reset"
+  },
+  "Bộ lọc từ Dashboard": {
+    "vi": "Bộ lọc từ Dashboard",
+    "en": "Filter from Dashboard"
+  },
+  "Chưa chọn chỉ số (Chọn ít nhất 1 metric)": {
+    "vi": "Chưa chọn chỉ số (Chọn ít nhất 1 metric)",
+    "en": "No metric selected (Select at least 1 metric)"
+  },
+  "1. CHỈ SỐ ĐO LƯỜNG (": {
+    "vi": "1. CHỈ SỐ ĐO LƯỜNG (",
+    "en": "1. METRICS ("
+  },
+  "Measures": {
+    "vi": "Đo",
+    "en": "Measures"
+  },
+  "Chưa có metric nào được phê duyệt. Hãy duyệt trong Catalog trước.": {
+    "vi": "Chưa có metric nào được phê duyệt. Hãy duyệt trong Catalog trước.",
+    "en": "No metrics have been approved yet. Please approve in the Catalog first."
+  },
+  "2. CHIỀU PHÂN TÍCH (": {
+    "vi": "2. CHIỀU PHÂN TÍCH (",
+    "en": "2. DIMENSIONS OF ANALYSIS ("
+  },
+  "Dimensions": {
+    "vi": "Kích thước",
+    "en": "Dimensions"
+  },
+  "Đang chọn (": {
+    "vi": "Đang chọn (",
+    "en": "Selecting ("
+  },
+  "Chọn ít nhất 1 Chỉ số ở mục 1": {
+    "vi": "Chọn ít nhất 1 Chỉ số ở mục 1",
+    "en": "Select at least 1 Metric in item 1"
+  },
+  "Hệ thống sẽ gợi ý các chiều phân tích an toàn (Tier A/B/C) tương ứng với chỉ số.": {
+    "vi": "Hệ thống sẽ gợi ý các chiều phân tích an toàn (Tier A/B/C) tương ứng với chỉ số.",
+    "en": "The system will suggest dimensions of safety analysis (Tier A/B/C) corresponding to the metric."
+  },
+  "Không tìm thấy chiều phân tích phù hợp.": {
+    "vi": "Không tìm thấy chiều phân tích phù hợp.",
+    "en": "No suitable analysis dimension was found."
+  },
+  "Cột mốc thời gian (Time Dimension):": {
+    "vi": "Cột mốc thời gian (Time Dimension):",
+    "en": "Time Dimension:"
+  },
+  "-- Không chọn mốc thời gian --": {
+    "vi": "-- Không chọn mốc thời gian --",
+    "en": "-- No time dimension --"
+  },
+  "Chu kỳ tổng hợp (Granularity):": {
+    "vi": "Chu kỳ tổng hợp (Granularity):",
+    "en": "Granularity:"
+  },
+  "Preview SQL": {
+    "vi": "Xem trước SQL",
+    "en": "Preview SQL"
+  },
+  "Thực thi (Execute)": {
+    "vi": "Thực thi (Execute)",
+    "en": "Execute"
+  },
+  "Xuất CSV": {
+    "vi": "Xuất CSV",
+    "en": "Export CSV"
+  },
+  "Read-only · LIMIT 100 · max 1000 · 15s timeout": {
+    "vi": "Chỉ đọc · LIMIT 100 · tối đa 1.000 dòng · thời gian chờ 15 giây",
+    "en": "Read-only · LIMIT 100 · max 1000 · 15s timeout"
+  },
+  "Lỗi truy vấn Semantic:": {
+    "vi": "Lỗi truy vấn Semantic:",
+    "en": "Semantic query error:"
+  },
+  "Chọn các chỉ số (Measures) và chiều phân tích (Dimensions / Time Grain) ở bảng điều khiển bên trái, sau đó nhấn": {
+    "vi": "Chọn các chỉ số (Measures) và chiều phân tích (Dimensions / Time Grain) ở bảng điều khiển bên trái, sau đó nhấn",
+    "en": "Select the metrics and analysis dimension (Dimensions / Time Grain) in the left panel, then press"
+  },
+  "hoặc": {
+    "vi": "hoặc",
+    "en": "or"
+  },
+  "Thực thi": {
+    "vi": "Thực thi",
+    "en": "Execution"
+  },
+  "dòng kết quả": {
+    "vi": "dòng kết quả",
+    "en": "result line"
+  },
+  "Bản xem trước SQL đã sẵn sàng": {
+    "vi": "Bản xem trước SQL đã sẵn sàng",
+    "en": "SQL preview is ready"
+  },
+  "COMPILED SQL (READ-ONLY)": {
+    "vi": "SQL được biên dịch (CHỈ ĐỌC)",
+    "en": "COMPILED SQL (READ-ONLY)"
+  },
+  "Dialect-aware AST compiled": {
+    "vi": "AST nhận biết phương ngữ được biên dịch",
+    "en": "Dialect-aware AST compiled"
+  },
+  "Tổng": {
+    "vi": "Tổng",
+    "en": "Total"
+  },
+  "Trung bình mỗi": {
+    "vi": "Trung bình mỗi",
+    "en": "Average per"
+  },
+  "Cao nhất / Thấp nhất": {
+    "vi": "Cao nhất / Thấp nhất",
+    "en": "Highest / Lowest"
+  },
+  "Số điểm dữ liệu (": {
+    "vi": "Số điểm dữ liệu (",
+    "en": "Number of data points ("
+  },
+  "Biểu đồ trực quan:": {
+    "vi": "Biểu đồ trực quan:",
+    "en": "Visual chart:"
+  },
+  "Phân tích xu hướng và tương quan dữ liệu": {
+    "vi": "Phân tích xu hướng và tương quan dữ liệu",
+    "en": "Analyze trends and correlate data"
+  },
+  "Thêm thủ công": {
+    "vi": "Thêm thủ công",
+    "en": "Add manually"
+  },
+  "Gửi metric": {
+    "vi": "Gửi metric",
+    "en": "Send metrics"
+  },
+  "Chế độ chỉ xem: catalog chỉ hiển thị các metric đã được phê duyệt.": {
+    "vi": "Chế độ chỉ xem: catalog chỉ hiển thị các metric đã được phê duyệt.",
+    "en": "View-only mode: the catalog displays only approved metrics."
+  },
+  "Yêu cầu metric từ Member (": {
+    "vi": "Yêu cầu metric từ Member (",
+    "en": "Request metrics from Member ("
+  },
+  "Duyệt definition đã sửa": {
+    "vi": "Duyệt definition đã sửa",
+    "en": "Approve the edited definition"
+  },
+  "Chỉnh sửa definition": {
+    "vi": "Chỉnh sửa definition",
+    "en": "Edit definition"
+  },
+  "Thùng rác": {
+    "vi": "Thùng rác",
+    "en": "Trash can"
+  },
+  "Các chỉ số đã xóa khỏi Semantic Layer. Bạn có thể khôi phục lại hoặc xóa vĩnh viễn.": {
+    "vi": "Các chỉ số đã xóa khỏi Semantic Layer. Bạn có thể khôi phục lại hoặc xóa vĩnh viễn.",
+    "en": "Metrics removed from the Semantic Layer. You can restore or permanently delete them."
+  },
+  "Xóa đã chọn (": {
+    "vi": "Xóa đã chọn (",
+    "en": "Delete selected ("
+  },
+  "Khôi phục đã chọn (": {
+    "vi": "Khôi phục đã chọn (",
+    "en": "Restore selected ("
+  },
+  "Dọn sạch thùng rác": {
+    "vi": "Dọn sạch thùng rác",
+    "en": "Empty the trash"
+  },
+  "Thùng rác trống. Không có chỉ số nào bị xóa.": {
+    "vi": "Thùng rác trống. Không có chỉ số nào bị xóa.",
+    "en": "Empty trash can. No metrics were removed."
+  },
+  "Chưa có Metric Definition nào": {
+    "vi": "Chưa có Metric Definition nào",
+    "en": "There is no Metric Definition yet"
+  },
+  "Mở AI Studio": {
+    "vi": "Mở AI Studio",
+    "en": "Open AI Studio"
+  },
+  "Không có metric nào đang chờ duyệt.": {
+    "vi": "Không có metric nào đang chờ duyệt.",
+    "en": "There are no metrics pending approval."
+  },
+  "2. Metrics Đã Phê Duyệt (Official Metrics)": {
+    "vi": "2. Metrics Đã Phê Duyệt (Official Metrics)",
+    "en": "2. Official Metrics"
+  },
+  "Các chỉ số chuẩn hóa đã sẵn sàng để truy vấn trong Metric Explorer và Export": {
+    "vi": "Các chỉ số chuẩn hóa đã sẵn sàng để truy vấn trong Metric Explorer và Export",
+    "en": "Normalized metrics are ready for querying in Metric Explorer and Export"
+  },
+  "Đang tải lịch sử phiên bản...": {
+    "vi": "Đang tải lịch sử phiên bản...",
+    "en": "Loading version history..."
+  },
+  "Làm mới tất cả": {
+    "vi": "Làm mới tất cả",
+    "en": "Refresh everything"
+  },
+  "Thêm widget": {
+    "vi": "Thêm widget",
+    "en": "Add widgets"
+  },
+  "Đang tải bảng điều khiển…": {
+    "vi": "Đang tải bảng điều khiển…",
+    "en": "Loading dashboard…"
+  },
+  "Chưa có chỉ số đã duyệt": {
+    "vi": "Chưa có chỉ số đã duyệt",
+    "en": "There are no approved metrics yet"
+  },
+  "Bảng điều khiển cần ít nhất một chỉ số đã duyệt (canonical v2, không lỗi) để hiển thị dữ liệu.": {
+    "vi": "Bảng điều khiển cần ít nhất một chỉ số đã duyệt (canonical v2, không lỗi) để hiển thị dữ liệu.",
+    "en": "The dashboard needs at least one approved metric (canonical v2, error-free) to display data."
+  },
+  "Đi tới Catalog": {
+    "vi": "Đi tới Catalog",
+    "en": "Go to Catalog"
+  },
+  "Chưa có widget nào trên bảng điều khiển.": {
+    "vi": "Chưa có widget nào trên bảng điều khiển.",
+    "en": "There are no widgets on the dashboard yet."
+  },
+  "Thêm widget đầu tiên": {
+    "vi": "Thêm widget đầu tiên",
+    "en": "Add your first widget"
+  },
+  "Bảng điều khiển đã bị thay đổi bởi người khác": {
+    "vi": "Bảng điều khiển đã bị thay đổi bởi người khác",
+    "en": "The control panel has been altered by someone else"
+  },
+  "Thay đổi của bạn chưa được ghi.": {
+    "vi": "Thay đổi của bạn chưa được ghi.",
+    "en": "Your changes have not been recorded."
+  },
+  "Tải phiên bản mới": {
+    "vi": "Tải phiên bản mới",
+    "en": "Download new version"
+  },
+  "Thử ghi đè sau khi tải/áp dụng lại": {
+    "vi": "Thử ghi đè sau khi tải/áp dụng lại",
+    "en": "Try overwriting after loading/applying again"
+  },
+  "Khoảng thời gian": {
+    "vi": "Khoảng thời gian",
+    "en": "Time period"
+  },
+  "Dữ liệu làm mới lúc": {
+    "vi": "Dữ liệu làm mới lúc",
+    "en": "Data refresh at"
+  },
+  "AI đề xuất:": {
+    "vi": "AI đề xuất:",
+    "en": "AI recommends:"
+  },
+  "Duyệt toàn bộ (": {
+    "vi": "Duyệt toàn bộ (",
+    "en": "Approve all ("
+  },
+  "Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt.": {
+    "vi": "Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt.",
+    "en": "You only have permission to view the review queue. Contact Data Lead for editing or approval."
+  },
+  "chỉnh sửa chưa được lưu. Nhấn Lưu trên từng dòng trước khi phê duyệt.": {
+    "vi": "chỉnh sửa chưa được lưu. Nhấn Lưu trên từng dòng trước khi phê duyệt.",
+    "en": "Edits have not been saved. Click Save on each line before approving."
+  },
+  "bảng ·": {
+    "vi": "bảng ·",
+    "en": "board ·"
+  },
+  "bảng chờ ·": {
+    "vi": "bảng chờ ·",
+    "en": "waiting table ·"
+  },
+  "cột chờ": {
+    "vi": "cột chờ",
+    "en": "waiting column"
+  },
+  "Chưa có metadata nào. Hãy chạy Generate ở AI Studio để tạo Semantic Layer trước.": {
+    "vi": "Chưa có metadata nào. Hãy chạy Generate ở AI Studio để tạo Semantic Layer trước.",
+    "en": "No metadata yet. Run Generate in AI Studio to create the Semantic Layer first."
+  },
+  "Duyệt lúc": {
+    "vi": "Duyệt lúc",
+    "en": "Approve now"
+  },
+  "Duyệt bảng này": {
+    "vi": "Duyệt bảng này",
+    "en": "Approve this board"
+  },
+  "Chưa có đoạn chat": {
+    "vi": "Chưa có đoạn chat",
+    "en": "There is no chat yet"
+  },
+  "Bắt đầu chat": {
+    "vi": "Bắt đầu chat",
+    "en": "Start chatting"
+  },
+  "Không tìm thấy đoạn chat phù hợp": {
+    "vi": "Không tìm thấy đoạn chat phù hợp",
+    "en": "No suitable chat found"
+  },
+  "Xóa đoạn chat?": {
+    "vi": "Xóa đoạn chat?",
+    "en": "Delete chat?"
+  },
+  "tin": {
+    "vi": "tin",
+    "en": "messages"
+  },
+  "Thông báo": {
+    "vi": "Thông báo",
+    "en": "Notification"
+  },
+  "Đánh dấu đã đọc": {
+    "vi": "Đánh dấu đã đọc",
+    "en": "Mark as read"
+  },
+  "Chưa có thông báo": {
+    "vi": "Chưa có thông báo",
+    "en": "No announcement yet"
+  },
+  "Yêu cầu metric và kết quả phê duyệt sẽ xuất hiện tại đây.": {
+    "vi": "Yêu cầu metric và kết quả phê duyệt sẽ xuất hiện tại đây.",
+    "en": "Metric requests and approval results will appear here."
+  },
+  "Phát hiện thay đổi cấu trúc Database (": {
+    "vi": "Phát hiện thay đổi cấu trúc Database (",
+    "en": "Detect changes in Database structure ("
+  },
+  "Thay đổi cấu trúc": {
+    "vi": "Thay đổi cấu trúc",
+    "en": "Structural changes"
+  },
+  "Phát hiện đổi tên cột tại bảng": {
+    "vi": "Phát hiện đổi tên cột tại bảng",
+    "en": "Detect column renaming in table"
+  },
+  "Có thay đổi về bảng (": {
+    "vi": "Có thay đổi về bảng (",
+    "en": "There are changes to the table ("
+  },
+  "bảng mới,": {
+    "vi": "bảng mới,",
+    "en": "new board,"
+  },
+  "bảng đã xóa). Bạn có muốn đồng bộ ngay?": {
+    "vi": "bảng đã xóa). Bạn có muốn đồng bộ ngay?",
+    "en": "deleted table). Do you want to sync now?"
+  },
+  "Chi tiết": {
+    "vi": "Chi tiết",
+    "en": "Detail"
+  },
+  "Đang tự vá...": {
+    "vi": "Đang tự vá...",
+    "en": "Self-patching..."
+  },
+  "Cập nhật ngay": {
+    "vi": "Cập nhật ngay",
+    "en": "Update now"
+  },
+  "Auto-Sync": {
+    "vi": "Tự động đồng bộ hóa",
+    "en": "Auto-Sync"
+  },
+  "Quản lý": {
+    "vi": "Quản lý",
+    "en": "Manage"
+  },
+  "Sync Logs": {
+    "vi": "Lịch sử đồng bộ",
+    "en": "Sync Logs"
+  },
+  "Data Sources": {
+    "vi": "Nguồn dữ liệu",
+    "en": "Data Sources"
+  },
+  "tables": {
+    "vi": "b?ng",
+    "en": "tables"
+  },
+  "Metric": {
+    "vi": "Chỉ số",
+    "en": "Metric"
+  },
+  "AI Semantic Layer Agent — Governance Platform": {
+    "vi": "Tác nhân lớp ngữ nghĩa AI - Nền tảng quản trị",
+    "en": "AI Semantic Layer Agent — Governance Platform"
+  },
+  "Hệ thống AI Agent tự động Introspect DB schema, đề xuất tên nghiệp vụ & Business Metrics và quản trị Semantic Layer với HITL Workflow": {
+    "vi": "Hệ thống AI Agent tự động Introspect DB schema, đề xuất tên nghiệp vụ & Business Metrics và quản trị Semantic Layer với HITL Workflow",
+    "en": "AI Agent system automatically Introspect DB schema, proposes business names & Business Metrics and manages Semantic Layer with HITL Workflow"
+  },
+  "Nguyễn Văn A": {
+    "vi": "Nguyễn Văn A",
+    "en": "Nguyen Van A"
+  },
+  "Xem chi tiết": {
+    "vi": "Xem chi tiết",
+    "en": "See details"
+  },
+  "Kéo để thay đổi kích thước": {
+    "vi": "Kéo để thay đổi kích thước",
+    "en": "Drag to resize"
+  },
+  "Kéo góc để thu phóng": {
+    "vi": "Kéo góc để thu phóng",
+    "en": "Drag the corner to zoom"
+  },
+  "Tìm metric đã duyệt…": {
+    "vi": "Tìm metric đã duyệt…",
+    "en": "Find approved metrics…"
+  },
+  "Bỏ trống để dùng tên metric": {
+    "vi": "Bỏ trống để dùng tên metric",
+    "en": "Leave blank to use the metric name"
+  },
+  "Introspect Schema": {
+    "vi": "Lược đồ hướng nội",
+    "en": "Introspect Schema"
+  },
+  "Tự động đọc metadata schema thông qua SQLAlchemy Inspector. Hỗ trợ Live DB và SQL Dump (chỉ ingest metadata, không truy vấn dữ liệu).": {
+    "vi": "Tự động đọc metadata schema thông qua SQLAlchemy Inspector. Hỗ trợ Live DB và SQL Dump (chỉ ingest metadata, không truy vấn dữ liệu).",
+    "en": "Automatically read schema metadata via SQLAlchemy Inspector. Live DB and SQL Dump support (only ingest metadata, not query data)."
+  },
+  "HITL Workflow": {
+    "vi": "Quy trình làm việc HITL",
+    "en": "HITL Workflow"
+  },
+  "Con người duyệt và phê duyệt tên nghiệp vụ do AI đề xuất trước khi lưu vào semantic layer.": {
+    "vi": "Con người duyệt và phê duyệt tên nghiệp vụ do AI đề xuất trước khi lưu vào semantic layer.",
+    "en": "Humans review and approve the business name proposed by AI before saving it to the semantic layer."
+  },
+  "Biên dịch Metrics": {
+    "vi": "Biên dịch Metrics",
+    "en": "Compile Metrics"
+  },
+  "SemanticQueryCompiler chuyển đổi metrics và dimensions thành SQL chính xác trên Live DB. Không dùng Text-to-SQL tự do.": {
+    "vi": "SemanticQueryCompiler chuyển đổi metrics và dimensions thành SQL chính xác trên Live DB. Không dùng Text-to-SQL tự do.",
+    "en": "SemanticQueryCompiler converts metrics and dimensions into accurate SQL on Live DB. Do not use Text-to-SQL freely."
+  },
+  "Read-Only Guardrails": {
+    "vi": "Lan can chỉ đọc",
+    "en": "Read-Only Guardrails"
+  },
+  "Chỉ cho phép SELECT. AST validation, auto-append LIMIT 100, statement timeout 15 giây.": {
+    "vi": "Chỉ cho phép SELECT. AST validation, auto-append LIMIT 100, statement timeout 15 giây.",
+    "en": "Only SELECT is allowed. AST validation, auto-append LIMIT 100, statement timeout 15 seconds."
+  },
+  "Business Metrics": {
+    "vi": "Số liệu kinh doanh",
+    "en": "Business Metrics"
+  },
+  "Định nghĩa chỉ số thống nhất: revenue, churn rate, conversion. AI gợi ý tên tiếng Việt chuẩn nghiệp vụ.": {
+    "vi": "Định nghĩa chỉ số thống nhất: revenue, churn rate, conversion. AI gợi ý tên tiếng Việt chuẩn nghiệp vụ.",
+    "en": "Define consistent metrics such as revenue, churn rate, and conversion. AI suggests business names in Vietnamese."
+  },
+  "Export Semantic": {
+    "vi": "Xuất ngữ nghĩa",
+    "en": "Export Semantic"
+  },
+  "Xuất semantic layer definitions sang JSON và YAML.": {
+    "vi": "Xuất semantic layer definitions sang JSON và YAML.",
+    "en": "Export semantic layer definitions to JSON and YAML."
+  },
+  "Kết nối": {
+    "vi": "Kết nối",
+    "en": "Connect"
+  },
+  "Truy vấn": {
+    "vi": "Truy vấn",
+    "en": "Query"
+  },
+  "Xuất": {
+    "vi": "Xuất",
+    "en": "Export"
+  },
+  "Python native": {
+    "vi": "Python thuần",
+    "en": "Python native"
+  },
+  "Type hints đầy đủ, async/await support.": {
+    "vi": "Type hints đầy đủ, async/await support.",
+    "en": "Type hints đầy đủ, async/await support."
+  },
+  "Zero config": {
+    "vi": "Không có cấu hình",
+    "en": "Zero config"
+  },
+  "Kết nối và introspect ngay lập tức.": {
+    "vi": "Kết nối và introspect ngay lập tức.",
+    "en": "Connect and introspect instantly."
+  },
+  "Multi-DB": {
+    "vi": "Đa DB",
+    "en": "Multi-DB"
+  },
+  "PostgreSQL, MySQL, SQLite.": {
+    "vi": "PostgreSQL, MySQL, SQLite.",
+    "en": "PostgreSQL, MySQL, SQLite."
+  },
+  "2-Pass AI": {
+    "vi": "AI hai lượt",
+    "en": "2-Pass AI"
+  },
+  "Làm giàu schema metadata tự động.": {
+    "vi": "Làm giàu schema metadata tự động.",
+    "en": "Automatic schema metadata enrichment."
+  },
+  "Copy code": {
+    "vi": "Sao chép mã",
+    "en": "Copy code"
+  },
+  "Tài liệu": {
+    "vi": "Tài liệu",
+    "en": "Document"
+  },
+  "An toàn dữ liệu": {
+    "vi": "An toàn dữ liệu",
+    "en": "Data safety"
+  },
+  "Giới hạn truy vấn": {
+    "vi": "Giới hạn truy vấn",
+    "en": "Query limits"
+  },
+  "Làm giàu ngữ nghĩa": {
+    "vi": "Làm giàu ngữ nghĩa",
+    "en": "Semantic enrichment"
+  },
+  "Sai lệch chỉ số": {
+    "vi": "Sai lệch chỉ số",
+    "en": "Metric discrepancy"
+  },
+  "Kết nối Database": {
+    "vi": "Kết nối Database",
+    "en": "Database connection"
+  },
+  "Cung cấp connection string (Live DB) hoặc upload SQL Dump. Hệ thống tự động mã hóa và lưu trữ an toàn.": {
+    "vi": "Cung cấp connection string (Live DB) hoặc upload SQL Dump. Hệ thống tự động mã hóa và lưu trữ an toàn.",
+    "en": "Provide connection string (Live DB) or upload SQL Dump. The system automatically encrypts and stores securely."
+  },
+  "AI Introspect Schema": {
+    "vi": "Lược đồ hướng nội AI",
+    "en": "AI Introspect Schema"
+  },
+  "AI Agent đọc metadata schema, phân tích bảng, cột, quan hệ. Đề xuất tên nghiệp vụ bằng tiếng Việt.": {
+    "vi": "AI Agent đọc metadata schema, phân tích bảng, cột, quan hệ. Đề xuất tên nghiệp vụ bằng tiếng Việt.",
+    "en": "AI Agent reads schema metadata, analyzes tables, columns, and relationships. Propose business name in Vietnamese."
+  },
+  "HITL Review & Approve": {
+    "vi": "HITL Xem xét & Phê duyệt",
+    "en": "HITL Review & Approve"
+  },
+  "Data steward xem xét, chỉnh sửa và phê duyệt tên nghiệp vụ. Mỗi thay đổi đều có audit log.": {
+    "vi": "Data steward xem xét, chỉnh sửa và phê duyệt tên nghiệp vụ. Mỗi thay đổi đều có audit log.",
+    "en": "Data steward reviews, edits and approves business names. Every change has an audit log."
+  },
+  "Define Metrics & Query": {
+    "vi": "Xác định số liệu & truy vấn",
+    "en": "Define Metrics & Query"
+  },
+  "Định nghĩa business metrics và dimensions. SemanticQueryCompiler biên dịch thành SQL chính xác trên Live DB. SQL Dump chỉ dùng để ingest schema metadata.": {
+    "vi": "Định nghĩa business metrics và dimensions. SemanticQueryCompiler biên dịch thành SQL chính xác trên Live DB. SQL Dump chỉ dùng để ingest schema metadata.",
+    "en": "Define business metrics and dimensions. SemanticQueryCompiler compiles to correct SQL on Live DB. SQL Dump is only used to ingest schema metadata."
+  },
+  "Schema Introspection": {
+    "vi": "Lược đồ nội tâm",
+    "en": "Schema Introspection"
+  },
+  "Query Compilation": {
+    "vi": "Biên dịch truy vấn",
+    "en": "Query Compilation"
+  },
+  "Export & Integration": {
+    "vi": "Xuất khẩu & Tích hợp",
+    "en": "Export & Integration"
+  },
+  "PostgreSQL": {
+    "vi": "PostgreSQL",
+    "en": "PostgreSQL"
+  },
+  "MySQL": {
+    "vi": "MySQL",
+    "en": "MySQL"
+  },
+  "SQLite": {
+    "vi": "SQLite",
+    "en": "SQLite"
+  },
+  "SQL Dump": {
+    "vi": "Kết xuất SQL",
+    "en": "SQL Dump"
+  },
+  "JSON Export": {
+    "vi": "Xuất JSON",
+    "en": "JSON Export"
+  },
+  "YAML Export": {
+    "vi": "Xuất YAML",
+    "en": "YAML Export"
+  },
+  "AI Enrichment": {
+    "vi": "Làm giàu AI",
+    "en": "AI Enrichment"
+  },
+  "Làm giàu schema metadata": {
+    "vi": "Làm giàu schema metadata",
+    "en": "Enrich schema metadata"
+  },
+  "Only": {
+    "vi": "Chỉ một",
+    "en": "Only"
+  },
+  "Deterministic compiler": {
+    "vi": "Trình biên dịch xác định",
+    "en": "Deterministic compiler"
+  },
+  "Query timeout": {
+    "vi": "Hết thời gian truy vấn",
+    "en": "Query timeout"
+  },
+  "Bảo vệ hiệu năng": {
+    "vi": "Bảo vệ hiệu năng",
+    "en": "Protect performance"
+  },
+  "An toàn tuyệt đối": {
+    "vi": "An toàn tuyệt đối",
+    "en": "Absolutely safe"
+  },
+  "AST Validation": {
+    "vi": "Xác thực AST",
+    "en": "AST Validation"
+  },
+  "Mọi câu SQL đều được phân tích cú pháp AST trước khi thực thi. Chỉ SELECT được phép.": {
+    "vi": "Mọi câu SQL đều được phân tích cú pháp AST trước khi thực thi. Chỉ SELECT được phép.",
+    "en": "Every SQL statement is AST parsed before execution. Only SELECT is allowed."
+  },
+  "Mã hóa Fernet": {
+    "vi": "Mã hóa Fernet",
+    "en": "Fernet encryption"
+  },
+  "Connection string được mã hóa AES-256 bằng Fernet. Không lưu plaintext.": {
+    "vi": "Connection string được mã hóa AES-256 bằng Fernet. Không lưu plaintext.",
+    "en": "Connection string is AES-256 encrypted using Fernet. Do not save plaintext."
+  },
+  "Read-Only Enforcement": {
+    "vi": "Thực thi chỉ đọc",
+    "en": "Read-Only Enforcement"
+  },
+  "Guardrails ngăn chặn INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE. Auto-append LIMIT 100.": {
+    "vi": "Guardrails ngăn chặn INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE. Auto-append LIMIT 100.",
+    "en": "Guardrails ngăn chặn INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE. Auto-append LIMIT 100."
+  },
+  "Audit Log": {
+    "vi": "Nhật ký kiểm tra",
+    "en": "Audit Log"
+  },
+  "Mỗi thay đổi semantic layer đều được ghi log. Truy vết đầy đủ cho compliance.": {
+    "vi": "Mỗi thay đổi semantic layer đều được ghi log. Truy vết đầy đủ cho compliance.",
+    "en": "Each semantic layer change is logged. Full traceability for compliance."
+  },
+  "Xem lịch sử phiên bản": {
+    "vi": "Xem lịch sử phiên bản",
+    "en": "View version history"
+  },
+  "Chuyển vào Thùng rác": {
+    "vi": "Chuyển vào Thùng rác",
+    "en": "Move to Trash"
+  },
+  "Xóa vĩnh viễn khỏi hệ thống": {
+    "vi": "Xóa vĩnh viễn khỏi hệ thống",
+    "en": "Permanently deleted from the system"
+  },
+  "Khôi phục metric": {
+    "vi": "Khôi phục metric",
+    "en": "Restore metrics"
+  },
+  "Phê duyệt chỉ số này": {
+    "vi": "Phê duyệt chỉ số này",
+    "en": "Approve this metric"
+  },
+  "Chờ duyệt": {
+    "vi": "Chờ duyệt",
+    "en": "Pending approval"
+  },
+  "Cần xem xét": {
+    "vi": "Cần xem xét",
+    "en": "Needs review"
+  },
+  "Đã duyệt": {
+    "vi": "Đã duyệt",
+    "en": "Approved"
+  },
+  "Đã thay thế": {
+    "vi": "Đã thay thế",
+    "en": "Replaced"
+  },
+  "Bị từ chối": {
+    "vi": "Bị từ chối",
+    "en": "Rejected"
+  },
+  "Lý do từ chối": {
+    "vi": "Lý do từ chối",
+    "en": "Reason for refusal"
+  },
+  "Lý do từ chối (bắt buộc khi từ chối)": {
+    "vi": "Lý do từ chối (bắt buộc khi từ chối)",
+    "en": "Reason for refusal (required when refusing)"
+  },
+  "e.g. E-Commerce Production DB": {
+    "vi": "Ví dụ: CSDL thương mại điện tử",
+    "en": "e.g. E-Commerce Production DB"
+  },
+  "Mô tả mục đích hoặc nội dung của nguồn dữ liệu này": {
+    "vi": "Mô tả mục đích hoặc nội dung của nguồn dữ liệu này",
+    "en": "Describe the purpose or content of this data source"
+  },
+  "= (Bằng)": {
+    "vi": "= (Bằng)",
+    "en": "= (Degree)"
+  },
+  "≠ (Khác)": {
+    "vi": "≠ (Khác)",
+    "en": "≠ (Other)"
+  },
+  "> (Lớn hơn)": {
+    "vi": "> (Lớn hơn)",
+    "en": "> (Larger)"
+  },
+  "≥ (Lớn hơn hoặc bằng)": {
+    "vi": "≥ (Lớn hơn hoặc bằng)",
+    "en": "≥ (Greater than or equal to)"
+  },
+  "< (Nhỏ hơn)": {
+    "vi": "< (Nhỏ hơn)",
+    "en": "< (Smaller)"
+  },
+  "≤ (Nhỏ hơn hoặc bằng)": {
+    "vi": "≤ (Nhỏ hơn hoặc bằng)",
+    "en": "≤ (Less than or equal to)"
+  },
+  "IN (Trong danh sách)": {
+    "vi": "IN (Trong danh sách)",
+    "en": "IN (In list)"
+  },
+  "NOT IN (Ngoài danh sách)": {
+    "vi": "NOT IN (Ngoài danh sách)",
+    "en": "NOT IN (Outside the list)"
+  },
+  "IS NULL (Rỗng)": {
+    "vi": "IS NULL (Rỗng)",
+    "en": "IS NULL (Empty)"
+  },
+  "IS NOT NULL (Không rỗng)": {
+    "vi": "IS NOT NULL (Không rỗng)",
+    "en": "IS NOT NULL (Not empty)"
+  },
+  "Definition": {
+    "vi": "Định nghĩa",
+    "en": "Definition"
+  },
+  "quantity * unit_price": {
+    "vi": "số lượng*đơn_giá",
+    "en": "quantity * unit_price"
+  },
+  "Ví dụ: Chưa trừ hoàn tiền, chỉ tính đơn completed": {
+    "vi": "Ví dụ: Chưa trừ hoàn tiền, chỉ tính đơn completed",
+    "en": "For example: Refund has not been deducted, only completed orders are counted"
+  },
+  "VD: Cập nhật công thức theo policy mới...": {
+    "vi": "VD: Cập nhật công thức theo policy mới...",
+    "en": "Example: Update formula according to new policy..."
+  },
+  "Quét cấu trúc Database...": {
+    "vi": "Quét cấu trúc Database...",
+    "en": "Scan Database structure..."
+  },
+  "Kiểm tra & đối chiếu cột đổi tên...": {
+    "vi": "Kiểm tra & đối chiếu cột đổi tên...",
+    "en": "Check & compare the renamed column..."
+  },
+  "Tự động cập nhật công thức chỉ số...": {
+    "vi": "Tự động cập nhật công thức chỉ số...",
+    "en": "Updating metric formula..."
+  },
+  "Lưu lịch sử thay đổi...": {
+    "vi": "Lưu lịch sử thay đổi...",
+    "en": "Save change history..."
+  },
+  "Vai trò lời mời": {
+    "vi": "Vai trò lời mời",
+    "en": "Invitation role"
+  },
+  "Compiled SQL (Read-only Guardrails)": {
+    "vi": "SQL đã biên dịch (chỉ đọc)",
+    "en": "Compiled SQL (Read-only Guardrails)"
+  },
+  "Chọn hoặc tìm kiếm cuộc trò chuyện": {
+    "vi": "Chọn hoặc tìm kiếm cuộc trò chuyện",
+    "en": "Select or search for a conversation"
+  },
+  "Tạo cuộc trò chuyện mới": {
+    "vi": "Tạo cuộc trò chuyện mới",
+    "en": "Create a new chat"
+  },
+  "Tìm kiếm hội thoại...": {
+    "vi": "Tìm kiếm hội thoại...",
+    "en": "Search conversation..."
+  },
+  "Tên cuộc trò chuyện...": {
+    "vi": "Tên cuộc trò chuyện...",
+    "en": "Chat name..."
+  },
+  "Xác nhận xóa": {
+    "vi": "Xác nhận xóa",
+    "en": "Confirm deletion"
+  },
+  "Đổi tên đoạn chat": {
+    "vi": "Đổi tên đoạn chat",
+    "en": "Rename the chat"
+  },
+  "Xóa đoạn chat": {
+    "vi": "Xóa đoạn chat",
+    "en": "Delete chat"
+  },
+  "Đóng thông báo trùng lặp": {
+    "vi": "Đóng thông báo trùng lặp",
+    "en": "Close duplicate notifications"
+  },
+  "Metric có sẵn (YAML)": {
+    "vi": "Metric có sẵn (YAML)",
+    "en": "Available Metrics (YAML)"
+  },
+  "Danh sách câu hỏi gợi ý, kéo ngang để xem thêm": {
+    "vi": "Danh sách câu hỏi gợi ý, kéo ngang để xem thêm",
+    "en": "List of suggested questions, scroll horizontally to see more"
+  },
+  "Sao chép câu lệnh SQL": {
+    "vi": "Sao chép câu lệnh SQL",
+    "en": "Copy the SQL statement"
+  },
+  "Doanh thu thuần đơn hàng thành công": {
+    "vi": "Doanh thu thuần đơn hàng thành công",
+    "en": "Net revenue from successful orders"
+  },
+  "Tổng số lượng đơn đặt hàng": {
+    "vi": "Tổng số lượng đơn đặt hàng",
+    "en": "Total number of orders"
+  },
+  "Giá trị trung bình mỗi đơn (AOV)": {
+    "vi": "Giá trị trung bình mỗi đơn (AOV)",
+    "en": "Average value per order (AOV)"
+  },
+  "Doanh thu theo khách hàng": {
+    "vi": "Doanh thu theo khách hàng",
+    "en": "Revenue by customer"
+  },
+  "Doanh thu tháng này": {
+    "vi": "Doanh thu tháng này",
+    "en": "Revenue this month"
+  },
+  "Tìm metric doanh thu đã duyệt": {
+    "vi": "Tìm metric doanh thu đã duyệt",
+    "en": "Find the approved revenue metric"
+  },
+  "Tìm bảng khách hàng": {
+    "vi": "Tìm bảng khách hàng",
+    "en": "Find the customer table"
+  },
+  "Tỷ lệ hủy đơn hàng": {
+    "vi": "Tỷ lệ hủy đơn hàng",
+    "en": "Order cancellation rate"
+  },
+  "Top sản phẩm bán chạy": {
+    "vi": "Top sản phẩm bán chạy",
+    "en": "Top best-selling products"
+  },
+  "Send message": {
+    "vi": "Gửi tin nhắn",
+    "en": "Send message"
+  },
+  "Close": {
+    "vi": "Đóng",
+    "en": "Close"
+  },
+  "Approved metrics": {
+    "vi": "Số liệu được phê duyệt",
+    "en": "Approved metrics"
+  },
+  "Source tables": {
+    "vi": "Bảng nguồn",
+    "en": "Source tables"
+  },
+  "Format": {
+    "vi": "Định dạng",
+    "en": "Format"
+  },
+  "Export Playground": {
+    "vi": "Xuất dữ liệu",
+    "en": "Export Playground"
+  },
+  "YAML": {
+    "vi": "YAML",
+    "en": "YAML"
+  },
+  "JSON": {
+    "vi": "JSON",
+    "en": "JSON"
+  },
+  "Ngày": {
+    "vi": "Ngày",
+    "en": "Day"
+  },
+  "Tuần": {
+    "vi": "Tuần",
+    "en": "Week"
+  },
+  "Tháng": {
+    "vi": "Tháng",
+    "en": "Month"
+  },
+  "Quý": {
+    "vi": "Quý",
+    "en": "Quarter"
+  },
+  "Năm": {
+    "vi": "Năm",
+    "en": "Year"
+  },
+  "Metric Explorer": {
+    "vi": "Khám phá chỉ số",
+    "en": "Metric Explorer"
+  },
+  "Xóa bộ lọc từ Dashboard": {
+    "vi": "Xóa bộ lọc từ Dashboard",
+    "en": "Remove filters from Dashboard"
+  },
+  "Tìm nhanh chỉ số đo lường...": {
+    "vi": "Tìm nhanh chỉ số đo lường...",
+    "en": "Find metrics quickly..."
+  },
+  "Tìm nhanh chiều phân tích...": {
+    "vi": "Tìm nhanh chiều phân tích...",
+    "en": "Quickly find analytical dimensions..."
+  },
+  "Bảng số liệu": {
+    "vi": "Bảng số liệu",
+    "en": "Data table"
+  },
+  "Biểu đồ": {
+    "vi": "Biểu đồ",
+    "en": "Chart"
+  },
+  "SQL Code": {
+    "vi": "Mã SQL",
+    "en": "SQL Code"
+  },
+  "Đường": {
+    "vi": "Đường",
+    "en": "Road"
+  },
+  "Vùng": {
+    "vi": "Vùng",
+    "en": "Region"
+  },
+  "Biểu đồ Tròn (Donut)": {
+    "vi": "Biểu đồ Tròn (Donut)",
+    "en": "Donut Chart"
+  },
+  "Metrics Catalog": {
+    "vi": "Danh mục chỉ số",
+    "en": "Metrics Catalog"
+  },
+  "Definition metric request": {
+    "vi": "Yêu cầu chỉ số định nghĩa",
+    "en": "Definition metric request"
+  },
+  "Tìm kiếm metric…": {
+    "vi": "Tìm kiếm metric…",
+    "en": "Search metrics…"
+  },
+  "Tất cả": {
+    "vi": "Tất cả",
+    "en": "All"
+  },
+  "Đã gửi": {
+    "vi": "Đã gửi",
+    "en": "Sent"
+  },
+  "Đã phê duyệt": {
+    "vi": "Đã phê duyệt",
+    "en": "Approved"
+  },
+  "Audit": {
+    "vi": "Kiểm toán",
+    "en": "Audit"
+  },
+  "Bảng điều khiển chỉ số": {
+    "vi": "Bảng điều khiển chỉ số",
+    "en": "Metrics Dashboard"
+  },
+  "Dùng đề xuất của AI": {
+    "vi": "Dùng đề xuất của AI",
+    "en": "Use AI suggestions"
+  },
+  "Tên nghiệp vụ": {
+    "vi": "Tên nghiệp vụ",
+    "en": "Business name"
+  },
+  "Mô tả nghiệp vụ": {
+    "vi": "Mô tả nghiệp vụ",
+    "en": "Business description"
+  },
+  "Schema Review": {
+    "vi": "Duyệt cấu trúc",
+    "en": "Schema Review"
+  },
+  "Tìm đoạn chat...": {
+    "vi": "Tìm đoạn chat...",
+    "en": "Find chat..."
+  },
+  "Clear search": {
+    "vi": "Xóa tìm kiếm",
+    "en": "Clear search"
+  },
+  "Tên đoạn chat...": {
+    "vi": "Tên đoạn chat...",
+    "en": "Chat name..."
+  },
+  "Cảnh báo thay đổi cấu trúc bảng": {
+    "vi": "Cảnh báo thay đổi cấu trúc bảng",
+    "en": "Table structure change warning"
+  },
+  "Để sau": {
+    "vi": "Để sau",
+    "en": "Later"
+  },
+  "Chưa được xác minh": {
+    "vi": "Chưa được xác minh",
+    "en": "Unverified"
+  },
+  "Bản nháp": {
+    "vi": "Bản nháp",
+    "en": "Draft"
+  },
+  "Lịch sử đồng bộ & tự phục hồi schema": {
+    "vi": "Lịch sử đồng bộ & tự phục hồi schema",
+    "en": "Synchronization history & self-healing schema"
+  },
+  "Workspace": {
+    "vi": "Không gian làm việc",
+    "en": "Workspace"
+  },
+  "AI Studio": {
+    "vi": "AI Studio",
+    "en": "AI Studio"
+  },
+  "Metrics Dashboard": {
+    "vi": "Bảng điều khiển",
+    "en": "Metrics Dashboard"
+  },
+  "Expand sidebar": {
+    "vi": "Mở rộng thanh bên",
+    "en": "Expand sidebar"
+  },
+  "Quản lý Workspace & Thành viên": {
+    "vi": "Quản lý Workspace & Thành viên",
+    "en": "Workspace & Member Management"
+  },
+  "Manage workspace": {
+    "vi": "Quản lý không gian làm việc",
+    "en": "Manage workspace"
+  },
+  "Mở lịch sử trò chuyện": {
+    "vi": "Mở lịch sử trò chuyện",
+    "en": "Open chat history"
+  },
+  "Toggle theme": {
+    "vi": "Chuyển đổi chủ đề",
+    "en": "Toggle theme"
+  },
+  "Collapse sidebar": {
+    "vi": "Thu gọn thanh bên",
+    "en": "Collapse sidebar"
+  },
+  "Connect database": {
+    "vi": "Kết nối cơ sở dữ liệu",
+    "en": "Connect database"
+  },
+  "Đăng xuất": {
+    "vi": "Đăng xuất",
+    "en": "Sign out"
+  },
+  "chuẩn hóa": {
+    "vi": "chuẩn hóa",
+    "en": "standardization"
+  },
+  "định nghĩa": {
+    "vi": "định nghĩa",
+    "en": "define"
+  },
+  "truy vấn": {
+    "vi": "truy vấn",
+    "en": "query"
+  },
+  "quản trị": {
+    "vi": "quản trị",
+    "en": "administration"
+  },
+  "GUARDRAIL": {
+    "vi": "RÀO CẢNH",
+    "en": "GUARDRAIL"
+  },
+  "TIMEOUT": {
+    "vi": "HẾT THỜI GIAN",
+    "en": "TIMEOUT"
+  },
+  "LLM ENRICH": {
+    "vi": "LLM làm phong phú",
+    "en": "LLM ENRICH"
+  },
+  "ZERO HALLUCINATION": {
+    "vi": "KHÔNG GÂY Ảo Giác",
+    "en": "ZERO HALLUCINATION"
+  },
+  "Kết nối PostgreSQL, MySQL, SQLite": {
+    "vi": "Kết nối PostgreSQL, MySQL, SQLite",
+    "en": "Kết nối PostgreSQL, MySQL, SQLite"
+  },
+  "Ingest SQL Dump schema metadata": {
+    "vi": "Nhập siêu dữ liệu lược đồ kết xuất SQL",
+    "en": "Ingest SQL Dump schema metadata"
+  },
+  "2-Pass AI enrichment với HITL review": {
+    "vi": "2-Pass AI enrichment với HITL review",
+    "en": "2-Pass AI enrichment with HITL review"
+  },
+  "Deterministic SemanticQueryCompiler": {
+    "vi": "Trình biên dịch ngữ nghĩa xác định",
+    "en": "Deterministic SemanticQueryCompiler"
+  },
+  "SELECT-only guardrails, LIMIT 100": {
+    "vi": "Chỉ cho phép SELECT, giới hạn 100 dòng",
+    "en": "SELECT-only guardrails, LIMIT 100"
+  },
+  "Fernet encrypted connection storage": {
+    "vi": "Lưu trữ kết nối được mã hóa Fernet",
+    "en": "Fernet encrypted connection storage"
+  },
+  "Export JSON / YAML": {
+    "vi": "Xuất JSON/YAML",
+    "en": "Export JSON / YAML"
+  },
+  "Versioning & audit trail": {
+    "vi": "Quá trình kiểm tra và lập phiên bản",
+    "en": "Versioning & audit trail"
+  },
+  "AI Agent tự động introspect schema metadata, đề xuất tên nghiệp vụ tiếng Việt và business metrics. HITL review giúp con người kiểm soát trước khi lưu.": {
+    "vi": "AI Agent tự động introspect schema metadata, đề xuất tên nghiệp vụ tiếng Việt và business metrics. HITL review giúp con người kiểm soát trước khi lưu.",
+    "en": "AI Agent automatically introspects schema metadata, suggests Vietnamese business names and business metrics. HITL review helps humans control before saving."
+  },
+  "Semantic Layer Agent": {
+    "vi": "Tác nhân lớp ngữ nghĩa",
+    "en": "Semantic Layer Agent"
+  },
+  "2-Pass AI Enrichment": {
+    "vi": "Làm giàu AI 2-Pass",
+    "en": "2-Pass AI Enrichment"
+  },
+  "Flow 1": {
+    "vi": "Luồng 1",
+    "en": "Flow 1"
+  },
+  "Schema introspection": {
+    "vi": "Lược đồ nội tâm",
+    "en": "Schema introspection"
+  },
+  "SemanticQueryCompiler biên dịch metrics và dimensions thành câu SELECT. sqlglot AST validation đảm bảo chỉ cho phép read-only, auto-append LIMIT 100.": {
+    "vi": "SemanticQueryCompiler biên dịch metrics và dimensions thành câu SELECT. sqlglot AST validation đảm bảo chỉ cho phép read-only, auto-append LIMIT 100.",
+    "en": "SemanticQueryCompiler compiles metrics and dimensions into SELECT statements. sqlglot AST validation ensures read-only, auto-append LIMIT 100."
+  },
+  "Deterministic Compiler": {
+    "vi": "Trình biên dịch xác định",
+    "en": "Deterministic Compiler"
+  },
+  "SELECT-only Guardrail": {
+    "vi": "Lan can chỉ dành cho CHỌN",
+    "en": "SELECT-only Guardrail"
+  },
+  "Flow 2": {
+    "vi": "Luồng 2",
+    "en": "Flow 2"
+  },
+  "Connection URLs được mã hóa Fernet trước khi lưu trữ. Statement timeout 15s ngăn chặn query quá lâu. Không bao giờ lưu plaintext.": {
+    "vi": "Connection URLs được mã hóa Fernet trước khi lưu trữ. Statement timeout 15s ngăn chặn query quá lâu. Không bao giờ lưu plaintext.",
+    "en": "Connection URLs are Fernet encrypted before being stored. Statement timeout of 15s prevents queries from taking too long. Never save plaintext."
+  },
+  "Security Layer": {
+    "vi": "Lớp bảo mật",
+    "en": "Security Layer"
+  },
+  "Fernet Encryption": {
+    "vi": "Mã hóa Fernet",
+    "en": "Fernet Encryption"
+  },
+  "Infrastructure": {
+    "vi": "Cơ sở hạ tầng",
+    "en": "Infrastructure"
+  },
+  "Zero plaintext": {
+    "vi": "Không có bản rõ",
+    "en": "Zero plaintext"
+  },
+  "Xuất semantic layer definitions sang JSON hoặc YAML. Versioning và HITL review giúp duy trì tính nhất quán qua các thay đổi.": {
+    "vi": "Xuất semantic layer definitions sang JSON hoặc YAML. Versioning và HITL review giúp duy trì tính nhất quán qua các thay đổi.",
+    "en": "Export semantic layer definitions to JSON or YAML. Versioning and HITL review help maintain consistency across changes."
+  },
+  "Export Engine": {
+    "vi": "Công cụ xuất dữ liệu",
+    "en": "Export Engine"
+  },
+  "JSON / YAML Export": {
+    "vi": "Xuất JSON / YAML",
+    "en": "JSON / YAML Export"
+  },
+  "Integration": {
+    "vi": "Tích hợp",
+    "en": "Integration"
+  },
+  "Portable definitions": {
+    "vi": "Định nghĩa có thể chuyển đổi",
+    "en": "Portable definitions"
+  },
+  "Sản phẩm": {
+    "vi": "Sản phẩm",
+    "en": "Products"
+  },
+  "Nhà phát triển": {
+    "vi": "Nhà phát triển",
+    "en": "Developers"
+  },
+  "Pháp lý": {
+    "vi": "Pháp lý",
+    "en": "Legal"
+  },
+  "Cần phê duyệt Schema &amp; Chỉ số": {
+    "vi": "Cần phê duyệt cấu trúc và chỉ số",
+    "en": "Schema and metrics require approval"
+  },
+  "Tự động đồng bộ & Tự vá schema": {
+    "vi": "Tự động đồng bộ và tự vá cấu trúc",
+    "en": "Automatic sync and schema repair"
+  },
+  "Phát hiện thay đổi schema (đổi tên/thêm/xóa cột) & tự động viết lại AST metric formula.": {
+    "vi": "Phát hiện thay đổi cấu trúc (đổi tên/thêm/xóa cột) và tự động viết lại công thức chỉ số.",
+    "en": "Detect schema changes (renamed, added, or removed columns) and automatically update metric formulas."
+  },
+  "Lịch Sử Đồng Bộ & Tự Phục Hồi": {
+    "vi": "Lịch sử đồng bộ và tự phục hồi",
+    "en": "Sync and recovery history"
+  },
+  "Đang tự động cập nhật & đồng bộ dữ liệu...": {
+    "vi": "Đang tự động cập nhật và đồng bộ dữ liệu...",
+    "en": "Updating and syncing data..."
+  },
+  "Hệ thống sẽ tự động quét lúc 02:00 AM hoặc khi bạn bấm nút &quot;Đồng bộ ngay&quot;.": {
+    "vi": "Hệ thống tự động quét lúc 02:00 hoặc khi bạn bấm “Đồng bộ ngay”.",
+    "en": "The system scans automatically at 02:00 or when you select “Sync now”."
+  },
+  "Đang tính toán kết quả từ chỉ số &quot;": {
+    "vi": "Đang tính toán kết quả từ chỉ số “",
+    "en": "Calculating results from metric “"
+  },
+  "Không tìm thấy metric nào khớp với &quot;": {
+    "vi": "Không tìm thấy chỉ số nào khớp với “",
+    "en": "No metrics match “"
+  },
+  "3. CHIỀU THỜI GIAN & CHU KỲ": {
+    "vi": "3. CHIỀU THỜI GIAN VÀ CHU KỲ",
+    "en": "3. TIME DIMENSION AND GRAIN"
+  },
+  "Đang biên dịch & thực thi truy vấn an toàn...": {
+    "vi": "Đang biên dịch và thực thi truy vấn an toàn...",
+    "en": "Compiling and running a safe query..."
+  },
+  "Sẵn sàng biên dịch & phân tích số liệu": {
+    "vi": "Sẵn sàng biên dịch và phân tích số liệu",
+    "en": "Ready to compile and analyze data"
+  },
+  "Nhấn nút &quot;Thực thi (Execute)&quot; để nạp số liệu thực tế từ Live DB.": {
+    "vi": "Nhấn “Thực thi” để nạp dữ liệu từ cơ sở dữ liệu trực tiếp.",
+    "en": "Select “Execute” to load data from the live database."
+  },
+  "Chưa có dữ liệu đồ thị. Bấm &quot;Thực thi (Execute)&quot; để nạp số liệu từ Live DB.": {
+    "vi": "Chưa có dữ liệu biểu đồ. Bấm “Thực thi” để nạp dữ liệu từ cơ sở dữ liệu trực tiếp.",
+    "en": "No chart data yet. Select “Execute” to load data from the live database."
+  },
+  "Duyệt & tạo": {
+    "vi": "Duyệt và tạo",
+    "en": "Review and create"
+  },
+  "Tiến trình đồng bộ & tự vá:": {
+    "vi": "Tiến trình đồng bộ và tự vá:",
+    "en": "Sync and repair progress:"
+  },
+  "Xem": {
+    "vi": "Xem",
+    "en": "View"
+  },
+  "theo": {
+    "vi": "theo",
+    "en": "by"
+  },
+  "Publish": {
+    "vi": "Xuất bản",
+    "en": "Publish"
+  },
+  "Publish the approved semantic layer to a standard spec for BI tools and semantic engines.": {
+    "vi": "Xuất bản Semantic Layer đã duyệt theo đặc tả chuẩn cho công cụ BI và semantic engine.",
+    "en": "Publish the approved semantic layer to a standard spec for BI tools and semantic engines."
+  },
+  "Explore": {
+    "vi": "Khám phá",
+    "en": "Explore"
+  },
+  "Compile approved metrics into safe queries — no manual SQL required.": {
+    "vi": "Biên dịch các chỉ số đã duyệt thành truy vấn an toàn, không cần viết SQL thủ công.",
+    "en": "Compile approved metrics into safe queries — no manual SQL required."
+  },
+  "Catalog": {
+    "vi": "Danh mục",
+    "en": "Catalog"
+  },
+  "Human-in-the-loop review of every business metric before it enters the semantic layer.": {
+    "vi": "Mọi chỉ số nghiệp vụ đều được con người xem xét trước khi đưa vào Semantic Layer.",
+    "en": "Human-in-the-loop review of every business metric before it enters the semantic layer."
+  },
+  "Bảng điều khiển": {
+    "vi": "Bảng điều khiển",
+    "en": "Dashboard"
+  },
+  "Theo dõi các chỉ số đã duyệt qua các widget có thể sắp xếp.": {
+    "vi": "Theo dõi các chỉ số đã duyệt qua các widget có thể sắp xếp.",
+    "en": "Monitor approved metrics with rearrangeable widgets."
+  },
+  "Flow 1 · HITL Review": {
+    "vi": "Luồng 1 · Duyệt có con người",
+    "en": "Flow 1 · HITL Review"
+  },
+  "Tên nghiệp vụ do AI đề xuất chỉ được lưu chính thức vào Metadata Store sau khi BA/DA chỉnh sửa và phê duyệt.": {
+    "vi": "Tên nghiệp vụ do AI đề xuất chỉ được lưu chính thức vào Metadata Store sau khi BA/DA chỉnh sửa và phê duyệt.",
+    "en": "AI proposed business names enter the Metadata Store only after BA/DA edits and approval."
+  },
+  "Metric Studio": {
+    "vi": "Studio chỉ số",
+    "en": "Metric Studio"
+  },
+  "Data Assistant": {
+    "vi": "Trợ lý dữ liệu",
+    "en": "Data Assistant"
+  },
+  "Generate": {
+    "vi": "Tạo",
+    "en": "Generate"
+  },
+  "Chat with the assistant to explore your schema and generate business metric definitions.": {
+    "vi": "Trò chuyện với trợ lý để khám phá cấu trúc và tạo định nghĩa chỉ số nghiệp vụ.",
+    "en": "Chat with the assistant to explore your schema and generate business metric definitions."
+  },
+  "Hỏi về schema, metric đã duyệt và cách khai thác dữ liệu an toàn.": {
+    "vi": "Hỏi về cấu trúc, chỉ số đã duyệt và cách khai thác dữ liệu an toàn.",
+    "en": "Ask about the schema, approved metrics, and safe ways to explore data."
+  },
+  "Đang tham gia...": {
+    "vi": "Đang tham gia...",
+    "en": "Joining..."
+  },
+  "Tham gia ngay": {
+    "vi": "Tham gia ngay",
+    "en": "Join now"
+  },
+  "Đăng nhập để tham gia": {
+    "vi": "Đăng nhập để tham gia",
+    "en": "Login to participate"
+  },
+  "Cấu hình widget không hợp lệ.": {
+    "vi": "Cấu hình widget không hợp lệ.",
+    "en": "Invalid widget configuration."
+  },
+  "Không thể tải dữ liệu cho widget này.": {
+    "vi": "Không thể tải dữ liệu cho widget này.",
+    "en": "Unable to load data for this widget."
+  },
+  "Chỉnh sửa widget": {
+    "vi": "Chỉnh sửa widget",
+    "en": "Edit widget"
+  },
+  "Thêm widget mới": {
+    "vi": "Thêm widget mới",
+    "en": "Add widget"
+  },
+  "Metric trùng hoàn toàn": {
+    "vi": "Metric trùng hoàn toàn",
+    "en": "Metrics are completely identical"
+  },
+  "Metric cùng lõi, khác filter": {
+    "vi": "Metric cùng lõi, khác filter",
+    "en": "Same core metric, different filter"
+  },
+  "Chỉnh sửa": {
+    "vi": "Chỉnh sửa",
+    "en": "Edit"
+  },
+  "Chuẩn hóa": {
+    "vi": "Chuẩn hóa",
+    "en": "Standardize"
+  },
+  "Lý do từ chối: ": {
+    "vi": "Lý do từ chối: ",
+    "en": "Reason for rejection: "
+  },
+  "Ghi chú: ": {
+    "vi": "Ghi chú: ",
+    "en": "Note: "
+  },
+  "Đang khôi phục...": {
+    "vi": "Đang khôi phục...",
+    "en": "Restoring..."
+  },
+  "Khôi phục & xóa phiên bản mới": {
+    "vi": "Khôi phục & xóa phiên bản mới",
+    "en": "Restore & delete new version"
+  },
+  "Công thức": {
+    "vi": "Công thức",
+    "en": "Formula"
+  },
+  "Bộ lọc": {
+    "vi": "Bộ lọc",
+    "en": "Filter"
+  },
+  "Đang xử lý...": {
+    "vi": "Đang xử lý...",
+    "en": "Processing..."
+  },
+  "Tải lên & Khởi tạo Schema": {
+    "vi": "Tải lên & Khởi tạo Schema",
+    "en": "Upload and inspect schema"
+  },
+  "Bắt Đầu Kết Nối & Introspect": {
+    "vi": "Bắt Đầu Kết Nối & Introspect",
+    "en": "Connect and inspect schema"
+  },
+  "Đang tạo...": {
+    "vi": "Đang tạo...",
+    "en": "Creating..."
+  },
+  "Tạo Workspace": {
+    "vi": "Tạo Workspace",
+    "en": "Create Workspace"
+  },
+  "Gửi Business Metric": {
+    "vi": "Gửi Business Metric",
+    "en": "Submit Business Metric"
+  },
+  "Định nghĩa Business Metric": {
+    "vi": "Định nghĩa Business Metric",
+    "en": "Business Metric Definition"
+  },
+  "Thêm mới Business Metric": {
+    "vi": "Thêm mới Business Metric",
+    "en": "Add Business Metric"
+  },
+  "Đang gửi...": {
+    "vi": "Đang gửi...",
+    "en": "Sending..."
+  },
+  "Đang lưu...": {
+    "vi": "Đang lưu...",
+    "en": "Saving..."
+  },
+  "Lưu metric": {
+    "vi": "Lưu metric",
+    "en": "Save metric"
+  },
+  "▲ Thu gọn": {
+    "vi": "▲ Thu gọn",
+    "en": "▲ Collapse"
+  },
+  "▼ Chi tiết": {
+    "vi": "▼ Chi tiết",
+    "en": "▼ Details"
+  },
+  "Ẩn câu query": {
+    "vi": "Ẩn câu query",
+    "en": "Hide query"
+  },
+  "Xem chi tiết câu query": {
+    "vi": "Xem chi tiết câu query",
+    "en": "See query details"
+  },
+  "Đã sao chép": {
+    "vi": "Đã sao chép",
+    "en": "Copied"
+  },
+  "Sao chép SQL": {
+    "vi": "Sao chép SQL",
+    "en": "Copy SQL"
+  },
+  "Tạo link mời": {
+    "vi": "Tạo link mời",
+    "en": "Create invitation link"
+  },
+  "Đã copy": {
+    "vi": "Đã copy",
+    "en": "Copied"
+  },
+  "Copy": {
+    "vi": "Sao chép",
+    "en": "Copy"
+  },
+  "Đang thu hồi...": {
+    "vi": "Đang thu hồi...",
+    "en": "Revoking..."
+  },
+  "Thu hồi": {
+    "vi": "Thu hồi",
+    "en": "Revoke"
+  },
+  "dòng": {
+    "vi": "dòng",
+    "en": "rows"
+  },
+  "Ẩn SQL đã biên dịch": {
+    "vi": "Ẩn SQL đã biên dịch",
+    "en": "Hide compiled SQL"
+  },
+  "Xem SQL đã biên dịch": {
+    "vi": "Xem SQL đã biên dịch",
+    "en": "View compiled SQL"
+  },
+  "Ẩn định nghĩa": {
+    "vi": "Ẩn định nghĩa",
+    "en": "Hide definition"
+  },
+  "Xem định nghĩa": {
+    "vi": "Xem định nghĩa",
+    "en": "See definition"
+  },
+  "Ẩn mã YAML": {
+    "vi": "Ẩn mã YAML",
+    "en": "Hide YAML code"
+  },
+  "Xem mã YAML": {
+    "vi": "Xem mã YAML",
+    "en": "View YAML code"
+  },
+  "AI đang phân tích cấu trúc Schema & quan hệ...": {
+    "vi": "AI đang phân tích cấu trúc Schema & quan hệ...",
+    "en": "AI is analyzing Schema structure & relationships..."
+  },
+  "AI đang đọc semantic layer và metric đã phê duyệt...": {
+    "vi": "AI đang đọc semantic layer và metric đã phê duyệt...",
+    "en": "AI is reading the semantic layer and approved metrics..."
+  },
+  "GỢI Ý CÂU HỎI TẠO METRIC": {
+    "vi": "GỢI Ý CÂU HỎI TẠO METRIC",
+    "en": "SUGGESTED METRIC CREATION QUESTIONS"
+  },
+  "GỢI Ý CÂU HỎI VỀ DỮ LIỆU": {
+    "vi": "GỢI Ý CÂU HỎI VỀ DỮ LIỆU",
+    "en": "SUGGESTED QUESTIONS ABOUT DATA"
+  },
+  "Hiển thị gợi ý": {
+    "vi": "Hiển thị gợi ý",
+    "en": "Show suggestions"
+  },
+  "Đã ẩn (Tick để hiện)": {
+    "vi": "Đã ẩn (Tick để hiện)",
+    "en": "Hidden (select to show)"
+  },
+  "AI can make mistakes. Every generated metric requires human approval before use.": {
+    "vi": "AI có thể mắc lỗi. Mọi chỉ số do AI tạo cần được con người phê duyệt trước khi sử dụng.",
+    "en": "AI can make mistakes. Every generated metric requires human approval before use."
+  },
+  "AI chỉ trả lời dựa trên semantic layer và metric đã được cấp quyền.": {
+    "vi": "AI chỉ trả lời dựa trên semantic layer và metric đã được cấp quyền.",
+    "en": "AI only responds based on the authorized semantic layer and metrics."
+  },
+  "Bạn": {
+    "vi": "Bạn",
+    "en": "You"
+  },
+  "AI Semantic Agent": {
+    "vi": "AI Semantic Agent",
+    "en": "AI Semantic Agent"
+  },
+  "Cao": {
+    "vi": "Cao",
+    "en": "High"
+  },
+  "Trung bình": {
+    "vi": "Trung bình",
+    "en": "Medium"
+  },
+  "Thấp": {
+    "vi": "Thấp",
+    "en": "Low"
+  },
+  "Hiển thị mã YAML": {
+    "vi": "Hiển thị mã YAML",
+    "en": "Show YAML code"
+  },
+  "Copy YAML": {
+    "vi": "Sao chép YAML",
+    "en": "Copy YAML"
+  },
+  "Xử lý cảnh báo trùng tên trước khi lưu": {
+    "vi": "Xử lý cảnh báo trùng tên trước khi lưu",
+    "en": "Handle duplicate name warnings before saving"
+  },
+  "Pending status · Phê duyệt trong catalog trước khi truy vấn": {
+    "vi": "Pending status · Phê duyệt trong catalog trước khi truy vấn",
+    "en": "Pending status · Approve in catalog before querying"
+  },
+  "Gửi Data Lead xem xét": {
+    "vi": "Gửi Data Lead xem xét",
+    "en": "Submit to Data Lead for review"
+  },
+  "Lưu vào Semantic Layer": {
+    "vi": "Lưu vào Semantic Layer",
+    "en": "Save to Semantic Layer"
+  },
+  "Sao chép": {
+    "vi": "Sao chép",
+    "en": "Copy"
+  },
+  "Đề xuất với AI": {
+    "vi": "Đề xuất với AI",
+    "en": "Suggest with AI"
+  },
+  "Sinh với AI": {
+    "vi": "Sinh với AI",
+    "en": "Generate with AI"
+  },
+  "Chưa có metric nào để hiển thị trong catalog.": {
+    "vi": "Chưa có metric nào để hiển thị trong catalog.",
+    "en": "There are no metrics to display in the catalog yet."
+  },
+  "Hãy thêm thủ công hoặc sử dụng AI Studio để tự động phân tích schema và đề xuất các chỉ số.": {
+    "vi": "Hãy thêm thủ công hoặc sử dụng AI Studio để tự động phân tích schema và đề xuất các chỉ số.",
+    "en": "Add it manually or use AI Studio to automatically analyze your schema and suggest metrics."
+  },
+  "1. Đã gửi": {
+    "vi": "1. Đã gửi",
+    "en": "1. Sent"
+  },
+  "1. Metrics Đang Chờ Phê Duyệt": {
+    "vi": "1. Metrics Đang Chờ Phê Duyệt",
+    "en": "1. Metrics Awaiting Approval"
+  },
+  "Các metric bạn đã gửi đang chờ Data Lead xem xét": {
+    "vi": "Các metric bạn đã gửi đang chờ Data Lead xem xét",
+    "en": "The metrics you have submitted are waiting for Data Lead to review"
+  },
+  "Các chỉ số cần Data Lead review và phê duyệt": {
+    "vi": "Các chỉ số cần Data Lead review và phê duyệt",
+    "en": "Metrics awaiting Data Lead review and approval"
+  },
+  "Chưa có metric nào được phê duyệt. Hãy duyệt các metric ở phần trên.": {
+    "vi": "Chưa có metric nào được phê duyệt. Hãy duyệt các metric ở phần trên.",
+    "en": "No metrics have been approved yet. Review the metrics above."
+  },
+  "Chưa có metric nào được phê duyệt.": {
+    "vi": "Chưa có metric nào được phê duyệt.",
+    "en": "No metrics have been approved yet."
+  },
+  "Xong": {
+    "vi": "Xong",
+    "en": "Done"
+  },
+  "Đã lưu chính thức": {
+    "vi": "Đã lưu chính thức",
+    "en": "Officially saved"
+  },
+  "Chờ review": {
+    "vi": "Chờ review",
+    "en": "Pending review"
+  },
+  "Tạo thủ công": {
+    "vi": "Tạo thủ công",
+    "en": "Created manually"
+  },
+  "AI đề xuất": {
+    "vi": "AI đề xuất",
+    "en": "Suggested by AI"
+  },
+  "Mô tả chỉ số bạn muốn tạo hoặc đặt câu hỏi về schema...": {
+    "vi": "Mô tả chỉ số bạn muốn tạo hoặc đặt câu hỏi về cấu trúc...",
+    "en": "Describe a metric to create or ask about the schema..."
+  },
+  "Hỏi về schema, metric đã duyệt hoặc cách chọn dữ liệu...": {
+    "vi": "Hỏi về cấu trúc, chỉ số đã duyệt hoặc cách chọn dữ liệu...",
+    "en": "Ask about the schema, approved metrics, or choosing data..."
+  },
+  "Tính tổng doanh thu thuần của các đơn hàng có trạng thái hoàn thành (Net Revenue)": {
+    "vi": "Tính tổng doanh thu thuần của các đơn hàng có trạng thái hoàn thành (Net Revenue)",
+    "en": "Calculate the total net revenue of orders with completed status (Net Revenue)"
+  },
+  "Tính tổng số lượng đơn đặt hàng phát sinh trong toàn hệ thống": {
+    "vi": "Tính tổng số lượng đơn đặt hàng phát sinh trong toàn hệ thống",
+    "en": "Calculate the total number of orders generated in the entire system"
+  },
+  "Tính giá trị trung bình trên mỗi đơn hàng (Average Order Value - AOV)": {
+    "vi": "Tính giá trị trung bình trên mỗi đơn hàng (Average Order Value - AOV)",
+    "en": "Calculate the average value per order (Average Order Value - AOV)"
+  },
+  "Tổng doanh thu theo khách hàng năm 2024": {
+    "vi": "Tổng doanh thu theo khách hàng năm 2024",
+    "en": "Total revenue by customer in 2024"
+  },
+  "Doanh thu tháng này theo chi nhánh": {
+    "vi": "Doanh thu tháng này theo chi nhánh",
+    "en": "This month's revenue by branch"
+  },
+  "Có những metric doanh thu nào đã được phê duyệt? Giải thích ngắn gọn từng metric.": {
+    "vi": "Có những metric doanh thu nào đã được phê duyệt? Giải thích ngắn gọn từng metric.",
+    "en": "What approved revenue metrics are there? Briefly explain each metric."
+  },
+  "Bảng hoặc cột nào liên quan đến khách hàng trong semantic layer này?": {
+    "vi": "Bảng hoặc cột nào liên quan đến khách hàng trong semantic layer này?",
+    "en": "Which table or column is related to the customer in this semantic layer?"
+  },
+  "Định nghĩa chỉ số tỷ lệ đơn hàng bị hủy so với tổng đơn": {
+    "vi": "Định nghĩa chỉ số tỷ lệ đơn hàng bị hủy so với tổng đơn",
+    "en": "Define the ratio of canceled orders to total orders"
+  },
+  "Tính tổng doanh số và số lượng bán theo từng danh mục sản phẩm": {
+    "vi": "Tính tổng doanh số và số lượng bán theo từng danh mục sản phẩm",
+    "en": "Calculate total sales and quantity sold by each product category"
+  },
+  "7 ngày qua": {
+    "vi": "7 ngày qua",
+    "en": "Last 7 days"
+  },
+  "30 ngày qua": {
+    "vi": "30 ngày qua",
+    "en": "Last 30 days"
+  },
+  "90 ngày qua": {
+    "vi": "90 ngày qua",
+    "en": "Last 90 days"
+  },
+  "Tháng này": {
+    "vi": "Tháng này",
+    "en": "This month"
+  },
+  "Quý này": {
+    "vi": "Quý này",
+    "en": "This quarter"
+  },
+  "Năm này": {
+    "vi": "Năm này",
+    "en": "This year"
+  },
+  "Loại biểu đồ": {
+    "vi": "Loại biểu đồ",
+    "en": "Chart type"
+  },
+  "Mốc thời gian": {
+    "vi": "Mốc thời gian",
+    "en": "Time grain"
+  },
+  "Tìm metric": {
+    "vi": "Tìm chỉ số",
+    "en": "Find metric"
+  },
+  "Cột thời gian": {
+    "vi": "Cột thời gian",
+    "en": "Time column"
+  },
+  "Chiều dữ liệu": {
+    "vi": "Chiều dữ liệu",
+    "en": "Dimension"
+  },
+  "Cột lọc ngày": {
+    "vi": "Cột lọc ngày",
+    "en": "Date filter column"
+  },
+  "Độ rộng": {
+    "vi": "Độ rộng",
+    "en": "Width"
+  },
+  "Chiều cao": {
+    "vi": "Chiều cao",
+    "en": "Height"
+  },
+  "Tiêu đề widget": {
+    "vi": "Tiêu đề widget",
+    "en": "Widget title"
+  },
+  "Biểu đồ đường": {
+    "vi": "Biểu đồ đường",
+    "en": "Line chart"
+  },
+  "Biểu đồ vùng": {
+    "vi": "Biểu đồ vùng",
+    "en": "Area chart"
+  },
+  "Biểu đồ cột": {
+    "vi": "Biểu đồ cột",
+    "en": "Bar chart"
+  },
+  "Biểu đồ tròn": {
+    "vi": "Biểu đồ tròn",
+    "en": "Pie chart"
+  },
+  "Bảng xếp hạng": {
+    "vi": "Bảng xếp hạng",
+    "en": "Ranking table"
+  },
+  "1/3 lưới": {
+    "vi": "1/3 lưới",
+    "en": "One third width"
+  },
+  "1/2 lưới": {
+    "vi": "1/2 lưới",
+    "en": "Half width"
+  },
+  "Đầy đủ chiều rộng": {
+    "vi": "Đầy đủ chiều rộng",
+    "en": "Full width"
+  },
+  "Gọn": {
+    "vi": "Gọn",
+    "en": "Compact"
+  },
+  "Vừa": {
+    "vi": "Vừa",
+    "en": "Normal"
+  }
+}
