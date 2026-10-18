@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,7 @@ from src.api.review_routes import review_router
 from src.api.routes import router
 from src.api.sync_routes import sync_router
 from src.config import get_settings
+from src.observability.langfuse_tracing import LangfuseMiddleware, shutdown_tracing
 from src.services.rate_limiter import RateLimitMiddleware
 from src.services.schema_cron_service import start_schema_cron_scheduler, stop_schema_cron_scheduler
 
@@ -30,9 +32,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s in %s mode", settings.app_name, settings.app_env)
     if settings.app_env != "test":
         start_schema_cron_scheduler()
-    yield
-    stop_schema_cron_scheduler()
-    logger.info("Shutting down %s...", settings.app_name)
+    try:
+        yield
+    finally:
+        stop_schema_cron_scheduler()
+        await asyncio.to_thread(shutdown_tracing)
+        logger.info("Shutting down %s...", settings.app_name)
 
 
 app = FastAPI(
@@ -45,6 +50,7 @@ app = FastAPI(
 settings = get_settings()
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(LangfuseMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),

@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8000, ge=1, le=65535)
     app_host: str = "0.0.0.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    langfuse_tracing_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+    langfuse_capture_content: bool = False
     cors_origins: str = "http://localhost:3000"
     frontend_app_url: str = "http://localhost:3000"
     secret_key: str = "dev-secret-key-change-in-prod-semantic-layer-2026"

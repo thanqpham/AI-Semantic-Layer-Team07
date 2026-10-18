@@ -1,5 +1,7 @@
 # 🤖 AI Semantic Layer Agent — P-069
 
+Theo dõi AI: [Cấu hình và thiết kế tracing Langfuse](docs/guide/langfuse.md).
+
 > **Dự án thuộc VinUni AI20K Build Phase (Cohort 3)**  
 > **Nền tảng AI Agent hỗ trợ xây dựng, quản trị lớp ngữ nghĩa dữ liệu (Semantic Layer) tập trung & biên dịch truy vấn dữ liệu kinh doanh chuẩn xác.**
 

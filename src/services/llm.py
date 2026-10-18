@@ -9,6 +9,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
 from src.config import Settings, get_settings, reload_settings
+from src.observability.langfuse_tracing import llm_trace_callbacks
 from src.observability.llm_usage import BenchmarkUsageCallback
 
 logger = logging.getLogger(__name__)
@@ -231,7 +232,7 @@ def _build_openai_client(config: LLMConfig) -> BaseChatModel:
         api_key=config.api_key,  # type: ignore[arg-type]
         base_url=config.base_url,
         temperature=config.temperature,
-        callbacks=[BenchmarkUsageCallback(config.provider, config.model)],
+        callbacks=[BenchmarkUsageCallback(config.provider, config.model), *llm_trace_callbacks()],
     )
 
 
@@ -250,7 +251,7 @@ def _build_anthropic_client(config: LLMConfig) -> BaseChatModel:
         api_key=config.api_key,  # type: ignore[arg-type]
         base_url=config.base_url,
         temperature=config.temperature,
-        callbacks=[BenchmarkUsageCallback(config.provider, config.model)],
+        callbacks=[BenchmarkUsageCallback(config.provider, config.model), *llm_trace_callbacks()],
     )
 
 
