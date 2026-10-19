@@ -17,6 +17,8 @@ import {
 import { cn } from '@/lib/utils';
 import { SectionLabel, type WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface SchemaReviewViewProps {
   dbId?: number | null;
@@ -40,7 +42,7 @@ function ReviewBadge({ status }: { status: 'pending_review' | 'approved' }) {
       )}
     >
       <span className={cn('h-1.5 w-1.5 rounded-full', approved ? 'bg-emerald-500' : 'bg-amber-500')} />
-      {approved ? 'Đã lưu chính thức' : 'Chờ review'}
+      <Translated text={approved ? 'Đã lưu chính thức' : 'Chờ review'} />
     </span>
   );
 }
@@ -57,6 +59,7 @@ function AiSuggestion({
   onAccept: () => void;
   disabled?: boolean;
 }) {
+  const { translate } = useLanguage();
   if (!suggestion || suggestion === current) return null;
   return (
     <button
@@ -64,10 +67,10 @@ function AiSuggestion({
       onClick={onAccept}
       disabled={disabled}
       className="mt-1 inline-flex items-center gap-1.5 text-left font-mono text-[10px] text-muted-foreground transition-colors hover:text-primary disabled:opacity-50"
-      title="Dùng đề xuất của AI"
+      title={translate("Dùng đề xuất của AI")}
     >
       <Sparkles className="h-3 w-3 shrink-0" />
-      <span className="truncate">AI đề xuất: {suggestion}</span>
+      <span className="truncate"><Translated text={"AI đề xuất:"} after />{suggestion}</span>
     </button>
   );
 }
@@ -94,13 +97,14 @@ function RowEditor({
   onChange,
   onSave,
 }: RowEditorProps) {
+  const { translate } = useLanguage();
   return (
     <div className="grid flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
       <div className="min-w-0">
         <Input
           value={businessName}
           disabled={disabled}
-          placeholder="Tên nghiệp vụ"
+          placeholder={translate("Tên nghiệp vụ")}
           className="h-8 text-xs"
           onChange={(event) => onChange({ business_name: event.target.value })}
         />
@@ -114,7 +118,7 @@ function RowEditor({
       <Input
         value={description}
         disabled={disabled}
-        placeholder="Mô tả nghiệp vụ"
+        placeholder={translate("Mô tả nghiệp vụ")}
         className="h-8 text-xs"
         onChange={(event) => onChange({ description: event.target.value })}
       />
@@ -126,7 +130,7 @@ function RowEditor({
         className="h-8 shrink-0 gap-1.5 text-[11px]"
       >
         {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-        Lưu
+        <Translated text={"Lưu"} />
       </Button>
     </div>
   );
@@ -168,6 +172,7 @@ export function SchemaReviewView({
   onNotify,
   onReviewChanged,
 }: SchemaReviewViewProps) {
+  const { translate } = useLanguage();
   const [review, setReview] = useState<SchemaReview | null>(null);
   const [drafts, setDrafts] = useState<DraftMap>({});
   const [baseline, setBaseline] = useState<DraftMap>({});
@@ -253,7 +258,7 @@ export function SchemaReviewView({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
       <ViewHeader
         eyebrow="Flow 1 · HITL Review"
-        title="Schema Review"
+        title={translate("Schema Review")}
         description="Tên nghiệp vụ do AI đề xuất chỉ được lưu chính thức vào Metadata Store sau khi BA/DA chỉnh sửa và phê duyệt."
         database={database}
         actions={
@@ -268,7 +273,7 @@ export function SchemaReviewView({
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
-            Duyệt toàn bộ ({pendingTotal})
+            <Translated text={"Duyệt toàn bộ ("} />{pendingTotal})
           </Button>
         }
       />
@@ -276,7 +281,7 @@ export function SchemaReviewView({
       <div className="flex flex-col gap-4 p-4 sm:p-6">
         {!canManageSchema && (
           <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">
-            Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt.
+            <Translated text={"Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt."} />
           </p>
         )}
         {error && (
@@ -287,21 +292,19 @@ export function SchemaReviewView({
         )}
         {dirtyCount > 0 && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-            {dirtyCount} chỉnh sửa chưa được lưu. Nhấn Lưu trên từng dòng trước khi phê duyệt.
-          </p>
+            {dirtyCount} <Translated text={"chỉnh sửa chưa được lưu. Nhấn Lưu trên từng dòng trước khi phê duyệt."} /></p>
         )}
 
         <div className="flex items-center gap-4">
           <SectionLabel>
-            {review?.tables.length || 0} bảng · {review?.pending_tables || 0} bảng chờ ·{' '}
-            {review?.pending_columns || 0} cột chờ
-          </SectionLabel>
+            {review?.tables.length || 0} <Translated text={"bảng ·"} after />{review?.pending_tables || 0} <Translated text={"bảng chờ ·"} />{' '}
+            {review?.pending_columns || 0} <Translated text={"cột chờ"} /></SectionLabel>
           {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
         </div>
 
         {review?.tables.length === 0 && !loading && (
           <p className="rounded-lg border border-border bg-secondary p-4 text-xs text-muted-foreground">
-            Chưa có metadata nào. Hãy chạy Generate ở AI Studio để tạo Semantic Layer trước.
+            <Translated text={"Chưa có metadata nào. Hãy chạy Generate ở AI Studio để tạo Semantic Layer trước."} />
           </p>
         )}
 
@@ -333,12 +336,11 @@ export function SchemaReviewView({
                 <ReviewBadge status={table.review_status} />
                 {pendingColumns > 0 && (
                   <span className="font-mono text-[10px] text-muted-foreground">
-                    {pendingColumns}/{table.columns.length} cột chờ
-                  </span>
+                    {pendingColumns}/{table.columns.length} <Translated text={"cột chờ"} /></span>
                 )}
                 {table.reviewed_at && (
                   <span className="font-mono text-[10px] text-muted-foreground">
-                    Duyệt lúc {new Date(table.reviewed_at).toLocaleString()}
+                    <Translated text={"Duyệt lúc"} after />{new Date(table.reviewed_at).toLocaleString()}
                   </span>
                 )}
                 <div className="ml-auto flex items-center gap-2">
@@ -358,7 +360,7 @@ export function SchemaReviewView({
                     ) : (
                       <CheckCircle2 className="h-3 w-3" />
                     )}
-                    Duyệt bảng này
+                    <Translated text={"Duyệt bảng này"} />
                   </Button>
                 </div>
               </div>

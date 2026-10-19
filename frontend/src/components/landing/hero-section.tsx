@@ -5,10 +5,13 @@ import Link from "next/link";
 import { ArrowRight, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AnimatedSphere } from "./animated-sphere";
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 const words = ["chuẩn hóa", "định nghĩa", "truy vấn", "quản trị"];
 
 export function HeroSection() {
+  const { translate } = useLanguage();
   const [isVisible, setIsVisible] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
 
@@ -65,7 +68,7 @@ export function HeroSection() {
         >
           <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground">
             <span className="w-8 h-px bg-foreground/30" />
-            Nền tảng AI Semantic Layer Agent
+            <Translated text={"Nền tảng AI Semantic Layer Agent"} />
           </span>
         </div>
 
@@ -76,12 +79,12 @@ export function HeroSection() {
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
             }`}
           >
-            <span className="block">Nền tảng</span>
+            <span className="block"><Translated text={"Nền tảng"} /></span>
             <span className="block">
-              để{" "}
+              <Translated text={"để"} />{" "}
               <span className="relative inline-block">
                 <span key={wordIndex} className="inline-flex">
-                  {words[wordIndex].split("").map((char, i) => (
+                  {translate(words[wordIndex]).split("").map((char, i) => (
                     <span
                       key={`${wordIndex}-${i}`}
                       className="inline-block animate-char-in"
@@ -106,8 +109,7 @@ export function HeroSection() {
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
             }`}
           >
-            Tự động chuyển đổi DB schema kỹ thuật thành ngôn ngữ nghiệp vụ thống nhất.
-            Xây dựng, quản trị và biên dịch chỉ số với độ chính xác tuyệt đối.
+            <Translated text={"Tự động chuyển đổi DB schema kỹ thuật thành ngôn ngữ nghiệp vụ thống nhất. Xây dựng, quản trị và biên dịch chỉ số với độ chính xác tuyệt đối."} />
           </p>
 
           {/* CTAs */}
@@ -122,8 +124,7 @@ export function HeroSection() {
               className="bg-foreground hover:bg-foreground/90 text-background px-8 h-14 text-base rounded-full group cursor-pointer"
             >
               <Link href="/register">
-                Dùng thử miễn phí
-                <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+                <Translated text={"Dùng thử miễn phí"} after /><ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
               </Link>
             </Button>
             <Button
@@ -134,7 +135,7 @@ export function HeroSection() {
             >
               <Link href="/login">
                 <Play className="w-4 h-4 mr-2" />
-                Đăng nhập
+                <Translated text={"Đăng nhập"} />
               </Link>
             </Button>
           </div>
@@ -159,7 +160,7 @@ export function HeroSection() {
                 <div key={`${stat.company}-${i}`} className="flex items-baseline gap-4">
                   <span className="text-4xl lg:text-5xl font-display">{stat.value}</span>
                   <span className="text-sm text-muted-foreground">
-                    {stat.label}
+                    <Translated text={stat.label} />
                     <span className="block font-mono text-xs mt-1">{stat.company}</span>
                   </span>
                 </div>

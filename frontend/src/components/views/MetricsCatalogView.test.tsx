@@ -435,7 +435,7 @@ describe('MetricsCatalogView', () => {
       />,
     );
     // Each card should have YAML definition toggle
-    expect(screen.getAllByText(/Xem YAML definition/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Xem định nghĩa YAML/).length).toBeGreaterThanOrEqual(2);
   });
 
   it('shows status badges with correct labels', () => {

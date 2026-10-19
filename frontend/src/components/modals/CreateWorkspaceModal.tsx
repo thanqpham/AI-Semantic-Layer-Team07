@@ -12,6 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface CreateWorkspaceModalProps {
   isOpen: boolean;
@@ -19,6 +21,7 @@ export interface CreateWorkspaceModalProps {
 }
 
 export function CreateWorkspaceModal({ isOpen, onClose }: CreateWorkspaceModalProps) {
+  const { translate } = useLanguage();
   const { createWorkspace } = useWorkspace();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
@@ -48,14 +51,14 @@ export function CreateWorkspaceModal({ isOpen, onClose }: CreateWorkspaceModalPr
     <Dialog open={isOpen} onOpenChange={(open) => !open && !loading && onClose()}>
       <DialogContent className="bg-background sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Tạo Workspace mới</DialogTitle>
-          <DialogDescription>Tạo một Workspace để quản lý dữ liệu và thành viên.</DialogDescription>
+          <DialogTitle className="font-display text-2xl"><Translated text={"Tạo Workspace mới"} /></DialogTitle>
+          <DialogDescription><Translated text={"Tạo một Workspace để quản lý dữ liệu và thành viên."} /></DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={submit}>
           <label className="block space-y-1.5">
-            <span className="text-sm font-medium">Tên Workspace</span>
+            <span className="text-sm font-medium"><Translated text={"Tên Workspace"} /></span>
             <input
-              aria-label="Tên Workspace"
+              aria-label={translate("Tên Workspace")}
               value={name}
               onChange={(event) => setName(event.target.value)}
               disabled={loading}
@@ -70,10 +73,10 @@ export function CreateWorkspaceModal({ isOpen, onClose }: CreateWorkspaceModalPr
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-              Hủy
+              <Translated text={"Hủy"} />
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Đang tạo...' : 'Tạo Workspace'}
+              <Translated text={loading ? 'Đang tạo...' : 'Tạo Workspace'} />
             </Button>
           </DialogFooter>
         </form>

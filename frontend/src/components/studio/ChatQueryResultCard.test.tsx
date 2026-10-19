@@ -38,8 +38,8 @@ describe('ChatQueryResultCard', () => {
     expect(screen.getByText('Công ty B')).toBeInTheDocument();
     expect(screen.getByText('2,300,000')).toBeInTheDocument();
     expect(screen.getByText(/Hiển thị/i)).toBeInTheDocument();
-    expect(screen.getByText(/LIMIT 100 applied/i)).toBeInTheDocument();
-    expect(screen.getByText('Read-only')).toBeInTheDocument();
+    expect(screen.getByText(/LIMIT 100 đã áp dụng/i)).toBeInTheDocument();
+    expect(screen.getByText('Chỉ đọc')).toBeInTheDocument();
   });
 
   it('toggles SQL disclosure button when SQL is available', () => {
@@ -49,16 +49,16 @@ describe('ChatQueryResultCard', () => {
     expect(toggleBtn).toBeInTheDocument();
 
     // SQL viewer not visible initially
-    expect(screen.queryByText(/Compiled SQL/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^SQL đã biên dịch \(chỉ đọc\)$/i)).not.toBeInTheDocument();
 
     // Click to open
     fireEvent.click(toggleBtn);
     expect(screen.getByText(/Ẩn SQL đã biên dịch/i)).toBeInTheDocument();
-    expect(screen.getByText(/Compiled SQL/i)).toBeInTheDocument();
+    expect(screen.getByText(/^SQL đã biên dịch \(chỉ đọc\)$/i)).toBeInTheDocument();
 
     // Click to close
     fireEvent.click(screen.getByRole('button', { name: /Ẩn SQL đã biên dịch/i }));
-    expect(screen.queryByText(/Compiled SQL/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^SQL đã biên dịch \(chỉ đọc\)$/i)).not.toBeInTheDocument();
   });
 
   it('does not render SQL disclosure button when SQL is redacted (null)', () => {

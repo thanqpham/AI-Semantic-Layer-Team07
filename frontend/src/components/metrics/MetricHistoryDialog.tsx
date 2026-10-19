@@ -20,6 +20,8 @@ import {
 import { cn } from '@/lib/utils';
 import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
 import { renderMetricYaml } from '@/lib/metrics';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface MetricHistoryDialogProps {
   history: MetricHistoryData;
@@ -166,7 +168,7 @@ export function MetricHistoryDialog({
       <DialogContent showCloseButton={!pending} className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
           <DialogTitle className="text-sm font-semibold">
-            Lịch sử · {history.metric_name}
+            <Translated text={"Lịch sử ·"} after />{history.metric_name}
           </DialogTitle>
           {canManage && onEdit && (
             <Button
@@ -179,7 +181,7 @@ export function MetricHistoryDialog({
               }}
             >
               <Edit2 className="h-3 w-3" />
-              Chỉnh sửa định nghĩa
+              <Translated text={"Chỉnh sửa định nghĩa"} />
             </Button>
           )}
         </DialogHeader>
@@ -205,7 +207,7 @@ export function MetricHistoryDialog({
 
         {equalSelection ? (
           <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-600 dark:text-amber-400">
-            Hãy chọn hai phiên bản khác nhau để so sánh.
+            <Translated text={"Hãy chọn hai phiên bản khác nhau để so sánh."} />
           </p>
         ) : (
           baseEntry &&
@@ -281,6 +283,7 @@ function DraftDecisionBar({
   pending: boolean;
   onDecide: (action: 'approve' | 'reject', reason?: string) => void;
 }) {
+  const { translate } = useLanguage();
   const [reason, setReason] = useState('');
   const [showReasonError, setShowReasonError] = useState(false);
 
@@ -296,27 +299,24 @@ function DraftDecisionBar({
   return (
     <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
       <p className="text-xs text-amber-700 dark:text-amber-300">
-        Bản sửa <span className="font-mono font-semibold">v{draft.version}</span> đang chờ phê duyệt.
-        Định nghĩa <span className="font-mono font-semibold">v{liveVersion}</span> vẫn đang phục vụ
-        truy vấn cho tới khi bản sửa được duyệt.
-      </p>
+        <Translated text={"Bản sửa"} after /><span className="font-mono font-semibold">v{draft.version}</span> <Translated text={"đang chờ phê duyệt. Định nghĩa"} after /><span className="font-mono font-semibold">v{liveVersion}</span> <Translated text={"vẫn đang phục vụ truy vấn cho tới khi bản sửa được duyệt."} /></p>
       {draft.changed_by_name && (
         <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
-          Người sửa: {draft.changed_by_name}
+          <Translated text={"Người sửa:"} after />{draft.changed_by_name}
         </p>
       )}
       {canApprove ? (
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <input
-              aria-label="Lý do từ chối"
+              aria-label={translate("Lý do từ chối")}
               value={reason}
               disabled={pending}
               onChange={(event) => {
                 setReason(event.target.value);
                 if (event.target.value.trim()) setShowReasonError(false);
               }}
-              placeholder="Lý do từ chối (bắt buộc khi từ chối)"
+              placeholder={translate("Lý do từ chối (bắt buộc khi từ chối)")}
               className={cn(
                 'h-8 min-w-48 flex-1 rounded-md border bg-background px-2 text-xs text-foreground',
                 showReasonError ? 'border-red-500 ring-1 ring-red-500' : 'border-border',
@@ -330,7 +330,7 @@ function DraftDecisionBar({
               onClick={() => onDecide('approve')}
             >
               <Check className="h-3.5 w-3.5" />
-              Phê duyệt bản sửa
+              <Translated text={"Phê duyệt bản sửa"} />
             </Button>
             <Button
               type="button"
@@ -341,18 +341,18 @@ function DraftDecisionBar({
               onClick={handleRejectClick}
             >
               <X className="h-3.5 w-3.5" />
-              Từ chối
+              <Translated text={"Từ chối"} />
             </Button>
           </div>
           {showReasonError && (
             <p className="text-[11px] font-medium text-red-500">
-              ⚠️ Vui lòng nhập lý do từ chối trước khi bấm Từ chối.
+              <Translated text={"⚠️ Vui lòng nhập lý do từ chối trước khi bấm Từ chối."} />
             </p>
           )}
         </div>
       ) : (
         <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
-          Bạn không có quyền phê duyệt bản sửa này.
+          <Translated text={"Bạn không có quyền phê duyệt bản sửa này."} />
         </p>
       )}
     </div>
@@ -369,10 +369,8 @@ function RollbackBar({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2">
       <p className="text-xs text-muted-foreground">
-        Đưa metric trở lại định nghĩa của{' '}
-        <span className="font-mono font-semibold text-foreground">v{baseVersion}</span> bằng cách ghi
-        thêm một phiên bản mới — lịch sử cũ được giữ nguyên.
-      </p>
+        <Translated text={"Đưa metric trở lại định nghĩa của"} />{' '}
+        <span className="font-mono font-semibold text-foreground">v{baseVersion}</span> <Translated text={"bằng cách ghi thêm một phiên bản mới — lịch sử cũ được giữ nguyên."} /></p>
       <Button
         type="button"
         size="sm"
@@ -381,7 +379,7 @@ function RollbackBar({
         onClick={onStart}
       >
         <RotateCcw className="h-3.5 w-3.5" />
-        Khôi phục phiên bản này
+        <Translated text={"Khôi phục phiên bản này"} />
       </Button>
     </div>
   );
@@ -402,6 +400,7 @@ function VersionSelect({
   onChange: (version: number) => void;
   disabled?: boolean;
 }) {
+  const { locale } = useLanguage();
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-[11px] font-medium text-muted-foreground">
@@ -416,7 +415,7 @@ function VersionSelect({
       >
         {versions.map((version) => (
           <option key={version.version} value={version.version}>
-            v{version.version} · {new Date(version.created_at).toLocaleDateString()}
+            v{version.version} · {new Date(version.created_at).toLocaleDateString(locale)}
           </option>
         ))}
       </select>
@@ -429,14 +428,15 @@ function VersionStatusBadge({ status }: { status?: MetricVersionStatus }) {
   if (!meta) return null;
   return (
     <span className={cn('rounded-full border px-2 py-0.5 font-mono text-[10px]', meta.className)}>
-      {meta.label}
+      <Translated text={meta.label} />
     </span>
   );
 }
 
 function VersionAudit({ version }: { version: MetricVersionData }) {
+  const { locale } = useLanguage();
   const createdAt = version.created_at
-    ? new Date(version.created_at).toLocaleString('vi-VN', {
+    ? new Date(version.created_at).toLocaleString(locale, {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -446,7 +446,7 @@ function VersionAudit({ version }: { version: MetricVersionData }) {
       })
     : null;
   const decisionAt = version.approved_at
-    ? new Date(version.approved_at).toLocaleString('vi-VN', {
+    ? new Date(version.approved_at).toLocaleString(locale, {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -464,26 +464,26 @@ function VersionAudit({ version }: { version: MetricVersionData }) {
   return (
     <div className="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">
       <span>
-        Tạo/Sửa lúc: <strong className="text-foreground font-medium">{createdAt}</strong> bởi{' '}
+        <Translated text={"Tạo/Sửa lúc:"} after /><strong className="text-foreground font-medium">{createdAt}</strong> <Translated text={"bởi"} />{' '}
         <strong className="text-foreground font-medium">{creator}</strong>
       </span>
       {version.parent_version && (
-        <span className="text-muted-foreground/70">· dựa trên v{version.parent_version}</span>
+        <span className="text-muted-foreground/70"><Translated text={"· dựa trên v"} />{version.parent_version}</span>
       )}
       {decisionAt && (
         <span>
           ·{' '}
           {isApproved ? (
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-              Đã duyệt bởi <strong>{actor}</strong> lúc <strong>{decisionAt}</strong>
+              <Translated text={"Đã duyệt bởi"} after /><strong>{actor}</strong> <Translated text={"lúc"} after /><strong>{decisionAt}</strong>
             </span>
           ) : isRejected ? (
             <span className="text-red-600 dark:text-red-400 font-medium">
-              Đã từ chối bởi <strong>{actor}</strong> lúc <strong>{decisionAt}</strong>
+              <Translated text={"Đã từ chối bởi"} after /><strong>{actor}</strong> <Translated text={"lúc"} after /><strong>{decisionAt}</strong>
             </span>
           ) : (
             <span>
-              Xử lý bởi <strong>{actor}</strong> lúc <strong>{decisionAt}</strong>
+              <Translated text={"Xử lý bởi"} after /><strong>{actor}</strong> <Translated text={"lúc"} after /><strong>{decisionAt}</strong>
             </span>
           )}
         </span>
@@ -493,18 +493,19 @@ function VersionAudit({ version }: { version: MetricVersionData }) {
 }
 
 function VersionList({ versions, liveVersion }: { versions: MetricVersionData[]; liveVersion: number }) {
+  const { locale } = useLanguage();
   return (
     <div className="space-y-3">
       {versions.map((version) => (
         <div key={version.version} className="rounded-lg border border-border bg-card p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <p className="font-mono text-xs font-semibold text-foreground">
-              Version {version.version} · {new Date(version.created_at).toLocaleString()}
+              <Translated text={"Version"} after />{version.version} · {new Date(version.created_at).toLocaleString(locale)}
             </p>
             <VersionStatusBadge status={version.status} />
             {version.version === liveVersion && version.status === 'approved' && (
               <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">
-                Đang publish
+                <Translated text={"Đang publish"} />
               </span>
             )}
           </div>
@@ -519,7 +520,7 @@ function VersionList({ versions, liveVersion }: { versions: MetricVersionData[];
               )}
             >
               <span className="font-medium">
-                {version.status === 'rejected' ? 'Lý do từ chối: ' : 'Ghi chú: '}
+                <Translated text={version.status === 'rejected' ? 'Lý do từ chối: ' : 'Ghi chú: '} />
               </span>
               <span className="text-muted-foreground whitespace-pre-wrap">
                 {version.status === 'approved' && version.change_reason.startsWith('[Từ chối]')
@@ -531,7 +532,7 @@ function VersionList({ versions, liveVersion }: { versions: MetricVersionData[];
           {version.definition ? (
             <YamlCodeViewer yaml={renderMetricYaml(version.definition)} />
           ) : (
-            <p className="text-xs text-amber-500">Phiên bản legacy không có definition.</p>
+            <p className="text-xs text-amber-500"><Translated text={"Phiên bản legacy không có definition."} /></p>
           )}
         </div>
       ))}

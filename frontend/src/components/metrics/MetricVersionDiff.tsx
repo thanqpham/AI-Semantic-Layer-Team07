@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import type { MetricDefinition } from '@/lib/api';
 import { buildMetricVersionDiff, DiffRow, DiffRowStatus } from '@/lib/metric-version-diff';
 import { cn } from '@/lib/utils';
+import { Translated } from '@/components/ui/translated';
 
 interface MetricVersionDiffProps {
   previousDefinition: MetricDefinition | null | undefined;
@@ -35,7 +36,7 @@ export function MetricVersionDiff({
   if (!result.available) {
     return (
       <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-600 dark:text-amber-400">
-        Không thể so sánh: một trong hai phiên bản là bản legacy không có definition.
+        <Translated text={"Không thể so sánh: một trong hai phiên bản là bản legacy không có definition."} />
       </p>
     );
   }
@@ -63,7 +64,7 @@ function DiffLine({ row, isFormula }: { row: DiffRow; isFormula: boolean }) {
         {rowMarkers[row.status]}
       </span>
       <span className="shrink-0 rounded border border-border bg-background/60 px-1 font-sans text-[10px] uppercase tracking-wide">
-        {isFormula ? 'Công thức' : 'Bộ lọc'}
+        <Translated text={isFormula ? 'Công thức' : 'Bộ lọc'} />
       </span>
       <span className="break-all">{row.text}</span>
     </li>

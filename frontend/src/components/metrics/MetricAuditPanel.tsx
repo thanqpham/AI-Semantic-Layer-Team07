@@ -10,6 +10,7 @@ import {
   MetricComparisonResponse,
   MetricRecord,
 } from '@/lib/api';
+import { Translated } from '@/components/ui/translated';
 
 interface MetricAuditPanelProps {
   dbId?: number | null;
@@ -66,12 +67,11 @@ export function MetricAuditPanel({ dbId, metrics, canEdit, onEdit }: MetricAudit
           ))}
         </div>
         <Button size="sm" variant="outline" onClick={() => void loadAudit()} disabled={loading}>
-          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Làm mới
-        </Button>
+          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> <Translated text={"Làm mới"} /></Button>
       </div>
 
       {error && <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600"><AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" />{error}</div>}
-      {loading && !audit && <div role="status" className="p-8 text-center text-xs text-muted-foreground">Đang phân tích Catalog...</div>}
+      {loading && !audit && <div role="status" className="p-8 text-center text-xs text-muted-foreground"><Translated text={"Đang phân tích Catalog..."} /></div>}
       {!loading && audit && groups.length === 0 && <EmptyAudit />}
       <div className="space-y-3">
         {groups.map((group, index) => (
@@ -89,14 +89,14 @@ function AuditStat({ label, value, tone = 'default' }: { label: string; value: n
 function AuditGroup({ group, canEdit, onEdit, onEditMetric }: { group: MetricComparisonGroup; canEdit?: boolean; onEdit: (id: number) => MetricRecord | undefined; onEditMetric?: (metric: MetricRecord) => void }) {
   return <article className="rounded-lg border border-border bg-card p-4">
     <div className="flex items-start justify-between gap-3">
-      <div><div className="flex items-center gap-2"><GitCompare className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold">{group.group_type === 'exact_duplicate' ? 'Metric trùng hoàn toàn' : 'Metric cùng lõi, khác filter'}</h3></div><p className="mt-1 font-mono text-xs text-muted-foreground">{group.core_formula} · {group.base_entity}</p></div>
-      <span className="rounded-full bg-secondary px-2 py-1 text-[10px] text-muted-foreground">{group.members.length} metric</span>
+      <div><div className="flex items-center gap-2"><GitCompare className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold"><Translated text={group.group_type === 'exact_duplicate' ? 'Metric trùng hoàn toàn' : 'Metric cùng lõi, khác filter'} /></h3></div><p className="mt-1 font-mono text-xs text-muted-foreground">{group.core_formula} · {group.base_entity}</p></div>
+      <span className="rounded-full bg-secondary px-2 py-1 text-[10px] text-muted-foreground">{group.members.length} <Translated text={"metric"} /></span>
     </div>
-    {group.group_type === 'near_duplicate' && <p className="mt-3 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">Cùng công thức lõi, khác bộ lọc nghiệp vụ. Hãy xác nhận các filter này có thực sự là định nghĩa riêng.</p>}
+    {group.group_type === 'near_duplicate' && <p className="mt-3 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300"><Translated text={"Cùng công thức lõi, khác bộ lọc nghiệp vụ. Hãy xác nhận các filter này có thực sự là định nghĩa riêng."} /></p>}
     <div className="mt-3 divide-y divide-border rounded-md border border-border">
-      {group.members.map((member) => <div key={member.metric_id} className="flex items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate text-xs font-medium">{member.name}</p><p className="mt-1 text-[11px] text-muted-foreground">{member.filters.length ? member.filters.map((filter) => `${filter.field} ${filter.operator} ${String(filter.value)}`).join('; ') : 'Không có filter'}</p></div>{canEdit && onEditMetric && <Button size="sm" variant="ghost" onClick={() => { const metric = onEdit(member.metric_id); if (metric) onEditMetric(metric); }}><Pencil className="mr-1 h-3 w-3" />Sửa</Button>}</div>)}
+      {group.members.map((member) => <div key={member.metric_id} className="flex items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate text-xs font-medium">{member.name}</p><p className="mt-1 text-[11px] text-muted-foreground">{member.filters.length ? member.filters.map((filter) => `${filter.field} ${filter.operator} ${String(filter.value)}`).join('; ') : 'Không có filter'}</p></div>{canEdit && onEditMetric && <Button size="sm" variant="ghost" onClick={() => { const metric = onEdit(member.metric_id); if (metric) onEditMetric(metric); }}><Pencil className="mr-1 h-3 w-3" /><Translated text={"Sửa"} /></Button>}</div>)}
     </div>
   </article>;
 }
 
-function EmptyAudit() { return <div className="rounded-lg border border-dashed border-border p-10 text-center text-xs text-muted-foreground">Không phát hiện nhóm metric trùng hoặc gần trùng.</div>; }
+function EmptyAudit() { return <div className="rounded-lg border border-dashed border-border p-10 text-center text-xs text-muted-foreground"><Translated text={"Không phát hiện nhóm metric trùng hoặc gần trùng."} /></div>; }

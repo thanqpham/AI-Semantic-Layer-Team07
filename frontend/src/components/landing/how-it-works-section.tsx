@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { ArrowRight } from "lucide-react";
+import { Translated } from '@/components/ui/translated';
 
 const steps = [
   {
@@ -66,17 +67,14 @@ export function HowItWorksSection() {
         >
           <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
             <span className="w-8 h-px bg-foreground/30" />
-            Cách hoạt động
-            <span className="w-8 h-px bg-foreground/30" />
+            <Translated text={"Cách hoạt động"} after /><span className="w-8 h-px bg-foreground/30" />
           </span>
           <h2 className="text-4xl lg:text-6xl font-display tracking-tight mb-6">
-            Bốn bước
-            <br />
-            đến semantic layer.
+            <Translated text={"Bốn bước"} after /><br />
+            <Translated text={"đến semantic layer."} />
           </h2>
           <p className="text-xl text-muted-foreground">
-            Từ kết nối database đến truy vấn metrics, quy trình hoàn toàn tự
-            động với con người phê duyệt.
+            <Translated text={"Từ kết nối database đến truy vấn metrics, quy trình hoàn toàn tự động với con người phê duyệt."} />
           </p>
         </div>
 
@@ -104,10 +102,10 @@ export function HowItWorksSection() {
 
               {/* Content */}
               <h3 className="text-xl font-medium mb-3 group-hover:translate-x-1 transition-transform duration-300">
-                {step.title}
+                <Translated text={step.title} />
               </h3>
               <p className="text-muted-foreground leading-relaxed mb-4">
-                {step.description}
+                <Translated text={step.description} />
               </p>
 
               {/* Detail Badge */}

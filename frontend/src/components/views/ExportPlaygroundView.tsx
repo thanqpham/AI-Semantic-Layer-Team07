@@ -8,6 +8,8 @@ import { exportSemanticLayerApi, MetricRecord } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { SectionLabel, type WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ExportPlaygroundViewProps {
   dbId?: number | null;
@@ -16,6 +18,7 @@ interface ExportPlaygroundViewProps {
 }
 
 export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPlaygroundViewProps) {
+  const { translate } = useLanguage();
   const [format, setFormat] = useState<'json' | 'yaml'>('yaml');
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
@@ -69,7 +72,7 @@ export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPla
     <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
       <ViewHeader
         eyebrow="Publish"
-        title="Export Playground"
+        title={translate("Export Playground")}
         description="Publish the approved semantic layer to a standard spec for BI tools and semantic engines."
         database={database}
         actions={
@@ -82,7 +85,7 @@ export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPla
               disabled={!content}
             >
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Đã sao chép' : 'Copy'}
+              <Translated text={copied ? 'Đã sao chép' : 'Copy'} />
             </Button>
             <Button
               size="sm"
@@ -91,7 +94,7 @@ export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPla
               disabled={!content}
             >
               <Download className="h-3.5 w-3.5" />
-              Tải file
+              <Translated text={"Tải file"} />
             </Button>
           </div>
         }
@@ -115,7 +118,7 @@ export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPla
                   {s.value}
                 </p>
                 <p className="relative mt-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {s.label}
+                  <Translated text={s.label} />
                 </p>
               </div>
             ))}
@@ -125,7 +128,7 @@ export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPla
           {loading ? (
             <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <p className="text-xs">Đang tải export...</p>
+              <p className="text-xs"><Translated text={"Đang tải export..."} /></p>
             </div>
           ) : error ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive">
@@ -134,7 +137,7 @@ export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPla
           ) : (
             <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
               <div className="flex items-center justify-between border-b border-border bg-secondary/30 px-4 py-2.5">
-                <SectionLabel>semantic_layer.{format}</SectionLabel>
+                <SectionLabel><Translated text={"semantic_layer."} />{format}</SectionLabel>
                 <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
                   {([
                     { key: 'yaml' as const, label: 'YAML', icon: FileText },
@@ -154,7 +157,7 @@ export function ExportPlaygroundView({ dbId, metrics = [], database }: ExportPla
                         )}
                       >
                         <Icon className="h-3.5 w-3.5" />
-                        <span>{f.label}</span>
+                        <span><Translated text={f.label} /></span>
                       </button>
                     );
                   })}

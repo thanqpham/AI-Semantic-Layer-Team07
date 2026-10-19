@@ -50,6 +50,8 @@ import {
   WidgetMeta,
   WIDTH_LABELS,
 } from './widgetConfigForm';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface WidgetConfigModalProps {
   open: boolean;
@@ -73,6 +75,7 @@ export function WidgetConfigModal(props: WidgetConfigModalProps) {
 }
 
 function WidgetConfigModalInner(props: WidgetConfigModalProps) {
+  const { translate } = useLanguage();
   const eligibleMetrics = useMemo(() => selectExecutableMetrics(props.metrics), [props.metrics]);
   const [form, setForm] = useState<WidgetFormState>(() =>
     initFormState(props.editingWidget, eligibleMetrics),
@@ -153,10 +156,10 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold">
-            {props.editingWidget ? 'Chỉnh sửa widget' : 'Thêm widget mới'}
+            <Translated text={props.editingWidget ? 'Chỉnh sửa widget' : 'Thêm widget mới'} />
           </DialogTitle>
           <DialogDescription>
-            Cấu hình widget từ metric đã duyệt. Dữ liệu chỉ được truy vấn khi bấm “Xem trước”.
+            <Translated text={"Cấu hình widget từ metric đã duyệt. Dữ liệu chỉ được truy vấn khi bấm “Xem trước”."} />
           </DialogDescription>
         </DialogHeader>
 
@@ -170,7 +173,7 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
               onChange={(event) => handleChartChange(event.target.value)}
             >
               {(Object.keys(CHART_LABELS) as DashboardChartType[]).map((chart) => (
-                <option key={chart} value={chart}>{CHART_LABELS[chart]}</option>
+                <option key={chart} value={chart}>{translate(CHART_LABELS[chart])}</option>
               ))}
             </select>
           </FormField>
@@ -192,7 +195,7 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
                 onChange={(event) => patchForm({ timeGrain: (event.target.value || null) as TimeGrain | null })}
               >
                 {(Object.keys(GRAIN_LABELS) as TimeGrain[]).map((grain) => (
-                  <option key={grain} value={grain}>{GRAIN_LABELS[grain]}</option>
+                  <option key={grain} value={grain}>{translate(GRAIN_LABELS[grain])}</option>
                 ))}
               </select>
             </FormField>
@@ -223,8 +226,8 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
           ) : (
             <p className="flex-1" />
           )}
-          <Button type="button" variant="outline" onClick={props.onCancel}>Hủy</Button>
-          <Button type="button" disabled={!canSave} onClick={handleSave}>Lưu</Button>
+          <Button type="button" variant="outline" onClick={props.onCancel}><Translated text={"Hủy"} /></Button>
+          <Button type="button" disabled={!canSave} onClick={handleSave}><Translated text={"Lưu"} /></Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -255,7 +258,7 @@ function resolveDimensionLabel(
 function FormField({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">{label}</Label>
+      <Label htmlFor={id} className="text-xs font-medium text-muted-foreground"><Translated text={label} /></Label>
       {children}
     </div>
   );
@@ -270,6 +273,7 @@ function MetricPicker({
   value: number | null;
   onChange: (value: string) => void;
 }) {
+  const { translate } = useLanguage();
   const [search, setSearch] = useState('');
   const filtered = filterMetricsByName(metrics, search);
   return (
@@ -278,7 +282,7 @@ function MetricPicker({
         <Input
           id="widget-metric-search"
           type="text"
-          placeholder="Tìm metric đã duyệt…"
+          placeholder={translate("Tìm metric đã duyệt…")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -296,7 +300,7 @@ function MetricPicker({
         </select>
       </FormField>
       {filtered.length === 0 && (
-        <p className="text-xs text-muted-foreground">Không có metric đã duyệt nào.</p>
+        <p className="text-xs text-muted-foreground"><Translated text={"Không có metric đã duyệt nào."} /></p>
       )}
     </div>
   );
@@ -315,6 +319,7 @@ function DimensionField({
   recommendation: DashboardChartType | null;
   onSelect: (columnId: number | null) => void;
 }) {
+  const { translate } = useLanguage();
   const isTimeSeries = form.chartType === 'line' || form.chartType === 'area';
   const label = isTimeSeries ? 'Cột thời gian' : 'Chiều dữ liệu';
   const options = isTimeSeries
@@ -329,14 +334,14 @@ function DimensionField({
           value={form.dimensionColId === null ? '' : String(form.dimensionColId)}
           onChange={(event) => onSelect(event.target.value === '' ? null : Number(event.target.value))}
         >
-          <option value="">— Chọn —</option>
+          <option value="">{translate('— Chọn —')}</option>
           {options.map((option) => (
             <option key={option.id} value={String(option.id)}>{option.name}</option>
           ))}
         </select>
         {recommendation && (
           <span className="whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-            Đề xuất: {CHART_LABELS[recommendation]}
+            <Translated text={"Đề xuất:"} after />{translate(CHART_LABELS[recommendation])}
           </span>
         )}
       </div>
@@ -355,6 +360,7 @@ function DateFilterField({
   required: boolean;
   onChange: (columnId: number | null) => void;
 }) {
+  const { translate } = useLanguage();
   return (
     <FormField label="Cột lọc ngày" id="widget-date-filter">
       <select
@@ -364,7 +370,7 @@ function DateFilterField({
         value={value === null ? '' : String(value)}
         onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
       >
-        {!required && <option value="">Không áp dụng</option>}
+        {!required && <option value="">{translate('Không áp dụng')}</option>}
         {timeColumns.map((column) => (
           <option key={column.column_id} value={String(column.column_id)}>{column.business_name}</option>
         ))}
@@ -380,6 +386,7 @@ function LayoutFields({
   form: WidgetFormState;
   onPatch: (patch: Partial<WidgetFormState>) => void;
 }) {
+  const { translate } = useLanguage();
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <FormField label="Độ rộng" id="widget-width">
@@ -390,7 +397,7 @@ function LayoutFields({
           onChange={(event) => onPatch({ width: event.target.value as typeof form.width })}
         >
           {(Object.keys(WIDTH_LABELS) as (keyof typeof WIDTH_LABELS)[]).map((width) => (
-            <option key={width} value={width}>{WIDTH_LABELS[width]}</option>
+            <option key={width} value={width}>{translate(WIDTH_LABELS[width])}</option>
           ))}
         </select>
       </FormField>
@@ -402,7 +409,7 @@ function LayoutFields({
           onChange={(event) => onPatch({ height: event.target.value as typeof form.height })}
         >
           {(Object.keys(HEIGHT_LABELS) as (keyof typeof HEIGHT_LABELS)[]).map((height) => (
-            <option key={height} value={height}>{HEIGHT_LABELS[height]}</option>
+            <option key={height} value={height}>{translate(HEIGHT_LABELS[height])}</option>
           ))}
         </select>
       </FormField>
@@ -412,7 +419,7 @@ function LayoutFields({
             id="widget-title"
             type="text"
             maxLength={200}
-            placeholder="Bỏ trống để dùng tên metric"
+            placeholder={translate("Bỏ trống để dùng tên metric")}
             value={form.title}
             onChange={(event) => onPatch({ title: event.target.value })}
           />
@@ -442,9 +449,9 @@ function PreviewPanel({
   return (
     <section className="rounded-lg border border-border bg-secondary/30 p-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground">Xem trước</h3>
+        <h3 className="text-sm font-semibold text-foreground"><Translated text={"Xem trước"} /></h3>
         <Button type="button" size="sm" variant="outline" disabled={!canPreview} onClick={onPreview}>
-          Xem trước
+          <Translated text={"Xem trước"} />
         </Button>
       </div>
       {!querySupported ? (
@@ -452,13 +459,12 @@ function PreviewPanel({
           role="note"
           className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-600 dark:text-amber-400"
         >
-          Nguồn SQL Dump chỉ chứa metadata cấu trúc và không hỗ trợ truy vấn trực tiếp. Không thể xem
-          trước dữ liệu Live DB cho nguồn này.
+          <Translated text={"Nguồn SQL Dump chỉ chứa metadata cấu trúc và không hỗ trợ truy vấn trực tiếp. Không thể xem trước dữ liệu Live DB cho nguồn này."} />
         </p>
       ) : previewWidget ? (
         <>
           <p className="mt-1 text-xs text-muted-foreground">
-            Dữ liệu mẫu truy vấn trực tiếp từ Live DB (tối đa 100 dòng).
+            <Translated text={"Dữ liệu mẫu truy vấn trực tiếp từ Live DB (tối đa 100 dòng)."} />
           </p>
           <div className="mt-2 h-64 rounded-xl border border-border bg-card p-3 flex flex-col">
             <DashboardChart
@@ -472,7 +478,7 @@ function PreviewPanel({
         </>
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">
-          Hoàn tất cấu hình hợp lệ rồi nhấn “Xem trước” để chạy truy vấn mẫu.
+          <Translated text={"Hoàn tất cấu hình hợp lệ rồi nhấn “Xem trước” để chạy truy vấn mẫu."} />
         </p>
       )}
     </section>

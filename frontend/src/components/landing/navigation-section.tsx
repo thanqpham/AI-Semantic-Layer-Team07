@@ -2,16 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { LanguageSwitch } from "@/components/ui/language-switch";
+import { useLanguage } from "@/context/LanguageContext";
+import { Translated } from '@/components/ui/translated';
 
 const navLinks = [
-  { name: "Tính năng", href: "#features" },
-  { name: "Cách hoạt động", href: "#how-it-works" },
-  { name: "Tích hợp", href: "#integrations" },
-  { name: "Bảo mật", href: "#security" },
-  { name: "Beta", href: "#pricing" },
+  { en: "Features", vi: "Tính năng", href: "#features" },
+  { en: "How it works", vi: "Cách hoạt động", href: "#how-it-works" },
+  { en: "Integrations", vi: "Tích hợp", href: "#integrations" },
+  { en: "Security", vi: "Bảo mật", href: "#security" },
+  { en: "Beta", vi: "Beta", href: "#pricing" },
 ];
 
 export function NavigationSection() {
+  const { t } = useLanguage();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -39,7 +43,7 @@ export function NavigationSection() {
           {/* Brand */}
           <Link href="/" className="flex items-center gap-3 group">
             <span className="text-2xl font-display tracking-tight">
-              SemanticLayer
+              <Translated text={"SemanticLayer"} />
             </span>
           </Link>
 
@@ -47,11 +51,11 @@ export function NavigationSection() {
           <div className="hidden lg:flex items-center gap-10">
             {navLinks.map((link) => (
               <a
-                key={link.name}
+                key={link.href}
                 href={link.href}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300 relative group"
               >
-                {link.name}
+                {t(link.en, link.vi)}
                 <span className="absolute -bottom-1 left-0 w-0 h-px bg-foreground transition-all duration-300 group-hover:w-full" />
               </a>
             ))}
@@ -59,17 +63,18 @@ export function NavigationSection() {
 
           {/* Desktop CTA */}
           <div className="hidden lg:flex items-center gap-6">
+            <LanguageSwitch />
             <Link
               href="/login"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              Đăng nhập
+              {t('Log in', 'Đăng nhập')}
             </Link>
             <Link
               href="/register"
               className="text-sm px-5 py-2.5 bg-foreground text-primary-foreground hover:bg-foreground/90 transition-colors"
             >
-              Dùng thử miễn phí
+              {t('Try for free', 'Dùng thử miễn phí')}
             </Link>
           </div>
 
@@ -78,7 +83,7 @@ export function NavigationSection() {
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}
             className="lg:hidden p-2"
-            aria-label="Toggle menu"
+            aria-label={t('Toggle menu', 'Mở hoặc đóng menu')}
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
           >
@@ -103,26 +108,27 @@ export function NavigationSection() {
             <div className="flex flex-col gap-4 pt-4">
               {navLinks.map((link) => (
                 <a
-                  key={link.name}
+                  key={link.href}
                   href={link.href}
                   onClick={() => setMobileOpen(false)}
                   className="text-lg text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {link.name}
+                  {t(link.en, link.vi)}
                 </a>
               ))}
               <div className="flex flex-col gap-3 pt-4 border-t border-foreground/10">
+                <LanguageSwitch />
                 <Link
                   href="/login"
                   className="text-lg text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Đăng nhập
+                  {t('Log in', 'Đăng nhập')}
                 </Link>
                 <Link
                   href="/register"
                   className="text-lg px-5 py-3 bg-foreground text-primary-foreground text-center hover:bg-foreground/90 transition-colors"
                 >
-                  Dùng thử miễn phí
+                  {t('Try for free', 'Dùng thử miễn phí')}
                 </Link>
               </div>
             </div>

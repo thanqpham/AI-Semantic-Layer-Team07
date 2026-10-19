@@ -40,6 +40,7 @@ import {
   truncatePieSlices,
 } from './dashboardFormatters';
 import { DashboardWidgetData } from './useDashboardWidgetData';
+import { Translated } from '@/components/ui/translated';
 
 export interface DashboardChartProps {
   widget: DashboardWidgetConfig;
@@ -130,7 +131,7 @@ function SuccessBody({ widget, title, metricName, dimensionLabel, data }: Dashbo
 function LoadingSkeleton({ label }: { label: string }) {
   return (
     <div role="status" aria-busy="true" className="flex h-full flex-col gap-2">
-      <span className="sr-only">Đang tải {label}</span>
+      <span className="sr-only"><Translated text={"Đang tải"} after />{label}</span>
       <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
       <div className="min-h-0 flex-1 animate-pulse rounded-lg bg-muted" />
     </div>
@@ -152,7 +153,7 @@ function ErrorState({
       className="flex h-full flex-col justify-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3"
     >
       <p className="text-sm font-medium text-destructive">
-        {isConfiguration ? 'Cấu hình widget không hợp lệ.' : 'Không thể tải dữ liệu cho widget này.'}
+        <Translated text={isConfiguration ? 'Cấu hình widget không hợp lệ.' : 'Không thể tải dữ liệu cho widget này.'} />
       </p>
       {message && <p className="break-words text-xs text-muted-foreground">{message}</p>}
       <button
@@ -160,7 +161,7 @@ function ErrorState({
         onClick={onRetry}
         className="self-start rounded-md border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent"
       >
-        Thử lại
+        <Translated text={"Thử lại"} />
       </button>
     </div>
   );
@@ -169,7 +170,7 @@ function ErrorState({
 function EmptyState() {
   return (
     <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
-      Chưa có dữ liệu cho phạm vi đã chọn.
+      <Translated text={"Chưa có dữ liệu cho phạm vi đã chọn."} />
     </p>
   );
 }
@@ -177,7 +178,7 @@ function EmptyState() {
 function UnavailableState() {
   return (
     <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
-      Truy vấn không khả dụng cho nguồn dữ liệu này.
+      <Translated text={"Truy vấn không khả dụng cho nguồn dữ liệu này."} />
     </p>
   );
 }
@@ -188,7 +189,7 @@ function KpiPanel({ metricName, data }: { metricName: string; data: DashboardWid
     <div className="flex min-h-0 flex-1 flex-col justify-between gap-2">
       <div>
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Tổng trong kỳ
+          <Translated text={"Tổng trong kỳ"} />
         </p>
         <p
           className="mt-1 text-2xl font-bold tabular-nums text-foreground"
@@ -237,7 +238,7 @@ function SummaryTable({
       <caption>{title}</caption>
       <thead>
         <tr>
-          <th scope="col">Mục</th>
+          <th scope="col"><Translated text={"Mục"} /></th>
           <th scope="col">{metricName}</th>
         </tr>
       </thead>
@@ -425,7 +426,7 @@ function RankingTable({
         </table>
       </div>
       {data.hiddenCount > 0 && (
-        <p className="pt-2 text-xs text-muted-foreground">+{data.hiddenCount} mục khác không hiển thị</p>
+        <p className="pt-2 text-xs text-muted-foreground">+{data.hiddenCount} <Translated text={"mục khác không hiển thị"} /></p>
       )}
     </div>
   );

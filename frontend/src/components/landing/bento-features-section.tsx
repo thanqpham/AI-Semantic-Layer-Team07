@@ -9,6 +9,7 @@ import {
   BarChart3,
   FileCode,
 } from "lucide-react";
+import { Translated } from '@/components/ui/translated';
 
 const features = [
   {
@@ -92,17 +93,14 @@ export function BentoFeaturesSection() {
         >
           <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
             <span className="w-8 h-px bg-foreground/30" />
-            Tính năng
-            <span className="w-8 h-px bg-foreground/30" />
+            <Translated text={"Tính năng"} after /><span className="w-8 h-px bg-foreground/30" />
           </span>
           <h2 className="text-4xl lg:text-6xl font-display tracking-tight mb-6">
-            Mọi thứ bạn cần
-            <br />
-            để quản trị dữ liệu.
+            <Translated text={"Mọi thứ bạn cần"} after /><br />
+            <Translated text={"để quản trị dữ liệu."} />
           </h2>
           <p className="text-xl text-muted-foreground">
-            Từ introspect schema đến biên dịch metrics, tất cả trong một nền
-            tảng duy nhất.
+            <Translated text={"Từ introspect schema đến biên dịch metrics, tất cả trong một nền tảng duy nhất."} />
           </p>
         </div>
 
@@ -132,10 +130,10 @@ export function BentoFeaturesSection() {
 
               {/* Content */}
               <h3 className="text-xl font-medium mb-3 group-hover:translate-x-1 transition-transform duration-300">
-                {feature.title}
+                <Translated text={feature.title} />
               </h3>
               <p className="text-muted-foreground leading-relaxed">
-                {feature.description}
+                <Translated text={feature.description} />
               </p>
             </div>
           ))}

@@ -77,7 +77,7 @@ describe('WorkspaceManagementModal', () => {
     expect(inviteLink).toHaveAttribute('href', 'https://app.example.com/invite/token');
     expect(inviteLink).toHaveAttribute('target', '_blank');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Đã copy' })).toBeInTheDocument());
   });
 
@@ -192,12 +192,12 @@ describe('WorkspaceManagementModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Thành viên/i }));
     expect(screen.queryByText('owner@example.com')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Invitation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Lời mời/i }));
     expect(screen.queryByText('Link mời #9')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Thành viên/i }));
     expect(screen.getByText('admin@example.com')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /^Invitation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Lời mời/i }));
     expect(screen.getByText('Link mời #9')).toBeInTheDocument();
   });
 });

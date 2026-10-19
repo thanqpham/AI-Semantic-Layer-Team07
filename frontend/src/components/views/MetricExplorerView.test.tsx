@@ -232,13 +232,13 @@ describe('MetricExplorerView', () => {
     // Tabs
     expect(screen.getByText('Bảng số liệu')).toBeInTheDocument();
     expect(screen.getByText('Biểu đồ')).toBeInTheDocument();
-    expect(screen.getByText('SQL Code')).toBeInTheDocument();
+    expect(screen.getByText('Mã SQL')).toBeInTheDocument();
 
     // Guardrail info
-    expect(screen.getByText(/Read-only · LIMIT 100 · max 1000 · 15s timeout/)).toBeInTheDocument();
+    expect(screen.getByText(/Chỉ đọc · LIMIT 100/)).toBeInTheDocument();
 
     // Buttons
-    expect(screen.getByRole('button', { name: /Preview SQL/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Xem trước SQL/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Thực thi/i })).toBeInTheDocument();
   });
 
@@ -541,7 +541,7 @@ describe('MetricExplorerView', () => {
 
     // Type non-matching search
     fireEvent.change(searchInput, { target: { value: 'không tồn tại' } });
-    expect(screen.getByText(/Không tìm thấy metric nào khớp/)).toBeInTheDocument();
+    expect(screen.getByText(/Không tìm thấy chỉ số nào khớp/)).toBeInTheDocument();
 
     // Clear search
     fireEvent.change(searchInput, { target: { value: '' } });

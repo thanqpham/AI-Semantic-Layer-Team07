@@ -20,6 +20,7 @@ from src.models.schema_metadata import RawSchemaMetadata, SchemaDialect
 logger = logging.getLogger(__name__)
 
 _SYNC_DRIVERS = {
+    "postgresql": "postgresql+psycopg2",
     "postgresql+asyncpg": "postgresql+psycopg2",
     "mysql+asyncmy": "mysql+pymysql",
     "mysql+aiomysql": "mysql+pymysql",

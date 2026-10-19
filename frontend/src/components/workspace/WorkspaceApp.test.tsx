@@ -1,7 +1,11 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceApp } from '@/components/workspace/WorkspaceApp';
+import { LanguageProvider } from '@/context/LanguageContext';
 import type { WorkspaceDatabase, ViewId } from '@/components/workspace/shared';
+
+const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: LanguageProvider });
+beforeEach(() => window.localStorage.setItem('app_language', 'en'));
 
 vi.mock('@/context/WorkspaceContext', () => ({
   useWorkspace: () => ({

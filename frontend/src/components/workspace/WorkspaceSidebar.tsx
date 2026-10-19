@@ -26,10 +26,12 @@ import {
 import type { AppNotification, ChatSessionItem } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useLanguage } from '@/context/LanguageContext';
 
 import { ChatHistorySection } from './ChatHistorySection';
 import { NotificationCenter } from './NotificationCenter';
 import { EngineIcon, engineLabels, SectionLabel, type ViewId, type WorkspaceDatabase } from './shared';
+import { Translated } from '@/components/ui/translated';
 
 interface WorkspaceSidebarProps {
   databases: WorkspaceDatabase[];
@@ -78,6 +80,15 @@ const navItems: { id: ViewId; label: string; icon: typeof Bot }[] = [
   { id: 'export', label: 'Export Playground', icon: Upload },
 ];
 
+const vietnameseNavLabels: Record<ViewId, string> = {
+  'ai-studio': 'AI Studio',
+  schema: 'Duyệt cấu trúc',
+  catalog: 'Danh mục chỉ số',
+  explorer: 'Khám phá chỉ số',
+  dashboard: 'Bảng điều khiển',
+  export: 'Xuất dữ liệu',
+};
+
 export function WorkspaceSidebar({
   databases,
   activeDbId,
@@ -114,6 +125,7 @@ export function WorkspaceSidebar({
   onDeleteChatSession,
   onRenameChatSession,
 }: WorkspaceSidebarProps) {
+  const { t } = useLanguage();
   const { workspaces, currentWorkspace, role, permissions, isLoading, switchWorkspace } = useWorkspace();
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const canManageWorkspace = Boolean(
@@ -128,7 +140,9 @@ export function WorkspaceSidebar({
     return true;
   });
   const getNavLabel = (id: ViewId, label: string) =>
-    id === 'ai-studio' && chatMode === 'data_assistant' ? 'Data Assistant' : label;
+    id === 'ai-studio' && chatMode === 'data_assistant'
+      ? t('Data Assistant', 'Trợ lý dữ liệu')
+      : t(label, vietnameseNavLabels[id]);
 
   if (collapsed) {
     return (
@@ -137,7 +151,7 @@ export function WorkspaceSidebar({
           type="button"
           onClick={onToggleCollapse}
           className="rounded-md p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
-          aria-label="Expand sidebar"
+          aria-label={t('Expand sidebar', 'Mở rộng thanh bên')}
         >
           <ChevronLeft className="h-4 w-4 rotate-180" />
         </button>
@@ -154,8 +168,8 @@ export function WorkspaceSidebar({
             type="button"
             onClick={onOpenWorkspaceManagement}
             className="rounded-md p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            title="Quản lý Workspace & Thành viên"
-            aria-label="Manage workspace"
+            title={t('Manage workspace and members', 'Quản lý Workspace & Thành viên')}
+            aria-label={t('Manage workspace', 'Quản lý workspace')}
           >
             <Building2 className="h-4 w-4" />
           </button>
@@ -186,8 +200,8 @@ export function WorkspaceSidebar({
               type="button"
               onClick={onOpenSyncLogs}
               className="relative rounded-md p-2 text-amber-400/80 transition-colors hover:bg-sidebar-accent hover:text-amber-300 cursor-pointer"
-              aria-label="Sync Logs"
-              title={pendingDriftCount > 0 ? `Sync Logs (${pendingDriftCount} thay đổi)` : 'Sync Logs'}
+              aria-label={t('Sync logs', 'Lịch sử đồng bộ')}
+              title={pendingDriftCount > 0 ? t(`Sync logs (${pendingDriftCount} changes)`, `Lịch sử đồng bộ (${pendingDriftCount} thay đổi)`) : t('Sync logs', 'Lịch sử đồng bộ')}
             >
               <RefreshCw className="h-4 w-4" />
               {pendingDriftCount > 0 && (
@@ -205,8 +219,8 @@ export function WorkspaceSidebar({
                 onToggleCollapse();
               }}
               className="relative rounded-md p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
-              aria-label="Mở lịch sử trò chuyện"
-              title="Mở lịch sử trò chuyện"
+              aria-label={t('Open chat history', 'Mở lịch sử trò chuyện')}
+              title={t('Open chat history', 'Mở lịch sử trò chuyện')}
             >
               <History className="h-4 w-4" />
               {chatSessions.length > 0 && (
@@ -221,7 +235,7 @@ export function WorkspaceSidebar({
           type="button"
           onClick={onToggleTheme}
           className="rounded-md p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
-          aria-label="Toggle theme"
+          aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
@@ -241,7 +255,7 @@ export function WorkspaceSidebar({
           type="button"
           onClick={onToggleCollapse}
           className="rounded-md p-1.5 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
-          aria-label="Collapse sidebar"
+          aria-label={t('Collapse sidebar', 'Thu gọn thanh bên')}
         >
           <PanelLeftClose className="h-4 w-4" />
         </button>
@@ -264,7 +278,7 @@ export function WorkspaceSidebar({
               <ChevronDown className="h-3 w-3 shrink-0 text-sidebar-foreground/50" />
             </div>
             <p className="truncate font-mono text-[10px] text-sidebar-foreground/50 capitalize">
-              {role ? role.replace('_', ' ') : 'Chưa có vai trò'}
+              {role ? role.replace('_', ' ') : t('No role', 'Chưa có vai trò')}
             </p>
           </div>
           {canManageWorkspace && onOpenWorkspaceManagement && (
@@ -272,8 +286,8 @@ export function WorkspaceSidebar({
               type="button"
               onClick={onOpenWorkspaceManagement}
               className="rounded p-1 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
-              title="Quản lý Workspace & Thành viên"
-              aria-label="Manage workspace"
+              title={t('Manage workspace and members', 'Quản lý Workspace & Thành viên')}
+              aria-label={t('Manage workspace', 'Quản lý workspace')}
             >
               <Users className="h-3.5 w-3.5" />
             </button>
@@ -292,7 +306,7 @@ export function WorkspaceSidebar({
           <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-sidebar-border bg-card p-1 shadow-lg">
             <div className="flex items-center justify-between px-2 py-1">
               <p className="font-mono text-[10px] uppercase text-muted-foreground">
-                {isLoading ? 'Đang tải Workspace...' : workspaces.length ? `Workspaces (${workspaces.length})` : 'Chưa có Workspace'}
+                {isLoading ? t('Loading workspaces...', 'Đang tải Workspace...') : workspaces.length ? t(`Workspaces (${workspaces.length})`, `Không gian làm việc (${workspaces.length})`) : t('No workspaces', 'Chưa có Workspace')}
               </p>
               {canManageWorkspace && onOpenWorkspaceManagement && (
                 <button
@@ -303,7 +317,7 @@ export function WorkspaceSidebar({
                   }}
                   className="font-mono text-[10px] text-primary hover:underline cursor-pointer"
                 >
-                  Quản lý
+                  <Translated text={"Quản lý"} />
                 </button>
               )}
             </div>
@@ -335,7 +349,7 @@ export function WorkspaceSidebar({
               className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-primary transition-colors hover:bg-accent cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
-              Tạo Workspace mới
+              <Translated text={"Tạo Workspace mới"} />
             </button>
           </div>
         )}
@@ -392,7 +406,7 @@ export function WorkspaceSidebar({
                 pendingDriftCount > 0 ? 'text-amber-400 animate-pulse' : 'text-amber-400',
               )}
             />
-            <span className="flex-1 text-sm font-medium">Sync Logs</span>
+            <span className="flex-1 text-sm font-medium"><Translated text={"Sync Logs"} /></span>
             {pendingDriftCount > 0 && (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 font-mono text-[10px] font-bold text-amber-950 shadow-sm animate-pulse">
                 {pendingDriftCount}
@@ -419,13 +433,13 @@ export function WorkspaceSidebar({
       {/* Data Sources */}
       <div className="flex min-h-0 flex-1 flex-col px-3 pt-4">
         <div className="mb-2 flex items-center justify-between px-1">
-          <SectionLabel>Data Sources</SectionLabel>
+          <SectionLabel><Translated text={"Data Sources"} /></SectionLabel>
           {canManageSchema && onConnectDatabase && (
             <button
               type="button"
               onClick={onConnectDatabase}
               className="rounded p-1 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
-              aria-label="Connect database"
+              aria-label={t('Connect database', 'Kết nối cơ sở dữ liệu')}
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -468,14 +482,14 @@ export function WorkspaceSidebar({
                         onRemoveDatabase(db.id);
                       }}
                       className="opacity-0 transition-opacity group-hover:opacity-100 cursor-pointer"
-                      aria-label={`Remove ${db.name}`}
+                      aria-label={t(`Remove ${db.name}`, `Xóa ${db.name}`)}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-sidebar-foreground/50 hover:text-destructive" />
                     </button>
                   )}
                 </div>
                 <p className="mt-1 pl-[26px] font-mono text-[10px] text-sidebar-foreground/45">
-                  {engineLabels[db.engine]} · {db.tables} tables
+                  {engineLabels[db.engine]} · {db.tables} {t('tables', 'bảng')}
                 </p>
               </div>
             );
@@ -491,13 +505,13 @@ export function WorkspaceSidebar({
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
         >
           <Settings className="h-4 w-4" />
-          Settings
+          <Translated text={"Settings"} />
         </button>
         <button
           type="button"
           onClick={onToggleTheme}
           className="h-8 w-8 rounded-md text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent cursor-pointer"
-          aria-label="Toggle theme"
+          aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
@@ -510,7 +524,7 @@ export function WorkspaceSidebar({
               type="button"
               onClick={onLogout}
               className="rounded p-1 text-sidebar-foreground/50 transition-colors hover:text-destructive cursor-pointer"
-              title="Đăng xuất"
+              title={t('Log out', 'Đăng xuất')}
             >
               <LogOut className="h-4 w-4" />
             </button>

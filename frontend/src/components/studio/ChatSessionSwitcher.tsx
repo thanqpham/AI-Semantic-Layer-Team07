@@ -16,6 +16,8 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatSessionItem } from '@/lib/api';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ChatSessionSwitcherProps {
   sessions: ChatSessionItem[];
@@ -36,6 +38,7 @@ export function ChatSessionSwitcher({
   onDeleteSession,
   onRenameSession,
 }: ChatSessionSwitcherProps) {
+  const { language, locale, translate } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -155,7 +158,7 @@ export function ChatSessionSwitcher({
             ? 'border-indigo-400 bg-indigo-50/80 text-indigo-950 dark:border-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-200 ring-2 ring-indigo-500/20'
             : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:border-indigo-800 dark:hover:bg-slate-800/80'
         }`}
-        title="Chọn hoặc tìm kiếm cuộc trò chuyện"
+        title={translate("Chọn hoặc tìm kiếm cuộc trò chuyện")}
         aria-expanded={isOpen}
       >
         <div className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
@@ -187,10 +190,10 @@ export function ChatSessionSwitcher({
         }}
         disabled={isStartingNewChat}
         className="group flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-indigo-500/20 hover:shadow-md hover:shadow-indigo-500/30 hover:brightness-105 active:scale-95 transition-all cursor-pointer shrink-0"
-        title="Tạo cuộc trò chuyện mới"
+        title={translate("Tạo cuộc trò chuyện mới")}
       >
         <Plus className="h-3.5 w-3.5 transition-transform group-hover:rotate-90" />
-        <span className="hidden sm:inline">Cuộc trò chuyện mới</span>
+        <span className="hidden sm:inline"><Translated text={"Cuộc trò chuyện mới"} /></span>
       </button>
 
       {/* 3. Floating Glassmorphism Dropdown Menu */}
@@ -200,7 +203,7 @@ export function ChatSessionSwitcher({
           <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80 px-1">
             <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
               <History className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>Lịch sử trò chuyện</span>
+              <span><Translated text={"Lịch sử trò chuyện"} /></span>
               <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                 {sessions.length}
               </span>
@@ -223,7 +226,7 @@ export function ChatSessionSwitcher({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm kiếm hội thoại..."
+                placeholder={translate("Tìm kiếm hội thoại...")}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/90 py-1.5 pl-8 pr-7 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-900 transition-all"
               />
               {searchQuery && (
@@ -259,7 +262,7 @@ export function ChatSessionSwitcher({
                   <MessageSquarePlus className="h-5 w-5" />
                 </div>
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Chưa có cuộc trò chuyện nào
+                  <Translated text={"Chưa có cuộc trò chuyện nào"} />
                 </p>
                 <button
                   type="button"
@@ -268,7 +271,7 @@ export function ChatSessionSwitcher({
                   className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-1.5 text-[11px] font-bold text-indigo-600 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-all cursor-pointer"
                 >
                   <Sparkles className="h-3 w-3" />
-                  <span>Bắt đầu cuộc trò chuyện mới</span>
+                  <span><Translated text={"Bắt đầu cuộc trò chuyện mới"} /></span>
                 </button>
               </div>
             )}
@@ -277,7 +280,7 @@ export function ChatSessionSwitcher({
             {!loadingSessions && sessions.length > 0 && filteredSessions.length === 0 && (
               <div className="py-6 text-center text-xs text-slate-400">
                 <Search className="mx-auto h-4 w-4 mb-1 opacity-40" />
-                <p className="font-medium">Không tìm thấy hội thoại</p>
+                <p className="font-medium"><Translated text={"Không tìm thấy hội thoại"} /></p>
                 <p className="text-[10px] text-slate-400 mt-0.5">&quot;{searchQuery}&quot;</p>
               </div>
             )}
@@ -287,7 +290,7 @@ export function ChatSessionSwitcher({
               const isActive = activeSessionId === session.id;
               const isEditing = editingId === session.id;
               const isDeleting = deletingId === session.id;
-              const timeLabel = formatRelativeTime(session.updated_at || session.created_at);
+              const timeLabel = formatRelativeTime(session.updated_at || session.created_at, language, locale);
 
               return (
                 <div
@@ -324,7 +327,7 @@ export function ChatSessionSwitcher({
                           if (e.key === 'Enter') handleSaveEdit(session.id, e);
                           if (e.key === 'Escape') handleCancelEdit(e as unknown as React.MouseEvent);
                         }}
-                        placeholder="Tên cuộc trò chuyện..."
+                        placeholder={translate("Tên cuộc trò chuyện...")}
                         className="w-full rounded-lg border border-indigo-400 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 dark:border-indigo-600 dark:bg-slate-950 dark:text-slate-100"
                       />
                       <div className="flex items-center justify-end gap-1">
@@ -334,14 +337,13 @@ export function ChatSessionSwitcher({
                           onClick={(e) => handleSaveEdit(session.id, e)}
                           className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
                         >
-                          <Check className="h-2.5 w-2.5" /> Lưu
-                        </button>
+                          <Check className="h-2.5 w-2.5" /> <Translated text={"Lưu"} /></button>
                         <button
                           type="button"
                           onClick={handleCancelEdit}
                           className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
                         >
-                          Hủy
+                          <Translated text={"Hủy"} />
                         </button>
                       </div>
                     </div>
@@ -352,24 +354,24 @@ export function ChatSessionSwitcher({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <span className="text-[11px] font-medium text-red-700 dark:text-red-300">
-                        Xóa đoạn chat này?
+                        <Translated text={"Xóa đoạn chat này?"} />
                       </span>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={(e) => handleConfirmDelete(session.id, e)}
                           className="rounded bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-red-700 cursor-pointer"
-                          title="Xác nhận xóa"
+                          title={translate("Xác nhận xóa")}
                         >
-                          Xóa
+                          <Translated text={"Xóa"} />
                         </button>
                         <button
                           type="button"
                           onClick={handleCancelDelete}
                           className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
-                          title="Hủy"
+                          title={translate("Hủy")}
                         >
-                          Hủy
+                          <Translated text={"Hủy"} />
                         </button>
                       </div>
                     </div>
@@ -397,7 +399,7 @@ export function ChatSessionSwitcher({
                           </span>
                           {isActive && (
                             <span className="rounded bg-indigo-100 px-1 py-0.1 text-[9px] font-bold text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 shrink-0">
-                              Active
+                              <Translated text={"Active"} />
                             </span>
                           )}
                         </div>
@@ -407,7 +409,7 @@ export function ChatSessionSwitcher({
                           {session.message_count > 0 && (
                             <>
                               <span>•</span>
-                              <span>{session.message_count} tin nhắn</span>
+                              <span>{session.message_count} <Translated text={"tin nhắn"} /></span>
                             </>
                           )}
                         </div>
@@ -419,7 +421,7 @@ export function ChatSessionSwitcher({
                           type="button"
                           onClick={(e) => handleStartEdit(session, e)}
                           className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400 transition-all cursor-pointer"
-                          title="Đổi tên đoạn chat"
+                          title={translate("Đổi tên đoạn chat")}
                         >
                           <Pencil className="h-3 w-3" />
                         </button>
@@ -427,7 +429,7 @@ export function ChatSessionSwitcher({
                           type="button"
                           onClick={(e) => handleStartDelete(session.id, e)}
                           className="rounded p-1 text-slate-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400 transition-all cursor-pointer"
-                          title="Xóa đoạn chat"
+                          title={translate("Xóa đoạn chat")}
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -444,8 +446,8 @@ export function ChatSessionSwitcher({
   );
 }
 
-function formatRelativeTime(dateString?: string): string {
-  if (!dateString) return 'Vừa xong';
+function formatRelativeTime(dateString: string | undefined, language: 'vi' | 'en', locale: string): string {
+  if (!dateString) return language === 'vi' ? 'Vừa xong' : 'Just now';
   try {
     const date = new Date(dateString);
     const now = new Date();
@@ -454,19 +456,19 @@ function formatRelativeTime(dateString?: string): string {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMins < 1) return 'Vừa xong';
-    if (diffMins < 60) return `${diffMins} phút trước`;
+    if (diffMins < 1) return language === 'vi' ? 'Vừa xong' : 'Just now';
+    if (diffMins < 60) return language === 'vi' ? `${diffMins} phút trước` : `${diffMins} min ago`;
     if (diffHours < 24 && date.getDate() === now.getDate()) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     }
     if (diffDays === 1 || (diffDays === 0 && date.getDate() !== now.getDate())) {
-      return 'Hôm qua';
+      return language === 'vi' ? 'Hôm qua' : 'Yesterday';
     }
     if (diffDays < 7) {
-      return `${diffDays} ngày trước`;
+      return language === 'vi' ? `${diffDays} ngày trước` : `${diffDays} days ago`;
     }
-    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    return date.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
   } catch {
-    return 'Vừa xong';
+    return language === 'vi' ? 'Vừa xong' : 'Just now';
   }
 }

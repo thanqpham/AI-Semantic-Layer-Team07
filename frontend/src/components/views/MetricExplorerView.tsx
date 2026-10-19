@@ -76,6 +76,8 @@ import {
 } from '@/lib/dimensions';
 import { SectionLabel, StatusPill, type WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 /**
  * Stateful selection pushed from the Metrics Dashboard drill-down.
@@ -260,6 +262,7 @@ export function MetricExplorerView({
   database,
   initialSelection,
 }: Props) {
+  const { language, translate } = useLanguage();
   const [metricIds, setMetricIds] = useState<number[]>([]);
   const [dimensions, setDimensions] = useState<DimensionSelection[]>([]);
   const [limit, setLimit] = useState(100);
@@ -479,7 +482,7 @@ export function MetricExplorerView({
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-12 text-center text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <p className="text-sm">Đang tải semantic catalog...</p>
+        <p className="text-sm"><Translated text={"Đang tải semantic catalog..."} /></p>
       </div>
     );
   }
@@ -489,7 +492,7 @@ export function MetricExplorerView({
       <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
         <ViewHeader
           eyebrow="Explore"
-          title="Metric Explorer"
+          title={translate("Metric Explorer")}
           description="Compile approved metrics into safe queries — no manual SQL required."
           database={database}
         />
@@ -498,9 +501,9 @@ export function MetricExplorerView({
             <AlertTriangle className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="font-semibold text-foreground text-sm">Chế độ xem Technical Preview</h2>
+            <h2 className="font-semibold text-foreground text-sm"><Translated text={"Chế độ xem Technical Preview"} /></h2>
             <p className="mt-1 text-xs text-muted-foreground max-w-md">
-              SQL Dump chỉ chứa metadata DDL và không hỗ trợ query. Hãy chọn Live DB.
+              <Translated text={"SQL Dump chỉ chứa metadata DDL và không hỗ trợ query. Hãy chọn Live DB."} />
             </p>
           </div>
         </div>
@@ -670,7 +673,7 @@ export function MetricExplorerView({
     <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
       <ViewHeader
         eyebrow="Explore"
-        title="Metric Explorer"
+        title={translate("Metric Explorer")}
         description="Compile approved metrics into safe queries — no manual SQL required."
         database={database}
       />
@@ -682,7 +685,7 @@ export function MetricExplorerView({
           <div className="rounded-xl border border-border bg-secondary/30 p-3 text-xs">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                CÂU HỎI PHÂN TÍCH HIỆN TẠI
+                <Translated text={"CÂU HỎI PHÂN TÍCH HIỆN TẠI"} />
               </span>
               {(metricIds.length > 0 || dimensions.length > 0) && (
                 <button
@@ -690,19 +693,19 @@ export function MetricExplorerView({
                   className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                 >
                   <RotateCcw className="h-2.5 w-2.5" />
-                  <span>Đặt lại</span>
+                  <span><Translated text={"Đặt lại"} /></span>
                 </button>
               )}
             </div>
             {dashboardFilterActive && (
               <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/10 px-2 py-1">
                 <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">
-                  Bộ lọc từ Dashboard
+                  <Translated text={"Bộ lọc từ Dashboard"} />
                 </span>
                 <button
                   type="button"
                   onClick={handleRemoveDashboardFilter}
-                  aria-label="Xóa bộ lọc từ Dashboard"
+                  aria-label={translate("Xóa bộ lọc từ Dashboard")}
                   className="rounded-full p-0.5 text-primary hover:bg-primary/20 cursor-pointer"
                 >
                   <X className="h-3 w-3" />
@@ -713,20 +716,20 @@ export function MetricExplorerView({
               <p className="font-medium text-foreground leading-relaxed">
                 {metricIds.length > 0 ? (
                   <span className="text-primary font-semibold">
-                    Xem{' '}
+                    <Translated text={"Xem"} />{' '}
                     {metricIds
                       .map((id) => approved.find((m) => m.metric_id === id)?.name || id)
                       .join(', ')}
                   </span>
                 ) : (
                   <span className="text-muted-foreground italic">
-                    Chưa chọn chỉ số (Chọn ít nhất 1 metric)
+                    <Translated text={"Chưa chọn chỉ số (Chọn ít nhất 1 metric)"} />
                   </span>
                 )}
                 {dimensions.length > 0 && (
                   <span className="text-foreground">
                     {' '}
-                    theo{' '}
+                    <Translated text={"theo"} />{' '}
                     <span className="font-semibold">
                       {dimensions
                         .map((d) => {
@@ -746,8 +749,8 @@ export function MetricExplorerView({
           {/* 1. Metrics Selector */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <SectionLabel>1. CHỈ SỐ ĐO LƯỜNG ({approved.length})</SectionLabel>
-              <span className="text-[10px] text-muted-foreground font-mono">Measures</span>
+              <SectionLabel><Translated text={"1. CHỈ SỐ ĐO LƯỜNG ("} />{approved.length})</SectionLabel>
+              <span className="text-[10px] text-muted-foreground font-mono"><Translated text={"Measures"} /></span>
             </div>
 
             {/* Quick Search for Metrics */}
@@ -757,7 +760,7 @@ export function MetricExplorerView({
                 <Input
                   value={metricSearch}
                   onChange={(e) => setMetricSearch(e.target.value)}
-                  placeholder="Tìm nhanh chỉ số đo lường..."
+                  placeholder={translate("Tìm nhanh chỉ số đo lường...")}
                   className="h-8 pl-8 pr-8 text-xs bg-background"
                 />
                 {metricSearch && (
@@ -810,12 +813,12 @@ export function MetricExplorerView({
               })}
               {approved.length === 0 && (
                 <p className="p-2 text-xs text-muted-foreground italic">
-                  Chưa có metric nào được phê duyệt. Hãy duyệt trong Catalog trước.
+                  <Translated text={"Chưa có metric nào được phê duyệt. Hãy duyệt trong Catalog trước."} />
                 </p>
               )}
               {approved.length > 0 && displayedMetrics.length === 0 && (
                 <div className="p-3 text-center text-xs text-muted-foreground italic rounded-lg border border-dashed border-border bg-card/30">
-                  Không tìm thấy metric nào khớp với &quot;{metricSearch}&quot;.
+                  <Translated text={"Không tìm thấy metric nào khớp với &quot;"} />{metricSearch}&quot;.
                 </div>
               )}
             </div>
@@ -826,11 +829,11 @@ export function MetricExplorerView({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <SectionLabel>
-                  2. CHIỀU PHÂN TÍCH ({displayedDimensions.length})
+                  <Translated text={"2. CHIỀU PHÂN TÍCH ("} />{displayedDimensions.length})
                 </SectionLabel>
                 {loadingDims && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
               </div>
-              <span className="text-[10px] text-muted-foreground font-mono">Dimensions</span>
+              <span className="text-[10px] text-muted-foreground font-mono"><Translated text={"Dimensions"} /></span>
             </div>
 
             {/* Quick Search */}
@@ -839,7 +842,7 @@ export function MetricExplorerView({
               <Input
                 value={dimSearch}
                 onChange={(e) => setDimSearch(e.target.value)}
-                placeholder="Tìm nhanh chiều phân tích..."
+                placeholder={translate("Tìm nhanh chiều phân tích...")}
                 className="h-8 pl-8 text-xs bg-background"
               />
               {dimSearch && (
@@ -859,7 +862,7 @@ export function MetricExplorerView({
             }).length > 0 && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 space-y-1.5">
                 <span className="text-[10px] font-semibold text-primary uppercase tracking-wider block">
-                  Đang chọn ({dimensions.filter((d) => {
+                  <Translated text={"Đang chọn ("} />{dimensions.filter((d) => {
                     const col = allColumns.find((c) => c.column_id === d.column_id);
                     return col && !isTimeDimension(col);
                   }).length}):
@@ -896,9 +899,9 @@ export function MetricExplorerView({
             <div className="rounded-xl border border-border bg-card/40 p-3">
               {metricIds.length === 0 && !dimSearch.trim() ? (
                 <div className="p-3 text-center text-xs text-muted-foreground space-y-1">
-                  <p className="font-medium text-foreground">Chọn ít nhất 1 Chỉ số ở mục 1</p>
+                  <p className="font-medium text-foreground"><Translated text={"Chọn ít nhất 1 Chỉ số ở mục 1"} /></p>
                   <p className="text-[11px]">
-                    Hệ thống sẽ gợi ý các chiều phân tích an toàn (Tier A/B/C) tương ứng với chỉ số.
+                    <Translated text={"Hệ thống sẽ gợi ý các chiều phân tích an toàn (Tier A/B/C) tương ứng với chỉ số."} />
                   </p>
                 </div>
               ) : (
@@ -942,7 +945,7 @@ export function MetricExplorerView({
 
                   {displayedDimensions.length === 0 && (
                     <p className="p-2 text-xs text-muted-foreground italic w-full text-center">
-                      Không tìm thấy chiều phân tích phù hợp.
+                      <Translated text={"Không tìm thấy chiều phân tích phù hợp."} />
                     </p>
                   )}
                 </div>
@@ -953,21 +956,21 @@ export function MetricExplorerView({
           {/* 3. Time Dimension & Grain */}
           <div className="space-y-2 rounded-xl border border-border bg-card/60 p-3.5 shadow-2xs">
             <div className="flex items-center justify-between">
-              <SectionLabel>3. CHIỀU THỜI GIAN & CHU KỲ</SectionLabel>
+              <SectionLabel><Translated text={"3. CHIỀU THỜI GIAN & CHU KỲ"} /></SectionLabel>
               <Calendar className="h-3.5 w-3.5 text-primary" />
             </div>
 
             {/* Time Column Picker */}
             <div>
               <label className="text-[11px] text-muted-foreground block mb-1">
-                Cột mốc thời gian (Time Dimension):
+                <Translated text={"Cột mốc thời gian (Time Dimension):"} />
               </label>
               <select
                 value={selectedTimeDimension?.column_id || ''}
                 onChange={(e) => setTimeDimensionColumn(e.target.value)}
                 className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
               >
-                <option value="">-- Không chọn mốc thời gian --</option>
+                <option value="">{translate('-- Không chọn mốc thời gian --')}</option>
                 {availableTimeColumns.map((col) => {
                   const table = catalog.tables.find((t) =>
                     t.columns.some((c) => c.column_id === col.column_id),
@@ -985,7 +988,7 @@ export function MetricExplorerView({
             {/* 5-Grain Buttons */}
             <div>
               <label className="text-[11px] text-muted-foreground block mb-1">
-                Chu kỳ tổng hợp (Granularity):
+                <Translated text={"Chu kỳ tổng hợp (Granularity):"} />
               </label>
               <div className="grid grid-cols-5 gap-1">
                 {TIME_GRAIN_OPTIONS.map((g) => {
@@ -1002,8 +1005,7 @@ export function MetricExplorerView({
                           : 'border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40',
                       )}
                     >
-                      <span className="text-[11px]">{g.label}</span>
-                      <span className="text-[9px] font-mono opacity-70">{g.enLabel}</span>
+                      <span className="text-[11px]">{language === 'vi' ? g.label : g.enLabel}</span>
                     </button>
                   );
                 })}
@@ -1022,7 +1024,7 @@ export function MetricExplorerView({
                 disabled={!metricIds.length || loading}
               >
                 <Eye className="h-3.5 w-3.5" />
-                <span>Preview SQL</span>
+                <span><Translated text={"Preview SQL"} /></span>
               </Button>
               <Button
                 className="w-full gap-1.5 text-xs font-semibold shadow-sm"
@@ -1034,7 +1036,7 @@ export function MetricExplorerView({
                 ) : (
                   <Play className="h-3.5 w-3.5" />
                 )}
-                <span>Thực thi (Execute)</span>
+                <span><Translated text={"Thực thi (Execute)"} /></span>
               </Button>
             </div>
           </div>
@@ -1064,7 +1066,7 @@ export function MetricExplorerView({
                     )}
                   >
                     <Icon className="h-3.5 w-3.5" />
-                    <span>{t.label}</span>
+                    <span><Translated text={t.label} /></span>
                   </button>
                 );
               })}
@@ -1080,7 +1082,7 @@ export function MetricExplorerView({
                   onClick={handleExportCsv}
                 >
                   <Download className="h-3 w-3" />
-                  <span>Xuất CSV</span>
+                  <span><Translated text={"Xuất CSV"} /></span>
                 </Button>
               )}
 
@@ -1096,13 +1098,13 @@ export function MetricExplorerView({
                   ) : (
                     <Copy className="h-3 w-3" />
                   )}
-                  <span>{copiedSql ? 'Đã sao chép' : 'Sao chép SQL'}</span>
+                  <span><Translated text={copiedSql ? 'Đã sao chép' : 'Sao chép SQL'} /></span>
                 </Button>
               )}
 
               <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground border-l border-border pl-3">
                 <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                <span>Read-only · LIMIT 100 · max 1000 · 15s timeout</span>
+                <span><Translated text={"Read-only · LIMIT 100 · max 1000 · 15s timeout"} /></span>
               </div>
             </div>
           </div>
@@ -1112,13 +1114,13 @@ export function MetricExplorerView({
             {loading ? (
               <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-3 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-xs font-medium">Đang biên dịch & thực thi truy vấn an toàn...</p>
+                <p className="text-xs font-medium"><Translated text={"Đang biên dịch & thực thi truy vấn an toàn..."} /></p>
               </div>
             ) : error ? (
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-xs text-destructive">
                 <div className="flex items-center gap-2 font-semibold text-sm">
                   <AlertTriangle className="h-4 w-4" />
-                  <span>Lỗi truy vấn Semantic:</span>
+                  <span><Translated text={"Lỗi truy vấn Semantic:"} /></span>
                 </div>
                 <p className="mt-2 font-mono leading-relaxed bg-background/50 p-3 rounded-lg border border-destructive/20">
                   {error}
@@ -1131,10 +1133,10 @@ export function MetricExplorerView({
                 </div>
                 <div className="max-w-md">
                   <p className="font-semibold text-foreground text-base">
-                    Sẵn sàng biên dịch & phân tích số liệu
+                    <Translated text={"Sẵn sàng biên dịch & phân tích số liệu"} />
                   </p>
                   <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-                    Chọn các chỉ số (Measures) và chiều phân tích (Dimensions / Time Grain) ở bảng điều khiển bên trái, sau đó nhấn <strong>Preview SQL</strong> hoặc <strong>Thực thi</strong>.
+                    <Translated text={"Chọn các chỉ số (Measures) và chiều phân tích (Dimensions / Time Grain) ở bảng điều khiển bên trái, sau đó nhấn"} after /><strong><Translated text={"Preview SQL"} /></strong> <Translated text={"hoặc"} after /><strong><Translated text={"Thực thi"} /></strong>.
                   </p>
                 </div>
               </div>
@@ -1189,17 +1191,17 @@ export function MetricExplorerView({
                       </table>
                     </div>
                     <div className="flex items-center justify-between border-t border-border bg-secondary/30 px-4 py-2.5 text-xs text-muted-foreground">
-                      <span>Hiển thị <strong>{output.rows.length}</strong> dòng kết quả</span>
-                      <span className="font-mono text-[11px]">LIMIT {limit} applied</span>
+                      <span><Translated text={"Hiển thị"} after /><strong>{output.rows.length}</strong> <Translated text={"dòng kết quả"} /></span>
+                      <span className="font-mono text-[11px]"><Translated text={"LIMIT"} after />{limit} <Translated text={"applied"} /></span>
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-border bg-card p-8 text-center text-xs text-muted-foreground">
                   <p className="text-sm font-semibold text-foreground mb-1">
-                    Bản xem trước SQL đã sẵn sàng
+                    <Translated text={"Bản xem trước SQL đã sẵn sàng"} />
                   </p>
-                  <p>Nhấn nút &quot;Thực thi (Execute)&quot; để nạp số liệu thực tế từ Live DB.</p>
+                  <p><Translated text={"Nhấn nút &quot;Thực thi (Execute)&quot; để nạp số liệu thực tế từ Live DB."} /></p>
                 </div>
               )
             ) : viewTab === 'chart' ? (
@@ -1215,16 +1217,16 @@ export function MetricExplorerView({
                 />
               ) : (
                 <div className="rounded-xl border border-border bg-card p-8 text-center text-xs text-muted-foreground">
-                  Chưa có dữ liệu đồ thị. Bấm &quot;Thực thi (Execute)&quot; để nạp số liệu từ Live DB.
+                  <Translated text={"Chưa có dữ liệu đồ thị. Bấm &quot;Thực thi (Execute)&quot; để nạp số liệu từ Live DB."} />
                 </div>
               )
             ) : (
               <div className="space-y-4">
                 <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
                   <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-2.5">
-                    <SectionLabel>COMPILED SQL (READ-ONLY)</SectionLabel>
+                    <SectionLabel><Translated text={"COMPILED SQL (READ-ONLY)"} /></SectionLabel>
                     <span className="font-mono text-[10px] text-muted-foreground">
-                      Dialect-aware AST compiled
+                      <Translated text={"Dialect-aware AST compiled"} />
                     </span>
                   </div>
                   <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-foreground bg-secondary/10">
@@ -1328,7 +1330,7 @@ function RechartsInteractiveStudio({
       <div className="grid grid-cols-4 gap-3">
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
           <span className="text-[11px] font-medium text-muted-foreground block truncate">
-            Tổng {primaryMetricName}
+            <Translated text={"Tổng"} after />{primaryMetricName}
           </span>
           <span className="mt-1 text-lg font-bold font-mono text-foreground block tabular-nums">
             {totalSum.toLocaleString()}
@@ -1336,7 +1338,7 @@ function RechartsInteractiveStudio({
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
           <span className="text-[11px] font-medium text-muted-foreground block truncate">
-            Trung bình mỗi {labelColName}
+            <Translated text={"Trung bình mỗi"} after />{labelColName}
           </span>
           <span className="mt-1 text-lg font-bold font-mono text-foreground block tabular-nums">
             {avgVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -1344,7 +1346,7 @@ function RechartsInteractiveStudio({
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
           <span className="text-[11px] font-medium text-muted-foreground block truncate">
-            Cao nhất / Thấp nhất
+            <Translated text={"Cao nhất / Thấp nhất"} />
           </span>
           <span className="mt-1 text-sm font-bold font-mono text-foreground block tabular-nums">
             {maxVal.toLocaleString()} / {minVal.toLocaleString()}
@@ -1352,7 +1354,7 @@ function RechartsInteractiveStudio({
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
           <span className="text-[11px] font-medium text-muted-foreground block truncate">
-            Số điểm dữ liệu ({labelColName})
+            <Translated text={"Số điểm dữ liệu ("} />{labelColName})
           </span>
           <span className="mt-1 text-lg font-bold font-mono text-foreground block tabular-nums">
             {rows.length}
@@ -1365,10 +1367,10 @@ function RechartsInteractiveStudio({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
           <div>
             <h3 className="font-semibold text-foreground text-sm">
-              Biểu đồ trực quan: {primaryMetricName} theo {labelColName}
+              <Translated text={"Biểu đồ trực quan:"} after />{primaryMetricName} <Translated text={"theo"} after />{labelColName}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Phân tích xu hướng và tương quan dữ liệu
+              <Translated text={"Phân tích xu hướng và tương quan dữ liệu"} />
             </p>
           </div>
 
@@ -1394,7 +1396,7 @@ function RechartsInteractiveStudio({
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  <span>{c.label}</span>
+                  <span><Translated text={c.label} /></span>
                 </button>
               );
             })}

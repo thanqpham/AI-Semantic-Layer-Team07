@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { AnimatedSphere } from "./animated-sphere";
 import { AnimatedTetrahedron } from "./animated-tetrahedron";
 import { AnimatedWave } from "./animated-wave";
+import { Translated } from '@/components/ui/translated';
 
 export function InfrastructureSection() {
   const [isVisible, setIsVisible] = useState(false);
@@ -35,17 +36,14 @@ export function InfrastructureSection() {
         >
           <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
             <span className="w-8 h-px bg-foreground/30" />
-            Hạ tầng
-            <span className="w-8 h-px bg-foreground/30" />
+            <Translated text={"Hạ tầng"} after /><span className="w-8 h-px bg-foreground/30" />
           </span>
           <h2 className="text-4xl lg:text-6xl font-display tracking-tight mb-6">
-            Xây dựng trên
-            <br />
-            nền tảng vững chắc.
+            <Translated text={"Xây dựng trên"} after /><br />
+            <Translated text={"nền tảng vững chắc."} />
           </h2>
           <p className="text-xl text-muted-foreground">
-            Kiến trúc bảo mật đa lớp, mã hóa end-to-end, và guardrails ngăn
-            chặn mọi truy vấn nguy hiểm.
+            <Translated text={"Kiến trúc bảo mật đa lớp, mã hóa end-to-end, và guardrails ngăn chặn mọi truy vấn nguy hiểm."} />
           </p>
         </div>
 

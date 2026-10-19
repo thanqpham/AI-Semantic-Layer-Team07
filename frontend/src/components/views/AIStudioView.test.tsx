@@ -42,8 +42,8 @@ describe('AIStudioView', () => {
       />
     );
 
-    expect(screen.getByText('Data Assistant')).toBeInTheDocument();
-    expect(screen.getByText(/Hỏi về schema, metric đã duyệt/i)).toBeInTheDocument();
+    expect(screen.getByText('Trợ lý dữ liệu')).toBeInTheDocument();
+    expect(screen.getByText(/Hỏi về cấu trúc, chỉ số đã duyệt/i)).toBeInTheDocument();
   });
 
   it('renders semantic query result table when response has intent semantic_query', async () => {
@@ -71,9 +71,9 @@ describe('AIStudioView', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText(/Hỏi về schema/i);
+    const textarea = screen.getByPlaceholderText(/Hỏi về cấu trúc/i);
     fireEvent.change(textarea, { target: { value: 'Tổng doanh thu theo khách hàng' } });
-    const sendBtn = screen.getByRole('button', { name: /Send message/i });
+    const sendBtn = screen.getByRole('button', { name: /Gửi tin nhắn/i });
     fireEvent.click(sendBtn);
 
     await waitFor(() => {
@@ -125,9 +125,9 @@ describe('AIStudioView', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText(/Hỏi về schema/i);
+    const textarea = screen.getByPlaceholderText(/Hỏi về cấu trúc/i);
     fireEvent.change(textarea, { target: { value: 'Doanh thu' } });
-    fireEvent.click(screen.getByRole('button', { name: /Send message/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Gửi tin nhắn/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Theo khách hàng/i)).toBeInTheDocument();
@@ -204,9 +204,9 @@ describe('AIStudioView', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText(/Hỏi về schema/i);
+    const textarea = screen.getByPlaceholderText(/Hỏi về cấu trúc/i);
     fireEvent.change(textarea, { target: { value: 'Doanh thu theo chi nhánh' } });
-    fireEvent.click(screen.getByRole('button', { name: /Send message/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Gửi tin nhắn/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Tạo Business Metric' })).toBeInTheDocument();
@@ -273,9 +273,9 @@ describe('AIStudioView', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText(/Hỏi về schema/i);
+    const textarea = screen.getByPlaceholderText(/Hỏi về cấu trúc/i);
     fireEvent.change(textarea, { target: { value: 'AOV' } });
-    fireEvent.click(screen.getByRole('button', { name: /Send message/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Gửi tin nhắn/i }));
 
     await waitFor(() => expect(screen.getByText('Metric AOV đã tồn tại trong hệ thống.')).toBeInTheDocument());
     expect(screen.getByText('Metric có sẵn (YAML)')).toBeInTheDocument();

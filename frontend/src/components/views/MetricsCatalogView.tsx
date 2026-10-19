@@ -34,6 +34,8 @@ import { cn } from '@/lib/utils';
 import type { WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { metricName } from '@/lib/metrics';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface MetricsCatalogViewProps {
   dbId?: number | null;
@@ -59,6 +61,7 @@ interface MetricsCatalogViewProps {
 }
 
 export function MetricsCatalogView(props: MetricsCatalogViewProps) {
+  const { translate } = useLanguage();
   const [search, setSearch] = useState('');
   const [approving, setApproving] = useState(false);
   const [history, setHistory] = useState<MetricHistoryData | null>(null);
@@ -220,7 +223,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
     <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
       <ViewHeader
         eyebrow="Catalog"
-        title="Metrics Catalog"
+        title={translate("Metrics Catalog")}
         description="Human-in-the-loop review of every business metric before it enters the semantic layer."
         database={props.database}
         onOpenSyncLogs={props.onOpenSyncLogs}
@@ -234,13 +237,13 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 onClick={props.onAddMetric}
               >
                 <Plus className="h-3.5 w-3.5" />
-                Thêm thủ công
+                <Translated text={"Thêm thủ công"} />
               </Button>
             )}
             {isMemberSubmitter && props.onSubmitMetric && (
               <Button size="sm" className="gap-1.5 text-xs cursor-pointer" onClick={props.onSubmitMetric}>
                 <Send className="h-3.5 w-3.5" />
-                Gửi metric
+                <Translated text={"Gửi metric"} />
               </Button>
             )}
             {props.onOpenStudio && (
@@ -251,7 +254,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 onClick={props.onOpenStudio}
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                {isMemberSubmitter ? 'Đề xuất với AI' : 'Sinh với AI'}
+                <Translated text={isMemberSubmitter ? 'Đề xuất với AI' : 'Sinh với AI'} />
               </Button>
             )}
             {canApprove && props.onApproveAll && (
@@ -274,14 +277,14 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
           role="status"
           className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2.5 text-xs text-amber-700 dark:text-amber-300"
         >
-          Chế độ chỉ xem: catalog chỉ hiển thị các metric đã được phê duyệt.
+          <Translated text={"Chế độ chỉ xem: catalog chỉ hiển thị các metric đã được phê duyệt."} />
         </div>
       )}
 
       {canManage && requests.some((item) => item.status === 'pending') && (
         <section className="border-b border-border bg-secondary/10 px-6 py-4">
           <h2 className="mb-3 text-sm font-semibold text-foreground">
-            Yêu cầu metric từ Member ({requests.filter((item) => item.status === 'pending').length})
+            <Translated text={"Yêu cầu metric từ Member ("} />{requests.filter((item) => item.status === 'pending').length})
           </h2>
           <div className="grid gap-3 lg:grid-cols-2">
             {requests.filter((item) => item.status === 'pending').map((request) => (
@@ -292,7 +295,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 </p>
                 {editingRequestId === request.id && (
                   <textarea
-                    aria-label="Definition metric request"
+                    aria-label={translate("Definition metric request")}
                     className="mt-2 min-h-36 w-full rounded border border-border bg-background p-2 font-mono text-[11px]"
                     value={editedDefinition}
                     onChange={(event) => setEditedDefinition(event.target.value)}
@@ -301,11 +304,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 <div className="mt-3 flex gap-2">
                   {editingRequestId === request.id ? (
                     <Button size="sm" className="h-7 text-xs" onClick={() => void approveEditedRequest(request)}>
-                      Duyệt definition đã sửa
+                      <Translated text={"Duyệt definition đã sửa"} />
                     </Button>
                   ) : (
                     <Button size="sm" className="h-7 text-xs" onClick={() => void resolveRequest(request, true)}>
-                      Duyệt & tạo
+                      <Translated text={"Duyệt & tạo"} />
                     </Button>
                   )}
                   <Button
@@ -317,10 +320,10 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                       setEditedDefinition(JSON.stringify(request.definition, null, 2));
                     }}
                   >
-                    Chỉnh sửa definition
+                    <Translated text={"Chỉnh sửa definition"} />
                   </Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => void resolveRequest(request, false)}>
-                    Từ chối
+                    <Translated text={"Từ chối"} />
                   </Button>
                 </div>
               </article>
@@ -336,7 +339,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm kiếm metric…"
+            placeholder={translate("Tìm kiếm metric…")}
             className="h-9 pl-9 text-xs"
           />
         </div>
@@ -398,7 +401,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              {f.label}
+              <Translated text={f.label} />
               <span
                 className={cn(
                   'rounded-full px-1.5 py-0.2 text-[10px] font-mono',
@@ -431,9 +434,9 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                   <Trash2 className="h-3.5 w-3.5" />
                 </span>
                 <div>
-                  <h2 className="font-semibold text-sm text-foreground">Thùng rác</h2>
+                  <h2 className="font-semibold text-sm text-foreground"><Translated text={"Thùng rác"} /></h2>
                   <p className="text-[11px] text-muted-foreground">
-                    Các chỉ số đã xóa khỏi Semantic Layer. Bạn có thể khôi phục lại hoặc xóa vĩnh viễn.
+                    <Translated text={"Các chỉ số đã xóa khỏi Semantic Layer. Bạn có thể khôi phục lại hoặc xóa vĩnh viễn."} />
                   </p>
                 </div>
               </div>
@@ -466,7 +469,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                         onClick={() => void handleBatchPermanentDelete()}
                       >
                         <Trash2 className="h-3 w-3" />
-                        Xóa đã chọn ({selectedTrashIds.length})
+                        <Translated text={"Xóa đã chọn ("} />{selectedTrashIds.length})
                       </Button>
                     )}
                     {canManage && props.onRestoreMetric && (
@@ -477,7 +480,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                         onClick={() => void handleBatchRestore()}
                       >
                         <RotateCcw className="h-3 w-3" />
-                        Khôi phục đã chọn ({selectedTrashIds.length})
+                        <Translated text={"Khôi phục đã chọn ("} />{selectedTrashIds.length})
                       </Button>
                     )}
                   </>
@@ -492,14 +495,13 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                       onClick={props.onEmptyTrash}
                     >
                       <Trash2 className="h-3 w-3" />
-                      Dọn sạch thùng rác
+                      <Translated text={"Dọn sạch thùng rác"} />
                     </Button>
                   )
                 )}
 
                 <span className="rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                  {trashMetrics.length} chỉ số
-                </span>
+                  {trashMetrics.length} <Translated text={"chỉ số"} /></span>
               </div>
             </div>
 
@@ -508,7 +510,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-secondary text-muted-foreground">
                   <Trash2 className="h-5 w-5" />
                 </div>
-                <p className="text-xs text-muted-foreground">Thùng rác trống. Không có chỉ số nào bị xóa.</p>
+                <p className="text-xs text-muted-foreground"><Translated text={"Thùng rác trống. Không có chỉ số nào bị xóa."} /></p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -532,11 +534,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               <Sigma className="h-6 w-6" />
             </div>
             <div>
-              <p className="font-semibold text-foreground text-sm">Chưa có Metric Definition nào</p>
+              <p className="font-semibold text-foreground text-sm"><Translated text={"Chưa có Metric Definition nào"} /></p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {!canManage
+                <Translated text={!canManage
                   ? 'Chưa có metric nào để hiển thị trong catalog.'
-                  : 'Hãy thêm thủ công hoặc sử dụng AI Studio để tự động phân tích schema và đề xuất các chỉ số.'}
+                  : 'Hãy thêm thủ công hoặc sử dụng AI Studio để tự động phân tích schema và đề xuất các chỉ số.'} />
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -547,7 +549,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                   className="gap-1.5 text-xs cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Thêm thủ công
+                  <Translated text={"Thêm thủ công"} />
                 </Button>
               )}
               {props.onOpenStudio && (
@@ -558,7 +560,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                   className="gap-1.5 text-xs cursor-pointer"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  Mở AI Studio
+                  <Translated text={"Mở AI Studio"} />
                 </Button>
               )}
             </div>
@@ -574,23 +576,22 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                     </span>
                     <div>
                       <h2 className="font-semibold text-sm text-foreground">
-                        {isMemberSubmitter ? '1. Đã gửi' : '1. Metrics Đang Chờ Phê Duyệt'}
+                        <Translated text={isMemberSubmitter ? '1. Đã gửi' : '1. Metrics Đang Chờ Phê Duyệt'} />
                       </h2>
                       <p className="text-[11px] text-muted-foreground">
-                        {isMemberSubmitter
+                        <Translated text={isMemberSubmitter
                           ? 'Các metric bạn đã gửi đang chờ Data Lead xem xét'
-                          : 'Các chỉ số cần Data Lead review và phê duyệt'}
+                          : 'Các chỉ số cần Data Lead review và phê duyệt'} />
                       </p>
                     </div>
                   </div>
                   <span className="rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                    {isMemberSubmitter ? submittedMetrics.length : pendingMetrics.length} chỉ số
-                  </span>
+                    {isMemberSubmitter ? submittedMetrics.length : pendingMetrics.length} <Translated text={"chỉ số"} /></span>
                 </div>
 
                 {(isMemberSubmitter ? submittedMetrics : pendingMetrics).length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center text-xs text-muted-foreground">
-                    Không có metric nào đang chờ duyệt.
+                    <Translated text={"Không có metric nào đang chờ duyệt."} />
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -618,23 +619,22 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                   </span>
                   <div>
                     <h2 className="font-semibold text-sm text-foreground">
-                      2. Metrics Đã Phê Duyệt (Official Metrics)
+                      <Translated text={"2. Metrics Đã Phê Duyệt (Official Metrics)"} />
                     </h2>
                     <p className="text-[11px] text-muted-foreground">
-                      Các chỉ số chuẩn hóa đã sẵn sàng để truy vấn trong Metric Explorer và Export
+                      <Translated text={"Các chỉ số chuẩn hóa đã sẵn sàng để truy vấn trong Metric Explorer và Export"} />
                     </p>
                   </div>
                 </div>
                 <span className="rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                  {approvedMetrics.length} chỉ số
-                </span>
+                  {approvedMetrics.length} <Translated text={"chỉ số"} /></span>
               </div>
 
               {approvedMetrics.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center text-xs text-muted-foreground">
-                  {canApprove
+                  <Translated text={canApprove
                     ? 'Chưa có metric nào được phê duyệt. Hãy duyệt các metric ở phần trên.'
-                    : 'Chưa có metric nào được phê duyệt.'}
+                    : 'Chưa có metric nào được phê duyệt.'} />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -678,7 +678,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
           role="status"
           className="fixed bottom-6 left-6 z-50 rounded-lg border border-border bg-card px-4 py-2 text-xs text-muted-foreground shadow-lg"
         >
-          Đang tải lịch sử phiên bản...
+          <Translated text={"Đang tải lịch sử phiên bản..."} />
         </div>
       )}
       {historyError && (

@@ -61,6 +61,7 @@ import {
   type DashboardDatePreset,
   type DashboardWidgetConfig,
 } from '@/lib/dashboard';
+import { Translated } from '@/components/ui/translated';
 
 // Dynamic imports for heavy views & modals to optimize initial bundle size & LCP
 const MetricExplorerView = dynamic(
@@ -69,7 +70,7 @@ const MetricExplorerView = dynamic(
     loading: () => (
       <div className="flex flex-1 items-center justify-center p-8 text-xs font-semibold text-muted-foreground gap-2">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Đang tải Trình khám phá chỉ số...
+        <Translated text={"Đang tải Trình khám phá chỉ số..."} />
       </div>
     ),
     ssr: false,
@@ -82,7 +83,7 @@ const ExportPlaygroundView = dynamic(
     loading: () => (
       <div className="flex flex-1 items-center justify-center p-8 text-xs font-semibold text-muted-foreground gap-2">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Đang tải Xuất dữ liệu...
+        <Translated text={"Đang tải Xuất dữ liệu..."} />
       </div>
     ),
     ssr: false,
@@ -95,7 +96,7 @@ const SchemaReviewView = dynamic(
     loading: () => (
       <div className="flex flex-1 items-center justify-center p-8 text-xs font-semibold text-muted-foreground gap-2">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Đang tải Schema Review...
+        <Translated text={"Đang tải Schema Review..."} />
       </div>
     ),
     ssr: false,
@@ -108,7 +109,7 @@ const MetricsDashboardView = dynamic(
     loading: () => (
       <div className="flex flex-1 items-center justify-center p-8 text-xs font-semibold text-muted-foreground gap-2">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Đang tải Bảng điều khiển chỉ số...
+        <Translated text={"Đang tải Bảng điều khiển chỉ số..."} />
       </div>
     ),
     ssr: false,
@@ -791,7 +792,7 @@ export default function WorkspacePage() {
   if (isLoading || !token) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-xs font-semibold text-muted-foreground">
-        Đang xác thực tài khoản...
+        <Translated text={"Đang xác thực tài khoản..."} />
       </div>
     );
   }
@@ -877,15 +878,14 @@ export default function WorkspacePage() {
           {(pendingCount > 0 || pendingSchemaCount > 0) && canApproveMetrics && (
             <div className="mx-6 mt-6 flex items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-700 shadow-sm dark:text-amber-300">
               <div>
-                <h3 className="text-sm font-semibold">Cần phê duyệt Schema &amp; Chỉ số</h3>
+                <h3 className="text-sm font-semibold"><Translated text={"Cần phê duyệt Schema &amp; Chỉ số"} /></h3>
                 <p className="mt-1 text-xs opacity-90">
                   {pendingSchemaCount > 0 && (
                     <>
-                      {pendingSchema.tables} bảng và {pendingSchema.columns} cột đang chờ review tên
-                      nghiệp vụ.{' '}
+                      {pendingSchema.tables} <Translated text={"bảng và"} after />{pendingSchema.columns} <Translated text={"cột đang chờ review tên nghiệp vụ."} />{' '}
                     </>
                   )}
-                  {pendingCount > 0 && <>{pendingCount} chỉ số đang chờ duyệt để chính thức sử dụng.</>}
+                  {pendingCount > 0 && <>{pendingCount} <Translated text={"chỉ số đang chờ duyệt để chính thức sử dụng."} /></>}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -897,14 +897,13 @@ export default function WorkspacePage() {
                     className="gap-2 text-xs font-semibold"
                   >
                     <ClipboardCheck className="h-4 w-4" />
-                    Review Schema ({pendingSchemaCount})
+                    <Translated text={"Review Schema ("} />{pendingSchemaCount})
                   </Button>
                 )}
                 {pendingCount > 0 && (
                   <Button onClick={approve} className="gap-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-amber-950" size="sm">
                     <CheckCircle2 className="h-4 w-4" />
-                    Duyệt {pendingCount} Chỉ số
-                  </Button>
+                    <Translated text={"Duyệt"} after />{pendingCount} <Translated text={"Chỉ số"} /></Button>
                 )}
               </div>
             </div>
@@ -996,16 +995,15 @@ export default function WorkspacePage() {
             <Database className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-foreground">Chưa chọn Target Database</h2>
+            <h2 className="text-base font-semibold text-foreground"><Translated text={"Chưa chọn Target Database"} /></h2>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              Kết nối tới Live Database hoặc tải lên tệp SQL Dump để tự động tạo Semantic Layer và
-              định nghĩa các chỉ số.
+              <Translated text={"Kết nối tới Live Database hoặc tải lên tệp SQL Dump để tự động tạo Semantic Layer và định nghĩa các chỉ số."} />
             </p>
           </div>
           {canManageSchema && (
             <Button onClick={() => setConnectOpen(true)} className="gap-2 text-xs">
               <Plus className="h-4 w-4" />
-              Thêm kết nối Database
+              <Translated text={"Thêm kết nối Database"} />
             </Button>
           )}
         </div>

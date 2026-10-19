@@ -39,6 +39,8 @@ import {
   type SchemaSyncStatus,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface SyncAuditLogsModalProps {
   isOpen: boolean;
@@ -55,6 +57,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
   databaseName,
   onSyncComplete,
 }) => {
+  const { locale, t } = useLanguage();
   const [logs, setLogs] = useState<SchemaSyncLog[]>([]);
   const [syncStatus, setSyncStatus] = useState<SchemaSyncStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -126,7 +129,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
       return (
         <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 font-mono text-[10px] text-sky-400">
           <Clock className="h-3 w-3" />
-          Daily Cron 02:00 AM
+          <Translated text={"Daily Cron 02:00 AM"} />
         </span>
       );
     }
@@ -139,27 +142,27 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
         return (
           <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 font-sans text-[11px] font-semibold text-emerald-400">
             <Shield className="h-3 w-3" />
-            Đã tự vá (Healed)
+            <Translated text={"Đã tự vá (Healed)"} />
           </span>
         );
       case 'success':
         return (
           <span className="inline-flex items-center gap-1 rounded-md border border-blue-500/40 bg-blue-500/15 px-2 py-0.5 font-sans text-[11px] font-medium text-blue-400">
             <CheckCircle2 className="h-3 w-3" />
-            Thành công
+            <Translated text={"Thành công"} />
           </span>
         );
       case 'no_change':
         return (
           <span className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-0.5 font-sans text-[11px] text-muted-foreground">
-            Không đổi
+            <Translated text={"Không đổi"} />
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/15 px-2 py-0.5 font-sans text-[11px] font-medium text-rose-400">
             <AlertTriangle className="h-3 w-3" />
-            Thất bại
+            <Translated text={"Thất bại"} />
           </span>
         );
     }
@@ -180,10 +183,10 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                 </div>
                 <div>
                   <DialogTitle className="font-display text-lg tracking-tight">
-                    Lịch Sử Đồng Bộ & Tự Phục Hồi
+                    <Translated text={"Lịch Sử Đồng Bộ & Tự Phục Hồi"} />
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                    Cơ sở dữ liệu: <span className="font-semibold text-foreground">{databaseName}</span>
+                    <Translated text={"Cơ sở dữ liệu:"} after /><span className="font-semibold text-foreground">{databaseName}</span>
                   </DialogDescription>
                 </div>
               </div>
@@ -196,24 +199,24 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
               className="gap-1.5 font-mono text-[11px] h-8"
             >
               <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              Làm mới danh sách
+              <Translated text={"Làm mới danh sách"} />
             </Button>
           </div>
 
           {/* Quick stats strip */}
           <div className="mt-4 grid grid-cols-3 gap-2.5">
             <div className="rounded-md border border-border bg-background/50 p-2.5">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Tổng số lần quét</p>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"><Translated text={"Tổng số lần quét"} /></p>
               <p className="font-display text-lg font-bold text-foreground mt-0.5">{logs.length}</p>
             </div>
             <div className="rounded-md border border-border bg-background/50 p-2.5">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Lần tự vá (Self-healed)</p>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"><Translated text={"Lần tự vá (Self-healed)"} /></p>
               <p className="font-display text-lg font-bold text-emerald-500 mt-0.5">{healedCount}</p>
             </div>
             <div className="rounded-md border border-border bg-background/50 p-2.5">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Quét lần cuối</p>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"><Translated text={"Quét lần cuối"} /></p>
               <p className="font-mono text-xs text-foreground mt-1 truncate">
-                {logs[0] ? new Date(logs[0].created_at).toLocaleTimeString() : 'Chưa có'}
+                {logs[0] ? new Date(logs[0].created_at).toLocaleTimeString(locale) : t('None yet', 'Chưa có')}
               </p>
             </div>
           </div>
@@ -227,9 +230,9 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
               <div className="mb-3 flex items-center justify-between text-xs font-semibold text-primary">
                 <span className="flex items-center gap-1.5">
                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
-                  Đang tự động cập nhật & đồng bộ dữ liệu...
+                  <Translated text={"Đang tự động cập nhật & đồng bộ dữ liệu..."} />
                 </span>
-                <span className="font-mono">Bước {Math.min(syncStep, 4)} / 4</span>
+                <span className="font-mono"><Translated text={"Bước"} after />{Math.min(syncStep, 4)} / 4</span>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {[
@@ -279,14 +282,14 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <span>Đang tải lịch sử đồng bộ...</span>
+              <span><Translated text={"Đang tải lịch sử đồng bộ..."} /></span>
             </div>
           ) : logs.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground text-xs">
               <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
-              <p>Chưa có lịch sử đồng bộ nào.</p>
+              <p><Translated text={"Chưa có lịch sử đồng bộ nào."} /></p>
               <p className="text-[11px] mt-1 text-muted-foreground/70">
-                Hệ thống sẽ tự động quét lúc 02:00 AM hoặc khi bạn bấm nút &quot;Đồng bộ ngay&quot;.
+                <Translated text={"Hệ thống sẽ tự động quét lúc 02:00 AM hoặc khi bạn bấm nút &quot;Đồng bộ ngay&quot;."} />
               </p>
             </div>
           ) : (
@@ -319,11 +322,11 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                       {getStatusBadge(log.status)}
                       {getTriggerBadge(log.trigger_type)}
                       <span className="font-mono text-[11px] text-muted-foreground">
-                        {new Date(log.created_at).toLocaleString()}
+                        {new Date(log.created_at).toLocaleString(locale)}
                       </span>
                     </div>
                     <span className="text-[11px] font-mono text-muted-foreground shrink-0">
-                      {isExpanded ? '▲ Thu gọn' : '▼ Chi tiết'}
+                      <Translated text={isExpanded ? '▲ Thu gọn' : '▼ Chi tiết'} />
                     </span>
                   </div>
 
@@ -340,7 +343,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                           {summary?.renamed_columns && summary.renamed_columns.length > 0 && (
                             <div className="rounded-md border border-border bg-card p-2.5 space-y-1.5">
                               <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-primary">
-                                Cột được đổi tên trong Database:
+                                <Translated text={"Cột được đổi tên trong Database:"} />
                               </p>
                               {summary.renamed_columns.map((rc, idx) => (
                                 <div key={idx} className="flex items-center gap-2 font-mono text-[11px]">
@@ -359,11 +362,10 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                               <div className="flex items-center justify-between">
                                 <p className="font-mono text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                                   <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                                  Công thức chỉ số đã được tự động cập nhật:
+                                  <Translated text={"Công thức chỉ số đã được tự động cập nhật:"} />
                                 </p>
                                 <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-semibold">
-                                  {summary.healed_metrics.length} chỉ số
-                                </span>
+                                  {summary.healed_metrics.length} <Translated text={"chỉ số"} /></span>
                               </div>
 
                               <div className="space-y-3">
@@ -406,7 +408,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                                           </span>
                                           {(hm.table_name || renCol?.table_name) && (
                                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border">
-                                              bảng: {hm.table_name || renCol?.table_name}
+                                              <Translated text={"bảng:"} after />{hm.table_name || renCol?.table_name}
                                             </span>
                                           )}
                                         </div>
@@ -422,7 +424,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                                           className="flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
                                         >
                                           <Code className="h-3.5 w-3.5" />
-                                          <span>{isQueryOpen ? 'Ẩn câu query' : 'Xem chi tiết câu query'}</span>
+                                          <span><Translated text={isQueryOpen ? 'Ẩn câu query' : 'Xem chi tiết câu query'} /></span>
                                           {isQueryOpen ? (
                                             <ChevronUp className="h-3 w-3" />
                                           ) : (
@@ -436,9 +438,9 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                                         {/* Old formula panel */}
                                         <div className="rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 space-y-1">
                                           <div className="flex items-center justify-between text-[10px] font-mono font-semibold text-rose-400">
-                                            <span>CÔNG THỨC CŨ</span>
+                                            <span><Translated text={"CÔNG THỨC CŨ"} /></span>
                                             <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold">
-                                              Cũ
+                                              <Translated text={"Cũ"} />
                                             </span>
                                           </div>
                                           <div className="font-mono text-xs font-semibold text-rose-300 line-through truncate py-0.5">
@@ -449,9 +451,9 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                                         {/* New formula panel */}
                                         <div className="rounded-md border border-emerald-500/40 bg-emerald-500/15 p-2.5 space-y-1">
                                           <div className="flex items-center justify-between text-[10px] font-mono font-semibold text-emerald-400">
-                                            <span>CÔNG THỨC MỚI</span>
+                                            <span><Translated text={"CÔNG THỨC MỚI"} /></span>
                                             <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-300 font-bold">
-                                              Mới
+                                              <Translated text={"Mới"} />
                                             </span>
                                           </div>
                                           <div className="font-mono text-xs font-bold text-emerald-300 truncate py-0.5">
@@ -466,7 +468,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                                           <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
                                             <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                                               <Terminal className="h-3.5 w-3.5" />
-                                              Câu lệnh SQL Query hoàn chỉnh:
+                                              <Translated text={"Câu lệnh SQL Query hoàn chỉnh:"} />
                                             </span>
                                             <button
                                               type="button"
@@ -490,7 +492,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                                               ) : (
                                                 <Copy className="h-3 w-3" />
                                               )}
-                                              <span>{isCopied ? 'Đã sao chép' : 'Sao chép SQL'}</span>
+                                              <span><Translated text={isCopied ? 'Đã sao chép' : 'Sao chép SQL'} /></span>
                                             </button>
                                           </div>
                                           <pre className="overflow-x-auto rounded bg-zinc-900/80 p-2.5 font-mono text-xs text-emerald-300 selection:bg-emerald-500/30">
@@ -509,7 +511,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                           {summary?.renamed_tables && summary.renamed_tables.length > 0 && (
                             <div className="rounded-md border border-sky-500/30 bg-sky-950/20 p-2.5 space-y-1.5">
                               <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-sky-400">
-                                Bảng được đổi tên trong Database:
+                                <Translated text={"Bảng được đổi tên trong Database:"} />
                               </p>
                               {summary.renamed_tables.map((rt, idx) => (
                                 <div key={idx} className="flex items-center gap-2 font-mono text-[11px]">
@@ -527,11 +529,10 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                               <div className="flex items-center justify-between">
                                 <p className="font-mono text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
                                   <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
-                                  Chỉ số cần rà soát (do mất cột nguồn):
+                                  <Translated text={"Chỉ số cần rà soát (do mất cột nguồn):"} />
                                 </p>
                                 <span className="text-[10px] font-mono text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded-full border border-rose-500/30 font-semibold">
-                                  {summary.broken_metrics.length} chỉ số
-                                </span>
+                                  {summary.broken_metrics.length} <Translated text={"chỉ số"} /></span>
                               </div>
                               <div className="space-y-1.5">
                                 {summary.broken_metrics.map((bm, idx) => (
@@ -542,11 +543,10 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                                     <div>
                                       <span className="font-semibold text-foreground">{bm.name}</span>
                                       <p className="text-[11px] text-rose-300/90 mt-0.5">
-                                        Cột <code className="rounded bg-rose-500/20 px-1 py-0.5 font-mono text-rose-200">{bm.column_name}</code> trong bảng <code className="rounded bg-secondary px-1 py-0.5 font-mono text-foreground">{bm.table_name}</code> đã bị xóa.
-                                      </p>
+                                        <Translated text={"Cột"} after /><code className="rounded bg-rose-500/20 px-1 py-0.5 font-mono text-rose-200">{bm.column_name}</code> <Translated text={"trong bảng"} after /><code className="rounded bg-secondary px-1 py-0.5 font-mono text-foreground">{bm.table_name}</code> <Translated text={"đã bị xóa."} /></p>
                                     </div>
                                     <span className="shrink-0 rounded-md border border-rose-500/30 bg-rose-500/20 px-2 py-1 font-mono text-[10px] font-bold text-rose-300 uppercase">
-                                      Chờ rà soát
+                                      <Translated text={"Chờ rà soát"} />
                                     </span>
                                   </div>
                                 ))}
@@ -558,7 +558,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                           {summary?.type_changes && summary.type_changes.length > 0 && (
                             <div className="rounded-md border border-purple-500/30 bg-purple-950/20 p-2.5 space-y-1.5">
                               <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-purple-400">
-                                Cột thay đổi kiểu dữ liệu:
+                                <Translated text={"Cột thay đổi kiểu dữ liệu:"} />
                               </p>
                               {summary.type_changes.map((tc, idx) => (
                                 <div key={idx} className="flex items-center gap-2 font-mono text-[11px]">
@@ -575,7 +575,7 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                           {summary?.added_tables && summary.added_tables.length > 0 && (
                             <div className="rounded-md border border-border bg-card p-2.5 space-y-1 text-[11px]">
                               <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                                Bảng mới phát hiện:
+                                <Translated text={"Bảng mới phát hiện:"} />
                               </p>
                               <div className="flex flex-wrap gap-1">
                                 {summary.added_tables.map((t, idx) => (
@@ -589,14 +589,14 @@ export const SyncAuditLogsModal: React.FC<SyncAuditLogsModalProps> = ({
                         </div>
                       ) : (
                         <div className="text-[11px] text-muted-foreground font-mono">
-                          Không có thay đổi cấu trúc bảng hoặc công thức metric nào cần vá.
+                          <Translated text={"Không có thay đổi cấu trúc bảng hoặc công thức metric nào cần vá."} />
                         </div>
                       )}
 
                       {/* Fingerprint info */}
                       {log.new_fingerprint && (
                         <div className="font-mono text-[10px] text-muted-foreground/80 flex items-center justify-between pt-1 border-t border-border/30">
-                          <span>Mã phiên bản cấu trúc:</span>
+                          <span><Translated text={"Mã phiên bản cấu trúc:"} /></span>
                           <span className="truncate max-w-[200px] text-foreground">{log.new_fingerprint}</span>
                         </div>
                       )}

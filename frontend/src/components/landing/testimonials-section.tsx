@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Translated } from '@/components/ui/translated';
 
 const testimonials = [
   {
@@ -60,7 +61,7 @@ export function TestimonialsSection() {
         {/* Section Label */}
         <div className="flex items-center gap-4 mb-16">
           <span className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-            Phản hồi từ người dùng
+            <Translated text={"Phản hồi từ người dùng"} />
           </span>
           <div className="flex-1 h-px bg-foreground/10" />
           <span className="font-mono text-xs text-muted-foreground">
@@ -80,7 +81,7 @@ export function TestimonialsSection() {
               }`}
             >
               <p className="font-display text-4xl md:text-5xl lg:text-6xl leading-[1.1] tracking-tight text-foreground">
-                &ldquo;{activeTestimonial.quote}&rdquo;
+                &ldquo;<Translated text={activeTestimonial.quote} />&rdquo;
               </p>
             </blockquote>
 
@@ -100,7 +101,7 @@ export function TestimonialsSection() {
                   {activeTestimonial.author}
                 </p>
                 <p className="text-muted-foreground">
-                  {activeTestimonial.role}, {activeTestimonial.company}
+                  <Translated text={activeTestimonial.role} />, {activeTestimonial.company}
                 </p>
               </div>
             </div>
@@ -116,10 +117,10 @@ export function TestimonialsSection() {
               }`}
             >
               <span className="font-mono text-xs tracking-widest text-muted-foreground uppercase block mb-4">
-                Kết quả nổi bật
+                <Translated text={"Kết quả nổi bật"} />
               </span>
               <p className="font-display text-3xl md:text-4xl text-foreground">
-                {activeTestimonial.metric}
+                <Translated text={activeTestimonial.metric} />
               </p>
             </div>
 
@@ -149,7 +150,7 @@ export function TestimonialsSection() {
         {/* Capability Labels Marquee */}
         <div className="mt-24 pt-12 border-t border-foreground/10">
           <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase mb-8 text-center">
-            Các khả năng chính
+            <Translated text={"Các khả năng chính"} />
           </p>
         </div>
       </div>

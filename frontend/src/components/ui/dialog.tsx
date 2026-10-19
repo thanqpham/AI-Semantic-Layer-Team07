@@ -4,6 +4,7 @@ import * as React from 'react';
 import { X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface DialogContextValue {
   open: boolean;
@@ -66,6 +67,7 @@ function DialogContent({
   showCloseButton = true,
   ...props
 }: DialogContentProps) {
+  const { translate } = useLanguage();
   const { open, onOpenChange } = useDialog();
 
   React.useEffect(() => {
@@ -102,7 +104,7 @@ function DialogContent({
             data-slot="dialog-close"
             onClick={() => onOpenChange(false)}
             className="absolute top-4 right-4 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-background/90 text-muted-foreground transition-all hover:bg-secondary hover:text-foreground hover:scale-105 cursor-pointer shadow-xs"
-            aria-label="Close"
+            aria-label={translate("Close")}
           >
             <X className="h-4 w-4" />
           </button>

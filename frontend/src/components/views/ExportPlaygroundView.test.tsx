@@ -21,14 +21,14 @@ describe('ExportPlaygroundView', () => {
     render(<ExportPlaygroundView dbId={3} />);
 
     // Header with title and description
-    expect(screen.getByText('Export Playground')).toBeInTheDocument();
-    expect(screen.getByText(/BI tools and semantic engines/i)).toBeInTheDocument();
+    expect(screen.getByText('Xuất dữ liệu')).toBeInTheDocument();
+    expect(screen.getByText(/công cụ BI và semantic engine/i)).toBeInTheDocument();
 
     // Eyebrow text
-    expect(screen.getByText('Publish')).toBeInTheDocument();
+    expect(screen.getByText('Xuất bản')).toBeInTheDocument();
 
     // Action buttons
-    expect(screen.getByRole('button', { name: /Copy/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sao chép/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Tải file/i })).toBeInTheDocument();
 
     // Format toggle as pill buttons (visible after content loads)

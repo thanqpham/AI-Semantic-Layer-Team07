@@ -24,6 +24,8 @@ import {
   renderMetricYaml,
   withPendingStatus,
 } from '@/lib/metrics';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 export interface MetricVersion {
   version: number;
@@ -64,6 +66,7 @@ const OPERATORS: { label: string; value: FilterOperator }[] = [
 type TabKey = 'definition' | 'history';
 
 export function MetricModal(props: MetricModalProps) {
+  const { t, translate } = useLanguage();
   const [definition, setDefinition] = useState<MetricDefinition>(createMetricDefinition());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -134,11 +137,11 @@ export function MetricModal(props: MetricModalProps) {
         <DialogHeader>
           <div className="flex flex-wrap items-center gap-3">
             <DialogTitle className="font-display text-2xl">
-              {props.submissionMode
+              <Translated text={props.submissionMode
                 ? 'Gửi Business Metric'
                 : props.initialName || props.initialDefinition?.metric?.name
                   ? 'Định nghĩa Business Metric'
-                  : 'Thêm mới Business Metric'}
+                  : 'Thêm mới Business Metric'} />
             </DialogTitle>
             <StatusPill status={status} />
           </div>
@@ -155,7 +158,7 @@ export function MetricModal(props: MetricModalProps) {
             { key: 'definition' as TabKey, label: 'Definition' },
             {
               key: 'history' as TabKey,
-              label: `Version history (${versions.length})`,
+              label: `${t('Version history', 'Lịch sử phiên bản')} (${versions.length})`,
             },
           ].map((tab) => (
             <button
@@ -169,7 +172,7 @@ export function MetricModal(props: MetricModalProps) {
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              {tab.label}
+              <Translated text={tab.label} />
             </button>
           ))}
         </div>
@@ -181,7 +184,7 @@ export function MetricModal(props: MetricModalProps) {
               <div className="space-y-3.5">
                 <div>
                   <Label htmlFor="metric-name" className="mb-1.5 block text-xs font-medium">
-                    Tên metric
+                    <Translated text={"Tên metric"} />
                   </Label>
                   <Input
                     id="metric-name"
@@ -193,7 +196,7 @@ export function MetricModal(props: MetricModalProps) {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label className="mb-1.5 block text-xs font-medium">Base entity</Label>
+                    <Label className="mb-1.5 block text-xs font-medium"><Translated text={"Base entity"} /></Label>
                     <select
                       value={definition.metric.base_entity}
                       onChange={(e) => setMetric({ base_entity: e.target.value, filters: [] })}
@@ -212,7 +215,7 @@ export function MetricModal(props: MetricModalProps) {
                   </div>
 
                   <div>
-                    <Label className="mb-1.5 block text-xs font-medium">Hàm tổng hợp</Label>
+                    <Label className="mb-1.5 block text-xs font-medium"><Translated text={"Hàm tổng hợp"} /></Label>
                     <select
                       value={definition.metric.formula.function}
                       onChange={(e) =>
@@ -239,7 +242,7 @@ export function MetricModal(props: MetricModalProps) {
                 </div>
 
                 <div>
-                  <Label className="mb-1.5 block text-xs font-medium">Biểu thức công thức</Label>
+                  <Label className="mb-1.5 block text-xs font-medium"><Translated text={"Biểu thức công thức"} /></Label>
                   <Input
                     required
                     list="metric-columns"
@@ -252,7 +255,7 @@ export function MetricModal(props: MetricModalProps) {
                         },
                       })
                     }
-                    placeholder="quantity * unit_price"
+                    placeholder={translate("quantity * unit_price")}
                     className="font-mono text-xs"
                   />
                   <datalist id="metric-columns">
@@ -263,13 +266,13 @@ export function MetricModal(props: MetricModalProps) {
                 </div>
 
                 <div>
-                  <Label className="mb-1.5 block text-xs font-medium">Ghi chú loại trừ</Label>
+                  <Label className="mb-1.5 block text-xs font-medium"><Translated text={"Ghi chú loại trừ"} /></Label>
                   <textarea
                     rows={2}
                     value={definition.metric.excluded_notes || ''}
                     onChange={(e) => setMetric({ excluded_notes: e.target.value })}
                     className="w-full rounded-md border border-border bg-transparent p-2 text-xs outline-none focus:ring-1 focus:ring-ring"
-                    placeholder="Ví dụ: Chưa trừ hoàn tiền, chỉ tính đơn completed"
+                    placeholder={translate("Ví dụ: Chưa trừ hoàn tiền, chỉ tính đơn completed")}
                   />
                 </div>
 
@@ -282,18 +285,17 @@ export function MetricModal(props: MetricModalProps) {
                 {requiresChangeReason && (
                   <div>
                     <Label className="mb-1.5 block text-xs font-medium">
-                      Lý do thay đổi <span className="text-destructive">*</span>
+                      <Translated text={"Lý do thay đổi"} after /><span className="text-destructive">*</span>
                     </Label>
                     <textarea
                       rows={2}
                       value={changeReason}
                       onChange={(e) => setChangeReason(e.target.value)}
                       className="w-full rounded-md border border-border bg-transparent p-2 text-xs outline-none focus:ring-1 focus:ring-ring"
-                      placeholder="VD: Cập nhật công thức theo policy mới..."
+                      placeholder={translate("VD: Cập nhật công thức theo policy mới...")}
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Chỉ số đang publish sẽ giữ nguyên. Bản sửa được lưu thành phiên bản mới chờ
-                      phê duyệt.
+                      <Translated text={"Chỉ số đang publish sẽ giữ nguyên. Bản sửa được lưu thành phiên bản mới chờ phê duyệt."} />
                     </p>
                   </div>
                 )}
@@ -316,7 +318,7 @@ export function MetricModal(props: MetricModalProps) {
                     role="status"
                     className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-300"
                   >
-                    Metric sẽ có trạng thái Chưa được xác minh sau khi gửi.
+                    <Translated text={"Metric sẽ có trạng thái Chưa được xác minh sau khi gửi."} />
                   </div>
                 )}
               </div>
@@ -324,7 +326,7 @@ export function MetricModal(props: MetricModalProps) {
               {/* YAML Spec Preview Column */}
               <div className="flex flex-col space-y-2">
                 <span className="font-mono text-[11px] text-muted-foreground">
-                  Preview chỉ đọc (YAML spec):
+                  <Translated text={"Preview chỉ đọc (YAML spec):"} />
                 </span>
                 <div className="flex-1 overflow-hidden rounded-lg border border-border bg-card">
                   <pre className="max-h-[380px] overflow-auto p-3 font-mono text-xs leading-relaxed text-foreground">
@@ -344,20 +346,20 @@ export function MetricModal(props: MetricModalProps) {
                       onClick={() => void props.onApprove?.()}
                     >
                       <Check className="h-4 w-4" />
-                      Phê duyệt metric
+                      <Translated text={"Phê duyệt metric"} />
                     </Button>
                   )}
                   {status === 'approved' && (
                     <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-500">
                       <Check className="h-3.5 w-3.5" />
-                      Đã có trong Semantic Layer
+                      <Translated text={"Đã có trong Semantic Layer"} />
                     </span>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2">
                   <Button type="button" variant="ghost" onClick={props.onClose}>
-                    Hủy
+                    <Translated text={"Hủy"} />
                   </Button>
                   <Button
                     type="submit"
@@ -370,13 +372,13 @@ export function MetricModal(props: MetricModalProps) {
                     className="gap-1.5 text-xs"
                   >
                     <Save className="h-3.5 w-3.5" />
-                    {saving
+                    <Translated text={saving
                       ? props.submissionMode
                         ? 'Đang gửi...'
                         : 'Đang lưu...'
                       : props.submissionMode
                         ? 'Gửi metric'
-                        : 'Lưu metric'}
+                        : 'Lưu metric'} />
                   </Button>
                 </div>
               </div>
@@ -385,7 +387,7 @@ export function MetricModal(props: MetricModalProps) {
             <div className="p-4">
               {versions.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic text-center py-6">
-                  Chưa có lịch sử phiên bản.
+                  <Translated text={"Chưa có lịch sử phiên bản."} />
                 </p>
               ) : (
                 <ol className="relative space-y-4 border-l border-border pl-6">
@@ -396,11 +398,11 @@ export function MetricModal(props: MetricModalProps) {
                       </span>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm text-foreground">
-                          Version {v.version}
+                          <Translated text={"Version"} after />{v.version}
                         </span>
                         {i === 0 && (
                           <span className="rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                            current
+                            <Translated text={"current"} />
                           </span>
                         )}
                       </div>
@@ -441,7 +443,7 @@ function FilterEditor({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label className="text-xs font-medium">Bộ lọc cố định</Label>
+        <Label className="text-xs font-medium"><Translated text={"Bộ lọc cố định"} /></Label>
         <Button
           type="button"
           variant="ghost"
@@ -452,7 +454,7 @@ function FilterEditor({
           className="h-6 gap-1 text-[11px] text-primary"
         >
           <Plus className="h-3 w-3" />
-          Thêm
+          <Translated text={"Thêm"} />
         </Button>
       </div>
       {filters.map((filter, index) => (
@@ -480,7 +482,7 @@ function FilterEditor({
           >
             {OPERATORS.map((op) => (
               <option key={op.value} value={op.value} className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
-                {op.label}
+                <Translated text={op.label} />
               </option>
             ))}
           </select>

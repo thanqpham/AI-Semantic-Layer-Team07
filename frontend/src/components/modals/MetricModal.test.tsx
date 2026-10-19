@@ -62,8 +62,8 @@ describe('MetricModal', () => {
         initialName="Doanh thu thuần"
       />,
     );
-    expect(screen.getByRole('button', { name: /Definition/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /History/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Định nghĩa/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Lịch sử phiên bản/i })).toBeInTheDocument();
   });
 
   it('shows Definition tab content by default with form fields', () => {
@@ -79,7 +79,7 @@ describe('MetricModal', () => {
     );
     // Definition tab should be active and show form fields
     expect(screen.getByText('Tên metric')).toBeInTheDocument();
-    expect(screen.getByText('Base entity')).toBeInTheDocument();
+    expect(screen.getByText('Thực thể gốc')).toBeInTheDocument();
     expect(screen.getByText('Hàm tổng hợp')).toBeInTheDocument();
     expect(screen.getByText('Biểu thức công thức')).toBeInTheDocument();
   });
@@ -109,10 +109,10 @@ describe('MetricModal', () => {
         ]}
       />,
     );
-    const historyBtn = screen.getByRole('button', { name: /History/i });
+    const historyBtn = screen.getByRole('button', { name: /Lịch sử phiên bản/i });
     fireEvent.click(historyBtn);
-    expect(screen.getByText(/Version 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Version 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Phiên bản 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Phiên bản 1/)).toBeInTheDocument();
     expect(screen.getByText(/Updated formula/)).toBeInTheDocument();
   });
 

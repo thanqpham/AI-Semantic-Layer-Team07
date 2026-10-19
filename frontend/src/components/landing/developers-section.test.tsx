@@ -45,9 +45,9 @@ describe('DevelopersSection', () => {
 
   it('renders feature list', () => {
     render(<DevelopersSection />);
-    const features = screen.getAllByText(/Python native/i);
+    const features = screen.getAllByText(/Python thuần/i);
     expect(features.length).toBeGreaterThanOrEqual(1);
-    const aiFeatures = screen.getAllByText(/2-Pass AI/i);
+    const aiFeatures = screen.getAllByText(/AI hai lượt/i);
     expect(aiFeatures.length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AnimatedTetrahedron } from "./animated-tetrahedron";
+import { Translated } from '@/components/ui/translated';
 
 export function CtaSection() {
   const [isVisible, setIsVisible] = useState(false);
@@ -57,14 +58,12 @@ export function CtaSection() {
               {/* Left content */}
               <div className="flex-1">
                 <h2 className="text-4xl lg:text-7xl font-display tracking-tight mb-8 leading-[0.95]">
-                  Sẵn sàng xây dựng
-                  <br />
+                  <Translated text={"Sẵn sàng xây dựng"} after /><br />
                   semantic layer?
                 </h2>
 
                 <p className="text-xl text-muted-foreground mb-12 leading-relaxed max-w-xl">
-                  Bắt đầu quản trị semantic layer với AI Agent. Kết nối
-                  database, introspect schema và định nghĩa metrics ngay hôm nay.
+                  <Translated text={"Bắt đầu quản trị semantic layer với AI Agent. Kết nối database, introspect schema và định nghĩa metrics ngay hôm nay."} />
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-start gap-4">
@@ -72,19 +71,18 @@ export function CtaSection() {
                     href="/register"
                     className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-foreground text-primary-foreground text-base font-medium hover:bg-foreground/90 transition-all group rounded-full"
                   >
-                    Bắt đầu miễn phí
-                    <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+                    <Translated text={"Bắt đầu miễn phí"} after /><ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
                   </Link>
                   <Link
                     href="/login"
                     className="inline-flex items-center justify-center gap-2 px-8 py-4 border border-foreground/20 text-foreground text-base font-medium hover:border-foreground hover:bg-foreground/5 transition-all rounded-full"
                   >
-                    Đăng nhập
+                    <Translated text={"Đăng nhập"} />
                   </Link>
                 </div>
 
                 <p className="text-sm text-muted-foreground mt-8 font-mono">
-                  Không cần thẻ tín dụng
+                  <Translated text={"Không cần thẻ tín dụng"} />
                 </p>
               </div>
 

@@ -21,6 +21,8 @@ import {
 import { ChatMessage, metricRequestKey, StudioChatStream } from '@/components/studio/StudioChatStream';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { applySuggestedName, metricName } from '@/lib/metrics';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface AIStudioViewProps {
   layer: SemanticLayerData;
@@ -56,6 +58,7 @@ export function AIStudioView({
   mode = 'metric_studio',
   refreshKey = 0,
 }: AIStudioViewProps) {
+  const { translate } = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [activePrompt, setActivePrompt] = useState('');
@@ -408,10 +411,10 @@ export function AIStudioView({
                   type="button"
                   onClick={onNewChat}
                   className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
-                  title="Tạo cuộc trò chuyện mới"
+                  title={translate("Tạo cuộc trò chuyện mới")}
                 >
                   <Plus className="h-3 w-3" />
-                  <span>Đoạn chat mới</span>
+                  <span><Translated text={"Đoạn chat mới"} /></span>
                 </button>
               )}
             </div>
@@ -420,10 +423,10 @@ export function AIStudioView({
               type="button"
               onClick={onNewChat}
               className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
-              title="Tạo cuộc trò chuyện mới"
+              title={translate("Tạo cuộc trò chuyện mới")}
             >
               <Plus className="h-3 w-3" />
-              <span>Đoạn chat mới</span>
+              <span><Translated text={"Đoạn chat mới"} /></span>
             </button>
           ) : undefined
         }
@@ -431,8 +434,7 @@ export function AIStudioView({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {!canGenerateMetrics && metricRequests.length > 0 && (
           <div className="border-b border-border px-6 py-2 text-xs text-muted-foreground">
-            Yêu cầu của bạn: {metricRequests.filter((item) => item.status === 'pending').length} chờ xử lý · {metricRequests.filter((item) => item.status === 'approved').length} đã duyệt.
-          </div>
+            <Translated text={"Yêu cầu của bạn:"} after />{metricRequests.filter((item) => item.status === 'pending').length} <Translated text={"chờ xử lý ·"} after />{metricRequests.filter((item) => item.status === 'approved').length} <Translated text={"đã duyệt."} /></div>
         )}
         <StudioChatStream
           messages={messages}

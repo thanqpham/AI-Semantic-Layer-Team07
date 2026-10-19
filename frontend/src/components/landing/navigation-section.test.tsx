@@ -41,7 +41,7 @@ describe('NavigationSection', () => {
 
   it('toggles mobile menu', () => {
     render(<NavigationSection />);
-    const menuButtons = screen.getAllByRole('button', { name: /toggle menu/i });
+    const menuButtons = screen.getAllByRole('button', { name: /Mở hoặc đóng menu/i });
     expect(menuButtons.length).toBeGreaterThanOrEqual(1);
     fireEvent.click(menuButtons[0]);
     const featureLinks = screen.getAllByText(/tính năng/i);

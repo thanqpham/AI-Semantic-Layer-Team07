@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 _SYNC_INSPECTION_DRIVERS = {
+    "postgresql": "postgresql+psycopg2",
     "postgresql+asyncpg": "postgresql+psycopg2",
     "mysql+asyncmy": "mysql+pymysql",
     "mysql+aiomysql": "mysql+pymysql",

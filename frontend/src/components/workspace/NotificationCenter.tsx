@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { AppNotification } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { Translated } from '@/components/ui/translated';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface EventStyle {
   Icon: typeof Bell;
@@ -107,6 +109,7 @@ export function NotificationCenter({
   className?: string;
   align?: 'left' | 'right';
 }) {
+  const { translate } = useLanguage();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -144,7 +147,7 @@ export function NotificationCenter({
         variant="ghost"
         className="relative h-8 w-8 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
         onClick={() => setOpen((current) => !current)}
-        aria-label="Thông báo"
+        aria-label={translate("Thông báo")}
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
@@ -161,14 +164,14 @@ export function NotificationCenter({
           )}
         >
           <div className="flex items-center justify-between px-1 pb-2 border-b border-border/60">
-            <p className="text-xs font-semibold text-foreground">Thông báo</p>
+            <p className="text-xs font-semibold text-foreground"><Translated text={"Thông báo"} /></p>
             {unreadCount > 0 && onMarkAllRead && (
               <button
                 type="button"
                 onClick={() => void onMarkAllRead()}
                 className="cursor-pointer font-mono text-[10px] text-primary hover:underline"
               >
-                Đánh dấu đã đọc
+                <Translated text={"Đánh dấu đã đọc"} />
               </button>
             )}
           </div>
@@ -180,9 +183,9 @@ export function NotificationCenter({
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
                   <Bell className="h-4 w-4 text-muted-foreground" />
                 </span>
-                <p className="text-xs font-medium text-foreground">Chưa có thông báo</p>
+                <p className="text-xs font-medium text-foreground"><Translated text={"Chưa có thông báo"} /></p>
                 <p className="text-[11px] text-muted-foreground">
-                  Yêu cầu metric và kết quả phê duyệt sẽ xuất hiện tại đây.
+                  <Translated text={"Yêu cầu metric và kết quả phê duyệt sẽ xuất hiện tại đây."} />
                 </p>
               </div>
             )}
