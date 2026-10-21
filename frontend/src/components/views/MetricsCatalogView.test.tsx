@@ -183,6 +183,7 @@ describe('MetricsCatalogView', () => {
       />,
     );
 
+    fireEvent.click(screen.getAllByLabelText(/Thao tác với/)[0]);
     const deleteButtons = screen.getAllByTitle('Chuyển vào Thùng rác');
     fireEvent.click(deleteButtons[0]);
 
@@ -203,6 +204,7 @@ describe('MetricsCatalogView', () => {
       />,
     );
 
+    fireEvent.click(screen.getAllByLabelText(/Thao tác với/)[0]);
     const editButtons = screen.getAllByRole('button', { name: /Chỉnh sửa/i });
     fireEvent.click(editButtons[0]);
 
@@ -316,6 +318,7 @@ describe('MetricsCatalogView', () => {
       />,
     );
 
+    fireEvent.click(screen.getByLabelText(/Thao tác với/));
     expect(screen.getByRole('button', { name: 'Chỉnh sửa' })).toBeInTheDocument();
     expect(screen.getByTitle('Chuyển vào Thùng rác')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Duyệt chỉ số này/i })).toBeInTheDocument();
@@ -335,8 +338,8 @@ describe('MetricsCatalogView', () => {
       />,
     );
     // Verify formula expression display
-    expect(screen.getByText(/SUM\(price\).*Bảng.*orders/)).toBeInTheDocument();
-    expect(screen.getByText(/COUNT\(id\).*Bảng.*orders/)).toBeInTheDocument();
+    expect(screen.getByText('SUM(price)')).toHaveClass('font-mono');
+    expect(screen.getByText('COUNT(id)')).toHaveClass('font-mono');
   });
 
   it('shows individual approve button on pending metric cards', () => {
@@ -421,7 +424,7 @@ describe('MetricsCatalogView', () => {
     expect(screen.queryByText('Doanh thu thuần')).not.toBeInTheDocument();
   });
 
-  it('shows YAML definition toggle in metric cards', () => {
+  it('opens YAML from the expanded metric row', () => {
     render(
       <MetricsCatalogView
         {...dataLeadCapabilities}
@@ -434,8 +437,10 @@ describe('MetricsCatalogView', () => {
         onApproveMetric={vi.fn()}
       />,
     );
-    // Each card should have YAML definition toggle
-    expect(screen.getAllByText(/Xem định nghĩa YAML/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByRole('button', { name: 'YAML' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { expanded: false })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'YAML' }));
+    expect(screen.getByText('Metric definition (YAML)')).toBeInTheDocument();
   });
 
   it('shows status badges with correct labels', () => {
@@ -509,6 +514,7 @@ describe('MetricsCatalogView', () => {
     expect(screen.getByText('Đã xóa')).toBeInTheDocument();
 
     // Click Khôi phục button
+    fireEvent.click(screen.getByLabelText(/Thao tác với/));
     const restoreBtn = screen.getByRole('button', { name: /Khôi phục/i });
     expect(restoreBtn).toBeInTheDocument();
     fireEvent.click(restoreBtn);
@@ -574,6 +580,7 @@ describe('MetricsCatalogView history modal', () => {
     );
 
   const openHistory = async () => {
+    fireEvent.click(screen.getByLabelText(/Thao tác với/));
     fireEvent.click(screen.getByTitle('Xem lịch sử phiên bản'));
     await screen.findByRole('dialog');
   };
@@ -697,6 +704,7 @@ describe('MetricsCatalogView history modal', () => {
     vi.spyOn(apiModule, 'getMetricHistoryApi').mockRejectedValue(new Error('network down'));
     renderCatalog();
 
+    fireEvent.click(screen.getByLabelText(/Thao tác với/));
     fireEvent.click(screen.getByTitle('Xem lịch sử phiên bản'));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Không thể tải lịch sử/i);
@@ -712,6 +720,7 @@ describe('MetricsCatalogView history modal', () => {
     );
     renderCatalog();
 
+    fireEvent.click(screen.getByLabelText(/Thao tác với/));
     fireEvent.click(screen.getByTitle('Xem lịch sử phiên bản'));
     expect(screen.getByRole('status')).toHaveTextContent(/Đang tải lịch sử/i);
 

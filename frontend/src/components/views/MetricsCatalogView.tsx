@@ -513,7 +513,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 <p className="text-xs text-muted-foreground"><Translated text={"Thùng rác trống. Không có chỉ số nào bị xóa."} /></p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+              <div className="min-w-0 divide-y divide-border overflow-visible rounded-lg border border-border bg-card">
                 {trashMetrics.map((metric) => (
                   <MetricCard
                     key={metric.metric_id}
@@ -594,7 +594,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                     <Translated text={"Không có metric nào đang chờ duyệt."} />
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                  <div className="min-w-0 divide-y divide-border overflow-visible rounded-lg border border-border bg-card">
                     {(isMemberSubmitter ? submittedMetrics : pendingMetrics).map((metric) => (
                       <MetricCard
                         key={metric.metric_id}
@@ -637,7 +637,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                     : 'Chưa có metric nào được phê duyệt.'} />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                <div className="min-w-0 divide-y divide-border overflow-visible rounded-lg border border-border bg-card">
                   {approvedMetrics.map((metric) => (
                     <MetricCard
                       key={metric.metric_id}
@@ -653,7 +653,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
             </section>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="min-w-0 divide-y divide-border overflow-visible rounded-lg border border-border bg-card">
             {(filterTab === 'pending'
               ? pendingMetrics
               : filterTab === 'submitted'
