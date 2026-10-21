@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Requ
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
 from src.api.auth import get_current_user
@@ -96,6 +96,7 @@ from src.services.chat_service import (
     save_chat_message,
     update_chat_session_title,
 )
+from src.services.chat_tasks import run_chat_task
 from src.services.database import decrypt_conn_url, get_db_session, get_session_factory
 from src.services.dimension_recommender import get_dimensions_for_metric, get_filter_columns_for_metric
 from src.services.export_service import build_semantic_layer_dict, serialize_to_json, serialize_to_yaml
@@ -1853,11 +1854,42 @@ async def chat_orchestrator(
     db: AsyncSession = Depends(get_db_session),
 ) -> ChatResponse:
     """Route read-only data assistance, live semantic querying, or metric generation."""
+    if not body.client_message_id:
+        return await _execute_chat_request(db_id, body, org_id, current_user, db)
+    user_id = current_user.id
+    factory = async_sessionmaker(db.bind, expire_on_commit=False)
+
+    async def execute() -> ChatResponse:
+        # The agent owns its session so closing the HTTP request cannot close it.
+        async with factory() as task_db:
+            user = await task_db.get(UserModel, user_id)
+            if user is None:
+                raise HTTPException(status_code=401, detail="User not found")
+            return await _execute_chat_request(db_id, body, org_id, user, task_db)
+
+    return await run_chat_task((user_id, org_id, db_id, body.client_message_id), execute)
+
+
+async def _execute_chat_request(
+    db_id: str, body: ChatRequest, org_id: int | None, current_user: UserModel, db: AsyncSession
+) -> ChatResponse:
+    """Authorize, replay, or execute one chat request using its own session."""
     numeric_db_id = _chat_db_id(db_id)
     try:
         chat_database = await get_chat_database(db, current_user.id, numeric_db_id, org_id=org_id)
         can_generate_metrics = await _chat_can_generate_metrics(db, chat_database, current_user.id)
-        session = await _resolve_chat_session(db, body.session_id, current_user.id, numeric_db_id)
+        session_id = body.session_id
+        if not session_id and body.client_message_id:
+            session_id = await db.scalar(
+                select(ChatSessionModel.id)
+                .join(ChatMessageModel, ChatMessageModel.session_id == ChatSessionModel.id)
+                .where(
+                    ChatSessionModel.user_id == current_user.id,
+                    ChatSessionModel.db_id == numeric_db_id,
+                    ChatMessageModel.client_message_id == body.client_message_id,
+                )
+            )
+        session = await _resolve_chat_session(db, session_id, current_user.id, numeric_db_id)
         replay = await _replay_chat_response(db, session, current_user.id, body.client_message_id, can_generate_metrics)
         if replay is not None:
             return replay

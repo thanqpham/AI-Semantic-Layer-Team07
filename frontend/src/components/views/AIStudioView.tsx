@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { MessageSquare, Plus } from 'lucide-react';
 
 import {
   ChatMessageItem,
-  ChatOrchestratorResponse,
+  ChatClarificationSelection,
   ChatSessionItem,
   createMetricApi,
   getChatSessionDetailApi,
@@ -23,6 +23,7 @@ import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { applySuggestedName, metricName } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
+import { PendingChat, pendingChatKey, readPendingChat, storePendingChat } from '@/lib/pendingChat';
 
 interface AIStudioViewProps {
   layer: SemanticLayerData;
@@ -108,47 +109,16 @@ export function AIStudioView({
     ]);
   };
 
-  useEffect(() => {
-    const version = ++requestVersion.current;
-    if (!semanticDbId || layer.source_type !== 'live') {
-      showWelcome();
-      return;
-    }
-
-    if (!activeSessionId) {
-      showWelcome();
-      return;
-    }
-
-    const loadDetail = async () => {
-      try {
-        const detail = await getChatSessionDetailApi(String(semanticDbId), activeSessionId);
-        if (version !== requestVersion.current) return;
-        setMessages(detail.messages.filter((item) => item.sender !== 'system').map(toChatMessage));
-      } catch (error) {
-        if (version === requestVersion.current) {
-          appendError(
-            setMessages,
-            error instanceof Error ? error.message : 'Không thể tải lịch sử cuộc trò chuyện.',
-          );
-        }
-      }
-    };
-
-    void loadDetail();
-  }, [activeSessionId, layer.db_name, layer.source_type, semanticDbId]);
-
-  useEffect(() => {
-    if (!semanticDbId || canGenerateMetrics) return;
-    void listMetricRequestsApi(String(semanticDbId)).then(setMetricRequests).catch(() => setMetricRequests([]));
-  }, [canGenerateMetrics, semanticDbId, refreshKey]);
-
-  const send = async (prompt: string, _targetTables: string[], reuseMetricId?: number) => {
-    const clientMessageId = crypto.randomUUID();
-    const requestSessionId = activeSessionId;
+  const send = async (
+    prompt: string, _targetTables: string[], reuseMetricId?: number,
+    selection?: ChatClarificationSelection, pending?: PendingChat,
+  ) => {
+    const clientMessageId = pending?.clientMessageId || crypto.randomUUID();
+    const requestSessionId = pending ? pending.sessionId : activeSessionId;
+    const version = requestVersion.current;
 
     setMessages((current) => [
-      ...current,
+      ...current.filter((item) => item.id !== clientMessageId),
       { id: clientMessageId, sender: 'user', text: prompt, timestamp: now() },
     ]);
     if (!semanticDbId) {
@@ -157,9 +127,13 @@ export function AIStudioView({
         'Semantic Layer đang được khởi tạo. Vui lòng tải lại sau khi enrichment hoàn tất.',
       );
     }
+    const storageKey = pendingChatKey(semanticDbId, requestSessionId);
+    storePendingChat(storageKey, { prompt, clientMessageId, sessionId: requestSessionId, reuseMetricId, selection });
     setLoading(true);
     try {
-      const response = reuseMetricId
+      const response = selection
+        ? await sendChatOrchestratorApi(String(semanticDbId), prompt, requestSessionId, clientMessageId, selection)
+        : reuseMetricId
         ? await sendChatOrchestratorApi(
             String(semanticDbId),
             prompt,
@@ -169,7 +143,8 @@ export function AIStudioView({
             reuseMetricId,
           )
         : await sendChatOrchestratorApi(String(semanticDbId), prompt, requestSessionId, clientMessageId);
-      if (requestSessionId && activeSessionId !== requestSessionId) return;
+      if (readPendingChat(storageKey)?.clientMessageId === clientMessageId) storePendingChat(storageKey, null);
+      if (version !== requestVersion.current) return;
       if (response.session_id) {
         setActiveSessionId?.(response.session_id);
         if (typeof window !== 'undefined') {
@@ -232,65 +207,66 @@ export function AIStudioView({
         },
       ]);
     } catch (error) {
+      if (version !== requestVersion.current) return;
       appendError(setMessages, error instanceof Error ? error.message : 'Không thể xử lý yêu cầu');
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   };
 
-  const handleSelectClarification = async (
-    assistantMessageId: string,
-    optionId: string,
-    label: string,
-  ) => {
-    if (!semanticDbId) return;
-    const clientMessageId = crypto.randomUUID();
-    const requestSessionId = activeSessionId;
+  const resumeRequest = useEffectEvent((request: PendingChat) => send(
+    request.prompt, [], request.reuseMetricId, request.selection, request,
+  ));
 
-    setMessages((current) => [
-      ...current,
-      { id: clientMessageId, sender: 'user', text: label, timestamp: now() },
-    ]);
-    setLoading(true);
-    try {
-      const response = await sendChatOrchestratorApi(
-        String(semanticDbId),
-        label,
-        requestSessionId,
-        clientMessageId,
-        { assistant_message_id: assistantMessageId, option_id: optionId },
-      );
-      if (requestSessionId && activeSessionId !== requestSessionId) return;
-      if (response.session_id) {
-        setActiveSessionId?.(response.session_id);
-      }
-      if (response.session) {
-        setSessions?.((current) => [
-          response.session!,
-          ...current.filter((item) => item.id !== response.session!.id),
-        ]);
-      }
-      setMessages((current) => [
-        ...current,
-        {
-          id: response.assistant_message_id || crypto.randomUUID(),
-          sender: 'assistant',
-          text: response.chat_response || metricResponseFallback(response),
-          suggestions: response.suggestions || undefined,
-          duplicates: response.duplicates,
-          dedupeSkipped: response.dedupe_performed === false,
-          suggestionAction: response.suggestion_action,
-          queryResult: response.semantic_query_result,
-          clarification: response.clarification,
-          timestamp: now(),
-        },
-      ]);
-    } catch (error) {
-      appendError(setMessages, error instanceof Error ? error.message : 'Không thể thực thi lựa chọn');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    const version = ++requestVersion.current;
+    setLoading(false);
+    if (!semanticDbId || layer.source_type !== 'live') {
+      showWelcome();
+      return;
     }
-  };
+
+    if (!activeSessionId) {
+      showWelcome();
+      const pending = readPendingChat(pendingChatKey(semanticDbId, null));
+      if (pending) void resumeRequest(pending);
+      return () => { requestVersion.current = version + 1; };
+    }
+
+    const loadDetail = async () => {
+      try {
+        const detail = await getChatSessionDetailApi(String(semanticDbId), activeSessionId);
+        if (version !== requestVersion.current) return;
+        const storageKey = pendingChatKey(semanticDbId, activeSessionId);
+        let pending = readPendingChat(storageKey);
+        if (pending && detail.messages.some((item) => item.client_message_id === `${pending!.clientMessageId}:assistant`)) {
+          storePendingChat(storageKey, null);
+          pending = null;
+        }
+        setMessages(detail.messages.filter((item) => item.sender !== 'system'
+          && (!pending || item.client_message_id !== pending.clientMessageId)).map(toChatMessage));
+        if (pending) void resumeRequest(pending);
+      } catch (error) {
+        if (version === requestVersion.current) {
+          appendError(
+            setMessages,
+            error instanceof Error ? error.message : 'Không thể tải lịch sử cuộc trò chuyện.',
+          );
+        }
+      }
+    };
+
+    void loadDetail();
+    return () => { requestVersion.current = version + 1; };
+  }, [activeSessionId, layer.db_name, layer.source_type, semanticDbId]);
+
+  useEffect(() => {
+    if (!semanticDbId || canGenerateMetrics) return;
+    void listMetricRequestsApi(String(semanticDbId)).then(setMetricRequests).catch(() => setMetricRequests([]));
+  }, [canGenerateMetrics, semanticDbId, refreshKey]);
+
+  const handleSelectClarification = (assistantMessageId: string, optionId: string, label: string) =>
+    send(label, [], undefined, { assistant_message_id: assistantMessageId, option_id: optionId });
 
   const updateMessage = (messageId: string, updater: (message: ChatMessage) => ChatMessage): void => {
     setMessages((current) => current.map((message) => (message.id === messageId ? updater(message) : message)));
@@ -499,16 +475,4 @@ function appendError(
 
 function now(): string {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function metricResponseFallback(
-  response: Pick<ChatOrchestratorResponse, 'chat_response' | 'suggestions' | 'duplicates'>,
-): string {
-  if (response.suggestions?.length) {
-    return `Dựa trên schema của bạn, tôi đề xuất ${response.suggestions.length} Metric Definition dưới đây.`;
-  }
-  if (response.duplicates?.length) {
-    return 'Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer.';
-  }
-  return 'Tôi chưa tìm thấy cấu trúc dữ liệu phù hợp trong hệ thống để tự động đề xuất chỉ số này.';
 }
