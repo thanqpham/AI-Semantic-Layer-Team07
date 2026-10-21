@@ -1,6 +1,7 @@
 import logging
 import os
 from collections.abc import Callable
+from contextvars import ContextVar
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
@@ -11,6 +12,7 @@ from langchain_openai import ChatOpenAI
 from src.config import Settings, get_settings, reload_settings
 from src.observability.langfuse_tracing import llm_trace_callbacks
 from src.observability.llm_usage import BenchmarkUsageCallback
+from src.services.llm_providers import PROVIDERS
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,8 @@ _DEFAULT_MODELS = {
     "groq": "openai/gpt-oss-120b",
     "mimo": "mimo-v2.5",
     "anthropic": "claude-sonnet-5",
+    "openrouter": "openrouter/auto",
+    "deepseek": "deepseek-flash",
 }
 
 # Wire protocol per provider — providers not listed speak the OpenAI protocol
@@ -67,6 +71,9 @@ class LLMConfig(NamedTuple):
     temperature: float
 
 
+account_llm_config: ContextVar[LLMConfig | None] = ContextVar("account_llm_config", default=None)
+
+
 def _provider_api_keys(settings: Settings) -> dict[str, str]:
     return {
         "openai": settings.openai_api_key,
@@ -79,6 +86,7 @@ def _provider_api_keys(settings: Settings) -> dict[str, str]:
 
 def _provider_base_urls(settings: Settings) -> dict[str, str]:
     return {
+        **{provider: values[1] for provider, values in PROVIDERS.items()},
         "openai": settings.openai_api_base,
         "gemini": settings.google_api_base,
         "groq": settings.groq_api_base,
@@ -298,15 +306,14 @@ def _settings_with_hot_reload() -> Settings:
 
 
 def get_llm(role: str | None = None) -> BaseChatModel:
-    """Return a chat model client for the given role, reusing cached clients.
-
-    Args:
-        role: Optional call-site role. "enrich" and "metric" select their
-            model override; "judge" uses the isolated Judge configuration.
-            None uses the global Agent model configuration.
-    """
+    """Reuse clients for account settings or environment role/Judge settings."""
     settings = _settings_with_hot_reload()
-    config = _resolve_llm_config(settings, role=role)
+    override = account_llm_config.get()
+    if override is not None and role != "judge":
+        _resolve_role_model(settings, role)  # Validate the role; account model overrides environment models.
+        config = override
+    else:
+        config = _resolve_llm_config(settings, role=role)
 
     cached = _client_cache.get(config)
     if cached is not None:

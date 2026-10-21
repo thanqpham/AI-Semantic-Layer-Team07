@@ -95,6 +95,16 @@ describe('WorkspaceSidebar', () => {
   });
 
   describe('expanded layout', () => {
+    it('shows the workspace title above its name and the role below the user name', () => {
+      workspaceState.role = 'data_lead';
+      render(<WorkspaceSidebar {...defaultProps} userName="alice" />);
+
+      expect(screen.getByText('Workspace').nextElementSibling).toContainElement(screen.getByText('Risk Analytics'));
+      const accountName = screen.getByText('alice');
+      expect(accountName.nextElementSibling).toHaveTextContent('Role: data lead');
+      expect(screen.getByText('data lead').closest('[class*="border-t"]')).toContainElement(accountName);
+    });
+
     it('renders sidebar at 288px width (w-72)', () => {
       render(<WorkspaceSidebar {...defaultProps} collapsed={false} />);
 
@@ -121,24 +131,26 @@ describe('WorkspaceSidebar', () => {
     it('shows footer with settings button', () => {
       render(<WorkspaceSidebar {...defaultProps} collapsed={false} />);
 
-      expect(screen.getByText('Settings')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
     });
 
     it('renders footer with inline flex layout matching reference', () => {
       render(<WorkspaceSidebar {...defaultProps} collapsed={false} />);
 
-      const footer = screen.getByText('Settings').closest('[class*="border-t"]');
+      const footer = screen.getByRole('button', { name: 'Settings' }).closest('[class*="border-t"]');
       expect(footer).toHaveClass('flex');
       expect(footer).toHaveClass('items-center');
       expect(footer).toHaveClass('justify-between');
     });
 
-    it('preserves userName and logout in footer when provided', () => {
-      const onLogout = vi.fn();
-      render(<WorkspaceSidebar {...defaultProps} userName="alice" onLogout={onLogout} collapsed={false} />);
+    it('places theme and settings beside the account name without a sidebar logout button', () => {
+      render(<WorkspaceSidebar {...defaultProps} userName="alice" collapsed={false} />);
 
-      expect(screen.getByText('alice')).toBeInTheDocument();
-      expect(screen.getByTitle('Log out')).toBeInTheDocument();
+      const settings = screen.getByRole('button', { name: 'Settings' });
+      const theme = screen.getByRole('button', { name: 'Toggle theme' });
+      expect(theme.nextElementSibling).toBe(settings);
+      expect(settings.parentElement?.parentElement).toContainElement(screen.getByText('alice'));
+      expect(screen.queryByTitle('Log out')).not.toBeInTheDocument();
     });
   });
 
@@ -233,6 +245,20 @@ describe('WorkspaceSidebar', () => {
       expect(buttons[4]).toHaveAttribute('aria-label', 'Export Playground');
       expect(buttons[5]).toHaveAttribute('aria-label', 'Open chat history');
     });
+
+    it('stacks theme above settings and can open settings from the collapsed rail', () => {
+      const onOpenSettings = vi.fn();
+      const onToggleTheme = vi.fn();
+      render(<WorkspaceSidebar {...defaultProps} collapsed onOpenSettings={onOpenSettings} onToggleTheme={onToggleTheme} />);
+      const settings = screen.getByRole('button', { name: 'Settings' });
+      const theme = screen.getByRole('button', { name: 'Toggle theme' });
+      expect(theme.parentElement).toHaveClass('flex-col');
+      expect(theme.nextElementSibling).toBe(settings);
+      fireEvent.click(theme);
+      fireEvent.click(settings);
+      expect(onToggleTheme).toHaveBeenCalledOnce();
+      expect(onOpenSettings).toHaveBeenCalledOnce();
+    });
   });
 
   describe('selected view behavior', () => {
@@ -317,7 +343,7 @@ describe('WorkspaceSidebar', () => {
       const onOpenSettings = vi.fn();
       render(<WorkspaceSidebar {...defaultProps} onOpenSettings={onOpenSettings} />);
 
-      fireEvent.click(screen.getByText('Settings'));
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
       expect(onOpenSettings).toHaveBeenCalledTimes(1);
     });
 

@@ -226,6 +226,20 @@ Sao chép `.env.example` thành `.env` tại thư mục gốc:
 cp .env.example .env
 ```
 
+#### Chọn provider và model trong Cài đặt
+
+Sau khi cập nhật backend, chạy `alembic upgrade head`, đăng nhập rồi mở **Cài đặt → Nhà cung cấp & model AI**:
+
+1. Chọn OpenRouter, Google Gemini, OpenAI, Anthropic (Claude), DeepSeek, Groq hoặc MiMo.
+2. Nhập API key của provider. Bấm **Tải danh sách model** rồi chọn model chat, hoặc nhập chính xác model ID.
+3. Bấm **Lưu cấu hình AI**. Cấu hình có hiệu lực cho các yêu cầu AI tiếp theo, không cần khởi động lại.
+
+Key được mã hóa Fernet trong Metadata Store theo tài khoản, không lưu trong trình duyệt và không trả về qua API. Mỗi provider nhớ key/model đã lưu; để trống ô key để giữ key cũ. Tác vụ đồng bộ schema chạy theo lịch sử dụng cấu hình của người tạo nguồn dữ liệu.
+
+Không cần điền API key LLM trong `.env` khi dùng cấu hình tài khoản. Vẫn cần `DATABASE_URL` và `ENCRYPTION_KEY` hợp lệ trên backend; giữ nguyên khóa mã hóa để đọc được thông tin đã lưu. Các biến LLM bên dưới là cấu hình dự phòng cho tài khoản chưa lưu lựa chọn và cho CLI/evaluation; cấu hình Judge giữ riêng.
+
+Danh sách model lấy từ API chính thức của [OpenRouter](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties), [Google Gemini](https://ai.google.dev/gemini-api/docs/openai), [Claude](https://platform.claude.com/docs/en/api/python/models/list) và [DeepSeek](https://api-docs.deepseek.com/api/list-models/).
+
 #### 📋 Bảng Chi tiết Biến Môi trường (Environment Variables Reference)
 
 | Nhóm | Tên biến | Kiểu / Giá trị mẫu | Bắt buộc | Mô tả chi tiết |
@@ -240,7 +254,7 @@ cp .env.example .env
 | **Database** | `DATABASE_URL` | `postgresql+asyncpg://dev:devpassword@localhost:5432/semantic_layer_dev` | **Có** | Connection string Metadata Store (PostgreSQL AsyncPG) |
 | | `TARGET_DATABASE_URL` | `postgresql://dev:devpassword@localhost:5432/ecommerce_db` | Không | Connection string dùng cho script tạo Live Target DB mẫu |
 | **LLM Provider** | `LLM_PROVIDER` | `openai` \| `gemini` \| `groq` \| `mimo` \| `anthropic` \| `custom` | Không (Mặc định: `openai`) | Lựa chọn nhà cung cấp mô hình ngôn ngữ lớn |
-| | `OPENAI_API_KEY` | `sk-proj-...` | **Có (nếu LLM=openai)** | Khóa API của OpenAI |
+| | `OPENAI_API_KEY` | `sk-proj-...` | Tùy chọn khi đã lưu trong Cài đặt | Khóa API dự phòng của OpenAI |
 | | `GOOGLE_API_KEY` | `AIzaSy...` | Tùy chọn (nếu LLM=gemini) | Khóa API Google AI Studio |
 | | `GROQ_API_KEY` | `gsk_...` | Tùy chọn (nếu LLM=groq) | Khóa API Groq Cloud (Tốc độ phản hồi cực nhanh) |
 | | `MIMO_API_KEY` | `your-mimo-key` | Tùy chọn (nếu LLM=mimo) | Khóa API Xiaomi MiMo |

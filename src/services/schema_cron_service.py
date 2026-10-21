@@ -15,8 +15,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.db import LiveTargetDbModel, SemanticDatabaseModel
+from src.models.db import LiveTargetDbModel, SchemaSyncLogModel, SemanticDatabaseModel
 from src.services.database import get_db_session
+from src.services.llm import account_llm_config
+from src.services.llm_settings_service import load_account_llm_config
 from src.services.schema_self_healing_service import execute_self_healing
 
 logger = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ async def _sync_databases_with_session(session: AsyncSession, results: dict[str,
 
     for sem_db_id in db_ids:
         try:
-            log = await execute_self_healing(session, sem_db_id, trigger_type="cron")
+            log = await _sync_with_owner_llm(session, sem_db_id)
             if log.status == "healed":
                 results["healed"] += 1
             else:
@@ -56,6 +58,19 @@ async def _sync_databases_with_session(session: AsyncSession, results: dict[str,
             results["errors"] += 1
             logger.error("[Schema Cron Job] Failed auto-sync for DB ID=%d: %s", sem_db_id, exc)
             results["details"].append({"db_id": sem_db_id, "status": "error", "error": str(exc)})
+
+
+async def _sync_with_owner_llm(session: AsyncSession, sem_db_id: int) -> SchemaSyncLogModel:
+    """Run scheduled healing with the database creator's account settings."""
+    owner_id = await session.scalar(
+        select(SemanticDatabaseModel.created_by).where(SemanticDatabaseModel.id == sem_db_id)
+    )
+    config = await load_account_llm_config(session, owner_id) if owner_id is not None else None
+    token = account_llm_config.set(config)
+    try:
+        return await execute_self_healing(session, sem_db_id, trigger_type="cron")
+    finally:
+        account_llm_config.reset(token)
 
 
 async def run_daily_schema_sync_job(db: AsyncSession | None = None) -> dict[str, Any]:

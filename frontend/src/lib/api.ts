@@ -561,6 +561,32 @@ export async function semanticRequest<T>(path: string, init: RequestInit = {}): 
   return response.json() as Promise<T>;
 }
 
+export interface LLMSettings {
+  provider: string;
+  model: string;
+  source: 'account' | 'environment';
+  saved_models: Record<string, string>;
+  providers: Array<{ id: string; name: string }>;
+}
+
+export function getLLMSettingsApi(): Promise<LLMSettings> {
+  return semanticRequest('/api/v1/settings/llm');
+}
+
+export function saveLLMSettingsApi(provider: string, model: string, apiKey: string): Promise<LLMSettings> {
+  return semanticRequest('/api/v1/settings/llm', {
+    method: 'PUT',
+    body: JSON.stringify({ provider, model, ...(apiKey ? { api_key: apiKey } : {}) }),
+  });
+}
+
+export function listLLMModelsApi(provider: string, apiKey: string): Promise<string[]> {
+  return semanticRequest('/api/v1/settings/llm/models', {
+    method: 'POST',
+    body: JSON.stringify({ provider, ...(apiKey ? { api_key: apiKey } : {}) }),
+  });
+}
+
 async function toSemanticApiError(response: Response): Promise<SemanticApiError> {
   const payload = (await response.json().catch(() => null)) as {
     detail?: unknown;

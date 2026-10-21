@@ -2,12 +2,17 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse, Response
 
 from src.api.auth import auth_router
 from src.api.dashboard_routes import router as dashboard_router
+from src.api.llm_settings_routes import router as llm_settings_router
+from src.api.llm_settings_routes import use_account_llm
 from src.api.organization_routes import router as organization_router
 from src.api.review_routes import review_router
 from src.api.routes import router
@@ -47,6 +52,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> Response:
+    """Keep API keys out of settings validation responses."""
+    if request.url.path.startswith("/api/v1/settings/llm"):
+        errors = [{key: error[key] for key in ("loc", "msg", "type")} for error in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": errors})
+    return await request_validation_exception_handler(request, exc)
+
+
 settings = get_settings()
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(RateLimitMiddleware)
@@ -63,9 +78,10 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(organization_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
-app.include_router(router, prefix="/api/v1")
-app.include_router(review_router, prefix="/api/v1")
-app.include_router(sync_router, prefix="/api/v1")
+app.include_router(llm_settings_router, prefix="/api/v1")
+app.include_router(router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
+app.include_router(review_router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
+app.include_router(sync_router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
 
 
 @app.get("/health")

@@ -36,7 +36,6 @@ interface WorkspaceAppProps {
   onCreateWorkspace?: () => void;
   onOpenWorkspaceManagement?: () => void;
   onOpenSyncLogs?: () => void;
-  onLogout?: () => void;
   onSelectChatSession?: (sessionId: string) => void;
   onNewChatSession?: () => void;
   onDeleteChatSession?: (sessionId: string) => void;
@@ -74,7 +73,6 @@ export function WorkspaceApp({
   onCreateWorkspace,
   onOpenWorkspaceManagement,
   onOpenSyncLogs,
-  onLogout,
   onSelectChatSession,
   onNewChatSession,
   onDeleteChatSession,
@@ -121,7 +119,6 @@ export function WorkspaceApp({
         onCreateWorkspace={onCreateWorkspace}
         onOpenWorkspaceManagement={onOpenWorkspaceManagement}
         onOpenSyncLogs={onOpenSyncLogs}
-        onLogout={onLogout}
         onSelectChatSession={onSelectChatSession}
         onNewChatSession={onNewChatSession}
         onDeleteChatSession={onDeleteChatSession}
