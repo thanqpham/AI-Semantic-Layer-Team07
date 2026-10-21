@@ -86,7 +86,7 @@ export function WorkspaceApp({
       aria-label={translate("Workspace")}
       className={cn(
         theme === 'dark' ? 'dark' : '',
-        'flex h-screen w-full overflow-hidden bg-background text-foreground',
+        'fixed inset-0 flex h-dvh w-full overflow-hidden bg-background text-foreground',
       )}
     >
       <WorkspaceSidebar

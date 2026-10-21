@@ -58,7 +58,7 @@ describe('WorkspaceApp', () => {
 
     const workspace = screen.getByRole('region', { name: /workspace/i });
     expect(workspace).toBeInTheDocument();
-    expect(workspace).toHaveClass('flex', 'h-screen');
+    expect(workspace).toHaveClass('flex', 'h-dvh');
 
     expect(screen.getByRole('complementary')).toBeInTheDocument();
     expect(screen.getByRole('main')).toBeInTheDocument();
