@@ -255,7 +255,7 @@ export function SchemaReviewView({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
       <ViewHeader
         eyebrow="Flow 1 · HITL Review"
         title={translate("Schema Review")}
@@ -278,7 +278,7 @@ export function SchemaReviewView({
         }
       />
 
-      <div className="flex flex-col gap-4 p-4 sm:p-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         {!canManageSchema && (
           <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">
             <Translated text={"Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt."} />
@@ -315,7 +315,7 @@ export function SchemaReviewView({
           return (
             <section
               key={table.table_name}
-              className="rounded-xl border border-border bg-card p-4 shadow-sm"
+              className="shrink-0 rounded-xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="flex flex-wrap items-center gap-3">
                 <button

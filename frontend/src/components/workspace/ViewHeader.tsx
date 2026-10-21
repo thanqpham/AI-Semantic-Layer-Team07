@@ -28,7 +28,7 @@ export function ViewHeader({
 }: ViewHeaderProps) {
   const { translate } = useLanguage();
   return (
-    <header className="view-header-container relative overflow-hidden border-b border-border px-4 py-5 sm:px-6">
+    <header className="view-header-container relative w-full shrink-0 overflow-hidden border-b border-border px-4 py-5 sm:px-6">
       {/* Editorial grid backdrop */}
       <div className="ws-grid-bg pointer-events-none absolute inset-0" aria-hidden />
 

@@ -45,7 +45,23 @@ vi.mock('@/components/views/AIStudioView', () => ({ AIStudioView: () => null }))
 vi.mock('@/components/views/ExportPlaygroundView', () => ({
   ExportPlaygroundView: () => <div data-testid="export-playground-view" />,
 }));
-vi.mock('@/components/views/MetricsCatalogView', () => ({ MetricsCatalogView: () => null }));
+vi.mock('@/components/views/MetricsCatalogView', () => ({
+  MetricsCatalogView: (props: {
+    metrics: apiModule.MetricRecord[];
+    onApproveMetric?: (id: number) => Promise<void>;
+    onApproveAll?: () => Promise<void>;
+  }) => (
+    <div>
+      {props.metrics.map((metric) => (
+        <div key={metric.metric_id}>
+          {metric.has_pending_version ? 'review-pending' : `published-version-${metric.version}`}
+          <button onClick={() => void props.onApproveMetric?.(metric.metric_id)}>catalog-approve-single</button>
+        </div>
+      ))}
+      <button onClick={() => void props.onApproveAll?.()}>catalog-approve-all</button>
+    </div>
+  ),
+}));
 vi.mock('@/components/views/MetricsDashboardView', () => ({
   MetricsDashboardView: () => <div data-testid="metrics-dashboard-view" />,
 }));
@@ -67,6 +83,9 @@ vi.mock('@/components/workspace/WorkspaceApp', () => ({
       )}
       {props.onSelectView && (
         <button onClick={() => props.onSelectView?.('export')}>page-nav-export</button>
+      )}
+      {props.onSelectView && (
+        <button onClick={() => props.onSelectView?.('catalog')}>page-nav-catalog</button>
       )}
       {props.children}
     </div>
@@ -119,6 +138,51 @@ vi.mock('@/lib/api', () => ({
   updateChatSessionTitleApi: vi.fn(),
   updateMetricApi: vi.fn(),
 }));
+
+describe('WorkspacePage metric approval sync', () => {
+  afterEach(() => {
+    cleanup();
+    state.permissions = { can_manage_schema: false };
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([]);
+    vi.mocked(apiModule.listMetricsApi).mockResolvedValue([]);
+  });
+
+  it.each(['single', 'all'])('refreshes the published version after %s approval without reloading', async (mode) => {
+    state.permissions = { can_manage_metrics: true, can_approve_metrics: true };
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([{
+      id: 1, display_name: 'Test DB', dialect: 'postgresql', updated_at: '', created_at: '',
+      semantic_db_id: 1, table_count: 1,
+    }]);
+    const metric: apiModule.MetricRecord = {
+      metric_id: 7, name: 'Revenue', definition: null, source: 'manual', created_at: '',
+      status: 'approved', version: 1, has_pending_version: true,
+    };
+    const published = { ...metric, version: 2, has_pending_version: false };
+    vi.mocked(apiModule.listMetricsApi).mockResolvedValue([metric]);
+    vi.mocked(apiModule.approveSingleMetricApi).mockImplementation(async () => {
+      vi.mocked(apiModule.listMetricsApi).mockResolvedValue([published]);
+      return published;
+    });
+    vi.mocked(apiModule.approveMetricsApi).mockImplementation(async () => {
+      vi.mocked(apiModule.listMetricsApi).mockResolvedValue([published]);
+      return { approved_count: 1, message: 'Approved' };
+    });
+
+    render(<WorkspacePage />);
+    expect(await screen.findByText('review-pending')).toBeInTheDocument();
+    const catalogCalls = vi.mocked(apiModule.getSemanticCatalogApi).mock.calls.length;
+    fireEvent.click(screen.getByText('page-nav-dashboard'));
+    await waitFor(() => expect(apiModule.getSemanticCatalogApi).toHaveBeenCalledTimes(catalogCalls + 1));
+    fireEvent.click(screen.getByText('page-nav-catalog'));
+    expect(await screen.findByText('review-pending')).toBeInTheDocument();
+    fireEvent.click(screen.getByText(`catalog-approve-${mode}`));
+
+    expect(await screen.findByText('published-version-2')).toBeInTheDocument();
+    expect(screen.queryByText('review-pending')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('page-nav-dashboard'));
+    await waitFor(() => expect(apiModule.getSemanticCatalogApi).toHaveBeenCalledTimes(catalogCalls + 2));
+  });
+});
 
 describe('WorkspacePage schema management', () => {
   afterEach(() => {

@@ -38,6 +38,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.db_base import Base, utc_now
 from src.models.db_chat import ChatMessageModel, ChatSessionModel
+from src.models.llm_settings import UserLLMSettingsModel
 from src.models.review_mixin import REVIEW_STATUS_CHECK, ReviewStateMixin
 
 __all__ = [
@@ -61,6 +62,7 @@ __all__ = [
     "SemanticMetricModel",
     "SemanticTableModel",
     "UserModel",
+    "UserLLMSettingsModel",
     "UserSessionModel",
     "utc_now",
 ]

@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     rate_limit_rpm: int = Field(default=15, ge=1, le=10000)
 
     # LLM Provider — any OpenAI-compatible endpoint name is accepted.
-    # Known presets: openai | gemini | groq | mimo | anthropic.
+    # Known presets: openai | gemini | groq | mimo | anthropic | openrouter | deepseek.
     # Aliases: google -> gemini, claude -> anthropic.
-    # A custom name (e.g. "custom", "vllm", "deepseek") requires LLM_API_BASE below.
+    # A custom name (e.g. "custom", "vllm") requires LLM_API_BASE below.
     llm_provider: str = "mimo"
 
     # Wire protocol used to talk to the provider. Empty = derive from LLM_PROVIDER

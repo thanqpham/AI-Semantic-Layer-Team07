@@ -11,7 +11,6 @@ import {
   Compass,
   History,
   LayoutDashboard,
-  LogOut,
   Moon,
   PanelLeftClose,
   Plus,
@@ -64,7 +63,6 @@ interface WorkspaceSidebarProps {
   onCreateWorkspace?: () => void;
   onOpenWorkspaceManagement?: () => void;
   onOpenSyncLogs?: () => void;
-  onLogout?: () => void;
   onSelectChatSession?: (sessionId: string) => void;
   onNewChatSession?: () => void;
   onDeleteChatSession?: (sessionId: string) => void;
@@ -119,7 +117,6 @@ export function WorkspaceSidebar({
   onCreateWorkspace,
   onOpenWorkspaceManagement,
   onOpenSyncLogs,
-  onLogout,
   onSelectChatSession,
   onNewChatSession,
   onDeleteChatSession,
@@ -231,14 +228,26 @@ export function WorkspaceSidebar({
             </button>
           )}
         </nav>
-        <button
-          type="button"
-          onClick={onToggleTheme}
-          className="rounded-md p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
-          aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
+        <div className="flex flex-col items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
+            aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
+            title={t('Toggle theme', 'Đổi giao diện sáng/tối')}
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
+            aria-label={t('Settings', 'Cài đặt')}
+            title={t('Settings', 'Cài đặt')}
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
       </aside>
     );
   }
@@ -261,7 +270,7 @@ export function WorkspaceSidebar({
         </button>
       </div>
 
-      {/* Workspace Switcher & RBAC */}
+      {/* Workspace Switcher */}
       <div className="relative px-3 pb-2">
         <div className="flex items-center gap-1.5 rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
@@ -271,15 +280,13 @@ export function WorkspaceSidebar({
             className="min-w-0 flex-1 cursor-pointer"
             onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
           >
+            <p className="font-mono text-[10px] text-sidebar-foreground/50">Workspace</p>
             <div className="flex items-center gap-1">
               <span className="truncate text-xs font-semibold text-sidebar-foreground">
                 {currentWorkspace?.name || 'Workspace'}
               </span>
               <ChevronDown className="h-3 w-3 shrink-0 text-sidebar-foreground/50" />
             </div>
-            <p className="truncate font-mono text-[10px] text-sidebar-foreground/50 capitalize">
-              {role ? role.replace('_', ' ') : t('No role', 'Chưa có vai trò')}
-            </p>
           </div>
           {canManageWorkspace && onOpenWorkspaceManagement && (
             <button
@@ -498,39 +505,35 @@ export function WorkspaceSidebar({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between border-t border-sidebar-border px-3 py-3">
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
-        >
-          <Settings className="h-4 w-4" />
-          <Translated text={"Settings"} />
-        </button>
-        <button
-          type="button"
-          onClick={onToggleTheme}
-          className="h-8 w-8 rounded-md text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent cursor-pointer"
-          aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-      </div>
-      {userName && (
-        <div className="flex items-center justify-between border-t border-sidebar-border px-3 py-2">
-          <span className="truncate text-xs font-medium text-sidebar-foreground">{userName}</span>
-          {onLogout && (
-            <button
-              type="button"
-              onClick={onLogout}
-              className="rounded p-1 text-sidebar-foreground/50 transition-colors hover:text-destructive cursor-pointer"
-              title={t('Log out', 'Đăng xuất')}
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          )}
+      <div className="flex items-center justify-between gap-3 border-t border-sidebar-border px-4 py-3">
+        <div className="min-w-0 flex-1">
+          {userName && <p className="truncate text-sm font-semibold leading-5 text-sidebar-foreground">{userName}</p>}
+          <p className="mt-1.5 flex w-fit max-w-full items-center gap-1.5 rounded-full border border-sidebar-border bg-sidebar-accent/60 px-2.5 py-0.5 text-[11px] leading-4">
+            <span className="shrink-0 text-sidebar-foreground/60">{t('Role', 'Vai trò')}:</span>{' '}
+            <span className="truncate font-semibold capitalize text-sidebar-foreground">{role ? role.replace('_', ' ') : t('No role', 'Chưa có vai trò')}</span>
+          </p>
         </div>
-      )}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent cursor-pointer"
+            aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
+            title={t('Toggle theme', 'Đổi giao diện sáng/tối')}
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
+            aria-label={t('Settings', 'Cài đặt')}
+            title={t('Settings', 'Cài đặt')}
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
     </aside>
   );
 }

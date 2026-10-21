@@ -194,7 +194,7 @@ function viewIdToTab(view: ViewId): WorkspaceTab {
 
 export default function WorkspacePage() {
   const router = useRouter();
-  const { user, token, logout, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { currentWorkspace, permissions, role } = useWorkspace();
   const [layers, setLayers] = useState<SemanticLayerData[]>([]);
@@ -588,6 +588,8 @@ export default function WorkspacePage() {
       if (tab === 'explorer' || tab === 'dashboard') {
         const nextCatalog = await getSemanticCatalogApi(dbId);
         setCatalog(nextCatalog);
+      } else {
+        setCatalog(null);
       }
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Không thể tải Semantic Layer');
@@ -726,32 +728,14 @@ export default function WorkspacePage() {
   const approve = async () => {
     if (!activeLayer?.semantic_db_id) return;
     const response = await approveMetricsApi(activeLayer.semantic_db_id);
-    setLayers((current) =>
-      current.map((item) =>
-        item.id === activeLayerId
-          ? {
-            ...item,
-            metrics: item.metrics.map((m) => ({ ...m, status: 'approved' })),
-          }
-          : item,
-      ),
-    );
+    await refreshSemanticData();
     notify(`Đã phê duyệt ${response.approved_count} metric.`);
   };
 
   const approveSingleMetric = async (metricId: number) => {
     if (!activeLayer?.semantic_db_id) return;
     await approveSingleMetricApi(String(activeLayer.semantic_db_id), metricId);
-    setLayers((current) =>
-      current.map((item) =>
-        item.id === activeLayerId
-          ? {
-            ...item,
-            metrics: item.metrics.map((m) => (m.metric_id === metricId ? { ...m, status: 'approved' } : m)),
-          }
-          : item,
-      ),
-    );
+    await refreshSemanticData();
     notify('Đã phê duyệt chỉ số thành công.');
   };
 
@@ -855,7 +839,6 @@ export default function WorkspacePage() {
         setLastReadLogId(syncStatus?.latest_log?.id ?? 0);
         setSyncModalOpen(true);
       }}
-      onLogout={logout}
       onSelectChatSession={canChat ? selectSession : undefined}
       onNewChatSession={canChat ? newChat : undefined}
       onDeleteChatSession={canChat ? removeSession : undefined}
