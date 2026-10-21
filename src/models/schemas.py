@@ -1027,6 +1027,7 @@ class ChatResponse(BaseModel):
     user_message_id: str
     assistant_message_id: str
     session: ChatSessionSummaryResponse | None = None
+    execution_trace: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------

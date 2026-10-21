@@ -80,6 +80,7 @@ from src.models.schemas import (
     SemanticTableUpdate,
     SqlDumpPreviewResponse,
 )
+from src.services.chat_execution import SAFE_ERROR, ChatExecution, current_execution, execution_step, stream_execution
 from src.services.chat_service import (
     ChatAuthorizationError,
     auto_generate_session_title,
@@ -96,7 +97,8 @@ from src.services.chat_service import (
     save_chat_message,
     update_chat_session_title,
 )
-from src.services.chat_tasks import run_chat_task
+from src.services.chat_tasks import start_chat_task
+from src.services.chat_trace_storage import execute_with_trace
 from src.services.database import decrypt_conn_url, get_db_session, get_session_factory
 from src.services.dimension_recommender import get_dimensions_for_metric, get_filter_columns_for_metric
 from src.services.export_service import build_semantic_layer_dict, serialize_to_json, serialize_to_yaml
@@ -1856,6 +1858,58 @@ async def chat_orchestrator(
     """Route read-only data assistance, live semantic querying, or metric generation."""
     if not body.client_message_id:
         return await _execute_chat_request(db_id, body, org_id, current_user, db)
+    await _authorize_chat_subscription(db_id, body, org_id, current_user, db)
+    task, _ = _start_chat_request(db_id, body, org_id, current_user, db)
+    return await asyncio.shield(task)
+
+
+@router.post("/semantic/{db_id}/chat/stream")
+async def chat_orchestrator_stream(
+    db_id: str,
+    body: ChatRequest,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    """Authorize every subscription before attaching to a shared chat execution."""
+    if not body.client_message_id:
+        raise HTTPException(status_code=422, detail="client_message_id is required")
+    await _authorize_chat_subscription(db_id, body, org_id, current_user, db)
+    task, execution = _start_chat_request(db_id, body, org_id, current_user, db)
+    return StreamingResponse(
+        stream_execution(task, execution),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _authorize_chat_subscription(
+    db_id: str,
+    body: ChatRequest,
+    org_id: int | None,
+    current_user: UserModel,
+    db: AsyncSession,
+) -> None:
+    """Recheck access even when a matching task is already running."""
+    try:
+        numeric_id = _chat_db_id(db_id)
+        await get_chat_database(db, current_user.id, numeric_id, org_id=org_id)
+        if body.session_id:
+            session = await get_chat_session(db, body.session_id, current_user.id)
+            if session is None or session.db_id != numeric_id:
+                raise ChatAuthorizationError("Chat session not found")
+    except ChatAuthorizationError as exc:
+        raise HTTPException(status_code=404, detail="Chat session or database not found") from exc
+
+
+def _start_chat_request(
+    db_id: str,
+    body: ChatRequest,
+    org_id: int | None,
+    current_user: UserModel,
+    db: AsyncSession,
+) -> tuple[asyncio.Task[ChatResponse], ChatExecution]:
+    """Create an independent database session owned by the shared task."""
     user_id = current_user.id
     factory = async_sessionmaker(db.bind, expire_on_commit=False)
 
@@ -1867,10 +1921,21 @@ async def chat_orchestrator(
                 raise HTTPException(status_code=401, detail="User not found")
             return await _execute_chat_request(db_id, body, org_id, user, task_db)
 
-    return await run_chat_task((user_id, org_id, db_id, body.client_message_id), execute)
+    return start_chat_task((user_id, org_id, db_id, body.client_message_id), execute)
 
 
 async def _execute_chat_request(
+    db_id: str, body: ChatRequest, org_id: int | None, current_user: UserModel, db: AsyncSession
+) -> ChatResponse:
+    """Collect and persist public progress for all chat entry points."""
+    return await execute_with_trace(
+        lambda: _execute_chat_request_inner(db_id, body, org_id, current_user, db),
+        db,
+        body,
+    )
+
+
+async def _execute_chat_request_inner(
     db_id: str, body: ChatRequest, org_id: int | None, current_user: UserModel, db: AsyncSession
 ) -> ChatResponse:
     """Authorize, replay, or execute one chat request using its own session."""
@@ -1931,12 +1996,15 @@ async def _reuse_existing_metric(
         raise HTTPException(status_code=400, detail="Metric không tồn tại hoặc chưa được phê duyệt")
     _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
     spec = SemanticQuerySpec(metric_ids=[body.reuse_metric_id], dimensions=[], filters=[], limit=100)
+    user_message = await save_chat_message(
+        db, session.id, "user", body.message, client_message_id=body.client_message_id
+    )
     try:
         result = await execute_natural_language_query(db, numeric_db_id, live_db, spec, catalog)
     except SemanticCompileError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
     return await _save_reused_metric_response(
-        db, session, current_user, body, result, can_generate_metrics
+        db, session, current_user, body, result, can_generate_metrics, user_message
     )
 
 
@@ -1947,11 +2015,9 @@ async def _save_reused_metric_response(
     body: ChatRequest,
     result: ChatSemanticQueryResult,
     can_generate_metrics: bool,
+    user_message: ChatMessageModel,
 ) -> ChatResponse:
     """Persist and format the deterministic result for a reused metric."""
-    user_message = await save_chat_message(
-        db, session.id, "user", body.message, client_message_id=body.client_message_id
-    )
     assistant = await save_chat_message(
         db,
         session.id,
@@ -1962,9 +2028,7 @@ async def _save_reused_metric_response(
         client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
     )
     refreshed = await get_chat_session_with_messages(db, session.id, current_user.id)
-    return _format_reused_metric_response(
-        session, user_message, assistant, refreshed, result, can_generate_metrics
-    )
+    return _format_reused_metric_response(session, user_message, assistant, refreshed, result, can_generate_metrics)
 
 
 def _format_reused_metric_response(
@@ -2021,17 +2085,16 @@ async def _handle_clarification_selection(
                 return await _invalid_clarification_option_response(
                     db, session, current_user, body, can_generate_metrics, org_id
                 )
+            user_msg = await save_chat_message(
+                db, session.id, "user", body.message, client_message_id=body.client_message_id
+            )
             try:
                 query_result = await execute_natural_language_query(db, numeric_db_id, live_db, spec, catalog)
             except SemanticCompileError as exc:
                 logger.warning("Semantic compile error for clarification option: %s (%s)", exc.message, exc.code)
                 return await _invalid_clarification_option_response(
-                    db, session, current_user, body, can_generate_metrics, org_id
+                    db, session, current_user, body, can_generate_metrics, org_id, user_msg
                 )
-
-            user_msg = await save_chat_message(
-                db, session.id, "user", body.message, client_message_id=body.client_message_id
-            )
             resp_text = query_result.explanation
             assistant = await save_chat_message(
                 db,
@@ -2087,9 +2150,13 @@ async def _invalid_clarification_option_response(
     body: ChatRequest,
     can_generate_metrics: bool,
     org_id: int | None = None,
+    user_msg: ChatMessageModel | None = None,
 ) -> ChatResponse:
     """Persist and return the stable invalid-option Vietnamese notice for a bad clarification selection."""
-    user_msg = await save_chat_message(db, session.id, "user", body.message, client_message_id=body.client_message_id)
+    if user_msg is None:
+        user_msg = await save_chat_message(
+            db, session.id, "user", body.message, client_message_id=body.client_message_id
+        )
     assistant = await save_chat_message(
         db,
         session.id,
@@ -2156,10 +2223,12 @@ async def _process_standard_chat(
         await _query_target(db, numeric_db_id, current_user.id, org_id)
         parser_catalog = await build_parser_catalog(db, numeric_db_id)
 
-    context = await _build_chat_context(
-        db, numeric_db_id, body.message, preclassified_intent, get_settings().metric_context_token_budget, history
-    )
-    existing_metrics, dedupe_performed = await load_existing_for_dedupe(db, str(numeric_db_id))
+    with execution_step("context"):
+        context = await _build_chat_context(
+            db, numeric_db_id, body.message, preclassified_intent, get_settings().metric_context_token_budget, history
+        )
+    with execution_step("dedupe"):
+        existing_metrics, dedupe_performed = await load_existing_for_dedupe(db, str(numeric_db_id))
     final_state = await _chat_state_for_context(
         chat_agent,
         context,
@@ -2258,6 +2327,8 @@ async def _build_and_save_chat_response(
                 "Bạn có thể thử mô tả chi tiết hơn về các trường dữ liệu cần dùng nhé!"
             )
 
+    if final_state.get("error"):
+        response_text = SAFE_ERROR
     assistant = await save_chat_message(
         db,
         session.id,
@@ -2321,7 +2392,7 @@ async def _execute_or_clarify_semantic_query(
             return None, None, f"Không thể biên dịch câu hỏi này: {exc.message}."
         except Exception as exc:
             logger.error("Failed to execute semantic query: %s", exc, exc_info=True)
-            return None, None, f"Không thể thực thi truy vấn trên cơ sở dữ liệu: {exc}"
+            return None, None, "Không thể thực thi truy vấn trên cơ sở dữ liệu. Vui lòng thử lại."
     clar = interp.clarification or (
         ChatClarificationPayload(**final_state["clarification"]) if final_state.get("clarification") else None
     )
@@ -2436,10 +2507,14 @@ async def _replay_chat_response(
     refreshed = await get_chat_session_with_messages(db, session.id, user_id)
     if refreshed is None:
         return None
+    execution = current_execution()
+    if execution is not None:
+        execution.replayed = True
     return ChatResponse(
         intent=intent,
         chat_response=assistant.content
         if intent in {"chitchat", "data_question", "out_of_scope", "semantic_query"}
+        or metadata.get("status") == "error"
         else None,
         suggestions=suggestions if intent == "metric_query" else None,
         duplicates=duplicates if intent == "metric_query" else [],
@@ -2451,4 +2526,5 @@ async def _replay_chat_response(
         user_message_id=user_message.id,
         assistant_message_id=assistant.id,
         session=_session_summary(refreshed),
+        execution_trace=metadata.get("execution_trace"),
     )

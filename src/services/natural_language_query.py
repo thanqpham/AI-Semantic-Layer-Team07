@@ -21,6 +21,7 @@ from src.models.schemas import (
     SemanticQuerySpec,
     SemanticTimeRange,
 )
+from src.services.chat_execution import execution_step
 from src.services.database import decrypt_conn_url
 from src.services.dimension_recommender import (
     get_dimensions_for_metric,
@@ -180,14 +181,16 @@ async def execute_natural_language_query(
     time_ranges: list[SemanticTimeRange] | None = None,
 ) -> ChatSemanticQueryResult:
     """Compile and execute a validated query spec on the Live DB."""
-    compiled = await SemanticQueryCompiler(db).compile(db_id, spec)
+    with execution_step("sql_compile"):
+        compiled = await SemanticQueryCompiler(db).compile(db_id, spec)
     conn_url = decrypt_conn_url(live_db.conn_url_enc)
-    exec_result = await execute_compiled_query(
-        conn_url=conn_url,
-        dialect=live_db.dialect,
-        compiled=compiled,
-        timeout_seconds=15,
-    )
+    with execution_step("sql_execute"):
+        exec_result = await execute_compiled_query(
+            conn_url=conn_url,
+            dialect=live_db.dialect,
+            compiled=compiled,
+            timeout_seconds=15,
+        )
     explanation = format_deterministic_explanation(
         metric_ids=spec.metric_ids,
         dimensions=spec.dimensions,

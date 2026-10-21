@@ -13,7 +13,7 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import React, { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import React, { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -31,8 +31,13 @@ import { ChatSemanticQueryResult, ChatClarificationPayload } from '@/lib/api';
 import { ChatQueryResultCard } from '@/components/studio/ChatQueryResultCard';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
+import { ExecutionTrace } from '@/lib/chatTrace';
+import { AgentThinking } from './AgentThinking';
+import { AgentFlowPanel } from './AgentFlowPanel';
 
 export interface ChatMessage {
+  executionTrace?: ExecutionTrace | null;
+  reconnecting?: boolean;
   id: string;
   sender: 'user' | 'assistant';
   text: string;
@@ -50,6 +55,8 @@ export interface ChatMessage {
 type SuggestionIndexHandler = (messageId: string, index: number) => void;
 
 interface StudioChatStreamProps {
+  conversationKey?: string | null;
+  reconnecting?: boolean;
   messages: ChatMessage[];
   onSendMessage: (promptText: string, targetTables: string[]) => Promise<void>;
   isLoading: boolean;
@@ -128,6 +135,15 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const { translate } = useLanguage();
   const mode = props.mode || 'metric_studio';
   const canGenerateMetrics = mode === 'metric_studio';
+  const [graph, setGraph] = useState<{ runId: string; title: string; trigger: HTMLButtonElement } | null>(null);
+  const [conversationKey, setConversationKey] = useState(props.conversationKey);
+  if (conversationKey !== props.conversationKey) {
+    setConversationKey(props.conversationKey);
+    if (conversationKey) setGraph(null);
+  }
+  const closeGraph = useCallback(() => setGraph(null), []);
+  const graphMessage = props.messages.find((message) => message.executionTrace?.run_id === graph?.runId);
+  const graphTrace = graphMessage?.executionTrace;
   const [input, setInput] = useState(props.activePromptText || '');
   const [saved, setSaved] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -242,7 +258,8 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   );
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       {/* 💬 Messages Stream */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
@@ -251,10 +268,14 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               <Translated text={"Bạn không có quyền tạo, sửa hoặc lưu metric trực tiếp. Bạn có thể tra cứu dữ liệu qua các metric đã duyệt (chỉ áp dụng cho kết nối Live DB) hoặc yêu cầu AI tạo Business Metric mới. Metric sau khi tạo sẽ được lưu vào Semantic Layer ở trạng thái chờ Data Lead phê duyệt."} />
             </div>
           )}
-          {props.messages.map((message) => (
+          {props.messages.map((message, index) => (
             <MessageBubble
-              key={message.id}
+              key={message.executionTrace?.run_id || message.id}
               message={message}
+              onOpenGraph={(trigger) => message.executionTrace && setGraph({
+                runId: message.executionTrace.run_id, trigger,
+                title: props.messages.slice(0, index).reverse().find((item) => item.sender === 'user')?.text || message.timestamp,
+              })}
               saved={allSavedNames}
               onSave={save}
               onEdit={props.onEditMetric}
@@ -272,7 +293,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
             />
           ))}
 
-          {props.isLoading && (
+          {props.isLoading && !props.messages.some((message) => message.executionTrace?.status === 'running') && (
             <div className="flex gap-4">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-primary text-primary-foreground">
                 <Bot className="h-4 w-4" />
@@ -281,7 +302,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                 <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                   <Sparkles className="h-3.5 w-3.5 animate-spin text-primary" />
                   <span>
-                    <Translated text={canGenerateMetrics
+                    <Translated text={props.reconnecting ? 'Đang kết nối lại' : canGenerateMetrics
                       ? 'AI đang phân tích cấu trúc Schema & quan hệ...'
                       : 'AI đang đọc semantic layer và metric đã phê duyệt...'} />
                   </span>
@@ -382,10 +403,13 @@ export function StudioChatStream(props: StudioChatStreamProps) {
         </div>
       </div>
     </div>
+    {graph && graphTrace && <AgentFlowPanel key={graph.runId} trace={graphTrace} reconnecting={graphMessage?.reconnecting} title={graph.title} onClose={closeGraph} trigger={graph.trigger} />}
+    </div>
   );
 }
 
 function MessageBubble({
+  onOpenGraph,
   message,
   saved,
   onSave,
@@ -402,6 +426,7 @@ function MessageBubble({
   onSelectClarification,
   theme,
 }: {
+  onOpenGraph?: (trigger: HTMLButtonElement) => void;
   message: ChatMessage;
   saved: ReadonlySet<string>;
   onSave: (suggestion: MetricSuggestion) => Promise<void>;
@@ -442,6 +467,8 @@ function MessageBubble({
           <span>{message.timestamp}</span>
         </div>
 
+        {!isUser && message.executionTrace && <AgentThinking trace={message.executionTrace}
+          reconnecting={message.reconnecting} onOpenGraph={(trigger) => onOpenGraph?.(trigger)} />}
         {/* The description line is hidden once every duplicate notice is settled. */}
         {message.text ? (
           <div

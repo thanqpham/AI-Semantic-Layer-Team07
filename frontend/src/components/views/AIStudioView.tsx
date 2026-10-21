@@ -24,6 +24,7 @@ import { applySuggestedName, metricName } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 import { PendingChat, pendingChatKey, readPendingChat, storePendingChat } from '@/lib/pendingChat';
+import { ChatProgressOptions, ChatStreamError } from '@/lib/chatStream';
 
 interface AIStudioViewProps {
   layer: SemanticLayerData;
@@ -67,6 +68,8 @@ export function AIStudioView({
   const semanticDbId = layer.semantic_db_id;
   const canGenerateMetrics = mode === 'metric_studio';
   const requestVersion = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
 
   const submittedRequestKeys = useMemo(
     () =>
@@ -130,19 +133,29 @@ export function AIStudioView({
     const storageKey = pendingChatKey(semanticDbId, requestSessionId);
     storePendingChat(storageKey, { prompt, clientMessageId, sessionId: requestSessionId, reuseMetricId, selection });
     setLoading(true);
+    setReconnecting(false);
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
+    const thinkingId = `${clientMessageId}:thinking`;
+    const progress: ChatProgressOptions = {
+      signal: controller.signal,
+      onTrace: (trace) => {
+        if (version !== requestVersion.current) return;
+        setMessages((current) => [...current.filter((item) => item.id !== thinkingId), {
+          id: thinkingId, sender: 'assistant', text: '', timestamp: now(), executionTrace: trace,
+        }]);
+      },
+      onReconnecting: (value) => {
+        if (version !== requestVersion.current) return;
+        setReconnecting(value);
+        setMessages((current) => current.map((item) => item.id === thinkingId ? { ...item, reconnecting: value } : item));
+      },
+    };
     try {
-      const response = selection
-        ? await sendChatOrchestratorApi(String(semanticDbId), prompt, requestSessionId, clientMessageId, selection)
-        : reuseMetricId
-        ? await sendChatOrchestratorApi(
-            String(semanticDbId),
-            prompt,
-            requestSessionId,
-            clientMessageId,
-            null,
-            reuseMetricId,
-          )
-        : await sendChatOrchestratorApi(String(semanticDbId), prompt, requestSessionId, clientMessageId);
+      const response = await sendChatOrchestratorApi(
+        String(semanticDbId), prompt, requestSessionId, clientMessageId, selection || null, reuseMetricId ?? null, progress,
+      );
       if (readPendingChat(storageKey)?.clientMessageId === clientMessageId) storePendingChat(storageKey, null);
       if (version !== requestVersion.current) return;
       if (response.session_id) {
@@ -161,8 +174,10 @@ export function AIStudioView({
       }
       if (response.intent === 'semantic_query') {
         setMessages((current) => [
-          ...current,
+          ...current.filter((item) => item.id !== thinkingId),
           {
+            executionTrace: response.execution_trace,
+            isError: response.execution_trace?.status === 'error',
             id: response.assistant_message_id || crypto.randomUUID(),
             sender: 'assistant',
             text: response.chat_response || '',
@@ -175,8 +190,10 @@ export function AIStudioView({
       }
       if (response.intent === 'chitchat' || response.intent === 'data_question' || response.intent === 'out_of_scope') {
         setMessages((current) => [
-          ...current,
+          ...current.filter((item) => item.id !== thinkingId),
           {
+            executionTrace: response.execution_trace,
+            isError: response.execution_trace?.status === 'error',
             id: response.assistant_message_id || crypto.randomUUID(),
             sender: 'assistant',
             text: response.chat_response || 'Xin chào! Tôi có thể giúp gì cho bạn?',
@@ -188,8 +205,10 @@ export function AIStudioView({
       const suggestions = response.suggestions || [];
       const duplicates = response.duplicates || [];
       setMessages((current) => [
-        ...current,
+        ...current.filter((item) => item.id !== thinkingId),
         {
+          executionTrace: response.execution_trace,
+          isError: response.execution_trace?.status === 'error',
           id: response.assistant_message_id || crypto.randomUUID(),
           sender: 'assistant',
           text:
@@ -207,8 +226,18 @@ export function AIStudioView({
         },
       ]);
     } catch (error) {
-      if (version !== requestVersion.current) return;
-      appendError(setMessages, error instanceof Error ? error.message : 'Không thể xử lý yêu cầu');
+      if (version !== requestVersion.current || controller.signal.aborted) return;
+      if (error instanceof ChatStreamError && error.trace) {
+        const failedTrace = error.trace;
+        if (failedTrace.status !== 'running' && readPendingChat(storageKey)?.clientMessageId === clientMessageId) storePendingChat(storageKey, null);
+        setMessages((current) => [...current.filter((item) => item.id !== thinkingId), {
+          id: thinkingId, sender: 'assistant', text: error.message, timestamp: now(), isError: true,
+          executionTrace: failedTrace, reconnecting: failedTrace.status === 'running',
+        }]);
+      } else {
+        setMessages((current) => current.filter((item) => item.id !== thinkingId));
+        appendError(setMessages, error instanceof Error ? error.message : 'Không thể xử lý yêu cầu');
+      }
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
@@ -230,7 +259,7 @@ export function AIStudioView({
       showWelcome();
       const pending = readPendingChat(pendingChatKey(semanticDbId, null));
       if (pending) void resumeRequest(pending);
-      return () => { requestVersion.current = version + 1; };
+      return () => { requestVersion.current = version + 1; requestController.current?.abort(); };
     }
 
     const loadDetail = async () => {
@@ -257,7 +286,7 @@ export function AIStudioView({
     };
 
     void loadDetail();
-    return () => { requestVersion.current = version + 1; };
+    return () => { requestVersion.current = version + 1; requestController.current?.abort(); };
   }, [activeSessionId, layer.db_name, layer.source_type, semanticDbId]);
 
   useEffect(() => {
@@ -413,6 +442,8 @@ export function AIStudioView({
             <Translated text={"Yêu cầu của bạn:"} after />{metricRequests.filter((item) => item.status === 'pending').length} <Translated text={"chờ xử lý ·"} after />{metricRequests.filter((item) => item.status === 'approved').length} <Translated text={"đã duyệt."} /></div>
         )}
         <StudioChatStream
+          conversationKey={activeSessionId}
+          reconnecting={reconnecting}
           messages={messages}
           onSendMessage={send}
           isLoading={loading || loadingSessions}
@@ -455,6 +486,7 @@ function toChatMessage(message: ChatMessageItem): ChatMessage {
     suggestionAction: message.metadata_json?.suggestion_action,
     queryResult: message.metadata_json?.semantic_query_result,
     clarification: message.metadata_json?.clarification,
+    executionTrace: message.metadata_json?.execution_trace,
     timestamp: new Date(message.created_at).toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',

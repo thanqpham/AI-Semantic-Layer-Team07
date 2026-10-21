@@ -1,4 +1,6 @@
 import { getStoredToken } from '@/lib/jwt';
+import { ExecutionTrace } from '@/lib/chatTrace';
+import { ChatProgressOptions, sendChatStream } from '@/lib/chatStream';
 
 export interface SemanticColumn {
   column_name: string;
@@ -709,6 +711,7 @@ export interface ChatSemanticQueryResult {
 }
 
 export interface ChatOrchestratorResponse {
+  execution_trace?: ExecutionTrace | null;
   intent: 'chitchat' | 'data_question' | 'metric_query' | 'semantic_query' | 'out_of_scope';
   chat_response?: string | null;
   suggestions?: MetricSuggestion[] | null;
@@ -742,6 +745,7 @@ export interface ChatMessageItem {
   content: string;
   intent?: string | null;
   metadata_json?: {
+    execution_trace?: ExecutionTrace | null;
     schema_version?: number;
     status?: 'pending' | 'completed' | 'error';
     suggestions?: MetricSuggestion[];
@@ -821,8 +825,9 @@ export async function sendChatOrchestratorApi(
   clientMessageId?: string,
   clarificationSelection?: ChatClarificationSelection | null,
   reuseMetricId?: number | null,
+  progress?: ChatProgressOptions,
 ): Promise<ChatOrchestratorResponse> {
-  return chatRequest<ChatOrchestratorResponse>(`${API_BASE}/api/v1/semantic/${dbId}/chat`, {
+  const init: RequestInit = {
     method: 'POST',
     body: JSON.stringify({
       message,
@@ -831,7 +836,12 @@ export async function sendChatOrchestratorApi(
       clarification_selection: clarificationSelection || null,
       ...(reuseMetricId != null ? { reuse_metric_id: reuseMetricId } : {}),
     }),
-  });
+  };
+  if (progress) return sendChatStream<ChatOrchestratorResponse>(
+    `${API_BASE}/api/v1/semantic/${dbId}/chat/stream`,
+    { ...init, headers: { 'Content-Type': 'application/json', ...getAuthHeader() } }, progress,
+  );
+  return chatRequest<ChatOrchestratorResponse>(`${API_BASE}/api/v1/semantic/${dbId}/chat`, init);
 }
 
 export interface MetricRequest {

@@ -53,6 +53,7 @@ def test_get_client_ip_fallback() -> None:
 def test_is_ai_request() -> None:
     assert is_ai_request("/api/v1/semantic/generate", "POST") is True
     assert is_ai_request("/api/v1/semantic/1/chat", "POST") is True
+    assert is_ai_request("/api/v1/semantic/1/chat/stream", "POST") is True
     assert is_ai_request("/api/v1/semantic/1/metrics/generate", "POST") is True
     assert is_ai_request("/api/v1/semantic/import/saved", "POST") is True
     assert is_ai_request("/api/v1/semantic/db/connect", "POST") is True

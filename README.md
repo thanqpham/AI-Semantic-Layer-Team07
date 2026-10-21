@@ -444,6 +444,8 @@ docker compose -f docker-compose.dev.yml down
 ### 7. AI Conversational Studio & Query Clarifier Wizard
 
 - `POST /api/v1/semantic/{db_id}/chat` — Multi-agent Chatbot tự động phân loại Intent (Chitchat tiếng Việt vs Gợi ý Metric)
+- `POST /api/v1/semantic/{db_id}/chat/stream` — Cùng payload chat, bắt buộc `client_message_id`; SSE gồm `snapshot`, `progress`, `result`, `error`. Kết nối lại bằng cùng mã để tiếp tục task hiện tại.
+- Thinking mặc định đóng, có thời gian từng bước và nút **Luồng agent**. Trace an toàn được lưu trong `metadata_json.execution_trace`; task đang chạy chỉ khôi phục được trong cùng một backend worker, không qua restart.
 - `POST /api/v1/semantic/{db_id}/query/wizard/start` — Bắt đầu phiên Wizard hỏi-đáp đa bước làm rõ câu truy vấn mơ hồ
 - `POST /api/v1/semantic/{db_id}/query/wizard/step` — Nạp lựa chọn người dùng cho từng bước Wizard và trả về cấu hình truy vấn đã làm rõ
 
