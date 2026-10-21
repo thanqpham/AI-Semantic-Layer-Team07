@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIStudioView } from './AIStudioView';
 import * as api from '@/lib/api';
+import { pendingChatKey, storePendingChat } from '@/lib/pendingChat';
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -17,7 +18,9 @@ vi.mock('@/lib/api', async () => {
 describe('AIStudioView', () => {
   beforeEach(() => {
     cleanup();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(api.listMetricRequestsApi).mockResolvedValue([]);
+    sessionStorage.clear();
   });
 
   const mockLayer: api.SemanticLayerData = {
@@ -31,6 +34,52 @@ describe('AIStudioView', () => {
     tables: [{ table_name: 'orders', business_name: 'Đơn hàng', description: '', columns: [] }],
     metrics: [],
   };
+
+  it('resumes the same pending request after a page reload', async () => {
+    vi.mocked(api.sendChatOrchestratorApi).mockImplementation(() => new Promise(() => {}));
+    const props = { layer: mockLayer, theme: 'light' as const, onMetricsChanged: vi.fn() };
+    const first = render(<AIStudioView {...props} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pending question' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gửi tin nhắn/i }));
+    await waitFor(() => expect(api.sendChatOrchestratorApi).toHaveBeenCalledTimes(1));
+    const originalArgs = vi.mocked(api.sendChatOrchestratorApi).mock.calls[0];
+    first.unmount();
+    vi.mocked(api.sendChatOrchestratorApi).mockResolvedValueOnce({
+      intent: 'chitchat', chat_response: 'Recovered answer', session_id: 'sess-recovered',
+      user_message_id: 'u-recovered', assistant_message_id: 'a-recovered',
+    });
+    render(<AIStudioView {...props} />);
+    await waitFor(() => expect(api.sendChatOrchestratorApi).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[1]).toEqual(originalArgs);
+    expect(await screen.findByText('Recovered answer')).toBeInTheDocument();
+    expect(screen.getByText('Pending question')).toBeInTheDocument();
+  });
+
+  it.each([false, true])('restores existing history without duplicate messages (completed: %s)', async (completed) => {
+    const key = pendingChatKey(101, 'sess-1');
+    storePendingChat(key, { prompt: 'Pending question', clientMessageId: 'client-1', sessionId: 'sess-1' });
+    const userMessage: api.ChatMessageItem = {
+      id: 'user-1', session_id: 'sess-1', sender: 'user', content: 'Pending question', sequence_no: 1,
+      client_message_id: 'client-1', created_at: '2026-01-01T00:00:00Z',
+    };
+    vi.mocked(api.getChatSessionDetailApi).mockResolvedValueOnce({
+      id: 'sess-1', db_id: 101, title: 'Chat', message_count: completed ? 2 : 1,
+      created_at: userMessage.created_at, updated_at: userMessage.created_at,
+      messages: completed ? [userMessage, {
+        ...userMessage, id: 'assistant-1', sender: 'assistant', content: 'Recovered answer',
+        sequence_no: 2, client_message_id: 'client-1:assistant',
+      }] : [userMessage],
+    });
+    vi.mocked(api.sendChatOrchestratorApi).mockResolvedValueOnce({
+      intent: 'chitchat', chat_response: 'Recovered answer', session_id: 'sess-1',
+      user_message_id: 'user-1', assistant_message_id: 'assistant-1',
+    });
+    render(<AIStudioView layer={mockLayer} theme="light" activeSessionId="sess-1" onMetricsChanged={vi.fn()} />);
+    expect(await screen.findByText('Recovered answer')).toBeInTheDocument();
+    expect(screen.getAllByText('Pending question')).toHaveLength(1);
+    expect(api.sendChatOrchestratorApi).toHaveBeenCalledTimes(completed ? 0 : 1);
+    expect(sessionStorage.getItem(key)).toBeNull();
+  });
 
   it('renders Data Assistant view header and welcome message for Member', () => {
     render(
