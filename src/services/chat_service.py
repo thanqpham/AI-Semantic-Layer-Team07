@@ -17,6 +17,7 @@ from src.models.db import (
     OrganizationMemberModel,
     SemanticDatabaseModel,
 )
+from src.services.chat_execution import current_execution
 from src.services.organization_service import ROLE_PERMISSIONS, require_permission
 
 DEFAULT_SESSION_TITLE = "Cuộc trò chuyện mới"
@@ -189,6 +190,7 @@ async def save_chat_message(
     if client_message_id:
         existing = await _find_client_message(db, session_id, client_message_id)
         if existing is not None:
+            _remember_user_message(existing)
             return existing
     next_sequence = await _next_sequence(db, session_id)
     message = ChatMessageModel(
@@ -205,7 +207,15 @@ async def save_chat_message(
     db.add(message)
     await db.commit()
     await db.refresh(message)
+    _remember_user_message(message)
     return message
+
+
+def _remember_user_message(message: ChatMessageModel) -> None:
+    """Remember the current request's user message for safe failure persistence."""
+    execution = current_execution()
+    if execution is not None and message.sender == "user":
+        execution.user_message_id = message.id
 
 
 async def get_recent_chat_history(db: AsyncSession, session_id: str, limit: int = 10) -> list[dict[str, str]]:

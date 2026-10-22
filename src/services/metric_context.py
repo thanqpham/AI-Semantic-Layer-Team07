@@ -12,8 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.models.db import CanonicalRelationshipModel, SemanticTableModel
+from src.models.schemas import ChatClarificationOption, ChatClarificationPayload
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
+
+_CLARIFICATION_OPTIONS_PROMPT = """
+Khi needs_clarification=true và có các cách hiểu cụ thể để người dùng chọn,
+bắt buộc trả thêm "options": ["Câu trả lời đầy đủ cho lựa chọn 1", "Câu trả lời đầy đủ cho lựa chọn 2"].
+Ví dụ hỏi AOV theo giá nào: options phải nêu rõ AOV theo từng cột giá có trong inventory.
+Mỗi lựa chọn phải có đủ ngữ cảnh KPI và tên bảng/cột để xử lý như tin nhắn tiếp theo.
+Không bịa tên bảng/cột. Chỉ để options=[] nếu cần người dùng nhập thông tin chưa biết.
+"""
 
 _SCOPE_PROMPT = """Bạn chọn phạm vi schema cho một KPI. Chỉ trả JSON:
 {{"table_names":["..."],"needs_clarification":false,"question":"..."}}
@@ -126,6 +135,7 @@ async def _select_tables(
             else (set(), _clarification("Bảng được chọn không tồn tại trong schema.").diagnostic)
         )
     prompt = prompt_template.format(inventory=json.dumps(inventory, ensure_ascii=False), question=question)
+    prompt += _CLARIFICATION_OPTIONS_PROMPT
     payload = await ainvoke_json(get_llm(role="metric"), prompt)
     selected = (
         {str(name) for name in payload.get("table_names", []) if str(name) in valid}
@@ -134,7 +144,12 @@ async def _select_tables(
     )
     if not isinstance(payload, dict) or payload.get("needs_clarification") or not selected:
         message = payload.get("question") if isinstance(payload, dict) else "Hãy nêu rõ phần dữ liệu bạn muốn xem."
-        return set(), _clarification(str(message)).diagnostic
+        options = payload.get("options", []) if isinstance(payload, dict) else []
+        diagnostic = _clarification(str(message or "Hãy nêu rõ phần dữ liệu bạn muốn xem."), options).diagnostic
+        if prompt_template == _SCOPE_PROMPT:
+            for option in diagnostic["clarification"]["options"]:
+                option["action"] = "create_metric"
+        return set(), diagnostic
     return selected, None
 
 
@@ -231,9 +246,28 @@ def _token_estimate(value: Any) -> int:
     return (len(json.dumps(value, ensure_ascii=False)) + 3) // 4
 
 
-def _clarification(message: str) -> MetricContextResult:
+def _clarification(message: str, options: Any = None) -> MetricContextResult:
     """Return a safe clarification result without calling downstream Metric AI."""
-    return MetricContextResult(schema={}, diagnostic={"status": "needs_clarification", "message": message})
+    labels = (
+        [label.strip() for label in options if isinstance(label, str) and label.strip()]
+        if isinstance(options, list)
+        else []
+    )
+    clarification = ChatClarificationPayload(
+        prompt=message,
+        options=[
+            ChatClarificationOption(id=f"scope_{index}", label=label)
+            for index, label in enumerate(dict.fromkeys(labels))
+        ],
+    )
+    return MetricContextResult(
+        schema={},
+        diagnostic={
+            "status": "needs_clarification",
+            "message": message,
+            "clarification": clarification.model_dump(mode="json"),
+        },
+    )
 
 
 def _ready_diagnostic(schema: dict[str, Any]) -> dict[str, Any]:

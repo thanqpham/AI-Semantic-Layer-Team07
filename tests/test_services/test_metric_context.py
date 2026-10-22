@@ -1,8 +1,43 @@
 """Regression tests for relationship-complete Metric AI context."""
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
-from src.services.metric_context import _SCOPE_PROMPT, _expand_context, _temporal_context, _token_estimate
+import pytest
+
+from src.services.metric_context import (
+    _SCOPE_PROMPT,
+    _expand_context,
+    _select_tables,
+    _temporal_context,
+    _token_estimate,
+)
+
+
+@pytest.mark.asyncio
+async def test_scope_clarification_preserves_selectable_options() -> None:
+    """An ambiguous AOV scope must retain choices instead of returning only text."""
+    payload = {
+        "needs_clarification": True,
+        "question": "AOV theo giá nào?",
+        "options": ["Giá trước thuế (price)", "Giá sau thuế (price_after_tax)"],
+    }
+    with (
+        patch("src.services.metric_context.get_llm"),
+        patch("src.services.metric_context.ainvoke_json", new=AsyncMock(return_value=payload)),
+    ):
+        _, diagnostic = await _select_tables("Tính AOV", [], [_table("order_header")], None)
+    assert [item["label"] for item in diagnostic["clarification"]["options"]] == payload["options"]
+    assert all(item["action"] == "create_metric" for item in diagnostic["clarification"]["options"])
+
+
+@pytest.mark.parametrize("options", [None, "price", [None, {}, "  "]])
+def test_scope_clarification_ignores_invalid_options(options) -> None:
+    """Malformed model choices leave a usable free-text question without crashing."""
+    from src.services.metric_context import _clarification
+
+    result = _clarification("Chọn giá nào?", options)
+    assert result.diagnostic["clarification"]["options"] == []
 
 
 def _column(name: str) -> SimpleNamespace:

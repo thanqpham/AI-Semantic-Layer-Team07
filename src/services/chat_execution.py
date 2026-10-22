@@ -1,0 +1,243 @@
+"""Public, allowlisted execution progress, independent of raw observability data."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+import uuid
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import UTC, datetime
+from typing import Any
+
+from src.observability import activate_trace
+
+LABELS = {
+    "orchestrator": "Phân loại yêu cầu",
+    "chitchat": "Soạn phản hồi hội thoại",
+    "data_assistant": "Tra cứu semantic layer và metric đã duyệt",
+    "metric_suggest": "Đề xuất định nghĩa metric",
+    "semantic_parse": "Phân tích câu hỏi theo danh mục metric",
+    "context": "Chuẩn bị ngữ cảnh dữ liệu",
+    "dedupe": "Kiểm tra metric trùng lặp",
+    "metric_generation": "Sinh định nghĩa metric",
+    "metric_generation_retry": "Thử lại với các cột hợp lệ",
+    "sql_compile": "Biên dịch và kiểm tra truy vấn",
+    "sql_execute": "Thực thi truy vấn chỉ đọc",
+    "out_of_scope": "Yêu cầu ngoài phạm vi hỗ trợ",
+    "clarification": "Yêu cầu làm rõ câu hỏi",
+    "response": "Hoàn tất phản hồi",
+}
+AGENTS = {"orchestrator", "chitchat", "data_assistant", "metric_suggest", "semantic_parse"}
+SAFE_ERROR = "Không thể hoàn tất xử lý. Vui lòng thử lại."
+_CURRENT: ContextVar[ChatExecution | None] = ContextVar("chat_execution", default=None)
+
+
+def current_execution() -> ChatExecution | None:
+    """Return the execution belonging to this task only."""
+    return _CURRENT.get()
+
+
+@contextmanager
+def execution_context(execution: ChatExecution) -> Iterator[None]:
+    """Collect public progress while retaining the existing node instrumentation."""
+    token = _CURRENT.set(execution)
+    try:
+        with activate_trace(execution):
+            yield
+    finally:
+        _CURRENT.reset(token)
+
+
+@contextmanager
+def execution_step(name: str) -> Iterator[None]:
+    """Measure a system step without capturing its inputs or results."""
+    execution = current_execution()
+    step_id = execution.start(name, name) if execution else None
+    try:
+        yield
+    except Exception:
+        if execution and step_id:
+            execution.end(step_id, "failed")
+        raise
+    else:
+        if execution and step_id:
+            execution.end(step_id, "finished")
+
+
+class ChatExecution:
+    """Keep a bounded chat run's public events available to reconnecting clients."""
+
+    def __init__(self) -> None:
+        self.started = time.perf_counter()
+        self.trace: dict[str, Any] = {
+            "run_id": str(uuid.uuid4()),
+            "status": "running",
+            "started_at": self.now(),
+            "finished_at": None,
+            "elapsed_ms": 0,
+            "events": [],
+        }
+        self.changed = asyncio.Event()
+        self.active: dict[tuple[str, str], list[str]] = {}
+        self.steps: dict[str, dict[str, Any]] = {}
+        self.last_node = "request"
+        self.user_message_id: str | None = None
+        self.replayed = False
+
+    @staticmethod
+    def now() -> str:
+        """Return an unambiguous UTC timestamp."""
+        return datetime.now(UTC).isoformat()
+
+    def elapsed(self) -> int:
+        """Measure elapsed time independently of wall-clock changes."""
+        return round((time.perf_counter() - self.started) * 1000)
+
+    def snapshot(self) -> dict[str, Any]:
+        """Copy public state so later updates cannot mutate a transmitted snapshot."""
+        return {
+            **self.trace,
+            "elapsed_ms": self.elapsed() if self.trace["status"] == "running" else self.trace["elapsed_ms"],
+            "events": list(self.trace["events"]),
+        }
+
+    def emit(self, **fields: Any) -> dict[str, Any]:
+        """Append an event made exclusively from server-owned identifiers and labels."""
+        event = {"seq": len(self.trace["events"]) + 1, "at": self.now(), "elapsed_ms": self.elapsed(), **fields}
+        self.trace["events"].append(event)
+        self.changed.set()
+        return event
+
+    def transition(self, source: str, target: str) -> None:
+        """Record an actual control-flow edge, including non-agent terminal steps."""
+        if source == target:
+            return
+        self.emit(
+            kind="transition",
+            source=source,
+            target=target,
+            node=target,
+            step_id=str(uuid.uuid4()),
+            status="finished",
+            summary=LABELS.get(target, ""),
+        )
+
+    def start(self, node: str, action: str) -> str:
+        """Start one uniquely identified invocation, retaining repeated invocations."""
+        if node in AGENTS and node == action:
+            self.transition(self.last_node, node)
+            self.last_node = node
+        if action == "sql_compile":
+            self.transition(self.last_node, "sql")
+            self.last_node = "sql"
+        step_id = str(uuid.uuid4())
+        event = self.emit(
+            kind="step", node=node, action=action, step_id=step_id, status="started", summary=LABELS[action]
+        )
+        self.steps[step_id] = event
+        self.active.setdefault((node, action), []).append(step_id)
+        return step_id
+
+    def end(self, step_id: str, status: str) -> None:
+        """Finish a particular invocation using monotonic elapsed time."""
+        event = self.steps.pop(step_id, None)
+        if event is None:
+            return
+        self.active[(event["node"], event["action"])].remove(step_id)
+        self.emit(
+            kind="step",
+            node=event["node"],
+            action=event["action"],
+            step_id=step_id,
+            status=status,
+            summary=event["summary"],
+            duration_ms=self.elapsed() - event["elapsed_ms"],
+        )
+
+    def record(self, kind: str, payload: Mapping[str, Any]) -> None:
+        """Project raw trace events onto an explicit public allowlist."""
+        if kind == "transition":
+            self._graph_transition(payload)
+            return
+        node = payload.get("node")
+        action = node if kind.startswith("node_") else payload.get("action")
+        if kind.startswith("action_") and action == node:
+            return
+        if node == "orchestrator" and payload.get("state_before", {}).get("intent"):
+            return  # A preclassified graph entry performs no second classification.
+        if action not in LABELS or not kind.startswith(("node_", "action_")):
+            return
+        safe_node = node if node in AGENTS else action
+        if kind.endswith("_started"):
+            self.start(safe_node, action)
+        elif kind.endswith(("_finished", "_failed")):
+            pending = self.active.get((safe_node, action), [])
+            if pending:
+                self.end(pending[-1], "failed" if kind.endswith("_failed") else "finished")
+
+    def _graph_transition(self, payload: Mapping[str, Any]) -> None:
+        source = payload.get("node")
+        target = {
+            "metric_query": "metric_suggest",
+            "data_question": "data_assistant",
+            "semantic_query": "semantic_parse",
+            "chitchat_done": "response",
+        }.get(payload.get("action"), payload.get("action"))
+        if source not in AGENTS or target not in LABELS:
+            return
+        if self.last_node == "request":
+            self.transition("request", source)
+        self.transition(source, target)
+        self.last_node = target
+
+    def finish(self, status: str, intent: str | None = None) -> dict[str, Any]:
+        """Close unfinished steps and add only the terminal edges actually taken."""
+        if self.trace["status"] != "running":
+            return self.snapshot()
+        for step_id in list(self.steps):
+            self.end(step_id, "failed" if status == "error" else "finished")
+        if status != "error":
+            terminal = (
+                "clarification"
+                if status == "needs_clarification"
+                else ("out_of_scope" if intent == "out_of_scope" else "response")
+            )
+            self.transition(self.last_node, terminal)
+            if terminal != "response":
+                self.transition(terminal, "response")
+        self.trace.update(status=status, finished_at=self.now(), elapsed_ms=self.elapsed())
+        self.changed.set()
+        return self.snapshot()
+
+
+def sse(event: str, payload: Any) -> str:
+    """Encode one SSE frame without placing untrusted content in its headers."""
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def stream_execution(task: asyncio.Task, execution: ChatExecution) -> AsyncIterator[str]:
+    """Replay a snapshot, follow progress, and leave the shared task alive on disconnect."""
+    snapshot = execution.snapshot()
+    cursor = len(snapshot["events"])
+    yield sse("snapshot", snapshot)
+    while not task.done():
+        execution.changed.clear()
+        events = execution.trace["events"][cursor:]
+        for event in events:
+            yield sse("progress", event)
+        cursor += len(events)
+        try:
+            await asyncio.wait_for(execution.changed.wait(), timeout=10)
+        except TimeoutError:
+            yield ": heartbeat\n\n"
+    for event in execution.trace["events"][cursor:]:
+        yield sse("progress", event)
+    try:
+        result = task.result()
+    except Exception:
+        yield sse("error", {"message": SAFE_ERROR, "execution_trace": execution.finish("error")})
+    else:
+        yield sse("result", result.model_dump(mode="json"))

@@ -1,4 +1,64 @@
 {
+  "Ph?n lo?i y?u c?u": {
+    "vi": "Ph?n lo?i y?u c?u",
+    "en": "Classify the request"
+  },
+  "So?n ph?n h?i h?i tho?i": {
+    "vi": "So?n ph?n h?i h?i tho?i",
+    "en": "Compose the conversational reply"
+  },
+  "Tra c?u semantic layer v? metric ?? duy?t": {
+    "vi": "Tra c?u semantic layer v? metric ?? duy?t",
+    "en": "Look up the semantic layer and approved metrics"
+  },
+  "?? xu?t ??nh ngh?a metric": {
+    "vi": "?? xu?t ??nh ngh?a metric",
+    "en": "Propose a metric definition"
+  },
+  "Ph?n t?ch c?u h?i theo danh m?c metric": {
+    "vi": "Ph?n t?ch c?u h?i theo danh m?c metric",
+    "en": "Interpret the question using the metric catalog"
+  },
+  "Chu?n b? ng? c?nh d? li?u": {
+    "vi": "Chu?n b? ng? c?nh d? li?u",
+    "en": "Prepare the data context"
+  },
+  "Ki?m tra metric tr?ng l?p": {
+    "vi": "Ki?m tra metric tr?ng l?p",
+    "en": "Check for duplicate metrics"
+  },
+  "Sinh ??nh ngh?a metric": {
+    "vi": "Sinh ??nh ngh?a metric",
+    "en": "Generate the metric definition"
+  },
+  "Th? l?i v?i c?c c?t h?p l?": {
+    "vi": "Th? l?i v?i c?c c?t h?p l?",
+    "en": "Retry using valid columns"
+  },
+  "Bi?n d?ch v? ki?m tra truy v?n": {
+    "vi": "Bi?n d?ch v? ki?m tra truy v?n",
+    "en": "Compile and validate the query"
+  },
+  "Th?c thi truy v?n ch? ??c": {
+    "vi": "Th?c thi truy v?n ch? ??c",
+    "en": "Execute the read-only query"
+  },
+  "Y?u c?u ngo?i ph?m vi h? tr?": {
+    "vi": "Y?u c?u ngo?i ph?m vi h? tr?",
+    "en": "The request is outside the supported scope"
+  },
+  "Y?u c?u l?m r? c?u h?i": {
+    "vi": "Y?u c?u l?m r? c?u h?i",
+    "en": "Ask for clarification"
+  },
+  "Ho?n t?t ph?n h?i": {
+    "vi": "Ho?n t?t ph?n h?i",
+    "en": "Complete the reply"
+  },
+  "?ang k?t n?i l?i": {
+    "vi": "?ang k?t n?i l?i",
+    "en": "Reconnecting"
+  },
   "Invitation": {
     "vi": "Lời mời",
     "en": "Invitation"

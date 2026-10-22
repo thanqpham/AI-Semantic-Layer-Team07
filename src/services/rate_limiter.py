@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 AI_POST_SUFFIXES = (
     "/semantic/generate",
     "/chat",
+    "/chat/stream",
     "/metrics/generate",
     "/semantic/import/saved",
     "/semantic/db/connect",

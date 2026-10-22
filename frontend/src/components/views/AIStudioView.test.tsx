@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIStudioView } from './AIStudioView';
 import * as api from '@/lib/api';
 import { pendingChatKey, storePendingChat } from '@/lib/pendingChat';
+import { traceFixture } from '@/test/chatTraceFixture';
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -35,6 +36,28 @@ describe('AIStudioView', () => {
     metrics: [],
   };
 
+  it('keeps Thinking expanded and its graph open when a streamed reply completes', async () => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    let complete!: (value: api.ChatOrchestratorResponse) => void;
+    vi.mocked(api.sendChatOrchestratorApi).mockImplementation((_db, _prompt, _session, _id, _selection, _reuse, progress) => {
+      progress!.onTrace(traceFixture);
+      return new Promise((resolve) => { complete = resolve; });
+    });
+    render(<AIStudioView layer={mockLayer} theme="light" onMetricsChanged={vi.fn()} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Trace question' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gửi tin nhắn/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Thinking/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Luồng agent' }));
+    await act(async () => complete({
+      intent: 'chitchat', chat_response: 'Final answer', session_id: 'session-1',
+      user_message_id: 'u', assistant_message_id: 'a',
+      execution_trace: { ...traceFixture, status: 'completed', elapsed_ms: 4000 },
+    }));
+    expect(screen.getByRole('button', { name: /Thinking.*Hoàn tất/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('heading', { name: 'Luồng agent' })).toBeInTheDocument();
+    expect(screen.getByText('Final answer')).toBeInTheDocument();
+  });
+
   it('resumes the same pending request after a page reload', async () => {
     vi.mocked(api.sendChatOrchestratorApi).mockImplementation(() => new Promise(() => {}));
     const props = { layer: mockLayer, theme: 'light' as const, onMetricsChanged: vi.fn() };
@@ -50,7 +73,9 @@ describe('AIStudioView', () => {
     });
     render(<AIStudioView {...props} />);
     await waitFor(() => expect(api.sendChatOrchestratorApi).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[1]).toEqual(originalArgs);
+    expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[1].slice(0, 6)).toEqual(originalArgs.slice(0, 6));
+    expect(originalArgs[6]?.signal.aborted).toBe(true);
+    expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[1][6]?.signal.aborted).toBe(false);
     expect(await screen.findByText('Recovered answer')).toBeInTheDocument();
     expect(screen.getByText('Pending question')).toBeInTheDocument();
   });
@@ -131,10 +156,10 @@ describe('AIStudioView', () => {
     });
   });
 
-  it('handles clarification selection click by sending option payload', async () => {
+  it.each(['semantic_query', 'data_question', 'metric_query'] as const)('shows clarification options for %s and sends the selection', async (intent) => {
     vi.mocked(api.sendChatOrchestratorApi)
       .mockResolvedValueOnce({
-        intent: 'semantic_query',
+        intent,
         chat_response: 'Vui lòng làm rõ câu hỏi',
         clarification: {
           prompt: 'Bạn muốn xem theo?',
@@ -190,7 +215,7 @@ describe('AIStudioView', () => {
         'Theo khách hàng',
         null,
         expect.any(String),
-        { assistant_message_id: 'a-1', option_id: 'opt_1' }
+        { assistant_message_id: 'a-1', option_id: 'opt_1' }, null, expect.objectContaining({ onTrace: expect.any(Function) }),
       );
       expect(screen.getByText('Alpha')).toBeInTheDocument();
       expect(screen.getByText('1,000,000')).toBeInTheDocument();
@@ -269,12 +294,17 @@ describe('AIStudioView', () => {
     });
   });
 
-  it('calculates an existing duplicate metric with its stable metric id', async () => {
+  it.each([false, true])('calculates an existing metric and preserves its proposal (conflict: %s)', async (conflict) => {
     vi.mocked(api.sendChatOrchestratorApi)
       .mockResolvedValueOnce({
         intent: 'metric_query',
         chat_response: 'Metric này đã tồn tại.',
-        duplicates: [
+        suggestions: conflict ? [{
+          yaml_preview: 'metric: new_aov',
+          definition: { metric: { name: 'New AOV', formula: { function: 'AVG', expression: 'order_total' }, base_entity: 'orders', filters: [], status: 'unverified', excluded_notes: '' } },
+          conflict: { proposed_metric_name: 'New AOV', existing_metric_id: 7, existing_metric_name: 'AOV', existing_metric_status: 'approved', suggested_name: 'New AOV 2', clarify_question: 'Name conflict' },
+        }] : [],
+        duplicates: conflict ? [] : [
           {
             existing_metric_id: 7,
             existing_metric_name: 'AOV',
@@ -326,8 +356,8 @@ describe('AIStudioView', () => {
     fireEvent.change(textarea, { target: { value: 'AOV' } });
     fireEvent.click(screen.getByRole('button', { name: /Gửi tin nhắn/i }));
 
-    await waitFor(() => expect(screen.getByText('Metric AOV đã tồn tại trong hệ thống.')).toBeInTheDocument());
-    expect(screen.getByText('Metric có sẵn (YAML)')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(conflict ? 'Name conflict' : 'Metric AOV đã tồn tại trong hệ thống.')).toBeInTheDocument());
+    if (!conflict) expect(screen.getByText('Metric có sẵn (YAML)')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Tính kết quả từ chỉ số này/i }));
 
     await waitFor(() => {
@@ -338,8 +368,10 @@ describe('AIStudioView', () => {
         expect.any(String),
         null,
         7,
+        expect.objectContaining({ onTrace: expect.any(Function) }),
       );
       expect(screen.getByText('250,000')).toBeInTheDocument();
+      if (conflict) expect(screen.getByRole('heading', { name: 'New AOV' })).toBeInTheDocument();
     });
   });
 });
