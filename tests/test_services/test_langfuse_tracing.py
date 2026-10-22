@@ -183,6 +183,7 @@ async def test_real_sdk_keeps_hierarchy_usage_and_respects_content_setting(sdk_e
     spans = sdk_exporter.get_finished_spans()
     assert len(spans) == 4
     assert len({span.context.trace_id for span in spans}) == 1
+    assert all(span.attributes["session.id"] == "session-sdk" for span in spans)
     generation = next(span for span in spans if span.attributes.get("langfuse.observation.type") == "generation")
     action = next(span for span in spans if span.name == "sdk-action")
     assert generation.parent.span_id == action.context.span_id
@@ -191,7 +192,6 @@ async def test_real_sdk_keeps_hierarchy_usage_and_respects_content_setting(sdk_e
         "output": 3,
         "total": 13,
     }
-    assert generation.attributes["session.id"] == "session-sdk"
     exported = str([dict(span.attributes) for span in spans])
     assert "private-connection" not in exported
     assert ("private-prompt" in exported) == tracing.get_settings().langfuse_capture_content
