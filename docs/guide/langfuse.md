@@ -1,8 +1,8 @@
 # Theo dõi xử lý AI bằng Langfuse
 
-Tích hợp dùng Python SDK v3 và callback LangChain chính thức. Không cần đổi
-frontend, schema DB hay API response. Cấu hình được đọc một lần mỗi process;
-sau khi đổi cấu hình cần khởi động lại backend.
+Tích hợp dùng Python SDK v4.7 trở lên (vẫn dưới v5) và callback LangChain
+chính thức. Không cần đổi frontend, schema DB hay API response. Cấu hình được
+đọc một lần mỗi process; đổi cấu hình cần khởi động lại backend.
 
 ## Cấu trúc trace
 
@@ -18,9 +18,10 @@ POST /api/v1/...                 # một trace cho mỗi request
 Tên root dùng route template, không chứa query string hoặc ID thực trong URL.
 Middleware ASGI giữ context xuyên suốt response streaming và background task
 được await trong request. Các tác vụ cron hoặc lời gọi LLM ngoài HTTP vẫn có
-span/generation riêng. Node có `session_id` gắn session vào các observation bên
-trong để lọc hội thoại trong Langfuse. Session không đồng nghĩa một trace:
-mỗi lượt HTTP vẫn tạo trace riêng.
+span/generation riêng. Các node có `session_id` truyền thuộc tính session trước
+khi tạo observation; Langfuse v4 áp dụng nó cho observation đang hoạt động và
+các observation con, gồm root request và generation có usage. Session không
+đồng nghĩa một trace: mỗi lượt HTTP vẫn tạo trace riêng.
 
 Tái sử dụng `trace_node`, `trace_action`, `trace_value` và `get_llm()` hiện có;
 không thay thế trace sink của benchmark. Chỉ những bước đã có các hook này
@@ -85,6 +86,7 @@ LangSmith là cấu hình độc lập. Nếu không dùng, đặt `LANGCHAIN_TR
 
 ## Tài liệu SDK
 
+- [Python SDK v3 → v4 migration](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4)
 - [LangChain integration](https://langfuse.com/integrations/frameworks/langchain)
 - [Sessions](https://langfuse.com/docs/observability/features/sessions)
 - [Masking](https://langfuse.com/docs/observability/features/masking)
