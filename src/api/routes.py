@@ -2072,6 +2072,9 @@ async def _handle_clarification_selection(
     if not matched_option:
         raise HTTPException(status_code=400, detail="Invalid clarification option")
 
+    if str(matched_option.get("id", "")).startswith("scope_"):
+        body = body.model_copy(update={"message": matched_option["label"]})
+
     spec_dict = matched_option.get("spec")
     if isinstance(spec_dict, dict) and spec_dict.get("metric_ids"):
         catalog = await build_parser_catalog(db, numeric_db_id)
@@ -2308,7 +2311,12 @@ async def _build_and_save_chat_response(
     notices = final_state.get("duplicate_notices") or []
     performed = final_state.get("dedupe_performed", dedupe_performed)
 
-    query_res, clar_payload = None, None
+    query_res = None
+    clar_payload = (
+        ChatClarificationPayload.model_validate(final_state["clarification"])
+        if final_state.get("clarification")
+        else None
+    )
     if intent == "semantic_query":
         query_res, clar_payload, response_text = await _execute_or_clarify_semantic_query(
             db, numeric_db_id, current_user.id, org_id, final_state, parser_catalog
@@ -2321,7 +2329,7 @@ async def _build_and_save_chat_response(
                 "Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer. "
                 "Bạn có thể sử dụng trực tiếp chỉ số có sẵn bên dưới để tính toán kết quả."
             )
-        else:
+        elif not clar_payload:
             response_text = (
                 "Tôi chưa tìm thấy cấu trúc dữ liệu phù hợp trong hệ thống để tự động đề xuất chỉ số này. "
                 "Bạn có thể thử mô tả chi tiết hơn về các trường dữ liệu cần dùng nhé!"
@@ -2416,7 +2424,11 @@ async def _chat_state_for_context(
 ) -> dict[str, Any]:
     """Run the graph only after consented context preparation succeeds."""
     if context.diagnostic["status"] != "ready":
-        return {"intent": "data_question", "chat_response": context.diagnostic["message"]}
+        return {
+            "intent": "data_question",
+            "chat_response": context.diagnostic["message"],
+            "clarification": context.diagnostic.get("clarification"),
+        }
     return await chat_agent.ainvoke(
         {
             "session_id": session_id,

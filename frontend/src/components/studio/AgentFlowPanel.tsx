@@ -57,7 +57,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
   useEffect(() => {
     const chat = panelRef.current?.previousElementSibling;
     if (mobile) chat?.setAttribute('inert', '');
-    closeRef.current?.focus();
+    closeRef.current?.focus({ preventScroll: true });
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); onClose(); }
       if (event.key !== 'Tab' || !mobile) return;
@@ -71,12 +71,12 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
     return () => {
       chat?.removeAttribute('inert');
       document.removeEventListener('keydown', keydown);
-      if (trigger?.isConnected) trigger.focus();
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
   }, [onClose, trigger, mobile]);
   return <aside ref={panelRef} aria-labelledby={headingId} role={mobile ? 'dialog' : 'complementary'} aria-modal={mobile || undefined}
-    className="fixed inset-0 z-50 flex flex-col overflow-y-auto border-l border-border bg-background shadow-xl lg:static lg:z-auto lg:w-[440px] lg:shrink-0 lg:shadow-none">
-    <div className="flex items-start justify-between gap-3 border-b border-border p-4">
+    className="fixed inset-0 z-50 flex min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain border-l border-border bg-background shadow-xl lg:static lg:z-auto lg:w-[440px] lg:shrink-0 lg:shadow-none">
+    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
       <div className="min-w-0">
         <h2 id={headingId} className="font-semibold">{t('Agent flow', 'Luồng agent')}</h2>
         <p className="mt-1 break-words text-xs text-muted-foreground">{title}</p>
@@ -85,7 +85,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
       <button ref={closeRef} type="button" onClick={onClose} aria-label={t('Close agent flow', 'Đóng luồng agent')}
         className="rounded p-2 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"><X className="h-4 w-4" /></button>
     </div>
-    <div className="px-3 py-4">
+    <div className="shrink-0 px-3 py-4">
       <div className="relative mx-auto aspect-[400/465] w-full max-w-[420px]" aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
         <svg viewBox="0 0 400 465" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
           <defs><marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
@@ -117,7 +117,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
       </div>
       <p className="text-[10px] text-muted-foreground">{t('Solid border: agent · Dashed border: system step', 'Viền liền: agent · Viền nét đứt: bước hệ thống')}</p>
     </div>
-    <div className="border-t border-border p-4">
+    <div className="shrink-0 break-words [overflow-wrap:anywhere] border-t border-border p-4">
       <h3 className="mb-3 text-sm font-semibold">{t(NODES.find((node) => node.id === selected)!.en, NODES.find((node) => node.id === selected)!.name)}</h3>
       {traceSteps(trace).some((step) => step.node === selected || (selected === 'sql' && step.action?.startsWith('sql_')))
         ? <ThinkingSteps trace={trace} node={selected} />

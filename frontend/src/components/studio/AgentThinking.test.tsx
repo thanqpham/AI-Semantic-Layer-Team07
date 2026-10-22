@@ -7,6 +7,24 @@ import { traceFixture } from '@/test/chatTraceFixture';
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('thinking and agent flow', () => {
+  it('scrolls only the chat pane as agent nodes update', () => {
+    const scrollIntoView = vi.fn();
+    const scrollTo = vi.fn();
+    const previous = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const props = { messages: [{ id: 'a', sender: 'assistant' as const, text: '', timestamp: '10:00', executionTrace: traceFixture }], onSendMessage: vi.fn(), isLoading: true, tableNames: [] };
+    try {
+      const { container, rerender } = render(<StudioChatStream {...props} />);
+      const pane = container.querySelector('.overflow-y-auto') as HTMLElement;
+      pane.scrollTo = scrollTo;
+      rerender(<StudioChatStream {...props} messages={[{ ...props.messages[0], executionTrace: { ...traceFixture, elapsed_ms: 3000 } }]} />);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(scrollTo).toHaveBeenCalledWith({ top: pane.scrollHeight, behavior: 'smooth' });
+    } finally {
+      HTMLElement.prototype.scrollIntoView = previous;
+    }
+  });
+
   it('starts closed, ticks when closed, and preserves expansion on completion', () => {
     vi.useFakeTimers();
     const props = { trace: traceFixture, onOpenGraph: vi.fn() };

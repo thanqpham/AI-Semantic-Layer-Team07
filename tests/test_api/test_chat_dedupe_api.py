@@ -87,6 +87,55 @@ _DUPLICATE_NOTICE: dict = {
 
 
 @pytest.mark.asyncio
+async def test_scope_question_returns_and_persists_options(client, auth_headers, chat_session_mocks) -> None:
+    """Scope questions must expose the same selectable choices live and after reload."""
+    clarification = {
+        "prompt": "AOV theo giá nào?",
+        "options": [{"id": "scope_0", "label": "Tính AOV theo price_after_tax"}],
+    }
+    with patch("src.api.routes.build_metric_context", new_callable=AsyncMock) as context:
+        context.return_value = MetricContextResult(
+            schema={},
+            diagnostic={
+                "status": "needs_clarification",
+                "message": clarification["prompt"],
+                "clarification": clarification,
+            },
+        )
+        response = await client.post("/api/v1/semantic/101/chat", json={"message": "Tính AOV"}, headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["clarification"]["options"][0]["label"] == clarification["options"][0]["label"]
+    metadata = chat_session_mocks.save.call_args.kwargs["metadata_json"]
+    assert metadata["clarification"]["options"][0]["id"] == "scope_0"
+
+
+@pytest.mark.asyncio
+async def test_scope_selection_continues_metric_generation() -> None:
+    """A scope answer uses the stored choice and stays in the metric generation flow."""
+    from src.api.routes import _handle_clarification_selection
+    from src.models.schemas import ChatClarificationSelection, ChatRequest
+
+    option = {"id": "scope_0", "label": "Tính AOV theo order_header.price_after_tax", "action": "create_metric"}
+    previous = SimpleNamespace(metadata_json={"clarification": {"options": [option]}})
+    selection = ChatClarificationSelection(assistant_message_id="a-1", option_id="scope_0")
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes._process_standard_chat", new_callable=AsyncMock) as process,
+    ):
+        await _handle_clarification_selection(
+            None,
+            SimpleNamespace(id="sess-1"),
+            SimpleNamespace(id=1),
+            101,
+            selection,
+            ChatRequest(message="Client label", clarification_selection=selection),
+            True,
+        )
+    assert process.call_args.args[4].message == option["label"]
+    assert process.call_args.kwargs["intent_override"] == "metric_query"
+
+
+@pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
 @patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_returns_duplicates(

@@ -197,6 +197,7 @@ export function AIStudioView({
             id: response.assistant_message_id || crypto.randomUUID(),
             sender: 'assistant',
             text: response.chat_response || 'Xin chào! Tôi có thể giúp gì cho bạn?',
+            clarification: response.clarification,
             timestamp: now(),
           },
         ]);
@@ -219,6 +220,7 @@ export function AIStudioView({
                 ? 'Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer. Bạn có thể sử dụng trực tiếp chỉ số có sẵn bên dưới để tính toán kết quả.'
                 : 'Tôi chưa tìm thấy cấu trúc dữ liệu phù hợp trong hệ thống để tự động đề xuất chỉ số này. Bạn có thể thử mô tả chi tiết hơn về các trường dữ liệu cần dùng nhé!'),
           suggestions,
+          clarification: response.clarification,
           duplicates: response.duplicates,
           dedupeSkipped: response.dedupe_performed === false,
           suggestionAction: response.suggestion_action,
@@ -309,11 +311,15 @@ export function AIStudioView({
       ),
     }));
 
-  const discardSuggestion = (messageId: string, index: number): void =>
-    updateMessage(messageId, (message) => ({
-      ...message,
-      suggestions: message.suggestions?.filter((_, itemIndex) => itemIndex !== index),
-    }));
+  const useExistingSuggestion = (messageId: string, index: number): void => {
+    const conflict = messages.find((message) => message.id === messageId)?.suggestions?.[index]?.conflict;
+    if (!conflict) return;
+    if (conflict.existing_metric_status !== 'approved' || !conflict.existing_metric_id) {
+      appendError(setMessages, `Chỉ số "${conflict.existing_metric_name}" chưa được phê duyệt hoặc không còn khả dụng. Vui lòng kiểm tra trong Catalog trước khi truy vấn.`);
+      return;
+    }
+    void send(`Tính kết quả từ chỉ số "${conflict.existing_metric_name}"`, [], conflict.existing_metric_id);
+  };
 
   const dismissDuplicate = (messageId: string, index: number): void =>
     updateMessage(messageId, (message) => ({
@@ -461,7 +467,7 @@ export function AIStudioView({
           mode={mode}
           onOpenCatalog={onOpenCatalog}
           onRenameSuggestion={renameSuggestion}
-          onDiscardSuggestion={discardSuggestion}
+          onUseExistingSuggestion={useExistingSuggestion}
           onDismissDuplicate={dismissDuplicate}
           onUseExistingDuplicate={useExistingDuplicate}
           onSubmitMetricRequest={!canGenerateMetrics ? submitRequest : undefined}

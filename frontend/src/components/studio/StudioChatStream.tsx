@@ -72,7 +72,7 @@ interface StudioChatStreamProps {
   submittedRequestKeys?: ReadonlySet<string>;
   approvedRequestKeys?: ReadonlySet<string>;
   onRenameSuggestion?: SuggestionIndexHandler;
-  onDiscardSuggestion?: SuggestionIndexHandler;
+  onUseExistingSuggestion?: SuggestionIndexHandler;
   onDismissDuplicate?: SuggestionIndexHandler;
   onUseExistingDuplicate?: SuggestionIndexHandler;
   onSubmitMetricRequest?: (messageId: string, suggestionIndex: number) => Promise<void>;
@@ -147,7 +147,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const [input, setInput] = useState(props.activePromptText || '');
   const [saved, setSaved] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const endRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; scrollLeft: number; isDragging: boolean; moved: boolean }>({
     startX: 0,
@@ -198,7 +198,8 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   }, [props.activePromptText]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    const pane = messagesRef.current;
+    pane?.scrollTo?.({ top: pane.scrollHeight, behavior: 'smooth' });
   }, [props.messages, props.isLoading]);
 
   const send = async () => {
@@ -261,7 +262,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       {/* 💬 Messages Stream */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
           {!canGenerateMetrics && (
             <div role="status" className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
@@ -285,7 +286,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               submittedKeys={props.submittedRequestKeys || new Set()}
               approvedKeys={props.approvedRequestKeys || new Set()}
               onRenameSuggestion={props.onRenameSuggestion}
-              onDiscardSuggestion={props.onDiscardSuggestion}
+              onUseExistingSuggestion={props.onUseExistingSuggestion}
               onDismissDuplicate={props.onDismissDuplicate}
               onUseExistingDuplicate={props.onUseExistingDuplicate}
               onSelectClarification={props.onSelectClarification}
@@ -315,7 +316,6 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               </div>
             </div>
           )}
-          <div ref={endRef} />
         </div>
       </div>
 
@@ -420,7 +420,7 @@ function MessageBubble({
   submittedKeys,
   approvedKeys,
   onRenameSuggestion,
-  onDiscardSuggestion,
+  onUseExistingSuggestion,
   onDismissDuplicate,
   onUseExistingDuplicate,
   onSelectClarification,
@@ -437,7 +437,7 @@ function MessageBubble({
   submittedKeys: ReadonlySet<string>;
   approvedKeys: ReadonlySet<string>;
   onRenameSuggestion?: SuggestionIndexHandler;
-  onDiscardSuggestion?: SuggestionIndexHandler;
+  onUseExistingSuggestion?: SuggestionIndexHandler;
   onDismissDuplicate?: SuggestionIndexHandler;
   onUseExistingDuplicate?: SuggestionIndexHandler;
   onSelectClarification?: (assistantMessageId: string, optionId: string, label: string) => void;
@@ -539,7 +539,7 @@ function MessageBubble({
                   onSubmitMetricRequest ? () => onSubmitMetricRequest(message.id, idx) : undefined
                 }
                 onRename={() => onRenameSuggestion?.(message.id, idx)}
-                onUseExisting={() => onDiscardSuggestion?.(message.id, idx)}
+                onUseExisting={() => onUseExistingSuggestion?.(message.id, idx)}
               />
             ))}
           </div>
