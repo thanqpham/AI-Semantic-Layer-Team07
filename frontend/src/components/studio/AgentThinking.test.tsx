@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AgentThinking } from './AgentThinking';
+import { AgentThinking, TraceDuration } from './AgentThinking';
 import { StudioChatStream, ChatMessage } from './StudioChatStream';
 import { traceFixture } from '@/test/chatTraceFixture';
 
@@ -14,7 +14,7 @@ describe('thinking and agent flow', () => {
     expect(screen.queryByText('Phân loại yêu cầu')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Thinking/ })).toHaveAttribute('aria-expanded', 'false');
     act(() => { vi.advanceTimersByTime(3000); });
-    expect(screen.getByText('5 giây')).toBeInTheDocument();
+    expect(screen.getByText('5 s')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Thinking/ }));
     expect(screen.getByText('Phân loại yêu cầu')).toBeInTheDocument();
     const completed = { ...traceFixture, status: 'completed' as const, elapsed_ms: 6000, events: [
@@ -23,7 +23,7 @@ describe('thinking and agent flow', () => {
     rerender(<AgentThinking {...props} trace={completed} />);
     expect(screen.getByRole('button', { name: /Thinking.*Hoàn tất/ })).toHaveAttribute('aria-expanded', 'true');
     act(() => { vi.advanceTimersByTime(5000); });
-    expect(screen.queryByText('11 giây')).not.toBeInTheDocument();
+    expect(screen.queryByText('11 s')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Luồng agent' }));
     expect(props.onOpenGraph).toHaveBeenCalledOnce();
   });
@@ -75,5 +75,15 @@ describe('thinking and agent flow', () => {
     fireEvent.click(close);
     expect(container.querySelector('[inert]')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+});
+
+describe('trace duration units', () => {
+  it.each([
+    [0, '0 s'], [1, '0.001 s'], [125, '0.125 s'], [999, '0.999 s'],
+    [1000, '1 s'], [59999, '59 s'], [60000, '1 m 0 s'], [90500, '1 m 30 s'],
+  ])('formats %i ms as %s', (milliseconds, expected) => {
+    render(<TraceDuration milliseconds={milliseconds} />);
+    expect(screen.getByText(expected)).toBeInTheDocument();
   });
 });

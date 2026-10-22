@@ -13,14 +13,17 @@ const AGENT_NAMES: Record<string, string> = {
 
 export function TraceDuration({ milliseconds, running = false }: { milliseconds: number; running?: boolean }) {
   const [extra, setExtra] = useState(0);
-  const { t } = useLanguage();
   useEffect(() => {
     if (!running) return;
     const started = performance.now();
     const timer = window.setInterval(() => setExtra(performance.now() - started), 1000);
     return () => window.clearInterval(timer);
   }, [running]);
-  return <span className="tabular-nums">{Math.floor((milliseconds + (running ? extra : 0)) / 1000)} {t('s', 'giây')}</span>;
+  const seconds = Math.max(0, milliseconds + (running ? extra : 0)) / 1000;
+  const duration = seconds < 1 ? `${Number(seconds.toFixed(3))} s`
+    : seconds < 60 ? `${Math.floor(seconds)} s`
+    : `${Math.floor(seconds / 60)} m ${Math.floor(seconds % 60)} s`;
+  return <span className="tabular-nums">{duration}</span>;
 }
 
 export function StepStatus({ status }: { status: TraceEvent['status'] }) {
