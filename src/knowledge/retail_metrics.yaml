@@ -1,0 +1,149 @@
+version: 1
+domain: retail_ecommerce
+sources:
+  - id: shopify_sales
+    title: Shopify — Sales reports
+    url: https://help.shopify.com/en/manual/reports-and-analytics/shopify-reports/report-types/default-reports/sales-report
+    reviewed_at: '2026-10-23'
+  - id: woocommerce_analytics
+    title: WooCommerce — Analytics and Sales Reports
+    url: https://woocommerce.com/document/woocommerce-analytics/
+    reviewed_at: '2026-10-23'
+  - id: shopify_profit
+    title: Shopify — Profit reports
+    url: https://help.shopify.com/en/manual/reports-and-analytics/shopify-reports/report-types/default-reports/profit-reports
+    reviewed_at: '2026-10-23'
+metrics:
+  - id: net_sales
+    name: Doanh số thuần
+    aliases: [doanh thu, doanh số, net sales, revenue]
+    meaning: Giá trị hàng bán sau các khoản giảm trừ đã xác nhận.
+    variants:
+      - name: merchandise_net_sales
+        formula: SUM(gross merchandise amount - discounts - returned merchandise amount)
+        source_ids: [woocommerce_analytics, shopify_sales]
+    grain: Một dòng cho mỗi đơn hàng hoặc dòng hàng; không trộn hai grain.
+    required_data: [giá trị hàng bán, giảm giá, giá trị trả hàng]
+    unit: Tiền tệ được doanh nghiệp xác nhận
+    confirm: [thuế và phí vận chuyển, trạng thái đơn, kỳ ghi nhận trả hàng, tiền tệ]
+    limitations: Không đồng nhất với tiền đã thu hoặc doanh thu kế toán; không trừ giảm giá hai lần.
+  - id: completed_orders
+    name: Số đơn hàng hoàn tất
+    aliases: [đơn hàng, số đơn, order count, completed orders]
+    meaning: Số đơn duy nhất thỏa điều kiện hoàn tất của doanh nghiệp.
+    variants:
+      - name: enterprise_completed_orders
+        formula: COUNT_DISTINCT(order key) with confirmed completion predicate
+        source_ids: [shopify_sales]
+    grain: Đơn hàng
+    required_data: [khóa đơn hàng, trạng thái hoàn tất]
+    unit: Đơn
+    confirm: [ánh xạ trạng thái hoàn tất, thời điểm tính]
+    limitations: Biến thể nội bộ; nguồn tham khảo đếm đơn được đặt, không xác định trạng thái hoàn tất của doanh nghiệp.
+  - id: customers
+    name: Số khách hàng
+    aliases: [khách hàng, customers, customer count]
+    meaning: Số khách hàng duy nhất trong phạm vi đã xác nhận.
+    variants:
+      - name: distinct_customers
+        formula: COUNT_DISTINCT(customer key)
+        source_ids: [woocommerce_analytics]
+    grain: Khách hàng
+    required_data: [khóa khách hàng]
+    unit: Khách hàng
+    confirm: [khách đăng ký hay khách đã mua, thời kỳ và khách vãng lai]
+    limitations: Không suy luận khách mới hoặc khách quay lại từ khóa khách hàng đơn thuần.
+  - id: net_units
+    name: Số lượng sản phẩm bán ròng
+    aliases: [số lượng bán, sản phẩm bán, units sold, quantity]
+    meaning: Lượng bán trừ lượng trả theo cùng đơn vị.
+    variants:
+      - name: net_quantity
+        formula: SUM(sold quantity - returned quantity)
+        source_ids: [shopify_sales]
+    grain: Dòng hàng
+    required_data: [số lượng bán, số lượng trả]
+    unit: Sản phẩm theo đơn vị đã xác nhận
+    confirm: [đơn hủy, NULL ở số lượng trả, quy đổi đơn vị]
+    limitations: Thiếu lượng trả thì chỉ đề xuất lượng bán gộp với tên và phạm vi rõ ràng.
+  - id: delivery_hours
+    name: Thời gian giao hàng trung bình
+    aliases: [giao hàng, delivery, lead time]
+    meaning: Thời gian giữa hai mốc nghiệp vụ được xác nhận.
+    variants:
+      - name: enterprise_delivery_duration
+        formula: AVG(TIMESTAMP_DIFF_HOURS(delivered timestamp, confirmed start timestamp))
+        source_ids: []
+    grain: Một lần giao hàng hoặc một đơn hàng được xác nhận
+    required_data: [mốc bắt đầu, mốc giao thành công]
+    unit: Giờ
+    confirm: [mốc bắt đầu là đặt hàng hay bàn giao vận chuyển, múi giờ, giao nhiều lần]
+    limitations: Công thức vận hành nội bộ, không gán cho chuẩn bên ngoài; thiếu mốc thì không tính.
+  - id: aov
+    name: Giá trị đơn hàng trung bình
+    aliases: [aov, trung bình đơn hàng, average order value]
+    variants:
+      - name: shopify_order_value
+        formula: (gross sales excluding adjustments - discounts excluding adjustments) / orders
+        source_ids: [shopify_sales]
+      - name: woocommerce_order_value
+        formula: net sales / orders
+        source_ids: [woocommerce_analytics]
+    meaning: Giá trị trung bình của cùng một tập đơn hàng.
+    grain: Đơn hàng
+    required_data: [giá trị theo biến thể đã chọn, khóa đơn hàng]
+    unit: Tiền tệ trên đơn
+    confirm: [biến thể công thức, trả hàng, trạng thái đơn, NULL ở giá trị]
+    limitations: Compiler v1 không hỗ trợ ratio giữa các phép tổng hợp; không dùng phép chia ID hoặc AVG nếu chưa chứng minh tương đương.
+  - id: gross_margin
+    name: Biên lợi nhuận gộp
+    aliases: [biên lợi nhuận, gross margin, margin]
+    meaning: Tỷ phần lợi nhuận sau giá vốn trên doanh số thuần.
+    variants:
+      - name: merchandise_margin
+        formula: (net sales - COGS) / net sales
+        source_ids: [shopify_profit]
+    grain: Cùng tập giao dịch cho doanh số và giá vốn
+    required_data: [doanh số thuần, giá vốn tại lúc bán]
+    unit: Tỷ lệ hoặc phần trăm
+    confirm: [nguồn giá vốn, phạm vi hàng trả, mẫu số bằng không]
+    limitations: Thiếu giá vốn thì không khả thi; compiler v1 chưa hỗ trợ ratio tổng hợp.
+  - id: conversion
+    name: Tỷ lệ chuyển đổi mua hàng
+    aliases: [chuyển đổi, conversion, checkout]
+    meaning: Tỷ phần phiên dẫn tới hành vi mua hàng được xác nhận.
+    variants:
+      - name: enterprise_purchase_sessions
+        formula: distinct converted sessions / distinct eligible sessions
+        source_ids: []
+    grain: Phiên truy cập
+    required_data: [khóa phiên, bằng chứng mua hàng theo phiên]
+    unit: Tỷ lệ hoặc phần trăm
+    confirm: [định nghĩa chuyển đổi, bot, attribution, kỳ quan sát]
+    limitations: Biến thể nội bộ cần doanh nghiệp xác nhận; không dùng số đơn chia ID phiên; compiler v1 chưa hỗ trợ ratio tổng hợp.
+  - id: cancellation
+    name: Tỷ lệ hủy đơn hàng
+    aliases: [hủy đơn, cancellation, cancel rate]
+    meaning: Tỷ phần đơn bị hủy trong cùng tập đơn hợp lệ.
+    variants:
+      - name: enterprise_cancellation_rate
+        formula: distinct canceled orders / distinct eligible orders
+        source_ids: []
+    grain: Đơn hàng
+    required_data: [khóa đơn hàng, trạng thái hủy]
+    unit: Tỷ lệ hoặc phần trăm
+    confirm: [phạm vi mẫu số, ánh xạ trạng thái hủy, kỳ ghi nhận]
+    limitations: Biến thể nội bộ; không áp filter hủy cho cả mẫu số; compiler v1 chưa hỗ trợ ratio tổng hợp.
+  - id: units_per_transaction
+    name: Số sản phẩm trên mỗi giao dịch
+    aliases: [sản phẩm trên, units per transaction, upt]
+    meaning: Lượng bán ròng trung bình trên mỗi đơn.
+    variants:
+      - name: net_units_per_order
+        formula: net quantity / total orders
+        source_ids: [shopify_sales]
+    grain: Đơn hàng và dòng hàng, phải tránh nhân bản đơn
+    required_data: [lượng bán ròng, khóa đơn hàng]
+    unit: Sản phẩm trên đơn
+    confirm: [trả hàng, trạng thái đơn, quan hệ dòng hàng với đơn]
+    limitations: Compiler v1 chưa hỗ trợ ratio tổng hợp hoặc phép tính nhiều bảng.

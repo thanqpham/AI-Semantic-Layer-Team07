@@ -28,6 +28,7 @@ from src.models.db import (
     UserModel,
 )
 from src.models.metric_definition import MetricDefinition
+from src.models.metric_review import MetricProposalReviewRequest, MetricProposalReviewResponse, MetricReview
 from src.models.schema_metadata import DiagnosticCode, RawSchemaMetadata, SchemaDialect
 from src.models.schemas import (
     ApproveRequest,
@@ -92,6 +93,7 @@ from src.services.chat_service import (
     get_chat_messages_page,
     get_chat_session,
     get_chat_session_with_messages,
+    get_metric_requirement_history,
     get_recent_chat_history,
     list_chat_sessions,
     save_chat_message,
@@ -115,8 +117,21 @@ from src.services.live_db_service import (
     list_live_target_dbs,
 )
 from src.services.metric_comparison import compare_catalog_metrics
-from src.services.metric_context import MetricContextResult, build_data_context, build_metric_context
+from src.services.metric_context import (
+    MetricContextResult,
+    build_data_context,
+    build_discovery_context,
+    build_metric_context,
+)
 from src.services.metric_dedupe import load_existing_for_dedupe
+from src.services.metric_proposals import (
+    generate_reviewed_metrics,
+    metric_version_review,
+    persist_reviewed_state,
+    re_review_proposal,
+    request_review_details,
+    require_proposal,
+)
 from src.services.metric_request_service import (
     MetricRequestError,
     approve_metric_request,
@@ -129,7 +144,7 @@ from src.services.metric_request_service import (
 )
 from src.services.metric_rollback import rollback_metric as rollback_metric_record
 from src.services.metric_versioning import latest_open_version
-from src.services.metrics import generate_metrics_from_prompt, normalize_prompt
+from src.services.metrics import normalize_prompt
 from src.services.natural_language_query import (
     build_parser_catalog,
     execute_natural_language_query,
@@ -834,24 +849,38 @@ async def generate_custom_metrics(
     except ValueError as error:
         raise HTTPException(status_code=404, detail=f"Database with id {db_id} not found") from error
     await _require_resource_permission(db, current_user.id, numeric_db_id, org_id, "can_submit_metric")
-    context = await build_metric_context(
-        db, numeric_db_id, clean_prompt, get_settings().metric_context_token_budget, body.target_tables
-    )
+    if body.proposal_mode == "discovery":
+        context = await build_discovery_context(
+            db, numeric_db_id, get_settings().metric_context_token_budget, body.target_tables, question=clean_prompt
+        )
+    else:
+        context = await build_metric_context(
+            db, numeric_db_id, clean_prompt, get_settings().metric_context_token_budget, body.target_tables
+        )
     if context.diagnostic["status"] != "ready":
         raise HTTPException(status_code=422, detail=context.diagnostic["message"])
 
     try:
         existing, dedupe_performed = await load_existing_for_dedupe(db, db_id)
-        suggestions, duplicates = await generate_metrics_from_prompt(
-            prompt=clean_prompt,
-            schema_context=context.schema,
-            target_tables=body.target_tables,
-            existing_metrics=existing or None,
+        result = await generate_reviewed_metrics(
+            db,
+            numeric_db_id,
+            current_user.id,
+            {
+                "user_message": clean_prompt,
+                "enriched_schema": context.schema,
+                "existing_metrics": existing or [],
+                "proposal_mode": body.proposal_mode,
+                "can_generate_metrics": True,
+            },
         )
+        await db.commit()
         return CustomMetricGenerateResponse(
-            suggestions=suggestions,
-            duplicates=duplicates,
+            suggestions=result.get("suggested_metrics", []),
+            duplicates=result.get("duplicate_notices", []),
             dedupe_performed=dedupe_performed,
+            blocked_candidates=result.get("blocked_candidates", []),
+            clarification=result.get("clarification"),
         )
     except Exception as exc:
         logger.error(f"Lỗi khi sinh metrics từ prompt: {exc}", exc_info=True)
@@ -876,6 +905,7 @@ async def create_metric_endpoint(
     metric_data: dict[str, Any] = {
         "definition": body.definition.model_dump(mode="json"),
         "source": body.source,
+        "proposal_id": body.proposal_id,
     }
 
     try:
@@ -890,6 +920,7 @@ async def create_metric_endpoint(
         logger.info("Duplicate metric rejected for db_id=%s: %s", db_id, exc)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
+        await db.rollback()
         logger.warning("create_metric validation error for db_id=%s: %s", db_id, exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -925,7 +956,7 @@ async def submit_metric_request(
         )
     except (MetricRequestError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return MetricRequestResponse.model_validate(request)
+    return await _metric_request_response(db, request)
 
 
 @router.get("/semantic/{db_id}/metric-requests", response_model=list[MetricRequestResponse])
@@ -939,7 +970,7 @@ async def get_metric_requests(
     database = await _require_resource_permission(db, current_user.id, db_id, org_id, "can_use_data_assistant")
     is_lead = await _chat_can_generate_metrics(db, database, current_user.id)
     requests = await list_metric_requests(db, db_id, current_user.id, is_lead)
-    return [MetricRequestResponse.model_validate(item) for item in requests]
+    return [await _metric_request_response(db, item) for item in requests]
 
 
 @router.post("/semantic/{db_id}/metric-requests/{request_id}/approve", response_model=MetricRequestResponse)
@@ -957,11 +988,13 @@ async def accept_metric_request(
     if request is None or request.db_id != db_id:
         raise HTTPException(status_code=404, detail="Metric request not found")
     try:
-        reviewed = await approve_metric_request(db, request_id, current_user.id, body.definition, body.review_note)
+        reviewed = await approve_metric_request(
+            db, request_id, current_user.id, body.definition, body.review_note, body.proposal_id
+        )
     except (MetricRequestError, ValueError) as exc:
         await db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return MetricRequestResponse.model_validate(reviewed)
+    return await _metric_request_response(db, reviewed)
 
 
 @router.post("/semantic/{db_id}/metric-requests/{request_id}/reject", response_model=MetricRequestResponse)
@@ -982,7 +1015,43 @@ async def decline_metric_request(
         reviewed = await reject_metric_request(db, request_id, current_user.id, body.review_note)
     except MetricRequestError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return MetricRequestResponse.model_validate(reviewed)
+    return await _metric_request_response(db, reviewed)
+
+
+async def _metric_request_response(db: AsyncSession, request: MetricRequestModel) -> MetricRequestResponse:
+    """Expose persisted review evidence only after request authorization."""
+    details = await request_review_details(db, request.assistant_message_id, request.suggestion_index, request.id)
+    return MetricRequestResponse.model_validate(
+        {**MetricRequestResponse.model_validate(request).model_dump(), **details}
+    )
+
+
+@router.post("/semantic/{db_id}/metric-proposals/{proposal_id}/review", response_model=MetricProposalReviewResponse)
+async def review_edited_metric_proposal(
+    db_id: int,
+    proposal_id: str,
+    body: MetricProposalReviewRequest,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> MetricProposalReviewResponse:
+    """Create fresh review evidence for an edit while preserving original requirements."""
+    database = await _require_resource_permission(db, current_user.id, db_id, org_id, "can_submit_metric")
+    is_lead = await _chat_can_generate_metrics(db, database, current_user.id)
+    try:
+        original = await require_proposal(db, db_id, proposal_id, current_user.id, allow_lead=is_lead)
+        proposal = await re_review_proposal(db, original, current_user.id, body.definition)
+        await db.commit()
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    definition = MetricDefinition.model_validate(proposal.final_definition) if proposal.final_definition else None
+    return MetricProposalReviewResponse(
+        proposal_id=proposal.id,
+        definition=definition,
+        yaml_preview=definition.to_yaml() if definition else "",
+        review=MetricReview.model_validate(proposal.review),
+    )
 
 
 def _safe_metric_definition(definition_raw: Any) -> MetricDefinition | None:
@@ -1232,9 +1301,13 @@ async def get_metric_history(
     if not metric:
         raise HTTPException(status_code=404, detail=f"Metric {metric_id} not found")
 
+    database = await db.get(SemanticDatabaseModel, db_id)
+    show_review = await _chat_can_generate_metrics(db, database, current_user.id)
+
     versions = [
         MetricVersionItem(
             version=v.version,
+            review=await metric_version_review(db, metric_id, v.version) if show_review else None,
             definition=v.definition,
             changed_by=v.changed_by,
             changed_by_name=_actor_name(v.changer),
@@ -1683,12 +1756,14 @@ def _assistant_metadata(
     semantic_query_result: dict[str, Any] | None = None,
     clarification: dict[str, Any] | None = None,
     interpretation: dict[str, Any] | None = None,
+    blocked_candidates: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Build the versioned assistant message metadata contract."""
     return {
         "schema_version": 2,
         "status": status_name,
         "suggestions": suggestions or [],
+        "blocked_candidates": blocked_candidates or [],
         "suggestion_action": action,
         "duplicates": duplicates or [],
         "dedupe_performed": dedupe_performed,
@@ -2204,6 +2279,8 @@ async def _process_standard_chat(
     classification = (
         {"intent": intent_override}
         if intent_override
+        else {"intent": "metric_query"}
+        if body.proposal_mode == "discovery"
         else await orchestrator_node({"user_message": body.message, "chat_history": history})
     )
     preclassified_intent = classification.get("intent", "data_question")
@@ -2227,9 +2304,30 @@ async def _process_standard_chat(
         parser_catalog = await build_parser_catalog(db, numeric_db_id)
 
     with execution_step("context"):
-        context = await _build_chat_context(
-            db, numeric_db_id, body.message, preclassified_intent, get_settings().metric_context_token_budget, history
-        )
+        try:
+            if preclassified_intent == "metric_query":
+                full_history = await get_metric_requirement_history(
+                    db, session.id, get_settings().metric_context_token_budget
+                )
+                history = [m for m in full_history if m["id"] != user_message.id]
+            context = await _build_chat_context(
+                db,
+                numeric_db_id,
+                body.message,
+                preclassified_intent,
+                get_settings().metric_context_token_budget,
+                history,
+                proposal_mode=body.proposal_mode,
+            )
+        except ValueError as exc:
+            context = MetricContextResult(
+                schema={},
+                diagnostic={
+                    "status": "needs_clarification",
+                    "message": str(exc),
+                    "clarification": {"prompt": str(exc), "options": []},
+                },
+            )
     with execution_step("dedupe"):
         existing_metrics, dedupe_performed = await load_existing_for_dedupe(db, str(numeric_db_id))
     final_state = await _chat_state_for_context(
@@ -2245,7 +2343,10 @@ async def _process_standard_chat(
         dedupe_performed,
         parser_catalog,
         chat_response=preclassified_chat_response,
+        proposal_mode=body.proposal_mode,
+        user_message_id=user_message.id,
     )
+    await persist_reviewed_state(db, numeric_db_id, current_user.id, final_state)
     return await _build_and_save_chat_response(
         db,
         session,
@@ -2329,6 +2430,10 @@ async def _build_and_save_chat_response(
                 "Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer. "
                 "Bạn có thể sử dụng trực tiếp chỉ số có sẵn bên dưới để tính toán kết quả."
             )
+        elif final_state.get("blocked_candidates"):
+            response_text = (
+                "Các KPI dưới đây chưa đủ điều kiện gửi duyệt. Xem kết quả thẩm định để bổ sung hoặc sửa yêu cầu."
+            )
         elif not clar_payload:
             response_text = (
                 "Tôi chưa tìm thấy cấu trúc dữ liệu phù hợp trong hệ thống để tự động đề xuất chỉ số này. "
@@ -2351,6 +2456,7 @@ async def _build_and_save_chat_response(
             diagnostics=context_diagnostic,
             semantic_query_result=query_res.model_dump(mode="json") if query_res else None,
             clarification=clar_payload.model_dump(mode="json") if clar_payload else None,
+            blocked_candidates=final_state.get("blocked_candidates", []),
         ),
         client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
     )
@@ -2364,6 +2470,7 @@ async def _build_and_save_chat_response(
         intent=intent,
         chat_response=response_text or None,
         suggestions=raw_metrics if intent == "metric_query" else None,
+        blocked_candidates=final_state.get("blocked_candidates", []),
         duplicates=notices if intent == "metric_query" else [],
         dedupe_performed=performed,
         suggestion_action=suggestion_action if intent == "metric_query" else None,
@@ -2421,6 +2528,8 @@ async def _chat_state_for_context(
     dedupe_performed: bool,
     parser_catalog: dict[str, Any] | None = None,
     chat_response: str | None = None,
+    proposal_mode: str = "requested",
+    user_message_id: str | None = None,
 ) -> dict[str, Any]:
     """Run the graph only after consented context preparation succeeds."""
     if context.diagnostic["status"] != "ready":
@@ -2433,6 +2542,8 @@ async def _chat_state_for_context(
         {
             "session_id": session_id,
             "user_message": message,
+            "user_message_id": user_message_id,
+            "proposal_mode": proposal_mode,
             "chat_history": history,
             "enriched_schema": context.schema,
             "approved_metrics": approved_metrics,
@@ -2454,14 +2565,22 @@ async def _build_chat_context(
     intent: str,
     token_budget: int,
     history: list[dict[str, str]] | None = None,
+    proposal_mode: str = "requested",
 ) -> MetricContextResult:
     """Prepare context only after the request intent is known."""
     query = message
+    if intent == "metric_query" and proposal_mode == "discovery":
+        query = "\n".join([m["content"] for m in history or [] if m.get("role") == "user"] + [message])
+        return await build_discovery_context(db, db_id, token_budget, question=query)
     if history and len(message.strip().split()) <= 6:
         prior_user_msgs = [m.get("content", "") for m in history if m.get("role") == "user" and m.get("content")]
         if prior_user_msgs:
             query = f"{prior_user_msgs[-1]}\nYêu cầu tiếp theo: {message}"
     if intent == "metric_query":
+        if history:
+            query = (
+                "\n".join(m["content"] for m in history if m.get("role") == "user") + "\nYêu cầu mới nhất: " + message
+            )
         return await build_metric_context(db, db_id, query, token_budget)
     if intent == "data_question":
         return await build_data_context(db, db_id, query, token_budget)
@@ -2524,11 +2643,9 @@ async def _replay_chat_response(
         execution.replayed = True
     return ChatResponse(
         intent=intent,
-        chat_response=assistant.content
-        if intent in {"chitchat", "data_question", "out_of_scope", "semantic_query"}
-        or metadata.get("status") == "error"
-        else None,
+        chat_response=assistant.content,
         suggestions=suggestions if intent == "metric_query" else None,
+        blocked_candidates=metadata.get("blocked_candidates", []),
         duplicates=duplicates if intent == "metric_query" else [],
         dedupe_performed=bool(metadata.get("dedupe_performed", True)),
         suggestion_action=suggestion_action if intent == "metric_query" else None,

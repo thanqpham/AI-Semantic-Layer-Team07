@@ -18,7 +18,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/components/ui/button';
-import { MetricSuggestion } from '@/lib/api';
+import { MetricSuggestion, MetricCandidateReport } from '@/lib/api';
+import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { cn } from '@/lib/utils';
 import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
 import { StatusPill } from '@/components/workspace/shared';
@@ -42,6 +43,7 @@ export interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   suggestions?: MetricSuggestion[];
+  blockedCandidates?: MetricCandidateReport[];
   duplicates?: ChatDuplicateNotice[];
   dedupeSkipped?: boolean;
   suggestionAction?: 'save_metric' | 'submit_metric_request' | null;
@@ -55,6 +57,7 @@ export interface ChatMessage {
 type SuggestionIndexHandler = (messageId: string, index: number) => void;
 
 interface StudioChatStreamProps {
+  onDiscoverMetrics?: () => void;
   conversationKey?: string | null;
   reconnecting?: boolean;
   messages: ChatMessage[];
@@ -372,6 +375,10 @@ export function StudioChatStream(props: StudioChatStreamProps) {
           </div>
 
           {/* Composer Input Box */}
+          {props.onDiscoverMetrics && <Button type="button" variant="outline" size="sm"
+            disabled={props.isLoading} onClick={props.onDiscoverMetrics} className="mb-2 gap-2">
+            <Sparkles className="h-4 w-4" />Khám phá KPI từ schema
+          </Button>}
           <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2 shadow-xs focus-within:border-foreground/30 focus-within:ring-1 focus-within:ring-ring/20">
             <textarea
               value={input}
@@ -517,6 +524,11 @@ function MessageBubble({
             <Translated text={"⚠️ Không kiểm tra được trùng lặp (dedupe unavailable) — danh sách chưa so với metric đã lưu."} />
           </div>
         )}
+
+        {message.blockedCandidates?.map((candidate, index) => <div key={candidate.proposal_id || index} className="w-full">
+          <p className="text-sm font-medium">{candidate.name}</p>
+          <MetricReviewPanel review={candidate.review} />
+        </div>)}
 
         {message.suggestions && message.suggestions.length > 0 && (
           <div className="w-full space-y-4 pt-1">
@@ -773,6 +785,7 @@ function SuggestionCard({
 
       {/* Visual Properties */}
       <div className="space-y-2 p-4 text-xs">
+        {suggestion.review && <MetricReviewPanel review={suggestion.review} definition={suggestion.definition} />}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -883,7 +896,7 @@ function SuggestionCard({
                 size="sm"
                 className="h-8 gap-1.5 text-xs cursor-pointer"
                 onClick={() => void handleSubmitRequest()}
-                disabled={saving}
+                disabled={saving || !suggestion.proposal_id || suggestion.review?.status !== 'pass'}
               >
                 <Save className="h-3.5 w-3.5" />
                 <Translated text={saving ? 'Đang gửi...' : 'Gửi Data Lead xem xét'} />
@@ -904,7 +917,7 @@ function SuggestionCard({
               size="sm"
               className="h-8 gap-1.5 text-xs cursor-pointer"
               onClick={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || !suggestion.proposal_id || suggestion.review?.status !== 'pass'}
             >
               <Save className="h-3.5 w-3.5" />
               <Translated text={saving ? 'Đang lưu...' : 'Lưu vào Semantic Layer'} />

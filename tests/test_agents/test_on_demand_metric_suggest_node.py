@@ -1,174 +1,112 @@
-"""Tests for the dedupe-aware LangGraph metric node."""
+"""Draft generation and mandatory post-generation review graph tests."""
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from src.agents.chat_graph import build_chat_graph
+from src.agents.graph import END, _route_after_review
+from src.agents.nodes.metric_review_node import metric_review_node, reviewed_state
 from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
-from src.models.metric_definition import MetricDefinition
-from src.models.schemas import MetricSuggestions
-from src.services.metrics import extract_schema_summary
+from src.agents.nodes.save_node import _selected_review_evidence
+from src.models.metric_review import MetricDraft, MetricDraftBatch, MetricReview
+from src.services.metric_proposal_generation import generate_metric_drafts
+from tests.metric_review_helpers import context, definition, schema
 
 
-def _definition(
-    name: str = "Doanh thu",
-    expression: str = "amount",
-    base_entity: str = "orders",
-) -> MetricDefinition:
-    return MetricDefinition.model_validate(
+async def test_empty_state_returns_error():
+    assert "error" in await on_demand_metric_suggest_node({})
+
+
+async def test_generator_returns_untrusted_drafts_not_actionable_suggestions():
+    draft = {"name": "Doanh thu", "definition": definition()}
+    with patch(
+        "src.agents.nodes.on_demand_metric_suggest_node.generate_metric_drafts", AsyncMock(return_value=[draft])
+    ):
+        result = await on_demand_metric_suggest_node({"enriched_schema": schema(), "user_message": "Doanh thu"})
+    assert result["metric_drafts"] == [draft]
+    assert not result.get("suggested_metrics") and not result.get("suggestion_action")
+
+
+async def test_generation_does_not_discard_invalid_reference_before_repair():
+    batch = MetricDraftBatch(candidates=[MetricDraft(name="Metric", definition=definition("missing"))])
+    with patch("src.services.metric_proposal_generation.invoke_metric_json", AsyncMock(return_value=batch)):
+        drafts = await generate_metric_drafts(context())
+    assert drafts[0]["definition"]["metric"]["formula"]["expression"] == "missing"
+
+
+async def test_generation_error_cannot_bypass_reviewer():
+    with patch(
+        "src.agents.nodes.on_demand_metric_suggest_node.generate_metric_drafts", AsyncMock(side_effect=RuntimeError)
+    ):
+        initial = await on_demand_metric_suggest_node({"enriched_schema": schema()})
+    result = {**initial, **await metric_review_node(initial)}
+    assert result["blocked_candidates"][0]["review"]["status"] == "error"
+    assert result["suggested_metrics"] == [] and result["suggestion_action"] is None
+
+
+def test_chat_graph_has_mandatory_review_edge_and_legacy_blocks_unreviewed_state():
+    graph = build_chat_graph().get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+    assert ("metric_suggest", "metric_review") in edges
+    assert ("metric_suggest", "__end__") not in edges
+    assert _route_after_review({}) == END
+    assert _route_after_review({"suggested_metrics": [{}], "blocked_candidates": [{}]}) == END
+
+
+def test_discovery_caps_results_and_preserves_blocked_reports():
+    proposals = [
         {
-            "metric": {
-                "name": name,
-                "formula": {"function": "SUM", "expression": expression},
-                "base_entity": base_entity,
-                "filters": [],
-                "status": "pending_approval",
-                "confidence": "high",
-                "excluded_notes": "",
-            }
+            "name": f"Metric {i}",
+            "final_definition": definition(name=f"Metric {i}"),
+            "review": MetricReview(status="pass", summary="Valid").model_dump(mode="json"),
         }
-    )
-
-
-def _mock_llm(structured_return: Any) -> MagicMock:
-    structured = AsyncMock()
-    structured.ainvoke.return_value = structured_return
-    llm = MagicMock()
-    llm.with_structured_output.return_value = structured
-    return llm
-
-
-def _schema_with_order_items() -> dict[str, Any]:
-    return {
-        "tables": [
-            {"table_name": "orders", "columns": [{"column_name": "amount", "data_type": "NUMERIC"}]},
-            {
-                "table_name": "order_items",
-                "columns": [
-                    {"column_name": "quantity", "data_type": "INT"},
-                    {"column_name": "unit_price", "data_type": "NUMERIC"},
-                ],
-            },
-        ]
-    }
-
-
-async def test_empty_state_returns_error() -> None:
-    result = await on_demand_metric_suggest_node({})
-    assert "error" in result
-
-
-async def test_node_returns_definition_without_sql() -> None:
-    llm = _mock_llm(MetricSuggestions(metrics=[_definition()]))
-    state = {
-        "enriched_schema": {
-            "tables": [{"table_name": "orders", "columns": [{"column_name": "amount", "data_type": "NUMERIC"}]}]
-        }
-    }
-    with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
-        result = await on_demand_metric_suggest_node(state)
-    item = result["suggested_metrics"][0]
-    metric = item["definition"]
-    assert metric["metric"]["formula"]["expression"] == "amount"
-    assert "sql_template" not in str(item)
-    assert result["duplicate_notices"] == []
-    assert result["dedupe_performed"] is True
-    llm.with_structured_output.assert_called_once_with(MetricSuggestions, method="function_calling")
-
-
-async def test_node_retries_when_first_definition_references_unknown_schema() -> None:
-    """Schema-invalid structured output must receive one corrective retry."""
-    invalid = _definition(expression="unknown_amount")
-    structured = AsyncMock()
-    structured.ainvoke.side_effect = [MetricSuggestions(metrics=[invalid]), MetricSuggestions(metrics=[_definition()])]
-    llm = MagicMock()
-    llm.with_structured_output.return_value = structured
-    state = {"enriched_schema": _schema_with_order_items()}
-
-    with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
-        result = await on_demand_metric_suggest_node(state)
-
-    assert structured.ainvoke.await_count == 2
-    metric = result["suggested_metrics"][0]["definition"]["metric"]
-    assert metric["formula"]["expression"] == "amount"
-
-
-async def test_node_emits_notices_when_existing_duplicate() -> None:
-    existing = [
+        for i in range(7)
+    ]
+    proposals += [
         {
-            "id": 12,
-            "name": "Doanh thu",
-            "status": "approved",
-            "function": "SUM",
-            "expression": "quantity * unit_price",
-            "base_entity": "order_items",
-            "filters": [],
+            "name": "Gross margin",
+            "final_definition": None,
+            "review": MetricReview(status="rejected", summary="Thiếu giá vốn").model_dump(mode="json"),
         }
     ]
-    duplicate = _definition(
-        name="DOANH  THU",
-        expression="quantity * unit_price",
-        base_entity="order_items",
+    result = reviewed_state(proposals, {"proposal_mode": "discovery"})
+    assert len(result["suggested_metrics"]) == 5
+    assert result["blocked_candidates"][0]["name"] == "Gross margin"
+    assert all(i["review"]["status"] == "pass" for i in result["suggested_metrics"])
+
+
+def test_dedupe_still_removes_existing_reviewed_metric():
+    raw = definition()
+    proposal = {
+        "name": "Metric",
+        "final_definition": raw,
+        "review": MetricReview(status="pass", summary="Valid").model_dump(mode="json"),
+    }
+    result = reviewed_state(
+        [proposal],
+        {
+            "existing_metrics": [
+                {
+                    "id": 5,
+                    "name": raw["metric"]["name"],
+                    "base_entity": "orders",
+                    "function": "SUM",
+                    "expression": "amount",
+                    "filters": [],
+                    "status": "approved",
+                }
+            ]
+        },
     )
-    llm = _mock_llm(MetricSuggestions(metrics=[duplicate]))
-    state = {"enriched_schema": _schema_with_order_items(), "existing_metrics": existing}
-    with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
-        result = await on_demand_metric_suggest_node(state)
-    llm.with_structured_output.assert_called_once_with(MetricSuggestions, method="function_calling")
-    assert result["suggested_metrics"] == []
-    notices = result["duplicate_notices"]
-    assert len(notices) == 1
-    assert notices[0]["existing_metric_id"] == 12
-    assert result["dedupe_performed"] is True
+    assert result["suggested_metrics"] == [] and len(result["duplicate_notices"]) == 1
 
 
-async def test_node_without_existing_uses_v1() -> None:
-    llm = _mock_llm(MetricSuggestions(metrics=[_definition()]))
-    state = {"enriched_schema": _schema_with_order_items()}
-    with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
-        result = await on_demand_metric_suggest_node(state)
-    llm.with_structured_output.assert_called_once_with(MetricSuggestions, method="function_calling")
-    assert result["suggested_metrics"]
-    assert result["duplicate_notices"] == []
-
-
-@pytest.mark.asyncio
-async def test_ambiguous_metric_marks_assumptions_low_confidence() -> None:
-    """Unspecified business conditions must be visible in the proposal."""
-    structured = AsyncMock()
-    structured.ainvoke.return_value = MetricSuggestions(metrics=[_definition()])
-    llm = MagicMock()
-    llm.with_structured_output.return_value = structured
-    state = {
-        "enriched_schema": {"tables": [{"table_name": "orders", "columns": [{"column_name": "amount"}]}]},
-        "metric_decision": {"kind": "missing_metric_supported", "assumptions": ["Chưa nêu cách xử lý hoàn tiền"]},
-    }
-    with patch("src.agents.nodes.on_demand_metric_suggest_node.get_llm", return_value=llm):
-        result = await on_demand_metric_suggest_node(state)
-
-    metric = result["suggested_metrics"][0]["definition"]["metric"]
-    assert metric["confidence"] == "low"
-    assert "Giả định cần xác nhận" in metric["excluded_notes"]
-
-
-def test_schema_prompt_contains_entity_and_column() -> None:
-    schema = {
-        "tables": [
-            {
-                "table_name": "orders",
-                "columns": [
-                    {
-                        "column_name": "amount",
-                        "business_name": "Số tiền",
-                        "description": "Tổng tiền đơn hàng",
-                    }
-                ],
-            }
-        ]
-    }
-    _, text = extract_schema_summary(schema)
-    assert "orders" in text
-    assert "amount" in text
-    assert "Số tiền" in text
-    assert "Tổng tiền đơn hàng" in text
+def test_legacy_save_preserves_human_selection_and_refuses_unreviewed_edits():
+    first = {"final_definition": definition(), "review": {"status": "pass"}}
+    second = {"final_definition": definition("amount * 2"), "review": {"status": "pass"}}
+    state = {"reviewed_proposals": [first, second], "suggested_metrics": [{"definition": second["final_definition"]}]}
+    assert _selected_review_evidence(state) == [second]
+    state["suggested_metrics"] = [{"definition": definition("amount * 3")}]
+    with pytest.raises(ValueError, match="HITL"):
+        _selected_review_evidence(state)

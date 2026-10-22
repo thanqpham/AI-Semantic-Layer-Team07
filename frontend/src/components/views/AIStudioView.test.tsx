@@ -1,3 +1,4 @@
+import { reviewedSuggestionFields } from '@/test/metricReviewFixture';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIStudioView } from './AIStudioView';
@@ -13,6 +14,7 @@ vi.mock('@/lib/api', async () => {
     getChatSessionDetailApi: vi.fn(),
     listMetricRequestsApi: vi.fn().mockResolvedValue([]),
     createMetricApi: vi.fn(),
+    reviewMetricProposalApi: vi.fn(),
   };
 });
 
@@ -35,6 +37,33 @@ describe('AIStudioView', () => {
     tables: [{ table_name: 'orders', business_name: 'Đơn hàng', description: '', columns: [] }],
     metrics: [],
   };
+
+  it('sends discovery mode explicitly from the schema discovery button', async () => {
+    vi.mocked(api.sendChatOrchestratorApi).mockResolvedValue({ intent: 'metric_query', suggestions: [],
+      session_id: 'sess-1', user_message_id: 'u-1', assistant_message_id: 'a-1' });
+    render(<AIStudioView layer={mockLayer} theme="light" onMetricsChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Khám phá KPI từ schema' }));
+    await waitFor(() => expect(api.sendChatOrchestratorApi).toHaveBeenCalled());
+    expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[0][7]).toBe('discovery');
+  });
+
+  it('creates a new immutable Member proposal when resolving a name conflict', async () => {
+    vi.mocked(api.getChatSessionDetailApi).mockResolvedValue({ id: 'sess-1', db_id: 101, title: 'Metrics',
+      created_at: '', updated_at: '', message_count: 1, messages: [{ id: 'a-original', session_id: 'sess-1', sequence_no: 1,
+        sender: 'assistant', content: 'Proposal', created_at: '', metadata_json: { suggestion_action: 'submit_metric_request',
+          suggestions: [{ ...reviewedSuggestionFields, yaml_preview: '', definition: { metric: { name: 'Sales', base_entity: 'orders',
+            formula: { function: 'SUM', expression: 'amount' }, filters: [], status: 'pending_approval', excluded_notes: '' } },
+            conflict: { proposed_metric_name: 'Sales', existing_metric_name: 'Sales', existing_metric_id: 7, existing_metric_status: 'approved', suggested_name: 'Sales before tax', clarify_question: 'Đổi tên metric' } }],
+        } }],
+    });
+    vi.mocked(api.sendChatOrchestratorApi).mockResolvedValue({ intent: 'metric_query', suggestions: [],
+      session_id: 'sess-1', user_message_id: 'u-2', assistant_message_id: 'a-new' });
+    render(<AIStudioView layer={mockLayer} theme="light" mode="data_assistant" activeSessionId="sess-1" onMetricsChanged={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi tên' }));
+    await waitFor(() => expect(api.sendChatOrchestratorApi).toHaveBeenCalled());
+    expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[0][1]).toContain('Sales before tax');
+    expect(api.reviewMetricProposalApi).not.toHaveBeenCalled();
+  });
 
   it('keeps Thinking expanded and its graph open when a streamed reply completes', async () => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: false });
@@ -215,7 +244,7 @@ describe('AIStudioView', () => {
         'Theo khách hàng',
         null,
         expect.any(String),
-        { assistant_message_id: 'a-1', option_id: 'opt_1' }, null, expect.objectContaining({ onTrace: expect.any(Function) }),
+        { assistant_message_id: 'a-1', option_id: 'opt_1' }, null, expect.objectContaining({ onTrace: expect.any(Function) }), 'requested',
       );
       expect(screen.getByText('Alpha')).toBeInTheDocument();
       expect(screen.getByText('1,000,000')).toBeInTheDocument();
@@ -246,7 +275,7 @@ describe('AIStudioView', () => {
         intent: 'metric_query',
         chat_response: null,
         suggestions: [
-          {
+          { ...reviewedSuggestionFields,
             definition: {
               schema_version: 2,
               metric: {
@@ -368,7 +397,7 @@ describe('AIStudioView', () => {
         expect.any(String),
         null,
         7,
-        expect.objectContaining({ onTrace: expect.any(Function) }),
+        expect.objectContaining({ onTrace: expect.any(Function) }), 'requested',
       );
       expect(screen.getByText('250,000')).toBeInTheDocument();
       if (conflict) expect(screen.getByRole('heading', { name: 'New AOV' })).toBeInTheDocument();

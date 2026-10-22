@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 
 const AGENT_NAMES: Record<string, string> = {
   orchestrator: 'Orchestrator', chitchat: 'Chitchat', data_assistant: 'Data Assistant',
-  metric_suggest: 'Metric Suggest', semantic_parse: 'Semantic Parse',
+  metric_suggest: 'Metric Suggest', metric_review: 'Metric Review', semantic_parse: 'Semantic Parse',
 };
 
 export function TraceDuration({ milliseconds, running = false }: { milliseconds: number; running?: boolean }) {

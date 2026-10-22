@@ -21,11 +21,12 @@ from src.services.metric_request_service import (
     reject_metric_request,
 )
 from src.services.notification_bus import clear_subscribers, subscribe, unsubscribe
+from tests.metric_review_helpers import seed_proposal
 
 
-def _suggestion_metadata() -> dict:
+async def _suggestion_metadata(db, db_id: int) -> dict:
     """Return one canonical suggestion stored in an assistant chat message."""
-    return {
+    metadata = {
         "suggestion_action": "submit_metric_request",
         "suggestions": [
             {
@@ -43,6 +44,9 @@ def _suggestion_metadata() -> dict:
             }
         ],
     }
+    proposal = await seed_proposal(db, db_id, 1, metadata["suggestions"][0]["definition"])
+    metadata["suggestions"][0]["proposal_id"] = proposal.id
+    return metadata
 
 
 @pytest.mark.asyncio
@@ -58,7 +62,7 @@ async def test_request_uses_only_owned_assistant_suggestion(async_session) -> No
         sequence_no=1,
         sender="assistant",
         content="Proposal",
-        metadata_json=_suggestion_metadata(),
+        metadata_json=await _suggestion_metadata(async_session, database.id),
     )
     async_session.add_all([session, message])
     await async_session.commit()
@@ -104,7 +108,7 @@ async def test_duplicate_pending_request_is_rejected(async_session) -> None:
         sequence_no=1,
         sender="assistant",
         content="Proposal",
-        metadata_json=_suggestion_metadata(),
+        metadata_json=await _suggestion_metadata(async_session, database.id),
     )
     async_session.add_all([session, message])
     await async_session.commit()
@@ -138,7 +142,7 @@ async def test_resubmission_allowed_after_rejection(async_session) -> None:
         sequence_no=1,
         sender="assistant",
         content="Proposal",
-        metadata_json=_suggestion_metadata(),
+        metadata_json=await _suggestion_metadata(async_session, database.id),
     )
     async_session.add_all([session, message])
     await async_session.commit()
@@ -165,7 +169,7 @@ async def test_resubmission_blocked_after_approval(async_session) -> None:
         sequence_no=1,
         sender="assistant",
         content="Proposal",
-        metadata_json=_suggestion_metadata(),
+        metadata_json=await _suggestion_metadata(async_session, database.id),
     )
     async_session.add_all([session, message])
     await async_session.commit()
@@ -202,7 +206,7 @@ async def test_reject_notifies_requester_of_rejection(async_session) -> None:
         sequence_no=1,
         sender="assistant",
         content="Proposal",
-        metadata_json=_suggestion_metadata(),
+        metadata_json=await _suggestion_metadata(async_session, database.id),
     )
     async_session.add_all([session, message])
     await async_session.commit()
@@ -241,7 +245,7 @@ async def test_submit_wakes_data_lead_subscribers(async_session) -> None:
         sequence_no=1,
         sender="assistant",
         content="Proposal",
-        metadata_json=_suggestion_metadata(),
+        metadata_json=await _suggestion_metadata(async_session, database.id),
     )
     async_session.add_all([session, message])
     await async_session.commit()
@@ -269,7 +273,7 @@ async def test_reject_wakes_requester_subscriber(async_session) -> None:
         sequence_no=1,
         sender="assistant",
         content="Proposal",
-        metadata_json=_suggestion_metadata(),
+        metadata_json=await _suggestion_metadata(async_session, database.id),
     )
     async_session.add_all([session, message])
     await async_session.commit()

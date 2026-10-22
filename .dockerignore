@@ -6,6 +6,7 @@ __pycache__
 *.pyc
 .pytest_cache
 .ruff_cache
+scratch/
 docs/
 presentation/
 eval/

@@ -13,6 +13,12 @@ POST /api/v1/...                 # một trace cho mỗi request
   metric_suggest
     metric_generation           # action đã được instrument trong code
       ChatOpenAI
+  metric_review
+    metric_review_decision       # đối chiếu nghiệp vụ với context gốc
+      ChatOpenAI
+    metric_repair                # chỉ khi cần, tối đa một lượt sửa
+      ChatOpenAI
+    metric_review_result         # status và repair_count, không chứa context
 ```
 
 Tên root dùng route template, không chứa query string hoặc ID thực trong URL.
@@ -85,6 +91,9 @@ LangSmith là cấu hình độc lập. Nếu không dùng, đặt `LANGCHAIN_TR
 để tránh gửi trace sang cả hai hệ thống. Masking ở đây chỉ áp dụng cho Langfuse.
 
 ## Tài liệu SDK
+
+Luồng thẩm định, giới hạn compiler và migration được mô tả ở
+[Thẩm định metric AI trước HITL](metric-review.md).
 
 - [Python SDK v3 → v4 migration](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4)
 - [LangChain integration](https://langfuse.com/integrations/frameworks/langchain)

@@ -24,6 +24,24 @@ DEFAULT_SESSION_TITLE = "Cuộc trò chuyện mới"
 ALLOWED_SENDERS = {"user", "assistant", "system"}
 
 
+async def get_metric_requirement_history(db: AsyncSession, session_id: str, budget: int) -> list[dict[str, str]]:
+    """Keep original user evidence and clarification prompts, with an explicit budget failure."""
+    result = await db.execute(
+        select(ChatMessageModel).where(ChatMessageModel.session_id == session_id).order_by(ChatMessageModel.sequence_no)
+    )
+    history: list[dict[str, str]] = []
+    used = 0
+    for message in result.scalars():
+        metadata = message.metadata_json if isinstance(message.metadata_json, dict) else {}
+        if message.sender != "user" and not metadata.get("clarification"):
+            continue
+        used += len(message.content)
+        if used > budget * 4:
+            raise ValueError("Context hội thoại quá lớn. Hãy mở cuộc trò chuyện mới với đầy đủ điều kiện KPI.")
+        history.append({"id": message.id, "role": message.sender, "content": message.content})
+    return history
+
+
 class ChatAuthorizationError(Exception):
     """Raised when a chat resource is missing or belongs to another user."""
 

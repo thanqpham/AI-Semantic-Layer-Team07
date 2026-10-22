@@ -179,12 +179,16 @@ async def _save_approved_metrics(
     user_id: int,
 ) -> None:
     """Persist and approve reviewed metric definitions from graph state."""
+    from src.services.metric_proposals import persist_reviewed_state
+
+    await _refresh_legacy_reviews(session, state, db_id)
+    await persist_reviewed_state(session, db_id, user_id, state)
     for payload in state.get("suggested_metrics", []):
-        definition = MetricDefinition.model_validate(payload)
+        definition = MetricDefinition.model_validate(payload["definition"])
         await trace_action(
             "metric_approve",
             {"connection_id": db_id},
-            _create_and_approve_metric(session, db_id, user_id, definition),
+            _create_and_approve_metric(session, db_id, user_id, definition, payload.get("proposal_id")),
         )
 
 
@@ -193,13 +197,57 @@ async def _create_and_approve_metric(
     db_id: int,
     user_id: int,
     definition: MetricDefinition,
+    proposal_id: str | None = None,
 ) -> Any:
     """Create and approve a reviewed metric in one traced action boundary."""
     metric = await create_metric(
         session,
         db_id,
-        {"definition": definition.model_dump(mode="json"), "source": "ai"},
+        {"definition": definition.model_dump(mode="json"), "source": "ai", "proposal_id": proposal_id},
         user_id,
     )
     await approve_metric(session, metric.id, user_id)
     return metric
+
+
+async def _refresh_legacy_reviews(session: Any, state: AgentState, db_id: int) -> None:
+    """Recheck newly persisted legacy metadata without changing the human-approved draft."""
+    from src.agents.nodes.metric_review_node import reviewed_state
+    from src.services.metric_context import load_review_schema
+    from src.services.metric_review import review_metric_draft
+
+    if not state.get("suggested_metrics"):
+        return
+    if not state.get("reviewed_proposals"):
+        raise ValueError("Legacy AI metrics require a passing review before save.")
+    schema = await load_review_schema(session, db_id)
+    proposals = []
+    for previous in _selected_review_evidence(state):
+        context = {**previous["context"], "schema": schema}
+        draft = {"name": previous["name"], "definition": previous["final_definition"]}
+        result = await review_metric_draft(context, draft, allow_repair=False)
+        if result["review"]["status"] != "pass" or result["final_definition"] != previous["final_definition"]:
+            raise ValueError("Metadata sau lưu cần thẩm định và HITL lại.")
+        result["original_definition"] = previous["original_definition"]
+        for key in ("original_definition", "revised", "repair_count", "repair_reason", "repair_feedback"):
+            result["review"][key] = previous["review"].get(key, result["review"].get(key))
+        proposals.append(result)
+    state.update(reviewed_state(proposals, state))
+
+
+def _selected_review_evidence(state: AgentState) -> list[dict[str, Any]]:
+    """Preserve human selection and reject edits that have not been reviewed."""
+    selected = []
+    for item in state.get("suggested_metrics", []):
+        evidence = next(
+            (
+                p
+                for p in state.get("reviewed_proposals", [])
+                if p["final_definition"] == item.get("definition") and p["review"]["status"] == "pass"
+            ),
+            None,
+        )
+        if evidence is None:
+            raise ValueError("Định nghĩa sau HITL đã thay đổi. Hãy thẩm định và duyệt lại.")
+        selected.append(evidence)
+    return selected

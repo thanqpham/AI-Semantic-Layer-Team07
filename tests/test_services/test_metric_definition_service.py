@@ -61,7 +61,7 @@ def _definition(name: str = "Doanh thu") -> dict:
 @pytest.mark.asyncio
 async def test_create_update_approve_and_history(async_session: AsyncSession) -> None:
     db_id = await _seed(async_session)
-    metric = await create_metric(async_session, db_id, {"definition": _definition(), "source": "ai"}, 1)
+    metric = await create_metric(async_session, db_id, {"definition": _definition(), "source": "manual"}, 1)
     assert metric.status == "pending_approval"
     assert metric.definition["schema_version"] == 2
     assert metric.sql_template == ""

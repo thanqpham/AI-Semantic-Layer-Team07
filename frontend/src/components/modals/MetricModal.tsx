@@ -12,6 +12,7 @@ import {
   MetricDefinition,
   MetricFilter,
   MetricFunction,
+  MetricReview,
   METRIC_WRITE_PERMISSION_MESSAGE,
   SemanticTable,
 } from '@/lib/api';
@@ -26,6 +27,7 @@ import {
 } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
+import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 
 export interface MetricVersion {
   version: number;
@@ -35,6 +37,8 @@ export interface MetricVersion {
 }
 
 interface MetricModalProps {
+  review?: MetricReview | null;
+  onReview?: (definition: MetricDefinition) => Promise<void>;
   isOpen: boolean;
   onClose: () => void;
   onSave: (definition: MetricDefinition, changeReason?: string) => Promise<void> | void;
@@ -150,6 +154,13 @@ export function MetricModal(props: MetricModalProps) {
               {definition.metric.name} · {definition.metric.base_entity}
             </p>
           )}
+          {props.review && <MetricReviewPanel review={props.review} definition={definition} />}
+          {props.onReview && <Button type="button" variant="outline" size="sm" disabled={saving} onClick={async () => {
+            setSaving(true); setError('');
+            try { await props.onReview!(withPendingStatus(definition)); }
+            catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể thẩm định.'); }
+            finally { setSaving(false); }
+          }}>Thẩm định lại bản sửa</Button>}
         </DialogHeader>
 
         {/* Tab Controls */}

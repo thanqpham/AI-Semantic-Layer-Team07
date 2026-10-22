@@ -12,8 +12,9 @@ class AgentState(TypedDict, total=False):
     1. Introspect Node  → raw_schema
     2. Enrich Node      → enriched_schema
     3. MetricSuggest    → suggested_metrics
-    4. HITL Interrupt   → reviewed (chờ user approve)
-    5. Save Node        → semantic_layer_id
+    4. MetricReview     → reviewed_proposals, passing suggested_metrics
+    5. HITL Interrupt   → reviewed (chờ user approve)
+    6. Save Node        → semantic_layer_id
     """
 
     # Input
@@ -54,7 +55,7 @@ class AgentState(TypedDict, total=False):
 
     suggested_metrics: list[dict[str, Any]]
     """Danh sách Business Metrics do LLM đề xuất.
-    Mỗi metric là một MetricDefinition JSON, không chứa SQL.
+    Mỗi item chứa definition, YAML preview, proposal_id và review; không chứa SQL.
     """
 
     duplicate_notices: list[dict[str, Any]]
@@ -89,7 +90,7 @@ class AgentState(TypedDict, total=False):
     metric_decision: dict[str, Any]
     """Validated metric availability and schema-support decision for one chat turn."""
 
-    suggestion_action: str
+    suggestion_action: str | None
     """Server-derived action for metric suggestions: save or submit for review."""
 
     context_diagnostic: dict[str, Any]
@@ -121,3 +122,16 @@ class AgentState(TypedDict, total=False):
 
     chat_history: list[dict[str, str]]
     """Prior user/assistant messages used as conversational context."""
+
+    proposal_mode: str
+    """Requested metric or retail KPI discovery."""
+    user_message_id: str | None
+    """Reference to the persisted current request."""
+    proposal_context: dict[str, Any]
+    """Complete shared evidence supplied to generator and reviewer."""
+    metric_drafts: list[dict[str, Any]]
+    """Untrusted drafts, not actionable suggestions."""
+    reviewed_proposals: list[dict[str, Any]]
+    """Review evidence awaiting persistence by the request's database session."""
+    blocked_candidates: list[dict[str, Any]]
+    """KPI decisions that cannot be saved or sent for human approval."""

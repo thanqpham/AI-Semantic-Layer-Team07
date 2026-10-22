@@ -19,6 +19,9 @@ LABELS = {
     "chitchat": "Soạn phản hồi hội thoại",
     "data_assistant": "Tra cứu semantic layer và metric đã duyệt",
     "metric_suggest": "Đề xuất định nghĩa metric",
+    "metric_review": "Thẩm định metric trước HITL",
+    "metric_review_decision": "Đối chiếu yêu cầu và kiểm tra nghiệp vụ",
+    "metric_repair": "Sửa metric theo kết quả thẩm định",
     "semantic_parse": "Phân tích câu hỏi theo danh mục metric",
     "context": "Chuẩn bị ngữ cảnh dữ liệu",
     "dedupe": "Kiểm tra metric trùng lặp",
@@ -30,7 +33,7 @@ LABELS = {
     "clarification": "Yêu cầu làm rõ câu hỏi",
     "response": "Hoàn tất phản hồi",
 }
-AGENTS = {"orchestrator", "chitchat", "data_assistant", "metric_suggest", "semantic_parse"}
+AGENTS = {"orchestrator", "chitchat", "data_assistant", "metric_suggest", "metric_review", "semantic_parse"}
 SAFE_ERROR = "Không thể hoàn tất xử lý. Vui lòng thử lại."
 _CURRENT: ContextVar[ChatExecution | None] = ContextVar("chat_execution", default=None)
 

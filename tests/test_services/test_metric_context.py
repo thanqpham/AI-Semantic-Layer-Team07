@@ -47,6 +47,9 @@ def _column(name: str) -> SimpleNamespace:
         business_name=name,
         description="",
         is_primary_key=name == "id",
+        is_nullable=False,
+        allowed_values=None,
+        review_status="approved",
         is_foreign_key=name.endswith("_id") and name != "id",
         fk_target_table=None,
         fk_target_column=None,
@@ -54,7 +57,9 @@ def _column(name: str) -> SimpleNamespace:
 
 
 def _table(name: str) -> SimpleNamespace:
-    return SimpleNamespace(table_name=name, business_name=name, description="", columns=[_column("id")])
+    return SimpleNamespace(
+        table_name=name, business_name=name, description="", columns=[_column("id")], review_status="approved"
+    )
 
 
 def test_context_keeps_late_business_tables_and_relationships() -> None:

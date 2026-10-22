@@ -162,12 +162,12 @@ _BASE_RULES = """Quy tắc BẮT BUỘC:
 2. formula.expression chỉ gồm cột của base_entity, số và các toán tử (+, -, *, /). Với metric thời gian giao hàng, chỉ được phép dùng `TIMESTAMP_DIFF_HOURS(thời_điểm_kết_thúc, thời_điểm_bắt_đầu)` trên đúng hai cột thời gian của base_entity. Không viết SQL, subquery, alias hay function khác.
 3. base_entity và các cột phải tồn tại chính xác trong Schema dưới đây.
 4. Ưu tiên base_entity có PK/grain rõ ràng; không giả định quan hệ hoặc ý nghĩa không có trong schema.
-5. Filter chỉ dùng cột của base_entity, tuân thủ chuẩn mực dữ liệu: (a) cờ test/bot (cột boolean kiểu is_test_order, is_bot_traffic) được hệ thống tự đính kèm filter loại trừ khi lưu (data hygiene) — KHÔNG tự khai filter loại trừ cờ test/bot trong đề xuất, chỉ khai filter nghiệp vụ thực sự cần cho định nghĩa chỉ số. (b) chỉ khai filter trạng thái khi tên hoặc mô tả nghiệp vụ của chỉ số nêu rõ hoạt động hoàn tất (ví dụ "đơn hàng hoàn tất", "giao thành công"); khi loại thì dùng phép loại trừ trạng thái vô hiệu lối cuối (ví dụ order_status <> 'cancelled' theo danh sách values của cột), TUYỆT ĐỐI KHÔNG dùng phép gồm một trạng thái duy nhất (= 'completed') vì sẽ bỏ sót đơn đang xử lý/đang giao. Giá trị tuân thủ quy tắc 6–7. Không bịa filter khi schema không có cờ tương ứng. (c) giá trị filter phải là literal (số/chuỗi/ngày); TUYỆT ĐỐI KHÔNG dùng tên cột hay tham chiếu cột (bảng.cột) làm giá trị — điều kiện join không thuộc filter, quan hệ giữa các thực thể đã nằm trong relationship.
+5. Filter chỉ dùng cột base_entity và literal đúng kiểu. Hệ thống tự thêm hygiene cho cờ test/bot đã nhận diện. Filter nghiệp vụ phải theo yêu cầu đã xác nhận: yêu cầu hoàn tất thì dùng đúng ánh xạ hoàn tất, không thay bằng điều kiện chỉ loại đơn hủy. Không bịa ánh xạ trạng thái, điều kiện join hay coi tên cột là literal.
 6. Khi dùng filter trên cột có values: [...] trong Schema, PHẢI dùng đúng 1 giá trị trong danh sách values. Không tự tạo giá trị mới.
 7. Không tự thêm filter cho trạng thái hoàn thành, hoàn tiền, kích hoạt hoặc bất kỳ điều kiện nghiệp vụ nào người dùng chưa nêu rõ.
-8. formula.function SUM và AVG CHỈ áp dụng cho các cột kiểu số (INT, DECIMAL, FLOAT, NUMERIC,...). TUYỆT ĐỐI KHÔNG dùng SUM/AVG cho cột kiểu BOOLEAN (ví dụ: is_canceled, is_active) hay TEXT. Để đếm các bản ghi thoả mãn cờ boolean hoặc trạng thái, PHẢI dùng function "COUNT" (expression "*" hoặc cột ID) kết hợp với "filters" (ví dụ: field "is_canceled", operator "eq", value true). Giá trị filter trên cờ nhị phân (is_*, has_*, flag) khi cột KHÔNG có danh sách values: cột kiểu số (INT/BIT) dùng giá trị số 1 cho trạng thái Hoàn thành / Kích hoạt / Bật và 0 cho Chưa xong / Tắt; cột kiểu BOOLEAN dùng true/false; cột kiểu ký tự (VARCHAR/CHAR) dùng chuỗi "1"/"0". TUYỆT ĐỐI KHÔNG tự bịa ra 'Y', 'N', 'TRUE', 'true'.
-9. Với metric tỷ lệ/phần trăm (Rate, Ratio, Percentage, Tỷ lệ, Tỉ lệ, Tỷ trọng), formula.expression BẮT BUỘC là phép chia giữa tử số và mẫu số; không sinh expression chỉ có một cột. Dùng đúng base entity theo thực thể gốc: phiên là `fact_sessions`, giỏ hàng là `fact_carts`, đơn hàng/doanh thu là `fact_orders`, chi tiết đơn hàng là `fact_order_items`.
-10. Mẫu metric tỷ lệ phải phản ánh đúng mẫu số: tỷ lệ chuyển đổi dùng `order_id / session_id`, tỷ lệ bỏ giỏ dùng `1 - (cart_id / cart_id)`, tỷ lệ hủy dùng `id / id` kèm filter hủy, và tỷ lệ khách hàng quay lại dùng `customer_id / customer_id` kèm filter thứ tự mua hàng. Không dùng rule tỷ lệ để tự ý suy diễn column không có trong Schema.
+8. SUM/AVG chỉ dùng cột số, không dùng BOOLEAN/BIT/TEXT. Đếm thực thể dùng COUNT_DISTINCT trên khóa. Giá trị filter phải khớp kiểu và metadata; không tự suy diễn quy ước 1/0 hoặc Y/N cho trạng thái nghiệp vụ chưa có bằng chứng.
+9. Compiler hiện chỉ hỗ trợ một aggregation trên một base_entity; không hỗ trợ ratio giữa các aggregates hoặc biểu thức nhiều bảng. Không giả công thức tỷ lệ bằng phép chia ID, SUM(a/b), CASE hay tên bảng mặc định không có trong schema.
+10. KPI chưa biểu diễn đúng phải được đánh dấu unsupported, không tạo công thức gần đúng để lưu. Không tự bịa mẫu số, population hay quy tắc NULL.
 """
 
 _DEDUPE_RULES = """8. Trước khi trả về, so sánh mỗi metric đề xuất với danh sách metric đang tồn tại. Nếu một metric đề xuất **cùng ý nghĩa nghiệp vụ và cùng logic tính toán ≥90%** với một metric đã có (bỏ qua hoa/thường, khoảng trắng, khác biệt cú pháp SQL vô nghĩa): KHÔNG đưa metric đó vào `metrics`; thêm mục vào `duplicates` với `proposed_metric_name` đúng bằng tên metric đề xuất bị coi là trùng (để hệ thống tự loại nếu vẫn lọt vào `metrics`), `user_message` tiếng Việt giải thích và `similarity_reason` nêu điểm giống. Nếu metric đã có ở trạng thái `approved`, nhấn mạnh rằng đã có metric chuẩn và không cần tạo mới. Chỉ xếp vào `duplicates` khi hai metric THAY THẾ ĐƯỢC CHO NHAU HOÀN TOÀN — cùng ý nghĩa VÀ cùng công thức sau chuẩn hóa. Nếu công thức/logic khác nhau (kể cả khi ý nghĩa gần giống hoặc tên gần trùng): đó là `conflicts` theo quy tắc 9, TUYỆT ĐỐI KHÔNG xếp vào `duplicates`.
@@ -198,10 +198,8 @@ def _render_prompt(output_format: str, rules: str, existing_block: str, schema_t
 
 def _requested_metric_rules() -> str:
     """Return stricter rules for a user-requested metric proposal."""
-    return """8. Đây là một metric được người dùng yêu cầu: chỉ trả đúng 1 Metric Definition.
-9. Nếu yêu cầu còn điều kiện nghiệp vụ chưa xác định, tạo baseline không có filter suy diễn,
-đặt confidence là \"low\" và ghi từng điều kiện đó vào excluded_notes với tiền tố
-\"Giả định cần xác nhận:\".
+    return """8. Đây là một metric được người dùng yêu cầu: chỉ trả đúng 1 Metric Definition khả thi.
+9. Nếu yêu cầu còn điều kiện nghiệp vụ chưa xác định, yêu cầu làm rõ; không tạo baseline thay đổi ý nghĩa yêu cầu.
 10. Trước khi trả về, tự kiểm tra base_entity, formula.expression và mọi filter.field
 đều khớp chính xác một bảng/cột trong Schema; nếu không, hãy chọn lại từ Schema."""
 

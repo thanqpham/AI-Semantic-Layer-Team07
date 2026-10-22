@@ -136,9 +136,45 @@ export interface MetricSuggestion {
   definition: MetricDefinition;
   yaml_preview: string;
   conflict?: MetricConflictInfo | null;
+  proposal_id?: string | null;
+  review?: MetricReview | null;
+}
+
+export interface MetricReview {
+  status: 'pass' | 'needs_revision' | 'needs_clarification' | 'rejected' | 'unsupported' | 'error';
+  summary: string;
+  issues: { code: string; message: string; evidence: string; action: string }[];
+  clarification?: string | null;
+  sources: { id: string; title: string; url: string; reviewed_at: string }[];
+  revised: boolean;
+  repair_count: number;
+  repair_reason?: string | null;
+  repair_feedback?: { code: string; message: string; evidence: string; action: string }[];
+  requirement: string;
+  original_definition?: Record<string, unknown> | null;
+}
+
+export interface MetricCandidateReport {
+  name: string;
+  proposal_id?: string | null;
+  review: MetricReview;
+}
+
+export interface ReviewedMetricProposal {
+  proposal_id: string;
+  definition: MetricDefinition | null;
+  yaml_preview: string;
+  review: MetricReview;
+}
+
+export function reviewMetricProposalApi(dbId: string, proposalId: string, definition: MetricDefinition): Promise<ReviewedMetricProposal> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/metric-proposals/${proposalId}/review`, {
+    method: 'POST', body: JSON.stringify({ definition }),
+  });
 }
 
 export interface MetricVersion {
+  review?: MetricReview | null;
   version: number;
   definition: MetricDefinition | null;
   status?: MetricVersionStatus;
@@ -629,12 +665,15 @@ export interface GeneratedMetricsResult {
   duplicates: DuplicateMetricNotice[];
   dedupe_performed: boolean;
   isLiveLLM: boolean;
+  blocked_candidates?: MetricCandidateReport[];
+  clarification?: ChatClarificationPayload | null;
 }
 
 export async function generateCustomMetricsApi(
   dbId: string,
   prompt: string,
   targetTables: string[] = [],
+  proposalMode: 'requested' | 'discovery' = 'requested',
 ): Promise<GeneratedMetricsResult> {
   const res = await fetch(`${API_BASE}/api/v1/semantic/${dbId}/metrics/generate`, {
     method: 'POST',
@@ -644,6 +683,7 @@ export async function generateCustomMetricsApi(
     },
     body: JSON.stringify({
       prompt,
+      proposal_mode: proposalMode,
       target_tables: targetTables.length ? targetTables : null,
     }),
   });
@@ -661,12 +701,14 @@ export async function generateCustomMetricsApi(
   const suggestions: MetricSuggestion[] = data.suggestions || [];
   const duplicates: DuplicateMetricNotice[] = data.duplicates || [];
   // Duplicates-only is a successful result (all proposals matched saved metrics).
-  if (suggestions.length === 0 && duplicates.length === 0) {
+  if (suggestions.length === 0 && duplicates.length === 0 && !data.blocked_candidates?.length && !data.clarification) {
     throw new Error('LLM không tìm thấy hoặc không sinh được chỉ số phù hợp với schema');
   }
   return {
     suggestions,
     duplicates,
+    blocked_candidates: data.blocked_candidates || [],
+    clarification: data.clarification,
     dedupe_performed: data.dedupe_performed !== false,
     isLiveLLM: true,
   };
@@ -711,6 +753,7 @@ export interface ChatSemanticQueryResult {
 }
 
 export interface ChatOrchestratorResponse {
+  blocked_candidates?: MetricCandidateReport[];
   execution_trace?: ExecutionTrace | null;
   intent: 'chitchat' | 'data_question' | 'metric_query' | 'semantic_query' | 'out_of_scope';
   chat_response?: string | null;
@@ -745,6 +788,7 @@ export interface ChatMessageItem {
   content: string;
   intent?: string | null;
   metadata_json?: {
+    blocked_candidates?: MetricCandidateReport[];
     execution_trace?: ExecutionTrace | null;
     schema_version?: number;
     status?: 'pending' | 'completed' | 'error';
@@ -826,11 +870,13 @@ export async function sendChatOrchestratorApi(
   clarificationSelection?: ChatClarificationSelection | null,
   reuseMetricId?: number | null,
   progress?: ChatProgressOptions,
+  proposalMode: 'requested' | 'discovery' = 'requested',
 ): Promise<ChatOrchestratorResponse> {
   const init: RequestInit = {
     method: 'POST',
     body: JSON.stringify({
       message,
+      proposal_mode: proposalMode,
       session_id: sessionId || null,
       client_message_id: clientMessageId,
       clarification_selection: clarificationSelection || null,
@@ -845,6 +891,8 @@ export async function sendChatOrchestratorApi(
 }
 
 export interface MetricRequest {
+  proposal_id?: string | null;
+  review?: MetricReview | null;
   id: number;
   db_id: number;
   requester_id: number;
@@ -883,10 +931,10 @@ export async function listMetricRequestsApi(dbId: string): Promise<MetricRequest
 }
 
 export async function approveMetricRequestApi(
-  dbId: string, requestId: number, definition?: MetricDefinition, reviewNote?: string,
+  dbId: string, requestId: number, definition?: MetricDefinition, reviewNote?: string, proposalId?: string,
 ): Promise<MetricRequest> {
   return chatRequest<MetricRequest>(`${API_BASE}/api/v1/semantic/${dbId}/metric-requests/${requestId}/approve`, {
-    method: 'POST', body: JSON.stringify({ definition: definition || null, review_note: reviewNote || null }),
+    method: 'POST', body: JSON.stringify({ definition: definition || null, review_note: reviewNote || null, proposal_id: proposalId }),
   });
 }
 
@@ -978,7 +1026,7 @@ export async function deleteMetricApi(dbId: string, metricId: string): Promise<v
 
 export async function createMetricApi(
   dbId: string,
-  payload: { definition: MetricDefinition; source: 'ai' | 'manual' },
+  payload: { definition: MetricDefinition; source: 'ai' | 'manual'; proposal_id?: string | null },
 ): Promise<MetricRecord> {
   const data = await semanticRequest<{
     metric_id: number;

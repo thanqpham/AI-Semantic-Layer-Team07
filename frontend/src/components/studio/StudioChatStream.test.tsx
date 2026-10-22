@@ -1,3 +1,4 @@
+import { reviewedSuggestionFields } from '@/test/metricReviewFixture';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +19,7 @@ describe('StudioChatStream', () => {
             text: 'Gợi ý',
             timestamp: '10:00',
             suggestions: [
-              {
+              { ...reviewedSuggestionFields,
                 definition: {
                   metric: {
                     name: 'Doanh thu',
@@ -59,7 +60,7 @@ describe('StudioChatStream', () => {
       <StudioChatStream
         messages={[{
           id: 'assumption', sender: 'assistant', text: 'Gợi ý', timestamp: '10:00',
-          suggestions: [{ definition: { metric: { name: 'Doanh thu', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'low', excluded_notes: 'Giả định cần xác nhận: Chưa nêu cách xử lý hoàn tiền' } }, yaml_preview: '' }],
+          suggestions: [{ ...reviewedSuggestionFields, definition: { metric: { name: 'Doanh thu', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'low', excluded_notes: 'Giả định cần xác nhận: Chưa nêu cách xử lý hoàn tiền' } }, yaml_preview: '' }],
         }]}
         onSendMessage={vi.fn()}
         isLoading={false}
@@ -138,7 +139,7 @@ describe('StudioChatStream', () => {
         messages={[{
           id: 'assistant-message', sender: 'assistant', text: 'Gợi ý', timestamp: '10:00',
           suggestionAction: 'submit_metric_request',
-          suggestions: [{ definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
+          suggestions: [{ ...reviewedSuggestionFields, definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
         }]}
         onSendMessage={vi.fn()}
         onSubmitMetricRequest={submit}
@@ -159,7 +160,7 @@ describe('StudioChatStream', () => {
         messages={[{
           id: 'assistant-message', sender: 'assistant', text: 'Gợi ý', timestamp: '10:00',
           suggestionAction: 'submit_metric_request',
-          suggestions: [{ definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
+          suggestions: [{ ...reviewedSuggestionFields, definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
         }]}
         onSendMessage={vi.fn()}
         isLoading={false}
@@ -180,7 +181,7 @@ describe('StudioChatStream', () => {
         messages={[{
           id: 'assistant-message', sender: 'assistant', text: 'Gợi ý', timestamp: '10:00',
           suggestionAction: 'submit_metric_request',
-          suggestions: [{ definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
+          suggestions: [{ ...reviewedSuggestionFields, definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
         }]}
         onSendMessage={vi.fn()}
         isLoading={false}
@@ -206,7 +207,7 @@ describe('StudioChatStream', () => {
         messages={[{
           id: 'assistant-message', sender: 'assistant', text: 'Gợi ý', timestamp: '10:00',
           suggestionAction: 'submit_metric_request',
-          suggestions: [{ definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
+          suggestions: [{ ...reviewedSuggestionFields, definition: { metric: { name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
         }]}
         onSendMessage={vi.fn()}
         onSubmitMetricRequest={submit}
@@ -253,7 +254,7 @@ describe('StudioChatStream', () => {
             text: 'Gợi ý',
             timestamp: '10:00',
             suggestions: [
-              {
+              { ...reviewedSuggestionFields,
                 definition: {
                   metric: {
                     name: 'Doanh thu thuần',
@@ -298,7 +299,7 @@ describe('StudioChatStream', () => {
             text: 'Gợi ý',
             timestamp: '10:00',
             suggestions: [
-              {
+              { ...reviewedSuggestionFields,
                 definition: {
                   metric: {
                     name: 'Doanh thu thuần',
@@ -332,7 +333,7 @@ describe('StudioChatStream', () => {
       <StudioChatStream
         messages={[{
           id: 'saved', sender: 'assistant', text: 'Gợi ý', timestamp: '10:00',
-          suggestions: [{ definition: { metric: { name: 'Doanh thu thuần', formula: { function: 'SUM', expression: 'price' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
+          suggestions: [{ ...reviewedSuggestionFields, definition: { metric: { name: 'Doanh thu thuần', formula: { function: 'SUM', expression: 'price' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
         }]}
         onSendMessage={vi.fn()}
         isLoading={false}
@@ -429,7 +430,7 @@ describe('StudioChatStream', () => {
             text: 'Gợi ý',
             timestamp: '10:00',
             suggestions: [
-              {
+              { ...reviewedSuggestionFields,
                 definition: {
                   metric: {
                     name: 'AOV',
@@ -466,7 +467,7 @@ describe('StudioChatStream', () => {
             text: 'Gợi ý',
             timestamp: '10:00',
             suggestions: [
-              {
+              { ...reviewedSuggestionFields,
                 definition: {
                   metric: {
                     name: 'Doanh thu',

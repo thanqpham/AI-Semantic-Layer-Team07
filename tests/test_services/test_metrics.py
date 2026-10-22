@@ -156,7 +156,7 @@ def test_metric_system_prompt_contains_all_rules() -> None:
         "formula.expression chỉ gồm",
         "base_entity và các cột phải tồn tại",
         "Ưu tiên base_entity có PK/grain",
-        "Filter chỉ dùng cột của base_entity",
+        "Filter chỉ dùng cột base_entity",
         "PHẢI dùng đúng 1 giá trị trong danh sách values",
     ]:
         assert rule_text in prompt
@@ -192,27 +192,24 @@ def test_build_metric_system_prompt_v2_includes_dedupe_rules() -> None:
 
 
 def test_metric_system_prompt_requires_default_filters() -> None:
-    """Rule 5(a): hygiene flags are system-attached; 5(b): exclude terminal invalid states."""
+    """Hygiene is attached by code; completion follows the confirmed requirement."""
     prompt = build_metric_system_prompt("test")
-    assert "KHÔNG tự khai filter loại trừ cờ test/bot" in prompt
-    assert "hệ thống tự đính kèm" in prompt
-    assert "dùng phép loại trừ trạng thái vô hiệu lối cuối" in prompt
-    assert "Không bịa filter khi schema không có cờ tương ứng" in prompt
+    assert "Hệ thống tự thêm hygiene" in prompt
+    assert "không thay bằng điều kiện chỉ loại đơn hủy" in prompt
+    assert "Không bịa ánh xạ trạng thái" in prompt
 
 
 def test_metric_system_prompt_forbids_column_reference_filter_values() -> None:
     """Rule 5(c): filter values must be literals, never column references or joins."""
     prompt = build_metric_system_prompt("test")
-    assert "TUYỆT ĐỐI KHÔNG dùng tên cột hay tham chiếu cột" in prompt
-    assert "điều kiện join không thuộc filter" in prompt
+    assert "Không bịa ánh xạ trạng thái, điều kiện join hay coi tên cột là literal" in prompt
 
 
 def test_metric_system_prompt_binary_flag_numeric_typing() -> None:
-    """Rule 7 must prefer numeric 0/1 for numeric flag columns."""
+    """Unknown binary business conventions must not be inferred from column names."""
     prompt = build_metric_system_prompt("test")
-    assert "dùng giá trị số 1" in prompt
-    assert 'dùng chuỗi "1"/"0"' in prompt
-    assert "'Y', 'N', 'TRUE', 'true'" in prompt
+    assert "Giá trị filter phải khớp kiểu và metadata" in prompt
+    assert "không tự suy diễn quy ước 1/0 hoặc Y/N" in prompt
 
 
 def test_metric_system_prompt_entity_counting_uses_count_distinct() -> None:

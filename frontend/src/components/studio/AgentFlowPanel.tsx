@@ -13,6 +13,7 @@ const NODES = [
   { id: 'chitchat', name: 'Chitchat', en: 'Chitchat', x: 72, y: 174, agent: true },
   { id: 'data_assistant', name: 'Data Assistant', en: 'Data Assistant', x: 200, y: 174, agent: true },
   { id: 'metric_suggest', name: 'Metric Suggest', en: 'Metric Suggest', x: 328, y: 174, agent: true },
+  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Metric Review', x: 328, y: 294, agent: true },
   { id: 'semantic_parse', name: 'Semantic Parse', en: 'Semantic Parse', x: 135, y: 254, agent: true },
   { id: 'out_of_scope', name: 'Ngoài phạm vi', en: 'Out of scope', x: 285, y: 254 },
   { id: 'sql', name: 'Biên dịch · SQL', en: 'Compile · SQL', x: 95, y: 334 },
@@ -23,7 +24,7 @@ const EDGES = [
   ['request', 'orchestrator'], ['orchestrator', 'chitchat'], ['orchestrator', 'data_assistant'],
   ['orchestrator', 'metric_suggest'], ['orchestrator', 'semantic_parse'], ['orchestrator', 'out_of_scope'],
   ['semantic_parse', 'sql'], ['semantic_parse', 'clarification'], ['chitchat', 'response'],
-  ['data_assistant', 'response'], ['metric_suggest', 'response'], ['sql', 'response'],
+  ['data_assistant', 'response'], ['metric_suggest', 'metric_review'], ['metric_review', 'response'], ['metric_review', 'clarification'], ['sql', 'response'],
   ['clarification', 'response'], ['out_of_scope', 'response'],
 ];
 

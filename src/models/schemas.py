@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from src.models.metric_definition import FilterOperator, MetricDefinition, MetricStatus
+from src.models.metric_review import MetricCandidateReport, MetricReview, ProposalMode
 from src.models.raw_schema import RawSchema
 from src.models.schema_metadata import ParseDiagnostic, RawSchemaMetadata, SchemaDialect
 
@@ -181,6 +182,7 @@ class MetricCreate(BaseModel):
 
     definition: MetricDefinition
     source: Literal["ai", "manual", "auto_sync"] = "manual"
+    proposal_id: str | None = Field(default=None, min_length=36, max_length=36)
 
 
 class MetricUpdate(BaseModel):
@@ -262,6 +264,7 @@ class MetricRequestReview(BaseModel):
     """Data Lead decision for a pending metric request."""
 
     definition: MetricDefinition | None = None
+    proposal_id: str | None = Field(default=None, min_length=36, max_length=36)
     review_note: str | None = Field(default=None, max_length=2000)
 
 
@@ -276,6 +279,8 @@ class MetricRequestResponse(BaseModel):
     assistant_message_id: str
     suggestion_index: int
     definition: MetricDefinition
+    proposal_id: str | None = None
+    review: MetricReview | None = None
     status: Literal["pending", "approved", "rejected"]
     reviewed_by: int | None = None
     review_note: str | None = None
@@ -316,6 +321,7 @@ class CustomMetricGenerateRequest(BaseModel):
 
     prompt: str = Field(..., min_length=1, max_length=2000, description="Yêu cầu nghiệp vụ để sinh chỉ số")
     target_tables: list[str] | None = Field(default=None, description="Danh sách bảng giới hạn phạm vi")
+    proposal_mode: ProposalMode = "requested"
 
 
 class MetricConflictInfo(BaseModel):
@@ -335,6 +341,8 @@ class MetricSuggestionItem(BaseModel):
     definition: MetricDefinition
     yaml_preview: str
     conflict: MetricConflictInfo | None = None
+    proposal_id: str | None = None
+    review: MetricReview | None = None
 
 
 class DuplicateMetricNotice(BaseModel):
@@ -366,6 +374,8 @@ class CustomMetricGenerateResponse(BaseModel):
     suggestions: list[MetricSuggestionItem] = Field(default_factory=list)
     duplicates: list[DuplicateMetricNotice] = Field(default_factory=list)
     dedupe_performed: bool = True
+    blocked_candidates: list[MetricCandidateReport] = Field(default_factory=list)
+    clarification: ChatClarificationPayload | None = None
 
 
 class GeneratedMetric(MetricDefinition):
@@ -846,6 +856,7 @@ class MetricComparisonResponse(BaseModel):
 
 
 class MetricVersionItem(BaseModel):
+    review: MetricReview | None = None
     """One version entry in a metric's history."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -945,6 +956,7 @@ class ChatRequest(BaseModel):
     )
     session_id: str | None = Field(default=None, min_length=36, max_length=36)
     client_message_id: str | None = Field(default=None, min_length=1, max_length=100)
+    proposal_mode: ProposalMode = "requested"
     clarification_selection: ChatClarificationSelection | None = None
     reuse_metric_id: int | None = Field(
         default=None,
@@ -1017,6 +1029,7 @@ class ChatResponse(BaseModel):
         default=None,
         description="Danh sách Business Metrics JSON (khi intent = 'metric_query')",
     )
+    blocked_candidates: list[MetricCandidateReport] = Field(default_factory=list)
     duplicates: list[DuplicateMetricNotice] = Field(default_factory=list)
     dedupe_performed: bool = True
     suggestion_action: Literal["save_metric", "submit_metric_request"] | None = None

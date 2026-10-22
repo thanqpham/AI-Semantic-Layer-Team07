@@ -7,6 +7,7 @@ import { MetricRollbackConfirmDialog } from '@/components/metrics/MetricRollback
 import { MetricVersionDiff } from '@/components/metrics/MetricVersionDiff';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import {
   approveSingleMetricApi,
   getMetricHistoryApi,
@@ -265,6 +266,7 @@ export function MetricHistoryDialog({
             }}
           />
         )}
+        {compareEntry?.review && <MetricReviewPanel review={compareEntry.review} definition={compareEntry.definition} />}
       </DialogContent>
     </Dialog>
   );

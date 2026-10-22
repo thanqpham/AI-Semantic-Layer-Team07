@@ -53,6 +53,8 @@ async def _attach_trace(db: AsyncSession, response: ChatResponse, execution: Cha
 
 
 def _response_status(response: ChatResponse, execution: ChatExecution) -> str:
+    if any(candidate.review.status == "error" for candidate in response.blocked_candidates):
+        return "error"
     if any(
         event.get("status") == "failed"
         and (
