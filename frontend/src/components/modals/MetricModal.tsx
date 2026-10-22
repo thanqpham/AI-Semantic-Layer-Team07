@@ -21,6 +21,7 @@ import { StatusPill } from '@/components/workspace/shared';
 import {
   coerceFilterValue,
   createMetricDefinition,
+  formatMetricFormula,
   renderMetricYaml,
   withPendingStatus,
 } from '@/lib/metrics';
@@ -93,6 +94,7 @@ export function MetricModal(props: MetricModalProps) {
       [],
     [definition.metric.base_entity, props.tables],
   );
+  const hasExplicitRatio = Boolean(definition.metric.formula.ratio);
 
   const setMetric = (patch: Partial<MetricDefinition['metric']>) => {
     setDefinition((current) => ({ metric: { ...current.metric, ...patch } }));
@@ -218,6 +220,7 @@ export function MetricModal(props: MetricModalProps) {
                     <Label className="mb-1.5 block text-xs font-medium"><Translated text={"Hàm tổng hợp"} /></Label>
                     <select
                       value={definition.metric.formula.function}
+                      disabled={hasExplicitRatio}
                       onChange={(e) =>
                         setMetric({
                           formula: {
@@ -246,6 +249,7 @@ export function MetricModal(props: MetricModalProps) {
                   <Input
                     required
                     list="metric-columns"
+                    disabled={hasExplicitRatio}
                     value={definition.metric.formula.expression}
                     onChange={(e) =>
                       setMetric({
@@ -258,6 +262,12 @@ export function MetricModal(props: MetricModalProps) {
                     placeholder={translate("quantity * unit_price")}
                     className="font-mono text-xs"
                   />
+                  {hasExplicitRatio && (
+                    <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                      Công thức tỷ lệ được cấu hình theo tử số/mẫu số riêng; chỉnh sửa công thức hiện chưa hỗ trợ.
+                      {` ${formatMetricFormula(definition)}`}
+                    </p>
+                  )}
                   <datalist id="metric-columns">
                     {columns.map((c) => (
                       <option key={c.column_name} value={c.column_name} />

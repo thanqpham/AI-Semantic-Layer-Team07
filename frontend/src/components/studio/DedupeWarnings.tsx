@@ -16,7 +16,7 @@ import {
 import { useState } from 'react';
 
 import { DuplicateMetricNotice, MetricConflictInfo, MetricDefinition } from '@/lib/api';
-import { statusLabel } from '@/lib/metrics';
+import { formatMetricFormula, statusLabel } from '@/lib/metrics';
 import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
@@ -194,7 +194,7 @@ function ExistingMetricPreview({ definition, yaml, status }: ExistingMetricPrevi
         <p className="flex items-center gap-1.5">
           <Calculator className="h-3.5 w-3.5 shrink-0 text-primary" />
           <span className="font-mono font-bold text-primary">
-            {metric.formula.function}({metric.formula.expression})
+            {formatMetricFormula({ metric })}
           </span>
         </p>
         <p className="flex items-center gap-1.5">

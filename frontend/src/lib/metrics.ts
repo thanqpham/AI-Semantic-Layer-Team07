@@ -25,6 +25,27 @@ export function createMetricDefinition(baseEntity: string = ''): MetricDefinitio
   };
 }
 
+export function formatMetricFormula(definition: MetricDefinition): string {
+  const formula = definition.metric.formula;
+  if (!formula.ratio) {
+    const prefix = formula.expression.includes('/') ? 'Cần xem xét · ' : '';
+    return `${prefix}${formula.function}(${formula.expression})`;
+  }
+
+  const numerator = formatAggregate(formula.ratio.numerator);
+  const denominator = formatAggregate(formula.ratio.denominator);
+  const scale = formula.ratio.scale ?? 1;
+  const offset = formula.ratio.offset ?? 0;
+  const ratio = `${scale} × (${numerator}) / (${denominator})`;
+  return offset ? `${offset} + ${ratio}` : ratio;
+}
+
+function formatAggregate(aggregate: NonNullable<MetricDefinition['metric']['formula']['ratio']>['numerator']): string {
+  const filters = aggregate.filters?.map((item) => `${item.field} ${item.operator} ${String(item.value ?? '')}`);
+  const filterText = filters?.length ? ` WHERE ${filters.join(' AND ')}` : '';
+  return `${aggregate.function}(${aggregate.expression})${filterText}`;
+}
+
 export function withPendingStatus(definition: MetricDefinition): MetricDefinition {
   return {
     metric: {
@@ -112,4 +133,3 @@ export function applySuggestedName(suggestion: MetricSuggestion): MetricSuggesti
   // The returned copy intentionally drops `conflict` — the clarify flow is resolved.
   return { definition, yaml_preview: renderMetricYaml(definition) };
 }
-

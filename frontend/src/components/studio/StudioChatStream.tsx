@@ -29,6 +29,7 @@ import {
 } from '@/components/studio/DedupeWarnings';
 import { ChatSemanticQueryResult, ChatClarificationPayload } from '@/lib/api';
 import { ChatQueryResultCard } from '@/components/studio/ChatQueryResultCard';
+import { formatMetricFormula } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 import { ExecutionTrace } from '@/lib/chatTrace';
@@ -779,8 +780,7 @@ function SuggestionCard({
               <Translated text={"Công thức tính"} />
             </span>
             <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
-              <span className="text-primary font-bold">{def.formula.function}</span>(
-              <span>{def.formula.expression}</span>)
+              <span>{formatMetricFormula({ metric: def })}</span>
             </p>
           </div>
           <div className="rounded-md border border-border bg-secondary/30 p-2.5">
@@ -799,7 +799,7 @@ function SuggestionCard({
               <Translated text={"Cột dữ liệu sử dụng"} />
             </span>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-              {def.formula.expression}
+              {formatMetricFormula({ metric: def })}
             </p>
           </div>
           <div className="rounded-md border border-border bg-secondary/30 p-2.5">
