@@ -12,7 +12,9 @@ from src.models.metric_definition import (
     MetricDefinition,
     MetricDiagnostic,
     MetricExpressionNode,
+    MetricFilter,
     MetricGrain,
+    MetricRatio,
     is_timestamp_diff_hours,
 )
 from src.services.metric_definitions import validate_metric_definition
@@ -46,14 +48,12 @@ class MetricDefinitionResolver:
             ),
         ]
         formula = definition.metric.formula.model_copy(
-            update={"expression_ast": _expression_tree(definition.metric.formula.expression, by_name)}
+            update={
+                "expression_ast": _expression_tree(definition.metric.formula.expression, by_name),
+                "ratio": _resolve_ratio(definition.metric.formula.ratio, by_name),
+            }
         )
-        filters = [
-            item.model_copy(
-                update={"field": by_name[item.field.lower()].column_name, "column_id": by_name[item.field.lower()].id}
-            )
-            for item in definition.metric.filters
-        ]
+        filters = _resolve_filters(definition.metric.filters, by_name)
         grain = MetricGrain(column_ids=_primary_key_ids(table.primary_key_column, columns))
         diagnostics = _grain_diagnostics(grain)
         status = "needs_review" if diagnostics else definition.metric.status
@@ -89,23 +89,55 @@ def _grain_diagnostics(grain: MetricGrain) -> list[MetricDiagnostic]:
     return [MetricDiagnostic(code="MISSING_GRAIN", message="Base entity has no canonical primary-key grain")]
 
 
+def _resolve_ratio(ratio: MetricRatio | None, columns: dict[str, SemanticColumnModel]) -> MetricRatio | None:
+    if ratio is None:
+        return None
+    aggregates = {}
+    for side in ("numerator", "denominator"):
+        aggregate = getattr(ratio, side)
+        aggregates[side] = aggregate.model_copy(
+            update={
+                "expression_ast": _expression_tree(aggregate.expression, columns),
+                "filters": _resolve_filters(aggregate.filters, columns),
+            }
+        )
+    return ratio.model_copy(update=aggregates)
+
+
+def _resolve_filters(
+    filters: list[MetricFilter],
+    columns: dict[str, SemanticColumnModel],
+) -> list[MetricFilter]:
+    return [
+        item.model_copy(
+            update={"field": columns[item.field.lower()].column_name, "column_id": columns[item.field.lower()].id}
+        )
+        for item in filters
+    ]
+
+
 def _expression_tree(
     expression: str,
     columns: dict[str, SemanticColumnModel],
 ) -> MetricExpressionNode:
+    return expression_tree_for_columns(expression, {name: column.id for name, column in columns.items()})
+
+
+def expression_tree_for_columns(expression: str, columns: dict[str, int]) -> MetricExpressionNode:
+    """Build a canonical AST from an expression and a case-insensitive column-ID map."""
     if expression == "*":
         return MetricExpressionNode(kind="literal", value=1)
-    return _node(sqlglot.parse_one(expression), columns)
+    return _node(sqlglot.parse_one(expression), {name.lower(): column_id for name, column_id in columns.items()})
 
 
-def _node(node: exp.Expression, columns: dict[str, SemanticColumnModel]) -> MetricExpressionNode:
+def _node(node: exp.Expression, columns: dict[str, int]) -> MetricExpressionNode:
     if is_timestamp_diff_hours(node):
         return MetricExpressionNode(
             kind="timestamp_diff_hours",
             children=[_node(item, columns) for item in node.expressions],
         )
     if isinstance(node, exp.Column):
-        return MetricExpressionNode(kind="column", column_id=columns[node.name.lower()].id)
+        return MetricExpressionNode(kind="column", column_id=columns[node.name.lower()])
     if isinstance(node, exp.Literal):
         return MetricExpressionNode(kind="literal", value=float(node.this))
     if isinstance(node, exp.Paren):

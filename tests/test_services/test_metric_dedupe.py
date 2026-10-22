@@ -110,6 +110,51 @@ def test_same_logic_detects_different_formula() -> None:
     assert _same_logic(_definition(expr="quantity + unit_price"), _existing()) is False
 
 
+def test_same_logic_includes_ratio_aggregates_scale_and_side_filters() -> None:
+    ratio = {
+        "numerator": {
+            "function": "SUM",
+            "expression": "amount",
+            "filters": [{"field": "status", "operator": "eq", "value": "paid"}],
+        },
+        "denominator": {"function": "COUNT_DISTINCT", "expression": "order_id", "filters": []},
+        "scale": 100,
+        "offset": 0,
+    }
+    proposal = MetricDefinition.model_validate(
+        {
+            "metric": {
+                "name": "Paid amount per order",
+                "formula": {
+                    "function": "SUM",
+                    "expression": "amount",
+                    "ratio": ratio,
+                },
+                "base_entity": "order_items",
+                "status": "pending_approval",
+                "confidence": "high",
+            }
+        }
+    )
+    existing = _existing()
+    existing.update(function="SUM", expression="amount", ratio=ratio, base_entity="order_items")
+
+    assert _same_logic(proposal, existing) is True
+    changed_scale = {**existing, "ratio": {**ratio, "scale": 1}}
+    assert _same_logic(proposal, changed_scale) is False
+    changed_filter = {
+        **existing,
+        "ratio": {
+            **ratio,
+            "numerator": {
+                **ratio["numerator"],
+                "filters": [{"field": "status", "operator": "eq", "value": "refunded"}],
+            },
+        },
+    }
+    assert _same_logic(proposal, changed_filter) is False
+
+
 # ---------------------------------------------------------------------------
 # merge_dedupe
 # ---------------------------------------------------------------------------
@@ -383,12 +428,13 @@ def test_metric_summary_projects_row() -> None:
         },
     )
     summary = _metric_summary(row)
-    assert set(summary) == {"id", "name", "status", "function", "expression", "base_entity", "filters"}
+    assert set(summary) == {"id", "name", "status", "function", "expression", "ratio", "base_entity", "filters"}
     assert summary["id"] == 7
     assert summary["name"] == "Doanh thu"
     assert summary["status"] == "approved"
     assert summary["function"] == "SUM"
     assert summary["expression"] == "quantity * unit_price"
+    assert summary["ratio"] is None
     assert summary["base_entity"] == "order_items"
     assert summary["filters"] == []
 

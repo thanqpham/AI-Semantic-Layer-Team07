@@ -24,9 +24,10 @@ def format_existing_metrics_context(existing: list[dict[str, Any]]) -> str:
     for item in existing:
         status = item.get("status") or "draft"
         filter_text = _render_filters(item.get("filters"))
+        formula_text = _render_formula(item)
         lines.append(
             f'- [ID {item.get("id")} | {status}] "{item.get("name")}" '
-            f"= {(item.get('function') or '').upper()}({item.get('expression')}) "
+            f"= {formula_text} "
             f"trên `{item.get('base_entity')}`{filter_text}"
         )
     return "\n".join(lines)
@@ -48,6 +49,22 @@ def _render_filters(filters: list[Any] | None) -> str:
         data = _filter_dict(item)
         parts.append(f"{data.get('field')} {data.get('operator')} {data.get('value')}")
     return f", filter: {'; '.join(parts)}"
+
+
+def _render_formula(item: dict[str, Any]) -> str:
+    ratio = item.get("ratio")
+    if not isinstance(ratio, dict):
+        return f"{(item.get('function') or '').upper()}({item.get('expression')})"
+
+    def aggregate_text(side: dict[str, Any]) -> str:
+        filters = _render_filters(side.get("filters"))
+        return f"{str(side.get('function') or '').upper()}({side.get('expression')}){filters}"
+
+    return (
+        f"{ratio.get('offset', 0)} + {ratio.get('scale', 1)} × "
+        f"({aggregate_text(ratio.get('numerator', {}))}) / "
+        f"({aggregate_text(ratio.get('denominator', {}))})"
+    )
 
 
 def _norm_name(name: str) -> str:
@@ -78,15 +95,46 @@ def _norm_filters(filters: list[Any] | None) -> list[tuple[str, str, str]]:
 
 
 def _same_logic(definition: MetricDefinition, existing: dict[str, Any]) -> bool:
-    """True when function, expression, entity, and filters match after normalize."""
+    """True only when aggregate sides, transforms, entity, and all filters match."""
     metric = definition.metric
     if (metric.formula.function or "").upper() != (existing.get("function") or "").upper():
         return False
     if _norm_expression(metric.formula.expression or "") != _norm_expression(existing.get("expression") or ""):
         return False
+    proposed_ratio = _ratio_key(metric.formula.ratio.model_dump(mode="json") if metric.formula.ratio else None)
+    if proposed_ratio != _ratio_key(existing.get("ratio")):
+        return False
     if (metric.base_entity or "").casefold() != (existing.get("base_entity") or "").casefold():
         return False
-    return _norm_filters(metric.filters) == _norm_filters(existing.get("filters"))
+    proposed_filters = _norm_filters(metric.filters)
+    if proposed_filters != _norm_filters(existing.get("filters")):
+        return False
+    ratio = metric.formula.ratio
+    if ratio is None:
+        return True
+    existing_ratio = existing.get("ratio") or {}
+    return (
+        _norm_filters(ratio.numerator.filters) == _norm_filters(existing_ratio.get("numerator", {}).get("filters"))
+        and _norm_filters(ratio.denominator.filters) == _norm_filters(existing_ratio.get("denominator", {}).get("filters"))
+    )
+
+
+def _ratio_key(ratio: dict[str, Any] | None) -> tuple[Any, ...] | None:
+    if not isinstance(ratio, dict):
+        return None
+
+    def side_key(side: dict[str, Any]) -> tuple[str, str]:
+        return (
+            str(side.get("function") or "").upper(),
+            _norm_expression(str(side.get("expression") or "")),
+        )
+
+    return (
+        side_key(ratio.get("numerator", {})),
+        side_key(ratio.get("denominator", {})),
+        float(ratio.get("scale", 1)),
+        float(ratio.get("offset", 0)),
+    )
 
 
 def merge_dedupe(
@@ -380,6 +428,7 @@ def _summary_from_definition(
         "status": status,
         "function": metric.formula.function,
         "expression": metric.formula.expression,
+        "ratio": metric.formula.ratio.model_dump(mode="json") if metric.formula.ratio else None,
         "base_entity": metric.base_entity,
         "filters": [f.model_dump() for f in (metric.filters or [])],
     }
@@ -401,6 +450,7 @@ def _metric_summary(row: SemanticMetricModel) -> dict[str, Any]:
         "status": row.status,
         "function": formula.get("function", ""),
         "expression": formula.get("expression", ""),
+        "ratio": formula.get("ratio"),
         "base_entity": metric.get("base_entity", ""),
         "filters": metric.get("filters", []),
     }

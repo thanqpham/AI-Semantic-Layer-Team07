@@ -16,9 +16,11 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
-from src.models.metric_definition import MetricDefinition
+from src.models.metric_definition import MetricDefinition, MetricExpressionNode, is_timestamp_diff_hours
 from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQuerySpec
 from src.observability import trace_action
+from src.services.metric_definition_resolver import expression_tree_for_columns
+from src.services.metric_definitions import is_numeric_data_type
 from src.services.query_compiler_sql import (
     _assemble_sql,
     _column_info,
@@ -109,6 +111,7 @@ class SemanticQueryCompiler:
             raise ValueError(f"Unknown base entity: {base_name}")
         dimensions = await self._load_dimensions(connection_id, [item.column_id for item in spec.dimensions])
         base_columns = await self._load_base_columns(base.id)
+        _validate_definition_asts(definitions, base_columns)
         _apply_time_grains(dimensions, spec.dimensions)
         runtime_filters = await self._load_runtime_filters(connection_id, spec.filters)
         joins = await self._resolve_joins(connection_id, base, dimensions + runtime_filters, table_by_id)
@@ -262,6 +265,62 @@ def _canonical_definitions(metrics: list[SemanticMetricModel]) -> list[MetricDef
     if any(invalid):
         raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric definition is not canonical v2")
     return definitions
+
+
+def _validate_definition_asts(
+    definitions: list[MetricDefinition],
+    columns: dict[int, tuple[str, str]],
+) -> None:
+    """Ensure persisted expression trees still match their readable formulas."""
+    column_ids = {name: column_id for column_id, (name, _) in columns.items()}
+    for definition in definitions:
+        formula = definition.metric.formula
+        _validate_expression_ast(formula.expression, formula.expression_ast, column_ids)
+        _validate_numeric_aggregate(formula.function, formula.expression_ast, columns)
+        if formula.ratio is None:
+            continue
+        for aggregate in (formula.ratio.numerator, formula.ratio.denominator):
+            _validate_expression_ast(aggregate.expression, aggregate.expression_ast, column_ids)
+            _validate_numeric_aggregate(aggregate.function, aggregate.expression_ast, columns)
+
+
+def _validate_expression_ast(
+    expression: str,
+    expression_ast: MetricExpressionNode | None,
+    column_ids: dict[str, int],
+) -> None:
+    if expression_ast is None:
+        raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric expression is not resolved")
+    try:
+        expected = expression_tree_for_columns(expression, column_ids)
+    except (KeyError, ValueError) as exc:
+        raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric expression references an unknown column") from exc
+    if expression_ast != expected:
+        raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric expression does not match its resolved AST")
+
+
+def _validate_numeric_aggregate(
+    function: str,
+    expression: MetricExpressionNode | None,
+    columns: dict[int, tuple[str, str]],
+) -> None:
+    if function not in {"SUM", "AVG"} or expression is None:
+        return
+    if expression.kind == "timestamp_diff_hours":
+        return
+    pending = [expression]
+    invalid: set[str] = set()
+    while pending:
+        node = pending.pop()
+        pending.extend(node.children)
+        if node.kind == "column" and node.column_id in columns and not is_numeric_data_type(columns[node.column_id][1]):
+            invalid.add(columns[node.column_id][0])
+    if invalid:
+        raise SemanticCompileError(
+            "METRIC_NEEDS_REVIEW",
+            f"{function} requires numeric columns",
+            {"columns": sorted(invalid)},
+        )
 
 
 def _apply_time_grains(dimensions: list[dict[str, Any]], selections: list[DimensionSelection]) -> None:

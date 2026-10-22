@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import sqlglot
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,21 +19,8 @@ from src.models.metric_definition import MetricDefinition, MetricStatus, is_time
 from src.models.review_mixin import REVIEW_STATUS_PENDING
 from src.models.schema_metadata import RawSchemaMetadata
 
-_NUMERIC_TYPES = (
-    "INT",
-    "DECIMAL",
-    "NUMERIC",
-    "FLOAT",
-    "DOUBLE",
-    "REAL",
-    "MONEY",
-    "NUMBER",
-    "SERIAL",
-    "TINYINT",
-    "BIGINT",
-    "SMALLINT",
-    "BOOL",
-    "BIT",
+_NUMERIC_TYPE = re.compile(
+    r"^(?:TINYINT|SMALLINT|INT|INTEGER|BIGINT|SERIAL|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL|MONEY|NUMBER)(?:\b|\s*\()"
 )
 
 
@@ -140,21 +129,33 @@ def _validate_expression_columns(
     columns: dict[str, SemanticColumnModel],
 ) -> None:
     formula = definition.metric.formula
-    if formula.expression == "*":
-        return
-    parsed = sqlglot.parse_one(formula.expression)
     col_map_lower = {k.lower(): (k, v) for k, v in columns.items()}
+    _validate_expression(formula.expression, formula.function, col_map_lower)
+    if formula.ratio is None:
+        return
+    for aggregate in (formula.ratio.numerator, formula.ratio.denominator):
+        _validate_expression(aggregate.expression, aggregate.function, col_map_lower)
+
+
+def _validate_expression(
+    expression: str,
+    function: str,
+    columns: dict[str, tuple[str, SemanticColumnModel]],
+) -> None:
+    if expression == "*":
+        return
+    parsed = sqlglot.parse_one(expression)
     if is_timestamp_diff_hours(parsed):
-        _validate_timestamp_difference(parsed, col_map_lower)
+        _validate_timestamp_difference(parsed, columns)
         return
     names = {column.name.lower() for column in parsed.find_all(exp.Column)}
-    missing = names - col_map_lower.keys()
+    missing = names - columns.keys()
     if missing:
         raise ValueError(f"Unknown expression columns: {sorted(missing)}")
-    if formula.function in {"SUM", "AVG"}:
-        invalid = [col_map_lower[name][0] for name in names if not _is_numeric(col_map_lower[name][1].data_type)]
+    if function in {"SUM", "AVG"}:
+        invalid = [columns[name][0] for name in names if not is_numeric_data_type(columns[name][1].data_type)]
         if invalid:
-            raise ValueError(f"{formula.function} requires numeric columns: {invalid}")
+            raise ValueError(f"{function} requires numeric columns: {invalid}")
 
 
 def _validate_timestamp_difference(parsed: exp.Expression, columns: dict[str, tuple[str, SemanticColumnModel]]) -> None:
@@ -173,13 +174,18 @@ def _validate_filter_columns(
     columns: dict[str, SemanticColumnModel],
 ) -> None:
     col_map_lower = {k.lower(): k for k in columns.keys()}
-    missing = {item.field.lower() for item in definition.metric.filters} - col_map_lower.keys()
+    filters = list(definition.metric.filters)
+    ratio = definition.metric.formula.ratio
+    if ratio is not None:
+        filters.extend(ratio.numerator.filters)
+        filters.extend(ratio.denominator.filters)
+    missing = {item.field.lower() for item in filters} - col_map_lower.keys()
     if missing:
         raise ValueError(f"Unknown filter columns: {sorted(missing)}")
 
 
-def _is_numeric(data_type: str) -> bool:
-    return any(token in data_type.upper() for token in _NUMERIC_TYPES)
+def is_numeric_data_type(data_type: str) -> bool:
+    return bool(_NUMERIC_TYPE.match(data_type.strip().upper()))
 
 
 def _is_time(data_type: str) -> bool:

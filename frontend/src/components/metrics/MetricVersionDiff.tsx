@@ -6,6 +6,7 @@ import type { MetricDefinition } from '@/lib/api';
 import { buildMetricVersionDiff, DiffRow, DiffRowStatus } from '@/lib/metric-version-diff';
 import { cn } from '@/lib/utils';
 import { Translated } from '@/components/ui/translated';
+import { formatMetricFormula } from '@/lib/metrics';
 
 interface MetricVersionDiffProps {
   previousDefinition: MetricDefinition | null | undefined;
@@ -77,10 +78,10 @@ function collectFormulaLines(
 ): Set<string> {
   const lines = new Set<string>();
   if (previous?.metric?.formula) {
-    lines.add(`${previous.metric.formula.function}(${previous.metric.formula.expression})`);
+    lines.add(formatMetricFormula(previous));
   }
   if (current?.metric?.formula) {
-    lines.add(`${current.metric.formula.function}(${current.metric.formula.expression})`);
+    lines.add(formatMetricFormula(current));
   }
   return lines;
 }

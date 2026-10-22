@@ -67,8 +67,8 @@ def observation(name: str, *, session_id: str | None = None) -> Iterator[Any]:
     from langfuse import propagate_attributes
 
     error = None
-    with client.start_as_current_observation(name=name, as_type="span") as span:
-        with propagate_attributes(session_id=session_id):
+    with propagate_attributes(session_id=session_id):
+        with client.start_as_current_observation(name=name, as_type="span") as span:
             try:
                 yield span
             except BaseException as exc:

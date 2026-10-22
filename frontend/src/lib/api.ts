@@ -37,11 +37,24 @@ export interface MetricFilter {
   value: unknown;
 }
 
+export interface MetricAggregate {
+  function: MetricFunction;
+  expression: string;
+  filters?: MetricFilter[];
+}
+
+export interface MetricRatio {
+  numerator: MetricAggregate;
+  denominator: MetricAggregate;
+  scale?: number;
+  offset?: number;
+}
+
 export interface MetricDefinition {
   schema_version?: 1 | 2;
   metric: {
     name: string;
-    formula: { function: MetricFunction; expression: string };
+    formula: { function: MetricFunction; expression: string; ratio?: MetricRatio | null };
     base_entity: string;
     base_entity_id?: number | null;
     grain?: { column_ids: number[] };
@@ -81,6 +94,7 @@ export interface MetricComparisonMember {
   expression: string;
   base_entity: string;
   filters: MetricFilter[];
+  ratio?: MetricRatio | null;
 }
 
 export interface MetricComparisonGroup {
@@ -88,7 +102,7 @@ export interface MetricComparisonGroup {
   core_formula: string;
   base_entity: string;
   members: MetricComparisonMember[];
-  differing_filters: MetricFilter[];
+  differing_filters: Array<MetricFilter & { scope?: 'metric' | 'numerator' | 'denominator' }>;
 }
 
 export interface MetricComparisonResponse {
@@ -1762,4 +1776,3 @@ export async function listSyncLogsApi(
 ): Promise<SchemaSyncLog[]> {
   return semanticRequest<SchemaSyncLog[]>(`/api/v1/semantic/${dbId}/sync-logs`);
 }
-

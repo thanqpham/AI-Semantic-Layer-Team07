@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { MetricRecord } from '@/lib/api';
 import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
 import { StatusPill } from '@/components/workspace/shared';
-import { metricName, renderMetricYaml } from '@/lib/metrics';
+import { formatMetricFormula, metricName, renderMetricYaml } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -41,7 +41,7 @@ export function MetricCard({
   const [tab, setTab] = useState<'definition' | 'yaml'>('definition');
   const detailId = useId();
   const formula = definition
-    ? `${definition.metric.formula.function}(${definition.metric.formula.expression})`
+    ? formatMetricFormula(definition)
     : t('No definition', 'Chưa có định nghĩa');
 
   return (

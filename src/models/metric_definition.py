@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Literal
 
 import sqlglot
@@ -65,6 +66,37 @@ class MetricExpressionNode(BaseModel):
     value: float | None = None
     children: list[MetricExpressionNode] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def validate_shape(self) -> MetricExpressionNode:
+        """Reject malformed ASTs before the compiler indexes their children."""
+        expected_children = {
+            "column": 0,
+            "literal": 0,
+            "neg": 1,
+            "timestamp_diff_hours": 2,
+            "add": 2,
+            "sub": 2,
+            "mul": 2,
+            "div": 2,
+        }[self.kind]
+        if len(self.children) != expected_children:
+            raise ValueError(f"{self.kind} expression requires {expected_children} children")
+        if self.kind == "column" and self.column_id is None:
+            raise ValueError("column expression requires a column_id")
+        if self.kind == "literal" and self.value is None:
+            raise ValueError("literal expression requires a value")
+        if self.kind == "column" and self.value is not None:
+            raise ValueError("column expression cannot contain a literal value")
+        if self.kind == "literal" and self.column_id is not None:
+            raise ValueError("literal expression cannot contain a column_id")
+        if self.kind not in {"column", "literal"} and (self.column_id is not None or self.value is not None):
+            raise ValueError(f"{self.kind} expression cannot contain a column_id or literal value")
+        if self.value is not None and not math.isfinite(self.value):
+            raise ValueError("literal expression must be finite")
+        if self.kind == "timestamp_diff_hours" and any(child.kind != "column" for child in self.children):
+            raise ValueError("timestamp difference requires two column expressions")
+        return self
+
 
 class MetricGrain(BaseModel):
     """Identify the canonical columns that uniquely define the base grain."""
@@ -78,6 +110,7 @@ class MetricFormula(BaseModel):
     function: MetricFunction
     expression: str = Field(..., min_length=1, max_length=1000)
     expression_ast: MetricExpressionNode | None = None
+    ratio: MetricRatio | None = None
 
     @field_validator("function", mode="before")
     @classmethod
@@ -185,6 +218,40 @@ class MetricFilter(BaseModel):
         elif self.value is None:
             raise ValueError(f"{self.operator} requires a value")
         return self
+
+
+class MetricAggregate(BaseModel):
+    """Describe one independently aggregated side of a metric ratio."""
+
+    function: MetricFunction
+    expression: str = Field(..., min_length=1, max_length=1000)
+    expression_ast: MetricExpressionNode | None = None
+    filters: list[MetricFilter] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_aggregate_expression(self) -> MetricAggregate:
+        """Apply the same safe-expression rules as a regular metric formula."""
+        MetricFormula(function=self.function, expression=self.expression)
+        return self
+
+
+class MetricRatio(BaseModel):
+    """Define a ratio of independently aggregated values."""
+
+    numerator: MetricAggregate
+    denominator: MetricAggregate
+    scale: float = 1.0
+    offset: float = 0.0
+
+    @field_validator("scale", "offset", mode="before")
+    @classmethod
+    def validate_finite_transform(cls, value: Any) -> Any:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError("ratio scale and offset must be finite numbers")
+        return value
+
+
+MetricFormula.model_rebuild()
 
 
 class MetricSpec(BaseModel):

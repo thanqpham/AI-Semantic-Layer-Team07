@@ -103,7 +103,8 @@ _V1_OUTPUT_FORMAT = """Trả về kết quả ở định dạng JSON thuần t�
         "name": "Tên metric tiếng Việt",
         "formula": {
           "function": "SUM",
-          "expression": "cột_tính_toán"
+          "expression": "cột_tính_toán",
+          "ratio": null
         },
         "base_entity": "tên_bảng_chính",
         "filters": [],
@@ -123,7 +124,8 @@ _V2_OUTPUT_FORMAT = """Trả về kết quả ở định dạng JSON thuần t�
         "name": "Tên metric tiếng Việt",
         "formula": {
           "function": "SUM",
-          "expression": "cột_tính_toán"
+          "expression": "cột_tính_toán",
+          "ratio": null
         },
         "base_entity": "tên_bảng_chính",
         "filters": [],
@@ -166,8 +168,8 @@ _BASE_RULES = """Quy tắc BẮT BUỘC:
 6. Khi dùng filter trên cột có values: [...] trong Schema, PHẢI dùng đúng 1 giá trị trong danh sách values. Không tự tạo giá trị mới.
 7. Không tự thêm filter cho trạng thái hoàn thành, hoàn tiền, kích hoạt hoặc bất kỳ điều kiện nghiệp vụ nào người dùng chưa nêu rõ.
 8. formula.function SUM và AVG CHỈ áp dụng cho các cột kiểu số (INT, DECIMAL, FLOAT, NUMERIC,...). TUYỆT ĐỐI KHÔNG dùng SUM/AVG cho cột kiểu BOOLEAN (ví dụ: is_canceled, is_active) hay TEXT. Để đếm các bản ghi thoả mãn cờ boolean hoặc trạng thái, PHẢI dùng function "COUNT" (expression "*" hoặc cột ID) kết hợp với "filters" (ví dụ: field "is_canceled", operator "eq", value true). Giá trị filter trên cờ nhị phân (is_*, has_*, flag) khi cột KHÔNG có danh sách values: cột kiểu số (INT/BIT) dùng giá trị số 1 cho trạng thái Hoàn thành / Kích hoạt / Bật và 0 cho Chưa xong / Tắt; cột kiểu BOOLEAN dùng true/false; cột kiểu ký tự (VARCHAR/CHAR) dùng chuỗi "1"/"0". TUYỆT ĐỐI KHÔNG tự bịa ra 'Y', 'N', 'TRUE', 'true'.
-9. Với metric tỷ lệ/phần trăm (Rate, Ratio, Percentage, Tỷ lệ, Tỉ lệ, Tỷ trọng), formula.expression BẮT BUỘC là phép chia giữa tử số và mẫu số; không sinh expression chỉ có một cột. Dùng đúng base entity theo thực thể gốc: phiên là `fact_sessions`, giỏ hàng là `fact_carts`, đơn hàng/doanh thu là `fact_orders`, chi tiết đơn hàng là `fact_order_items`.
-10. Mẫu metric tỷ lệ phải phản ánh đúng mẫu số: tỷ lệ chuyển đổi dùng `order_id / session_id`, tỷ lệ bỏ giỏ dùng `1 - (cart_id / cart_id)`, tỷ lệ hủy dùng `id / id` kèm filter hủy, và tỷ lệ khách hàng quay lại dùng `customer_id / customer_id` kèm filter thứ tự mua hàng. Không dùng rule tỷ lệ để tự ý suy diễn column không có trong Schema.
+9. Với metric tỷ lệ, tỷ trọng, trung bình trên mỗi thực thể, hoặc phép tính có tử số/mẫu số, BẮT BUỘC khai báo `formula.ratio` gồm `numerator` và `denominator`; mỗi vế có `function`, `expression`, `filters` tùy chọn. `scale` mặc định là 1; chỉ đặt 100 khi metric được định nghĩa rõ là phần trăm. `offset` mặc định là 0; với tỷ lệ bỏ giỏ dạng 1 trừ tỷ lệ hoàn tất, đặt `offset: 1` và `scale: -1`. Ví dụ AOV: numerator SUM(price_after_discount), denominator COUNT_DISTINCT(order_id), scale 1. Filter ở metric.filters áp dụng cho cả hai vế; filter trong từng aggregate.filters chỉ áp dụng cho vế đó. Không suy diễn phép chia từ formula.expression.
+10. Công thức tỷ lệ phải dùng đúng khóa thực thể cho từng vế và mẫu số theo định nghĩa nghiệp vụ (ví dụ chuyển đổi: đơn hàng / phiên; tỷ lệ hủy: đơn hủy / tổng đơn; khách quay lại: khách quay lại / tổng khách). Không dùng cùng một phép tổng hợp cho hai vế nếu ý nghĩa cần khác nhau; không tự chọn trạng thái hay cột không có trong Schema.
 """
 
 _DEDUPE_RULES = """8. Trước khi trả về, so sánh mỗi metric đề xuất với danh sách metric đang tồn tại. Nếu một metric đề xuất **cùng ý nghĩa nghiệp vụ và cùng logic tính toán ≥90%** với một metric đã có (bỏ qua hoa/thường, khoảng trắng, khác biệt cú pháp SQL vô nghĩa): KHÔNG đưa metric đó vào `metrics`; thêm mục vào `duplicates` với `proposed_metric_name` đúng bằng tên metric đề xuất bị coi là trùng (để hệ thống tự loại nếu vẫn lọt vào `metrics`), `user_message` tiếng Việt giải thích và `similarity_reason` nêu điểm giống. Nếu metric đã có ở trạng thái `approved`, nhấn mạnh rằng đã có metric chuẩn và không cần tạo mới. Chỉ xếp vào `duplicates` khi hai metric THAY THẾ ĐƯỢC CHO NHAU HOÀN TOÀN — cùng ý nghĩa VÀ cùng công thức sau chuẩn hóa. Nếu công thức/logic khác nhau (kể cả khi ý nghĩa gần giống hoặc tên gần trùng): đó là `conflicts` theo quy tắc 9, TUYỆT ĐỐI KHÔNG xếp vào `duplicates`.
@@ -301,10 +303,19 @@ def _references_schema(definition: MetricDefinition, valid: dict[str, set[str]])
     definition.metric.base_entity = actual_table_name
     col_lower = {c.lower(): c for c in columns}
     try:
-        parsed = sqlglot.parse_one(definition.metric.formula.expression)
-        referenced = {col.name.lower() for col in parsed.find_all(exp.Column)}
-        for item in definition.metric.filters:
-            referenced.add(item.field.lower())
+        formula = definition.metric.formula
+        expressions = [formula.expression]
+        filters = list(definition.metric.filters)
+        if formula.ratio is not None:
+            for aggregate in (formula.ratio.numerator, formula.ratio.denominator):
+                expressions.append(aggregate.expression)
+                filters.extend(aggregate.filters)
+        referenced = {
+            col.name.lower()
+            for expression in expressions
+            for col in sqlglot.parse_one(expression).find_all(exp.Column)
+        }
+        referenced.update(item.field.lower() for item in filters)
         return referenced.issubset(set(col_lower.keys()))
     except Exception:
         return False
