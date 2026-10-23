@@ -81,6 +81,27 @@ def test_discovery_caps_results_and_preserves_blocked_reports():
     assert all(i["review"]["status"] == "pass" for i in result["suggested_metrics"])
 
 
+def test_passing_variant_does_not_pause_for_another_variant_clarification():
+    passed = {
+        "name": "Giá trị đơn hàng trước thuế",
+        "final_definition": definition(),
+        "review": MetricReview(status="pass", summary="Đạt").model_dump(mode="json"),
+    }
+    blocked = {
+        "name": "Giá trị đơn hàng sau thuế",
+        "final_definition": None,
+        "review": MetricReview(
+            status="needs_clarification",
+            summary="Thiếu ý nghĩa cột thuế",
+            clarification="Cần xác nhận ý nghĩa cột thuế",
+        ).model_dump(mode="json"),
+    }
+    result = reviewed_state([passed, blocked], {})
+    assert len(result["suggested_metrics"]) == 1
+    assert result["blocked_candidates"][0]["review"]["status"] == "needs_clarification"
+    assert "clarification" not in result
+
+
 def test_dedupe_still_removes_existing_reviewed_metric():
     raw = definition()
     proposal = {

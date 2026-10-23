@@ -51,7 +51,7 @@ def reviewed_state(proposals: list[dict[str, Any]], state: dict[str, Any]) -> di
         if kept
         else None,
     }
-    if questions:
+    if questions and not kept:
         response["clarification"] = {"prompt": "\n".join(dict.fromkeys(questions)), "options": []}
     errors = any(p["review"]["status"] == "error" for p in proposals)
     response["run_status"] = (

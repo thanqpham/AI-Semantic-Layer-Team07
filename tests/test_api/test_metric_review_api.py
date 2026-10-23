@@ -6,10 +6,17 @@ import pytest
 from sqlalchemy import func, select
 
 from src.api.auth import create_access_token
-from src.models.db import MetricProposalModel, SemanticDatabaseModel, SemanticMetricModel, UserModel
+from src.models.db import (
+    MetricProposalModel,
+    SemanticColumnModel,
+    SemanticDatabaseModel,
+    SemanticMetricModel,
+    SemanticTableModel,
+    UserModel,
+)
 from src.models.metric_review import MetricDraft, MetricDraftBatch
 from src.services.metric_context import MetricContextResult, load_review_schema
-from tests.metric_review_helpers import definition, reviewer_mock, seed_proposal
+from tests.metric_review_helpers import definition, reviewer_mock, scope_mock, seed_proposal
 
 
 @pytest.fixture
@@ -55,6 +62,57 @@ async def test_generate_persists_report_not_catalog_and_save_is_still_pending(cl
     history = await client.get(f"/api/v1/semantic/{db_id}/metric/{saved.json()['metric_id']}/history", headers=headers)
     assert history.status_code == 200, history.text
     assert history.json()["versions"][0]["review"]["status"] == "pass"
+
+
+async def test_generate_average_variants_without_scope_column_clarification(client, async_session, setup_review):
+    db_id, _, headers = setup_review
+    table = await async_session.scalar(select(SemanticTableModel).where(SemanticTableModel.db_id == db_id))
+    async_session.add_all(
+        [
+            SemanticColumnModel(
+                table_id=table.id,
+                column_name=name,
+                data_type="NUMERIC",
+                business_name=name,
+                is_nullable=False,
+                review_status="approved",
+            )
+            for name in ("price_before_tax", "price_after_tax", "total_discount_value")
+        ]
+    )
+    await async_session.commit()
+    variants = []
+    for name, expression, variant_id in [
+        ("Giá trị đơn hàng trung bình trước thuế", "price_before_tax", "order_average_pre_tax"),
+        ("Giá trị đơn hàng trung bình sau thuế", "price_after_tax", "order_average_after_tax"),
+        (
+            "Giá trị đơn hàng trung bình sau thuế và giảm giá",
+            "price_after_tax - total_discount_value",
+            "order_average_after_tax_discount",
+        ),
+    ]:
+        raw = definition(expression, name)
+        raw["metric"]["formula"]["function"] = "AVG"
+        variants.append(
+            {"name": name, "status": "ready", "definition": raw, "knowledge_id": "aov", "variant_id": variant_id}
+        )
+    with (
+        patch(
+            "src.services.metric_context.invoke_metric_json",
+            new=scope_mock({"table_names": ["orders"], "needs_clarification": True, "question": "Chọn cột giá nào?"}),
+        ),
+        patch("src.services.metric_workflow.generate_metric_drafts", AsyncMock(return_value=variants)),
+        patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()) as review,
+    ):
+        response = await client.post(
+            f"/api/v1/semantic/{db_id}/metrics/generate",
+            headers=headers,
+            json={"prompt": "Đề xuất giá trị trung bình trên mỗi đơn hàng"},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["clarification"] is None
+    assert len(response.json()["suggestions"]) == 3
+    assert review.await_count == 1
 
 
 async def test_generate_discovery_returns_supported_and_blocked_without_inventing_five(client, setup_review):
@@ -202,8 +260,10 @@ async def test_partial_chat_status_survives_replay_and_history(client, setup_rev
     db_id, _, headers = setup_review
     generate, _ = mocked_review_pipeline
     generate.return_value = [{"name": "Doanh thu", "definition": definition()}, {"name": "Broken", "definition": None}]
+
     async def repair(_context, items, _task_id):
         return [{"candidate_id": i["candidate_id"], "name": "Broken", "definition": None} for i in items]
+
     body = {"message": "Khám phá KPI", "proposal_mode": "discovery", "client_message_id": "partial-replay"}
     with patch("src.services.metric_workflow.repair_metric_drafts", AsyncMock(side_effect=repair)):
         response = await client.post(f"/api/v1/semantic/{db_id}/chat", headers=headers, json=body)
@@ -212,5 +272,7 @@ async def test_partial_chat_status_survives_replay_and_history(client, setup_rev
     assert response.json()["run_status"] == replay.json()["run_status"] == "partial"
     assert replay.json()["execution_trace"]["status"] == "partial"
     assert generate.await_count == 1
-    history = await client.get(f"/api/v1/semantic/{db_id}/chat/sessions/{response.json()['session_id']}", headers=headers)
+    history = await client.get(
+        f"/api/v1/semantic/{db_id}/chat/sessions/{response.json()['session_id']}", headers=headers
+    )
     assert history.json()["messages"][-1]["metadata_json"]["run_status"] == "partial"

@@ -8,7 +8,7 @@ from typing import Any
 import sqlglot
 from sqlglot import exp
 
-from src.models.metric_definition import MetricDefinition, MetricFilter
+from src.models.metric_definition import MetricDefinition, MetricFilter, MetricGrain
 from src.models.metric_review import MetricReview, ReviewIssue
 from src.services.metric_definition_resolver import _node
 from src.services.metric_definitions import _validate_expression_columns, _validate_filter_columns
@@ -76,7 +76,7 @@ def _validate_schema(definition: MetricDefinition, schema: dict[str, Any]) -> No
     columns = _columns(table)
     _validate_expression_columns(definition, columns)
     _validate_filter_columns(definition, columns)
-    _validate_grain(columns)
+    _validate_grain(definition, columns)
     _validate_compiler_expression(definition, columns)
     definition.metric.filters.extend(
         hygiene_flag_filters(
@@ -103,9 +103,11 @@ def _columns(table: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate_grain(columns: dict[str, Any]) -> None:
-    if not any(c.is_primary_key for c in columns.values()):
+def _validate_grain(definition: MetricDefinition, columns: dict[str, Any]) -> None:
+    primary_keys = [column.id for column in columns.values() if column.is_primary_key]
+    if not primary_keys:
         raise ValueError("MISSING_GRAIN: chưa xác định khóa chính của bảng gốc.")
+    definition.metric.grain = MetricGrain(column_ids=primary_keys)
 
 
 def _validate_compiler_expression(definition: MetricDefinition, columns: dict[str, Any]) -> None:

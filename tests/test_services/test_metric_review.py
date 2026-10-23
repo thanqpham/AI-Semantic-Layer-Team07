@@ -47,7 +47,13 @@ def test_knowledge_keeps_aov_variants_and_no_evaluation_dependencies():
     data = load_metric_knowledge()
     assert len(data["metrics"]) == 10
     aov = next(m for m in data["metrics"] if m["id"] == "aov")
-    assert len(aov["variants"]) == 2 and aov["variants"][0]["formula"] != aov["variants"][1]["formula"]
+    assert len(aov["variants"]) == 5
+    formulas = {variant["id"]: variant["formula"] for variant in aov["variants"]}
+    assert formulas["shopify_order_value"] != formulas["woocommerce_order_value"]
+    assert all(
+        formulas[key].startswith("AVG(")
+        for key in ("order_average_pre_tax", "order_average_after_tax", "order_average_after_tax_discount")
+    )
     assert all(s["url"].startswith("https://") for s in data["sources"])
     assert "eval/" not in str(data) and "expected" not in str(data)
 
@@ -57,8 +63,6 @@ def test_oversize_context_is_rejected_without_truncation():
         settings.return_value.metric_context_token_budget = 2
         with pytest.raises(ValueError, match="Context"):
             prepare_proposal_context({"user_message": "Tính doanh thu", "enriched_schema": schema()})
-
-
 
 
 @pytest.mark.parametrize(

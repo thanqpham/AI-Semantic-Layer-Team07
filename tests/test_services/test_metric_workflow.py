@@ -159,7 +159,9 @@ async def test_feasibility_decisions_never_trigger_repair(status):
 async def test_compound_metrics_remain_unsupported(name, knowledge):
     evidence = context()
     evidence["knowledge"] = metric_knowledge(name)
-    variant_id = evidence["knowledge"]["metrics"][0]["variants"][0]["id"]
+    variant_id = (
+        "shopify_order_value" if knowledge == "aov" else evidence["knowledge"]["metrics"][0]["variants"][0]["id"]
+    )
     with patch("src.services.metric_workflow.review_metric_batch", new_callable=AsyncMock) as review:
         result = await run_metric_workflow(
             evidence, drafts=[{**draft(name=name), "knowledge_id": knowledge, "variant_id": variant_id}]
@@ -205,6 +207,58 @@ async def test_generic_request_keeps_two_named_tax_variants_as_separate_proposal
         "merchandise_net_including_vat",
     }
     assert result[0]["review"]["criteria"]["order_status"] == "all_statuses"
+
+
+async def test_average_order_variants_use_valid_order_grain_averages():
+    evidence = context()
+    evidence["question"] = evidence["requirement"] = "Đề xuất giá trị trung bình mỗi đơn hàng"
+    evidence["knowledge"] = metric_knowledge("doanh thu trung bình")
+    order = evidence["schema"]["tables"][0]
+    order["columns"].extend(
+        [
+            {"column_name": "price_before_tax", "data_type": "NUMERIC", "is_nullable": False},
+            {"column_name": "price_after_tax", "data_type": "NUMERIC", "is_nullable": False},
+            {"column_name": "total_discount_value", "data_type": "NUMERIC", "is_nullable": False},
+        ]
+    )
+    variants = [
+        {
+            **draft("price_before_tax", "Giá trị đơn hàng trung bình trước thuế"),
+            "knowledge_id": "aov",
+            "variant_id": "order_average_pre_tax",
+        },
+        {
+            **draft("price_after_tax", "Giá trị đơn hàng trung bình sau thuế"),
+            "knowledge_id": "aov",
+            "variant_id": "order_average_after_tax",
+        },
+        {
+            **draft("price_after_tax - total_discount_value", "Giá trị đơn hàng trung bình sau thuế và giảm giá"),
+            "knowledge_id": "aov",
+            "variant_id": "order_average_after_tax_discount",
+        },
+    ]
+    for item in variants:
+        item["definition"]["metric"]["formula"]["function"] = "AVG"
+    with patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()) as review:
+        result = await run_metric_workflow(evidence, drafts=variants, allow_repair=False)
+    assert [item["review"]["status"] for item in result] == ["pass", "pass", "pass"]
+    assert review.await_count == 1
+
+
+@pytest.mark.parametrize("table_name,nullable", [("order_line", False), ("orders", True)])
+async def test_order_average_rejects_line_grain_or_nullable_amount(table_name, nullable):
+    evidence = context()
+    table = evidence["schema"]["tables"][0]
+    table["table_name"] = table_name
+    table["columns"][1]["is_nullable"] = nullable
+    raw = draft("amount", "Giá trị đơn hàng trung bình")
+    raw["definition"]["metric"]["base_entity"] = table_name
+    raw["definition"]["metric"]["formula"]["function"] = "AVG"
+    with patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()) as review:
+        result = await run_metric_workflow(evidence, drafts=[raw], allow_repair=False)
+    assert result[0]["review"]["status"] == "unsupported"
+    review.assert_not_awaited()
 
 
 async def test_requested_before_tax_blocks_vat_variant_even_if_reviewer_would_pass():

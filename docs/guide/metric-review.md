@@ -53,8 +53,12 @@ Với schema lớn, AI đọc inventory gọn của tất cả bảng rồi ch�
 trong ngân sách context. Các bảng đã chọn giữ nguyên đầy đủ cột, kiểu, khóa, nullable,
 giá trị khai báo và quan hệ; không cắt bớt điều kiện để vừa prompt. Phạm vi đã chọn
 được ghi trong context báo cáo, không đại diện cho mọi KPI có thể có của toàn database.
-KPI ratio tổng hợp như AOV, biên lợi nhuận hay tỷ lệ chuyển đổi được đánh dấu
-chưa hỗ trợ; compiler v1 không bị mở rộng hoặc nhận phép chia ID giả công thức.
+Bước chọn phạm vi chỉ chọn bảng, không hỏi người dùng chọn cột giá hay công thức AOV;
+Metric Designer tự tạo các biến thể có tiêu chí riêng từ metadata đã nạp.
+AOV tính bằng tỷ số giữa hai phép tổng hợp vẫn chưa hỗ trợ. Khi metadata xác nhận
+một dòng cho mỗi đơn và cột giá không NULL, `AVG` trên giá trị mỗi đơn là biến thể
+có thể kiểm tra và thẩm định. Biên lợi nhuận và tỷ lệ chuyển đổi tổng hợp vẫn chưa
+hỗ trợ; compiler v1 không nhận phép chia ID giả công thức.
 
 ## Tri thức tham khảo
 
