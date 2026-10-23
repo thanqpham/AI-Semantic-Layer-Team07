@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Bot, Cog, X } from 'lucide-react';
 import { ExecutionTrace, traceSteps } from '@/lib/chatTrace';
 import { cn } from '@/lib/utils';
@@ -8,29 +8,27 @@ import { useLanguage } from '@/context/LanguageContext';
 import { ThinkingSteps, TraceDuration } from './AgentThinking';
 
 const NODES = [
-  { id: 'request', name: 'Yêu cầu', en: 'Request', x: 200, y: 24 },
-  { id: 'orchestrator', name: 'Orchestrator', en: 'Orchestrator', x: 200, y: 94, agent: true },
-  { id: 'chitchat', name: 'Chitchat', en: 'Chitchat', x: 72, y: 174, agent: true },
-  { id: 'data_assistant', name: 'Data Assistant', en: 'Data Assistant', x: 200, y: 174, agent: true },
-  { id: 'metric_coordinator', name: 'Điều phối metric', en: 'Metric coordination', x: 328, y: 174 },
-  { id: 'metric_suggest', name: 'Metric Builder', en: 'Metric Builder', x: 328, y: 254, agent: true },
-  { id: 'metric_validate', name: 'Kiểm tra kỹ thuật', en: 'Technical validation', x: 328, y: 334 },
-  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Data Lead Reviewer', x: 328, y: 414, agent: true },
-  { id: 'metric_repair', name: 'Sửa theo phản hồi', en: 'Metric repair', x: 208, y: 494 },
-  { id: 'semantic_parse', name: 'Semantic Parse', en: 'Semantic Parse', x: 135, y: 254, agent: true },
-  { id: 'out_of_scope', name: 'Ngoài phạm vi', en: 'Out of scope', x: 285, y: 254 },
-  { id: 'sql', name: 'Biên dịch · SQL', en: 'Compile · SQL', x: 95, y: 334 },
-  { id: 'clarification', name: 'Cần làm rõ', en: 'Clarification', x: 200, y: 414 },
-  { id: 'response', name: 'Phản hồi', en: 'Response', x: 200, y: 574 },
-];
-const EDGES = [
-  ['request', 'orchestrator'], ['orchestrator', 'chitchat'], ['orchestrator', 'data_assistant'],
-  ['orchestrator', 'metric_coordinator'], ['orchestrator', 'semantic_parse'], ['orchestrator', 'out_of_scope'],
-  ['semantic_parse', 'sql'], ['semantic_parse', 'clarification'], ['chitchat', 'response'],
-  ['data_assistant', 'response'], ['metric_coordinator', 'metric_suggest'], ['metric_suggest', 'metric_validate'],
-  ['metric_validate', 'metric_review'], ['metric_review', 'metric_repair'], ['metric_repair', 'metric_validate'],
-  ['metric_review', 'response'], ['metric_review', 'clarification'], ['sql', 'response'],
-  ['clarification', 'response'], ['out_of_scope', 'response'],
+  { id: 'request', name: 'Yêu cầu', en: 'Request', x: 200, y: 40 },
+  { id: 'orchestrator', name: 'Orchestrator', en: 'Orchestrator', x: 200, y: 145, agent: true },
+  { id: 'chitchat', name: 'Chitchat', en: 'Chitchat', x: 70, y: 275, agent: true },
+  { id: 'data_assistant', name: 'Data Assistant', en: 'Data Assistant', x: 200, y: 275, agent: true },
+  { id: 'metric_coordinator', name: 'Điều phối metric', en: 'Metric coordination', x: 330, y: 275 },
+  { id: 'metric_suggest', name: 'Metric Builder', en: 'Metric Builder', x: 330, y: 395, agent: true },
+  { id: 'metric_validate', name: 'Kiểm tra kỹ thuật', en: 'Technical validation', x: 330, y: 510 },
+  { id: 'metric_provider_wait', name: 'Đợi thử lại', en: 'Wait to retry', x: 200, y: 510 },
+  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Data Lead Reviewer', x: 330, y: 625, agent: true },
+  { id: 'metric_review_decision', name: 'Đánh giá nghiệp vụ', en: 'Business review', x: 200, y: 625 },
+  { id: 'metric_repair', name: 'Sửa theo phản hồi', en: 'Metric repair', x: 200, y: 745 },
+  { id: 'semantic_parse', name: 'Semantic Parse', en: 'Semantic Parse', x: 70, y: 275, agent: true },
+  { id: 'context', name: 'Chuẩn bị ngữ cảnh', en: 'Prepare context', x: 70, y: 395 },
+  { id: 'dedupe', name: 'Kiểm tra trùng lặp', en: 'Check duplicates', x: 70, y: 510 },
+  { id: 'metric_generation', name: 'Sinh metric', en: 'Generate metric', x: 70, y: 625 },
+  { id: 'metric_generation_retry', name: 'Thử sinh lại', en: 'Retry generation', x: 70, y: 745 },
+  { id: 'sql', name: 'Biên dịch · SQL', en: 'Compile · SQL', x: 70, y: 395 },
+  { id: 'sql_execute', name: 'Thực thi truy vấn', en: 'Execute query', x: 200, y: 510 },
+  { id: 'out_of_scope', name: 'Ngoài phạm vi', en: 'Out of scope', x: 330, y: 395 },
+  { id: 'clarification', name: 'Cần làm rõ', en: 'Clarification', x: 200, y: 745 },
+  { id: 'response', name: 'Phản hồi', en: 'Response', x: 200, y: 875 },
 ];
 
 function subscribeViewport(listener: () => void) {
@@ -39,6 +37,7 @@ function subscribeViewport(listener: () => void) {
 }
 
 function nodeStatus(trace: ExecutionTrace, node: string): string {
+  if (node === 'request') return 'completed';
   const steps = traceSteps(trace).filter((step) => step.node === node || (node === 'sql' && step.action?.startsWith('sql_')));
   if (steps.some((step) => step.status === 'started')) return 'running';
   if (steps.some((step) => step.status === 'failed')) return 'error';
@@ -56,10 +55,29 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
   const headingId = useId();
   const markerId = useId().replaceAll(':', '');
   const mobile = useSyncExternalStore(subscribeViewport, () => window.matchMedia('(max-width: 1023px)').matches, () => false);
-  const actualEdges = trace.events.filter((event) => event.kind === 'transition'
-    && NODES.some((node) => node.id === event.source) && NODES.some((node) => node.id === event.target))
-    .map((event) => [event.source!, event.target!]);
-  const edges = [...new Map([...EDGES, ...actualEdges].map((edge) => [edge.join(':'), edge])).values()];
+  const visibleNodes = useMemo(() => {
+    const firstSeen = new Map<string, number>();
+    trace.events.forEach((event, index) => {
+      const touched = event.kind === 'transition'
+        ? [event.source, event.target]
+        : [event.node === 'sql' || event.action?.startsWith('sql_') ? 'sql' : event.node];
+      touched.forEach((id) => {
+        if (id && NODES.some((node) => node.id === id) && !firstSeen.has(id)) firstSeen.set(id, index);
+      });
+    });
+    firstSeen.set('request', -1);
+    if (trace.status !== 'running') firstSeen.set('response', trace.events.length);
+    return NODES
+      .filter((node) => firstSeen.has(node.id))
+      .sort((a, b) => (firstSeen.get(a.id)! - firstSeen.get(b.id)!) || NODES.indexOf(a) - NODES.indexOf(b));
+  }, [trace]);
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+  const graphHeight = Math.max(220, ...visibleNodes.map((node) => node.y + 90));
+  const edges = [...new Map(trace.events
+    .filter((event) => event.kind === 'transition'
+      && visibleNodeIds.has(event.source || '') && visibleNodeIds.has(event.target || ''))
+    .map((event) => [`${event.source}:${event.target}`, [event.source!, event.target!] as const])).values()];
+  const selectedNode = visibleNodeIds.has(selected) ? selected : visibleNodes[0]?.id || 'request';
   useEffect(() => {
     const chat = panelRef.current?.previousElementSibling;
     if (mobile) chat?.setAttribute('inert', '');
@@ -92,31 +110,52 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
         className="rounded p-2 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"><X className="h-4 w-4" /></button>
     </div>
     <div className="shrink-0 px-3 py-4">
-      <div className="relative mx-auto aspect-[400/620] w-full max-w-[420px]" aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
-        <svg viewBox="0 0 400 620" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
+      <div className="relative mx-auto w-full max-w-[420px]" style={{ aspectRatio: `400 / ${graphHeight}` }} aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
+        <svg viewBox={`0 0 400 ${graphHeight}`} aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
           <defs><marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
           {edges.map(([source, target]) => {
-            const a = NODES.find((node) => node.id === source)!, b = NODES.find((node) => node.id === target)!;
-            const taken = trace.events.some((event) => event.kind === 'transition' && event.source === source && event.target === target);
+            const a = NODES.find((node) => node.id === source)!;
+            const b = NODES.find((node) => node.id === target)!;
+            const sourceY = a.y;
+            const targetY = b.y;
             const status = nodeStatus(trace, target);
-            return <path key={`${source}-${target}`} data-taken={taken} data-edge={`${source}-${target}`}
-              d={`M ${a.x} ${a.y + 20} C ${a.x} ${a.y + 50}, ${b.x} ${b.y - 50}, ${b.x} ${b.y - 20}`}
-              fill="none" markerEnd={`url(#${markerId})`} strokeWidth={taken ? 2 : 1}
-              className={!taken ? 'stroke-muted-foreground/20' : status === 'running' ? 'stroke-blue-500' : status === 'error' ? 'stroke-red-500' : 'stroke-emerald-500'} />;
+            const startY = sourceY + (targetY >= sourceY ? 32 : -32);
+            const endY = targetY + (targetY >= sourceY ? -32 : 32);
+            const controlY = (startY + endY) / 2;
+            return <path key={`${source}-${target}`} data-taken="true" data-edge={`${source}-${target}`}
+              d={`M ${a.x} ${startY} C ${a.x} ${controlY}, ${b.x} ${controlY}, ${b.x} ${endY}`}
+              fill="none" markerEnd={`url(#${markerId})`} strokeWidth={2} strokeDasharray="5 5"
+              className={status === 'running' ? 'stroke-blue-500' : status === 'error' ? 'stroke-red-500' : 'stroke-emerald-500'} />;
           })}
         </svg>
-        {NODES.map((node) => {
+        {visibleNodes.map((node) => {
           const status = nodeStatus(trace, node.id);
           const label = { idle: t('Not run', 'Chưa chạy'), running: t('Running', 'Đang chạy'), completed: t('Completed', 'Hoàn tất'), error: t('Error', 'Có lỗi') }[status];
-          return <button type="button" key={node.id} aria-pressed={selected === node.id}
-            onClick={() => setSelected(node.id)} style={{ left: `${node.x / 4}%`, top: `${node.y / 6.2}%` }}
-            className={cn('absolute flex w-[30%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 border bg-card px-1 py-2 text-[10px] shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
-              node.agent ? 'rounded-lg' : 'rounded border-dashed', selected === node.id && 'ring-2 ring-ring/50',
+          const selectedClass = selectedNode === node.id && 'ring-2 ring-ring/50';
+          const statusClass = status === 'idle' ? 'border-border text-muted-foreground'
+            : status === 'running' ? 'animate-pulse border-blue-500 text-blue-600 motion-reduce:animate-none dark:text-blue-400'
+            : status === 'completed' ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
+            : 'border-red-500 text-red-600 dark:text-red-400';
+          const style = { left: `${node.x / 4}%`, top: `${node.y / graphHeight * 100}%` };
+          const name = t(node.en, node.name);
+          if (node.agent) return <div key={node.id} className="absolute flex w-[112px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[10px]" style={style}>
+            <button type="button" aria-label={`${name} · ${label}`} aria-pressed={selectedNode === node.id}
+              onClick={() => setSelected(node.id)}
+              className={cn('flex h-[68px] w-[68px] items-center justify-center rounded-full border-2 bg-card shadow-xs focus-visible:outline-2 focus-visible:outline-ring', statusClass, selectedClass)}>
+              <Bot aria-hidden className="h-6 w-6" />
+            </button>
+            <span className="mt-1 font-medium">{name}</span>
+            <span>{status === 'completed' ? '✓ ' : status === 'error' ? '! ' : '◌ '}{label}</span>
+          </div>;
+          return <button type="button" key={node.id} aria-pressed={selectedNode === node.id}
+            aria-label={`${name} · ${label}`} onClick={() => setSelected(node.id)} style={style}
+            className={cn('absolute flex w-[116px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 border border-dashed bg-card px-2 py-2 text-center text-[10px] shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
+              'rounded', selectedClass,
               status === 'idle' && 'border-border text-muted-foreground',
               status === 'running' && 'animate-pulse border-blue-500 text-blue-600 motion-reduce:animate-none dark:text-blue-400',
               status === 'completed' && 'border-emerald-500 text-emerald-700 dark:text-emerald-400',
               status === 'error' && 'border-red-500 text-red-600 dark:text-red-400')}>
-            <span className="flex items-center gap-1 font-medium">{node.agent ? <Bot className="h-3 w-3" /> : <Cog className="h-3 w-3" />}{t(node.en, node.name)}</span>
+            <span className="flex items-center gap-1 font-medium"><Cog className="h-3 w-3" />{name}</span>
             <span>{status === 'completed' ? '✓ ' : status === 'error' ? '! ' : status === 'running' ? '◌ ' : '○ '}{label}</span>
           </button>;
         })}
@@ -124,10 +163,10 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
       <p className="text-[10px] text-muted-foreground">{t('Solid border: agent · Dashed border: system step', 'Viền liền: agent · Viền nét đứt: bước hệ thống')}</p>
     </div>
     <div className="shrink-0 break-words [overflow-wrap:anywhere] border-t border-border p-4">
-      <h3 className="mb-3 text-sm font-semibold">{t(NODES.find((node) => node.id === selected)!.en, NODES.find((node) => node.id === selected)!.name)}</h3>
-      {traceSteps(trace).some((step) => step.node === selected || (selected === 'sql' && step.action?.startsWith('sql_')))
-        ? <ThinkingSteps trace={trace} node={selected} />
-        : <p className="text-xs text-muted-foreground">{nodeStatus(trace, selected) === 'idle'
+      <h3 className="mb-3 text-sm font-semibold">{t(NODES.find((node) => node.id === selectedNode)!.en, NODES.find((node) => node.id === selectedNode)!.name)}</h3>
+      {traceSteps(trace).some((step) => step.node === selectedNode || (selectedNode === 'sql' && step.action?.startsWith('sql_')))
+        ? <ThinkingSteps trace={trace} node={selectedNode} />
+        : <p className="text-xs text-muted-foreground">{nodeStatus(trace, selectedNode) === 'idle'
           ? t('This step has not run.', 'Bước này chưa chạy.')
           : t('Control flow passed through this step.', 'Luồng xử lý đã đi qua bước này.')}</p>}
     </div>

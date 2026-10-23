@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentThinking, TraceDuration } from './AgentThinking';
+import { AgentFlowPanel } from './AgentFlowPanel';
 import { StudioChatStream, ChatMessage } from './StudioChatStream';
 import { traceFixture } from '@/test/chatTraceFixture';
 
@@ -59,7 +60,7 @@ describe('thinking and agent flow', () => {
     expect(screen.getByRole('heading', { name: 'Luồng agent' })).toBeInTheDocument();
     expect(screen.getByText('Doanh thu tháng này', { selector: 'p' })).toBeInTheDocument();
     expect(container.querySelector('[data-edge="request-orchestrator"]')).toHaveAttribute('data-taken', 'true');
-    expect(container.querySelector('[data-edge="orchestrator-semantic_parse"]')).toHaveAttribute('data-taken', 'false');
+    expect(container.querySelector('[data-edge="orchestrator-semantic_parse"]')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Thinking/ })).toHaveAttribute('aria-expanded', 'false');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('heading', { name: 'Luồng agent' })).not.toBeInTheDocument();
@@ -67,6 +68,49 @@ describe('thinking and agent flow', () => {
     fireEvent.click(trigger);
     rerender(<StudioChatStream {...props} conversationKey="session-2" messages={[]} />);
     expect(screen.queryByRole('heading', { name: 'Luồng agent' })).not.toBeInTheDocument();
+  });
+
+  it('shows only traced agents and lays them out without overlapping nodes', () => {
+    const trace = {
+      ...traceFixture,
+      events: [
+        ...traceFixture.events,
+        { seq: 3, kind: 'transition' as const, step_id: 'edge-2', node: 'data_assistant', source: 'orchestrator', target: 'data_assistant',
+          at: '', elapsed_ms: 1000, status: 'finished' as const, summary: '' },
+        { seq: 4, kind: 'step' as const, step_id: 'step-2', node: 'data_assistant', action: 'data_assistant',
+          at: '', elapsed_ms: 1000, status: 'started' as const, summary: 'Tra cứu dữ liệu' },
+      ],
+    };
+    const { container, rerender } = render(<AgentFlowPanel trace={trace} title="Doanh thu tháng này" onClose={vi.fn()} trigger={null} />);
+
+    expect(screen.getByRole('button', { name: /Orchestrator.*Đang chạy/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Data Assistant.*Đang chạy/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Chitchat/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Metric Builder/ })).not.toBeInTheDocument();
+    const edge = container.querySelector('[data-edge="orchestrator-data_assistant"]');
+    expect(edge).toBeInTheDocument();
+    expect(edge).toHaveAttribute('stroke-dasharray', '5 5');
+    expect(screen.getByRole('button', { name: /Orchestrator/ })).toHaveClass('rounded-full');
+
+    const nodePositions = [...container.querySelectorAll<HTMLButtonElement>('[aria-pressed]')]
+      .map((node) => {
+        const position = node.parentElement?.classList.contains('absolute') ? node.parentElement : node;
+        return `${position?.style.left},${position?.style.top}`;
+      });
+    expect(new Set(nodePositions).size).toBe(nodePositions.length);
+
+    const completedTrace = {
+      ...trace,
+      status: 'completed' as const,
+      events: [...trace.events, {
+        seq: 5, kind: 'transition' as const, step_id: 'edge-response', node: 'response',
+        source: 'data_assistant', target: 'response', at: '', elapsed_ms: 2000,
+        status: 'finished' as const, summary: '',
+      }],
+    };
+    rerender(<AgentFlowPanel trace={completedTrace} title="Doanh thu tháng này" onClose={vi.fn()} trigger={null} />);
+    expect(screen.getByRole('button', { name: /Phản hồi.*Hoàn tất/ })).toBeInTheDocument();
+    expect(container.querySelector('[data-edge="data_assistant-response"]')).toBeInTheDocument();
   });
 
   it.each(['needs_clarification', 'error'] as const)('shows the terminal status %s and freezes time', (status) => {
@@ -87,7 +131,7 @@ describe('thinking and agent flow', () => {
     const close = screen.getByRole('button', { name: 'Đóng luồng agent' });
     expect(close).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
-    expect(screen.getByRole('button', { name: /Phản hồi/ })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /Orchestrator/ })).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(close).toHaveFocus();
     fireEvent.click(close);
