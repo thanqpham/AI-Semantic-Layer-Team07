@@ -98,6 +98,7 @@ describe('thinking and agent flow', () => {
         return `${position?.style.left},${position?.style.top}`;
       });
     expect(new Set(nodePositions).size).toBe(nodePositions.length);
+    expect(container.querySelector('aside')).toHaveClass('overflow-hidden');
 
     const completedTrace = {
       ...trace,
@@ -111,6 +112,79 @@ describe('thinking and agent flow', () => {
     rerender(<AgentFlowPanel trace={completedTrace} title="Doanh thu tháng này" onClose={vi.fn()} trigger={null} />);
     expect(screen.getByRole('button', { name: /Phản hồi.*Hoàn tất/ })).toBeInTheDocument();
     expect(container.querySelector('[data-edge="data_assistant-response"]')).toBeInTheDocument();
+    const xPosition = (name: RegExp) => Number.parseFloat(
+      screen.getByRole('button', { name }).parentElement?.style.left || screen.getByRole('button', { name }).style.left,
+    );
+    expect(xPosition(/Yêu cầu|Request/)).toBeLessThan(xPosition(/Orchestrator/));
+    expect(xPosition(/Orchestrator/)).toBeLessThan(xPosition(/Data Assistant/));
+    expect(xPosition(/Data Assistant/)).toBeLessThan(xPosition(/Phản hồi/));
+  });
+
+  it('resizes the desktop agent flow with pointer drag and keyboard controls', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    try {
+      const { container } = render(<AgentFlowPanel trace={traceFixture} title="Request" onClose={vi.fn()} trigger={null} />);
+      const panel = screen.getByRole('complementary');
+      const separator = screen.getByRole('separator', { name: 'Thay đổi kích thước luồng agent' });
+      Object.assign(separator, {
+        setPointerCapture: vi.fn(),
+        hasPointerCapture: vi.fn().mockReturnValue(true),
+        releasePointerCapture: vi.fn(),
+      });
+
+      expect(panel).toHaveStyle({ width: '440px' });
+      fireEvent.pointerDown(separator, { pointerId: 1, clientX: 800 });
+      fireEvent.pointerMove(separator, { pointerId: 1, clientX: 740 });
+      fireEvent.pointerUp(separator, { pointerId: 1 });
+      expect(panel).toHaveStyle({ width: '500px' });
+      fireEvent.keyDown(separator, { key: 'ArrowRight' });
+      expect(panel).toHaveStyle({ width: '484px' });
+      expect(container.querySelector('[aria-valuenow="484"]')).toBe(separator);
+    } finally {
+      cleanup();
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it('reflows the graph as its available panel size changes', () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalResizeObserver = globalThis.ResizeObserver;
+    let resize!: ResizeObserverCallback;
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    });
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    const trace = {
+      ...traceFixture,
+      status: 'completed' as const,
+      events: [
+        ...traceFixture.events,
+        { seq: 3, kind: 'transition' as const, step_id: 'edge-data', node: 'data_assistant', source: 'orchestrator', target: 'data_assistant',
+          at: '', elapsed_ms: 1000, status: 'finished' as const, summary: '' },
+        { seq: 4, kind: 'transition' as const, step_id: 'edge-response', node: 'response', source: 'data_assistant', target: 'response',
+          at: '', elapsed_ms: 2000, status: 'finished' as const, summary: '' },
+      ],
+    };
+    try {
+      const { container } = render(<AgentFlowPanel trace={trace} title="Request" onClose={vi.fn()} trigger={null} />);
+      const graph = container.querySelector('[aria-label="Sơ đồ thực thi agent"]')!;
+
+      act(() => resize([{ target: graph, contentRect: { width: 280, height: 500 } } as ResizeObserverEntry], {} as ResizeObserver));
+      expect(graph).toHaveAttribute('data-layout-columns', '3');
+      expect(graph).toHaveAttribute('data-layout-bands', '2');
+
+      act(() => resize([{ target: graph, contentRect: { width: 660, height: 500 } } as ResizeObserverEntry], {} as ResizeObserver));
+      expect(graph).toHaveAttribute('data-layout-columns', '4');
+      expect(graph).toHaveAttribute('data-layout-bands', '1');
+    } finally {
+      cleanup();
+      window.matchMedia = originalMatchMedia;
+      vi.stubGlobal('ResizeObserver', originalResizeObserver);
+    }
   });
 
   it.each(['needs_clarification', 'error'] as const)('shows the terminal status %s and freezes time', (status) => {

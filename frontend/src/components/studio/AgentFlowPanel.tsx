@@ -1,34 +1,35 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { Bot, Cog, X } from 'lucide-react';
 import { ExecutionTrace, traceSteps } from '@/lib/chatTrace';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
-import { ThinkingSteps, TraceDuration } from './AgentThinking';
+import { TraceDuration } from './AgentThinking';
 
 const NODES = [
-  { id: 'request', name: 'Yêu cầu', en: 'Request', x: 200, y: 40 },
-  { id: 'orchestrator', name: 'Orchestrator', en: 'Orchestrator', x: 200, y: 145, agent: true },
-  { id: 'chitchat', name: 'Chitchat', en: 'Chitchat', x: 70, y: 275, agent: true },
-  { id: 'data_assistant', name: 'Data Assistant', en: 'Data Assistant', x: 200, y: 275, agent: true },
-  { id: 'metric_coordinator', name: 'Điều phối metric', en: 'Metric coordination', x: 330, y: 275 },
-  { id: 'metric_suggest', name: 'Metric Builder', en: 'Metric Builder', x: 330, y: 395, agent: true },
-  { id: 'metric_validate', name: 'Kiểm tra kỹ thuật', en: 'Technical validation', x: 330, y: 510 },
-  { id: 'metric_provider_wait', name: 'Đợi thử lại', en: 'Wait to retry', x: 200, y: 510 },
-  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Data Lead Reviewer', x: 330, y: 625, agent: true },
-  { id: 'metric_review_decision', name: 'Đánh giá nghiệp vụ', en: 'Business review', x: 200, y: 625 },
-  { id: 'metric_repair', name: 'Sửa theo phản hồi', en: 'Metric repair', x: 200, y: 745 },
-  { id: 'semantic_parse', name: 'Semantic Parse', en: 'Semantic Parse', x: 70, y: 275, agent: true },
-  { id: 'context', name: 'Chuẩn bị ngữ cảnh', en: 'Prepare context', x: 70, y: 395 },
-  { id: 'dedupe', name: 'Kiểm tra trùng lặp', en: 'Check duplicates', x: 70, y: 510 },
-  { id: 'metric_generation', name: 'Sinh metric', en: 'Generate metric', x: 70, y: 625 },
-  { id: 'metric_generation_retry', name: 'Thử sinh lại', en: 'Retry generation', x: 70, y: 745 },
-  { id: 'sql', name: 'Biên dịch · SQL', en: 'Compile · SQL', x: 70, y: 395 },
-  { id: 'sql_execute', name: 'Thực thi truy vấn', en: 'Execute query', x: 200, y: 510 },
-  { id: 'out_of_scope', name: 'Ngoài phạm vi', en: 'Out of scope', x: 330, y: 395 },
-  { id: 'clarification', name: 'Cần làm rõ', en: 'Clarification', x: 200, y: 745 },
-  { id: 'response', name: 'Phản hồi', en: 'Response', x: 200, y: 875 },
+  { id: 'request', name: 'Yêu cầu', en: 'Request', stage: 0 },
+  { id: 'orchestrator', name: 'Orchestrator', en: 'Orchestrator', stage: 1, agent: true },
+  { id: 'chitchat', name: 'Chitchat', en: 'Chitchat', stage: 2, agent: true },
+  { id: 'data_assistant', name: 'Data Assistant', en: 'Data Assistant', stage: 2, agent: true },
+  { id: 'metric_coordinator', name: 'Điều phối metric', en: 'Metric coordination', stage: 2 },
+  { id: 'metric_suggest', name: 'Metric Builder', en: 'Metric Builder', stage: 3, agent: true },
+  { id: 'metric_validate', name: 'Kiểm tra kỹ thuật', en: 'Technical validation', stage: 4 },
+  { id: 'metric_provider_wait', name: 'Đợi thử lại', en: 'Wait to retry', stage: 5 },
+  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Data Lead Reviewer', stage: 5, agent: true },
+  { id: 'metric_review_decision', name: 'Đánh giá nghiệp vụ', en: 'Business review', stage: 6 },
+  { id: 'metric_repair', name: 'Sửa theo phản hồi', en: 'Metric repair', stage: 6 },
+  { id: 'semantic_parse', name: 'Semantic Parse', en: 'Semantic Parse', stage: 2, agent: true },
+  { id: 'context', name: 'Chuẩn bị ngữ cảnh', en: 'Prepare context', stage: 3 },
+  { id: 'dedupe', name: 'Kiểm tra trùng lặp', en: 'Check duplicates', stage: 4 },
+  { id: 'metric_generation', name: 'Sinh metric', en: 'Generate metric', stage: 5 },
+  { id: 'metric_generation_retry', name: 'Thử sinh lại', en: 'Retry generation', stage: 6 },
+  { id: 'sql', name: 'Biên dịch · SQL', en: 'Compile · SQL', stage: 3 },
+  { id: 'sql_execute', name: 'Thực thi truy vấn', en: 'Execute query', stage: 4 },
+  { id: 'out_of_scope', name: 'Ngoài phạm vi', en: 'Out of scope', stage: 2 },
+  { id: 'clarification', name: 'Cần làm rõ', en: 'Clarification', stage: 7 },
+  { id: 'response', name: 'Phản hồi', en: 'Response', stage: 8 },
 ];
 
 function subscribeViewport(listener: () => void) {
@@ -48,9 +49,13 @@ function nodeStatus(trace: ExecutionTrace, node: string): string {
 export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }: {
   trace: ExecutionTrace; title: string; onClose: () => void; trigger: HTMLButtonElement | null; reconnecting?: boolean;
 }) {
-  const { t } = useLanguage();
+  const { t, translate } = useLanguage();
   const [selected, setSelected] = useState('orchestrator');
+  const [panelWidth, setPanelWidth] = useState(440);
+  const [graphSize, setGraphSize] = useState({ width: 400, height: 500 });
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const graphRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const headingId = useId();
   const markerId = useId().replaceAll(':', '');
@@ -72,12 +77,52 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
       .sort((a, b) => (firstSeen.get(a.id)! - firstSeen.get(b.id)!) || NODES.indexOf(a) - NODES.indexOf(b));
   }, [trace]);
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
-  const graphHeight = Math.max(220, ...visibleNodes.map((node) => node.y + 90));
+  const graphWidth = graphSize.width;
+  const graphHeight = graphSize.height;
+  const stages = [...new Set(visibleNodes.map((node) => node.stage))];
+  const columns = Math.min(stages.length, Math.max(2, Math.floor((graphWidth - 32) / 80)));
+  const bands = Math.ceil(stages.length / columns);
+  const graphPositions = new Map(visibleNodes.map((node) => {
+    const stageIndex = stages.indexOf(node.stage);
+    const band = Math.floor(stageIndex / columns);
+    const column = stageIndex % columns;
+    const nodesInStage = visibleNodes.filter((candidate) => candidate.stage === node.stage);
+    const row = nodesInStage.indexOf(node);
+    const bandHeight = (graphHeight - 48) / bands;
+    const rowSpacing = Math.min(88, Math.max(58, (bandHeight - 36) / Math.max(1, nodesInStage.length)));
+    const direction = band % 2 === 0 ? 1 : -1;
+    const left = 36;
+    const right = graphWidth - 36;
+    const x = columns === 1 ? graphWidth / 2
+      : direction === 1
+        ? left + column * (right - left) / (columns - 1)
+        : right - column * (right - left) / (columns - 1);
+    const y = 24 + band * bandHeight + bandHeight / 2 + (row - (nodesInStage.length - 1) / 2) * rowSpacing;
+    return [node.id, { x, y }] as const;
+  }));
   const edges = [...new Map(trace.events
     .filter((event) => event.kind === 'transition'
       && visibleNodeIds.has(event.source || '') && visibleNodeIds.has(event.target || ''))
     .map((event) => [`${event.source}:${event.target}`, [event.source!, event.target!] as const])).values()];
   const selectedNode = visibleNodeIds.has(selected) ? selected : visibleNodes[0]?.id || 'request';
+  const resizePanel = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = resizeStart.current;
+    if (!start) return;
+    const maxWidth = Math.min(720, window.innerWidth * 0.75);
+    setPanelWidth(Math.min(maxWidth, Math.max(320, start.width + start.x - event.clientX)));
+  };
+  const finishResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    resizeStart.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+  const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const maxWidth = Math.min(720, window.innerWidth * 0.75);
+    setPanelWidth((width) => Math.min(maxWidth, Math.max(320, width + (event.key === 'ArrowLeft' ? 16 : -16))));
+  };
   useEffect(() => {
     const chat = panelRef.current?.previousElementSibling;
     if (mobile) chat?.setAttribute('inert', '');
@@ -98,8 +143,36 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
       if (trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
   }, [onClose, trigger, mobile]);
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        setGraphSize((current) => current.width === width && current.height === height
+          ? current
+          : { width, height });
+      }
+    });
+    observer.observe(graph);
+    return () => observer.disconnect();
+  }, []);
   return <aside ref={panelRef} aria-labelledby={headingId} role={mobile ? 'dialog' : 'complementary'} aria-modal={mobile || undefined}
-    className="fixed inset-0 z-50 flex min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain border-l border-border bg-background shadow-xl lg:static lg:z-auto lg:w-[440px] lg:shrink-0 lg:shadow-none">
+    style={{ width: mobile ? undefined : panelWidth }}
+    className="fixed inset-0 z-50 flex min-h-0 min-w-0 flex-col overflow-hidden overscroll-contain border-l border-border bg-background shadow-xl lg:relative lg:z-auto lg:w-[440px] lg:shrink-0 lg:shadow-none">
+    {!mobile && <div role="separator" aria-orientation="vertical"
+      aria-label={t('Resize agent flow panel', 'Thay đổi kích thước luồng agent')}
+      aria-valuemin={320} aria-valuemax={Math.min(720, Math.round(window.innerWidth * 0.75))}
+      aria-valuenow={panelWidth} tabIndex={0}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        resizeStart.current = { x: event.clientX, width: panelWidth };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={resizePanel} onPointerUp={finishResize} onPointerCancel={finishResize}
+      onKeyDown={handleResizeKeyDown}
+      className="absolute inset-y-0 left-0 z-10 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none lg:block before:absolute before:inset-y-0 before:left-1/2 before:w-px before:bg-transparent hover:before:bg-primary focus-visible:before:bg-primary focus-visible:outline-none"
+    />}
     <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
       <div className="min-w-0">
         <h2 id={headingId} className="font-semibold">{t('Agent flow', 'Luồng agent')}</h2>
@@ -109,21 +182,21 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
       <button ref={closeRef} type="button" onClick={onClose} aria-label={t('Close agent flow', 'Đóng luồng agent')}
         className="rounded p-2 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"><X className="h-4 w-4" /></button>
     </div>
-    <div className="shrink-0 px-3 py-4">
-      <div className="relative mx-auto w-full max-w-[420px]" style={{ aspectRatio: `400 / ${graphHeight}` }} aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
-        <svg viewBox={`0 0 400 ${graphHeight}`} aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
+    <div className="flex min-h-0 flex-1 flex-col px-3 py-2">
+      <div ref={graphRef} data-layout-columns={columns} data-layout-bands={bands}
+        className="relative mx-auto min-h-0 w-full flex-1" aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
+        <svg viewBox={`0 0 ${graphWidth} ${graphHeight}`} preserveAspectRatio="none" aria-hidden className="absolute inset-0 h-full w-full">
           <defs><marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
           {edges.map(([source, target]) => {
-            const a = NODES.find((node) => node.id === source)!;
-            const b = NODES.find((node) => node.id === target)!;
-            const sourceY = a.y;
-            const targetY = b.y;
+            const a = graphPositions.get(source)!;
+            const b = graphPositions.get(target)!;
             const status = nodeStatus(trace, target);
-            const startY = sourceY + (targetY >= sourceY ? 32 : -32);
-            const endY = targetY + (targetY >= sourceY ? -32 : 32);
-            const controlY = (startY + endY) / 2;
+            const forward = b.x >= a.x;
+            const startX = a.x + (forward ? 34 : -34);
+            const endX = b.x + (forward ? -34 : 34);
+            const controlX = (startX + endX) / 2;
             return <path key={`${source}-${target}`} data-taken="true" data-edge={`${source}-${target}`}
-              d={`M ${a.x} ${startY} C ${a.x} ${controlY}, ${b.x} ${controlY}, ${b.x} ${endY}`}
+              d={`M ${startX} ${a.y} C ${controlX} ${a.y}, ${controlX} ${b.y}, ${endX} ${b.y}`}
               fill="none" markerEnd={`url(#${markerId})`} strokeWidth={2} strokeDasharray="5 5"
               className={status === 'running' ? 'stroke-blue-500' : status === 'error' ? 'stroke-red-500' : 'stroke-emerald-500'} />;
           })}
@@ -136,20 +209,21 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
             : status === 'running' ? 'animate-pulse border-blue-500 text-blue-600 motion-reduce:animate-none dark:text-blue-400'
             : status === 'completed' ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
             : 'border-red-500 text-red-600 dark:text-red-400';
-          const style = { left: `${node.x / 4}%`, top: `${node.y / graphHeight * 100}%` };
+          const position = graphPositions.get(node.id)!;
+          const style = { left: `${position.x / graphWidth * 100}%`, top: `${position.y / graphHeight * 100}%` };
           const name = t(node.en, node.name);
-          if (node.agent) return <div key={node.id} className="absolute flex w-[112px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[10px]" style={style}>
+          if (node.agent) return <div key={node.id} className="absolute flex w-[64px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[9px] leading-tight" style={style}>
             <button type="button" aria-label={`${name} · ${label}`} aria-pressed={selectedNode === node.id}
               onClick={() => setSelected(node.id)}
-              className={cn('flex h-[68px] w-[68px] items-center justify-center rounded-full border-2 bg-card shadow-xs focus-visible:outline-2 focus-visible:outline-ring', statusClass, selectedClass)}>
-              <Bot aria-hidden className="h-6 w-6" />
+              className={cn('flex h-10 w-10 items-center justify-center rounded-full border-2 bg-card shadow-xs focus-visible:outline-2 focus-visible:outline-ring', statusClass, selectedClass)}>
+              <Bot aria-hidden className="h-4 w-4" />
             </button>
-            <span className="mt-1 font-medium">{name}</span>
-            <span>{status === 'completed' ? '✓ ' : status === 'error' ? '! ' : '◌ '}{label}</span>
+            <span className="mt-1 line-clamp-2 font-medium">{name}</span>
+            <span>{status === 'completed' ? '✓' : status === 'error' ? '!' : '◌'} {status === 'running' ? t('Running', 'Đang chạy') : label}</span>
           </div>;
           return <button type="button" key={node.id} aria-pressed={selectedNode === node.id}
             aria-label={`${name} · ${label}`} onClick={() => setSelected(node.id)} style={style}
-            className={cn('absolute flex w-[116px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 border border-dashed bg-card px-2 py-2 text-center text-[10px] shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
+            className={cn('absolute flex w-[70px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 border border-dashed bg-card px-1 py-1.5 text-center text-[9px] leading-tight shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
               'rounded', selectedClass,
               status === 'idle' && 'border-border text-muted-foreground',
               status === 'running' && 'animate-pulse border-blue-500 text-blue-600 motion-reduce:animate-none dark:text-blue-400',
@@ -158,17 +232,18 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
             <span className="flex items-center gap-1 font-medium"><Cog className="h-3 w-3" />{name}</span>
             <span>{status === 'completed' ? '✓ ' : status === 'error' ? '! ' : status === 'running' ? '◌ ' : '○ '}{label}</span>
           </button>;
-        })}
+        }) }
       </div>
-      <p className="text-[10px] text-muted-foreground">{t('Solid border: agent · Dashed border: system step', 'Viền liền: agent · Viền nét đứt: bước hệ thống')}</p>
-    </div>
-    <div className="shrink-0 break-words [overflow-wrap:anywhere] border-t border-border p-4">
-      <h3 className="mb-3 text-sm font-semibold">{t(NODES.find((node) => node.id === selectedNode)!.en, NODES.find((node) => node.id === selectedNode)!.name)}</h3>
-      {traceSteps(trace).some((step) => step.node === selectedNode || (selectedNode === 'sql' && step.action?.startsWith('sql_')))
-        ? <ThinkingSteps trace={trace} node={selectedNode} />
-        : <p className="text-xs text-muted-foreground">{nodeStatus(trace, selectedNode) === 'idle'
-          ? t('This step has not run.', 'Bước này chưa chạy.')
-          : t('Control flow passed through this step.', 'Luồng xử lý đã đi qua bước này.')}</p>}
+      <p className="shrink-0 pt-1 text-[10px] text-muted-foreground">{t('Solid border: agent · Dashed border: system step', 'Viền liền: agent · Viền nét đứt: bước hệ thống')}</p>
+      <div className="max-h-[22vh] shrink-0 overflow-hidden border-t border-border px-3 py-2">
+        <h3 className="truncate text-xs font-semibold">{t(NODES.find((node) => node.id === selectedNode)!.en, NODES.find((node) => node.id === selectedNode)!.name)}</h3>
+        {traceSteps(trace).filter((step) => step.node === selectedNode || (selectedNode === 'sql' && step.action?.startsWith('sql_'))).slice(-1).map((step) =>
+          <div key={step.step_id} className="mt-1 flex items-start gap-2 text-[11px]">
+            <span className="shrink-0">{step.status === 'started' ? '◌' : step.status === 'failed' ? '!' : '✓'}</span>
+            <p className="line-clamp-2 min-w-0 text-muted-foreground">{translate(step.summary)}</p>
+          </div>)}
+        {nodeStatus(trace, selectedNode) === 'idle' && <p className="mt-1 text-[11px] text-muted-foreground">{t('This step has not run.', 'Bước này chưa chạy.')}</p>}
+      </div>
     </div>
   </aside>;
 }
