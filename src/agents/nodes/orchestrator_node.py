@@ -54,7 +54,7 @@ async def orchestrator_node(state: AgentState) -> dict[str, Any]:
     """Classify user message into chitchat, semantic_query, data_question, metric_query, or out_of_scope.
 
     Uses LLM with temperature=0.0 for deterministic classification.
-    Falls back to 'chitchat' on error to avoid breaking the conversation.
+    Stops routing on provider errors so one failure does not trigger more LLM calls.
     """
     existing_intent = state.get("intent")
     if existing_intent in _INTENTS:
@@ -82,8 +82,11 @@ async def orchestrator_node(state: AgentState) -> dict[str, Any]:
             return {"intent": "out_of_scope", "chat_response": _OUT_OF_SCOPE_RESPONSE}
         return {"intent": intent}
     except Exception as exc:
-        logger.warning("Orchestrator failed; defaulting to metric query: %s", exc)
-        return {"intent": "metric_query"}
+        logger.warning("Orchestrator classification failed: %s", type(exc).__name__)
+        return {
+            "intent": "chitchat",
+            "chat_response": "Chưa thể phân loại yêu cầu do dịch vụ AI đang lỗi. Vui lòng thử lại sau.",
+        }
 
 
 def _classification_prompt(state: AgentState, user_message: str) -> str:

@@ -1,4 +1,4 @@
-version: 1
+version: 2
 domain: retail_ecommerce
 sources:
   - id: shopify_sales
@@ -20,8 +20,22 @@ metrics:
     meaning: Giá trị hàng bán sau các khoản giảm trừ đã xác nhận.
     variants:
       - name: merchandise_net_sales
-        formula: SUM(gross merchandise amount - discounts - returned merchandise amount)
-        source_ids: [woocommerce_analytics, shopify_sales]
+        id: merchandise_net_sales
+        criteria: {tax_basis: excludes_tax, refund_policy: subtract_returns_and_coupons, formula_basis: woocommerce_net_sales}
+        formula: SUM(gross sales - returns - coupons)
+        source_ids: [woocommerce_analytics]
+      - name: shopify_net_sales
+        id: shopify_net_sales
+        criteria: {tax_basis: excludes_tax, refund_policy: subtract_sales_reversals, formula_basis: shopify_net_sales}
+        formula: SUM(gross sales - discounts - sales reversals)
+        source_ids: [shopify_sales]
+      - name: merchandise_net_including_vat
+        id: merchandise_net_including_vat
+        criteria: {tax_basis: includes_vat, refund_policy: subtract_sales_reversals}
+        formula: SUM(confirmed net merchandise amount before VAT + confirmed VAT amount after reversals)
+        required_data: [net merchandise amount before VAT, VAT amount after reversals on the same grain]
+        source_ids: []
+        limitations: Derived variant; source terms distinguish sales and tax, but enterprise column meanings must be verified.
     grain: Một dòng cho mỗi đơn hàng hoặc dòng hàng; không trộn hai grain.
     required_data: [giá trị hàng bán, giảm giá, giá trị trả hàng]
     unit: Tiền tệ được doanh nghiệp xác nhận
@@ -33,6 +47,8 @@ metrics:
     meaning: Số đơn duy nhất thỏa điều kiện hoàn tất của doanh nghiệp.
     variants:
       - name: enterprise_completed_orders
+        id: enterprise_completed_orders
+        criteria: {order_status: confirmed_completed}
         formula: COUNT_DISTINCT(order key) with confirmed completion predicate
         source_ids: [shopify_sales]
     grain: Đơn hàng
@@ -46,6 +62,8 @@ metrics:
     meaning: Số khách hàng duy nhất trong phạm vi đã xác nhận.
     variants:
       - name: distinct_customers
+        id: distinct_customers
+        criteria: {population: confirmed_customer_population}
         formula: COUNT_DISTINCT(customer key)
         source_ids: [woocommerce_analytics]
     grain: Khách hàng
@@ -59,6 +77,8 @@ metrics:
     meaning: Lượng bán trừ lượng trả theo cùng đơn vị.
     variants:
       - name: net_quantity
+        id: net_quantity
+        criteria: {refund_policy: subtract_returned_quantity}
         formula: SUM(sold quantity - returned quantity)
         source_ids: [shopify_sales]
     grain: Dòng hàng
@@ -72,6 +92,8 @@ metrics:
     meaning: Thời gian giữa hai mốc nghiệp vụ được xác nhận.
     variants:
       - name: enterprise_delivery_duration
+        id: enterprise_delivery_duration
+        criteria: {start_event: confirmed_start_event, end_event: delivered_event}
         formula: AVG(TIMESTAMP_DIFF_HOURS(delivered timestamp, confirmed start timestamp))
         source_ids: []
     grain: Một lần giao hàng hoặc một đơn hàng được xác nhận
@@ -84,9 +106,13 @@ metrics:
     aliases: [aov, trung bình đơn hàng, average order value]
     variants:
       - name: shopify_order_value
+        id: shopify_order_value
+        criteria: {formula_basis: shopify_sales, denominator: orders}
         formula: (gross sales excluding adjustments - discounts excluding adjustments) / orders
         source_ids: [shopify_sales]
       - name: woocommerce_order_value
+        id: woocommerce_order_value
+        criteria: {formula_basis: woocommerce_net_sales, denominator: orders}
         formula: net sales / orders
         source_ids: [woocommerce_analytics]
     meaning: Giá trị trung bình của cùng một tập đơn hàng.
@@ -101,6 +127,8 @@ metrics:
     meaning: Tỷ phần lợi nhuận sau giá vốn trên doanh số thuần.
     variants:
       - name: merchandise_margin
+        id: merchandise_margin
+        criteria: {profit_basis: net_sales_minus_cogs, denominator: net_sales}
         formula: (net sales - COGS) / net sales
         source_ids: [shopify_profit]
     grain: Cùng tập giao dịch cho doanh số và giá vốn
@@ -114,6 +142,8 @@ metrics:
     meaning: Tỷ phần phiên dẫn tới hành vi mua hàng được xác nhận.
     variants:
       - name: enterprise_purchase_sessions
+        id: enterprise_purchase_sessions
+        criteria: {numerator: converted_sessions, denominator: eligible_sessions}
         formula: distinct converted sessions / distinct eligible sessions
         source_ids: []
     grain: Phiên truy cập
@@ -127,6 +157,8 @@ metrics:
     meaning: Tỷ phần đơn bị hủy trong cùng tập đơn hợp lệ.
     variants:
       - name: enterprise_cancellation_rate
+        id: enterprise_cancellation_rate
+        criteria: {numerator: canceled_orders, denominator: eligible_orders}
         formula: distinct canceled orders / distinct eligible orders
         source_ids: []
     grain: Đơn hàng
@@ -140,6 +172,8 @@ metrics:
     meaning: Lượng bán ròng trung bình trên mỗi đơn.
     variants:
       - name: net_units_per_order
+        id: net_units_per_order
+        criteria: {numerator: net_quantity, denominator: orders}
         formula: net quantity / total orders
         source_ids: [shopify_sales]
     grain: Đơn hàng và dòng hàng, phải tránh nhân bản đơn

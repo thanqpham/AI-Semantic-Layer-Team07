@@ -9,36 +9,36 @@ from src.agents.graph import END, _route_after_review
 from src.agents.nodes.metric_review_node import metric_review_node, reviewed_state
 from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
 from src.agents.nodes.save_node import _selected_review_evidence
-from src.models.metric_review import MetricDraft, MetricDraftBatch, MetricReview
+from src.models.metric_review import MetricBuildBatch, MetricReview
 from src.services.metric_proposal_generation import generate_metric_drafts
-from tests.metric_review_helpers import context, definition, schema
+from src.services.metric_workflow import _graph
+from tests.metric_review_helpers import context, definition, reviewer_mock, schema
 
 
 async def test_empty_state_returns_error():
     assert "error" in await on_demand_metric_suggest_node({})
 
 
-async def test_generator_returns_untrusted_drafts_not_actionable_suggestions():
+async def test_coordinator_returns_only_reviewed_suggestions():
     draft = {"name": "Doanh thu", "definition": definition()}
-    with patch(
-        "src.agents.nodes.on_demand_metric_suggest_node.generate_metric_drafts", AsyncMock(return_value=[draft])
+    with (
+        patch("src.services.metric_workflow.generate_metric_drafts", AsyncMock(return_value=[draft])),
+        patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()),
     ):
         result = await on_demand_metric_suggest_node({"enriched_schema": schema(), "user_message": "Doanh thu"})
-    assert result["metric_drafts"] == [draft]
-    assert not result.get("suggested_metrics") and not result.get("suggestion_action")
+    assert result["suggested_metrics"][0]["review"]["status"] == "pass"
+    assert result["run_status"] == "completed"
 
 
 async def test_generation_does_not_discard_invalid_reference_before_repair():
-    batch = MetricDraftBatch(candidates=[MetricDraft(name="Metric", definition=definition("missing"))])
+    batch = MetricBuildBatch(task_id="test-task", candidates=[{"name": "Metric", "definition": definition("missing")}])
     with patch("src.services.metric_proposal_generation.invoke_metric_json", AsyncMock(return_value=batch)):
-        drafts = await generate_metric_drafts(context())
+        drafts = await generate_metric_drafts(context(), "test-task")
     assert drafts[0]["definition"]["metric"]["formula"]["expression"] == "missing"
 
 
 async def test_generation_error_cannot_bypass_reviewer():
-    with patch(
-        "src.agents.nodes.on_demand_metric_suggest_node.generate_metric_drafts", AsyncMock(side_effect=RuntimeError)
-    ):
+    with patch("src.services.metric_workflow.generate_metric_drafts", AsyncMock(side_effect=RuntimeError)):
         initial = await on_demand_metric_suggest_node({"enriched_schema": schema()})
     result = {**initial, **await metric_review_node(initial)}
     assert result["blocked_candidates"][0]["review"]["status"] == "error"
@@ -48,10 +48,15 @@ async def test_generation_error_cannot_bypass_reviewer():
 def test_chat_graph_has_mandatory_review_edge_and_legacy_blocks_unreviewed_state():
     graph = build_chat_graph().get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
-    assert ("metric_suggest", "metric_review") in edges
-    assert ("metric_suggest", "__end__") not in edges
+    assert ("orchestrator", "metric_coordinator") in edges
+    workflow_edges = {(edge.source, edge.target) for edge in _graph().get_graph().edges}
+    assert {("build", "validate"), ("validate", "review"), ("repair", "validate")} <= workflow_edges
     assert _route_after_review({}) == END
     assert _route_after_review({"suggested_metrics": [{}], "blocked_candidates": [{}]}) == END
+    assert (
+        _route_after_review({"suggested_metrics": [{"review": {"status": "pass"}}], "blocked_candidates": [{}]})
+        == "save"
+    )
 
 
 def test_discovery_caps_results_and_preserves_blocked_reports():

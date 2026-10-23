@@ -12,9 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.models.db import CanonicalRelationshipModel, SemanticTableModel
+from src.models.metric_review import MetricScopeSelection
 from src.models.schemas import ChatClarificationOption, ChatClarificationPayload
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
+from src.services.metric_runtime import MetricCallError, invoke_metric_json
 
 _CLARIFICATION_OPTIONS_PROMPT = """
 Khi needs_clarification=true và có các cách hiểu cụ thể để người dùng chọn,
@@ -211,7 +213,18 @@ async def _select_tables(
         )
     prompt = prompt_template.format(inventory=json.dumps(inventory, ensure_ascii=False), question=question)
     prompt += _CLARIFICATION_OPTIONS_PROMPT
-    payload = await ainvoke_json(get_llm(role="metric"), prompt)
+    try:
+        payload = (
+            (await invoke_metric_json(MetricScopeSelection, prompt, "schema")).model_dump()
+            if prompt_template != _DATA_SCOPE_PROMPT
+            else await ainvoke_json(get_llm(role="metric"), prompt)
+        )
+    except MetricCallError as exc:
+        return set(), {
+            "status": "error",
+            "message": exc.error.message,
+            "execution_error": exc.error.model_dump(mode="json"),
+        }
     selected = (
         {str(name) for name in payload.get("table_names", []) if str(name) in valid}
         if isinstance(payload, dict)

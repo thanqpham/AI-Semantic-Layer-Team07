@@ -28,7 +28,12 @@ from src.models.db import (
     UserModel,
 )
 from src.models.metric_definition import MetricDefinition
-from src.models.metric_review import MetricProposalReviewRequest, MetricProposalReviewResponse, MetricReview
+from src.models.metric_review import (
+    MetricExecutionError,
+    MetricProposalReviewRequest,
+    MetricProposalReviewResponse,
+    MetricReview,
+)
 from src.models.schema_metadata import DiagnosticCode, RawSchemaMetadata, SchemaDialect
 from src.models.schemas import (
     ApproveRequest,
@@ -858,6 +863,17 @@ async def generate_custom_metrics(
             db, numeric_db_id, clean_prompt, get_settings().metric_context_token_budget, body.target_tables
         )
     if context.diagnostic["status"] != "ready":
+        if context.diagnostic.get("execution_error"):
+            failure = MetricExecutionError.model_validate(context.diagnostic["execution_error"])
+            return CustomMetricGenerateResponse(
+                run_status="error",
+                blocked_candidates=[
+                    {
+                        "name": "Phân tích schema",
+                        "review": MetricReview(status="error", summary=failure.message, execution_error=failure),
+                    }
+                ],
+            )
         raise HTTPException(status_code=422, detail=context.diagnostic["message"])
 
     try:
@@ -881,6 +897,7 @@ async def generate_custom_metrics(
             dedupe_performed=dedupe_performed,
             blocked_candidates=result.get("blocked_candidates", []),
             clarification=result.get("clarification"),
+            run_status=result.get("run_status", "completed"),
         )
     except Exception as exc:
         logger.error(f"Lỗi khi sinh metrics từ prompt: {exc}", exc_info=True)
@@ -1757,6 +1774,7 @@ def _assistant_metadata(
     clarification: dict[str, Any] | None = None,
     interpretation: dict[str, Any] | None = None,
     blocked_candidates: list[Any] | None = None,
+    run_status: str | None = None,
 ) -> dict[str, Any]:
     """Build the versioned assistant message metadata contract."""
     return {
@@ -1764,6 +1782,7 @@ def _assistant_metadata(
         "status": status_name,
         "suggestions": suggestions or [],
         "blocked_candidates": blocked_candidates or [],
+        "run_status": run_status,
         "suggestion_action": action,
         "duplicates": duplicates or [],
         "dedupe_performed": dedupe_performed,
@@ -2425,6 +2444,8 @@ async def _build_and_save_chat_response(
     elif intent == "metric_query":
         if raw_metrics:
             response_text = f"Đã đề xuất {len(raw_metrics)} Metric Definition."
+            if final_state.get("run_status") == "partial":
+                response_text += " Một số KPI chưa hoàn tất do lỗi thực thi; các KPI đạt vẫn có thể gửi duyệt."
         elif notices:
             response_text = (
                 "Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer. "
@@ -2457,6 +2478,7 @@ async def _build_and_save_chat_response(
             semantic_query_result=query_res.model_dump(mode="json") if query_res else None,
             clarification=clar_payload.model_dump(mode="json") if clar_payload else None,
             blocked_candidates=final_state.get("blocked_candidates", []),
+            run_status=final_state.get("run_status"),
         ),
         client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
     )
@@ -2471,6 +2493,7 @@ async def _build_and_save_chat_response(
         chat_response=response_text or None,
         suggestions=raw_metrics if intent == "metric_query" else None,
         blocked_candidates=final_state.get("blocked_candidates", []),
+        run_status=final_state.get("run_status"),
         duplicates=notices if intent == "metric_query" else [],
         dedupe_performed=performed,
         suggestion_action=suggestion_action if intent == "metric_query" else None,
@@ -2537,6 +2560,7 @@ async def _chat_state_for_context(
             "intent": "data_question",
             "chat_response": context.diagnostic["message"],
             "clarification": context.diagnostic.get("clarification"),
+            "run_status": "error" if context.diagnostic["status"] == "error" else "needs_clarification",
         }
     return await chat_agent.ainvoke(
         {
@@ -2646,6 +2670,7 @@ async def _replay_chat_response(
         chat_response=assistant.content,
         suggestions=suggestions if intent == "metric_query" else None,
         blocked_candidates=metadata.get("blocked_candidates", []),
+        run_status=metadata.get("run_status"),
         duplicates=duplicates if intent == "metric_query" else [],
         dedupe_performed=bool(metadata.get("dedupe_performed", True)),
         suggestion_action=suggestion_action if intent == "metric_query" else None,

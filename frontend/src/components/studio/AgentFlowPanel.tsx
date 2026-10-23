@@ -12,19 +12,24 @@ const NODES = [
   { id: 'orchestrator', name: 'Orchestrator', en: 'Orchestrator', x: 200, y: 94, agent: true },
   { id: 'chitchat', name: 'Chitchat', en: 'Chitchat', x: 72, y: 174, agent: true },
   { id: 'data_assistant', name: 'Data Assistant', en: 'Data Assistant', x: 200, y: 174, agent: true },
-  { id: 'metric_suggest', name: 'Metric Suggest', en: 'Metric Suggest', x: 328, y: 174, agent: true },
-  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Metric Review', x: 328, y: 294, agent: true },
+  { id: 'metric_coordinator', name: 'Điều phối metric', en: 'Metric coordination', x: 328, y: 174 },
+  { id: 'metric_suggest', name: 'Metric Builder', en: 'Metric Builder', x: 328, y: 254, agent: true },
+  { id: 'metric_validate', name: 'Kiểm tra kỹ thuật', en: 'Technical validation', x: 328, y: 334 },
+  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Data Lead Reviewer', x: 328, y: 414, agent: true },
+  { id: 'metric_repair', name: 'Sửa theo phản hồi', en: 'Metric repair', x: 208, y: 494 },
   { id: 'semantic_parse', name: 'Semantic Parse', en: 'Semantic Parse', x: 135, y: 254, agent: true },
   { id: 'out_of_scope', name: 'Ngoài phạm vi', en: 'Out of scope', x: 285, y: 254 },
   { id: 'sql', name: 'Biên dịch · SQL', en: 'Compile · SQL', x: 95, y: 334 },
-  { id: 'clarification', name: 'Cần làm rõ', en: 'Clarification', x: 245, y: 334 },
-  { id: 'response', name: 'Phản hồi', en: 'Response', x: 200, y: 424 },
+  { id: 'clarification', name: 'Cần làm rõ', en: 'Clarification', x: 200, y: 414 },
+  { id: 'response', name: 'Phản hồi', en: 'Response', x: 200, y: 574 },
 ];
 const EDGES = [
   ['request', 'orchestrator'], ['orchestrator', 'chitchat'], ['orchestrator', 'data_assistant'],
-  ['orchestrator', 'metric_suggest'], ['orchestrator', 'semantic_parse'], ['orchestrator', 'out_of_scope'],
+  ['orchestrator', 'metric_coordinator'], ['orchestrator', 'semantic_parse'], ['orchestrator', 'out_of_scope'],
   ['semantic_parse', 'sql'], ['semantic_parse', 'clarification'], ['chitchat', 'response'],
-  ['data_assistant', 'response'], ['metric_suggest', 'metric_review'], ['metric_review', 'response'], ['metric_review', 'clarification'], ['sql', 'response'],
+  ['data_assistant', 'response'], ['metric_coordinator', 'metric_suggest'], ['metric_suggest', 'metric_validate'],
+  ['metric_validate', 'metric_review'], ['metric_review', 'metric_repair'], ['metric_repair', 'metric_validate'],
+  ['metric_review', 'response'], ['metric_review', 'clarification'], ['sql', 'response'],
   ['clarification', 'response'], ['out_of_scope', 'response'],
 ];
 
@@ -87,8 +92,8 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
         className="rounded p-2 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"><X className="h-4 w-4" /></button>
     </div>
     <div className="shrink-0 px-3 py-4">
-      <div className="relative mx-auto aspect-[400/465] w-full max-w-[420px]" aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
-        <svg viewBox="0 0 400 465" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
+      <div className="relative mx-auto aspect-[400/620] w-full max-w-[420px]" aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
+        <svg viewBox="0 0 400 620" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
           <defs><marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
           {edges.map(([source, target]) => {
             const a = NODES.find((node) => node.id === source)!, b = NODES.find((node) => node.id === target)!;
@@ -104,7 +109,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
           const status = nodeStatus(trace, node.id);
           const label = { idle: t('Not run', 'Chưa chạy'), running: t('Running', 'Đang chạy'), completed: t('Completed', 'Hoàn tất'), error: t('Error', 'Có lỗi') }[status];
           return <button type="button" key={node.id} aria-pressed={selected === node.id}
-            onClick={() => setSelected(node.id)} style={{ left: `${node.x / 4}%`, top: `${node.y / 4.65}%` }}
+            onClick={() => setSelected(node.id)} style={{ left: `${node.x / 4}%`, top: `${node.y / 6.2}%` }}
             className={cn('absolute flex w-[30%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 border bg-card px-1 py-2 text-[10px] shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
               node.agent ? 'rounded-lg' : 'rounded border-dashed', selected === node.id && 'ring-2 ring-ring/50',
               status === 'idle' && 'border-border text-muted-foreground',

@@ -7,9 +7,9 @@ from sqlalchemy import func, select
 
 from src.api.auth import create_access_token
 from src.models.db import MetricProposalModel, SemanticDatabaseModel, SemanticMetricModel, UserModel
-from src.models.metric_review import MetricDraft, MetricDraftBatch, MetricReview
+from src.models.metric_review import MetricDraft, MetricDraftBatch
 from src.services.metric_context import MetricContextResult, load_review_schema
-from tests.metric_review_helpers import definition, seed_proposal
+from tests.metric_review_helpers import definition, reviewer_mock, seed_proposal
 
 
 @pytest.fixture
@@ -29,10 +29,13 @@ async def test_generate_persists_report_not_catalog_and_save_is_still_pending(cl
     batch = MetricDraftBatch(candidates=[MetricDraft(name="Doanh thu trước thuế", definition=definition())])
     with (
         patch("src.api.routes.build_metric_context", AsyncMock(return_value=context)),
-        patch("src.services.metric_proposal_generation.invoke_metric_json", AsyncMock(return_value=batch)),
         patch(
-            "src.services.metric_review.invoke_metric_json",
-            AsyncMock(return_value=MetricReview(status="pass", summary="Khớp yêu cầu")),
+            "src.services.metric_workflow.generate_metric_drafts",
+            AsyncMock(return_value=[item.model_dump(mode="json") for item in batch.candidates]),
+        ),
+        patch(
+            "src.services.metric_workflow.review_metric_batch",
+            reviewer_mock(),
         ),
     ):
         response = await client.post(
@@ -74,10 +77,13 @@ async def test_generate_discovery_returns_supported_and_blocked_without_inventin
         ]
     )
     with (
-        patch("src.services.metric_proposal_generation.invoke_metric_json", AsyncMock(return_value=batch)),
         patch(
-            "src.services.metric_review.invoke_metric_json",
-            AsyncMock(return_value=MetricReview(status="pass", summary="Có khóa đơn")),
+            "src.services.metric_workflow.generate_metric_drafts",
+            AsyncMock(return_value=[item.model_dump(mode="json") for item in batch.candidates]),
+        ),
+        patch(
+            "src.services.metric_workflow.review_metric_batch",
+            reviewer_mock(),
         ),
     ):
         response = await client.post(
@@ -94,8 +100,8 @@ async def test_generate_discovery_returns_supported_and_blocked_without_inventin
 async def test_re_review_endpoint_rejects_forged_scope_and_leaves_original_intact(client, async_session, setup_review):
     db_id, original, headers = setup_review
     with patch(
-        "src.services.metric_review.invoke_metric_json",
-        AsyncMock(return_value=MetricReview(status="pass", summary="Bản sửa đạt")),
+        "src.services.metric_workflow.review_metric_batch",
+        reviewer_mock(),
     ):
         response = await client.post(
             f"/api/v1/semantic/{db_id}/metric-proposals/{original.id}/review",
@@ -124,6 +130,33 @@ async def test_ai_cannot_save_without_report_or_after_edit(client, setup_review)
         assert response.status_code == 422, response.text
 
 
+async def test_partial_generate_returns_valid_sibling_and_typed_execution_error(client, setup_review):
+    db_id, _, headers = setup_review
+    build = AsyncMock(
+        return_value=[{"name": "Doanh thu", "definition": definition()}, {"name": "Broken", "definition": None}]
+    )
+
+    async def repair(_context, items, _task_id):
+        return [{"candidate_id": i["candidate_id"], "name": "Broken", "definition": None} for i in items]
+
+    with (
+        patch("src.services.metric_workflow.generate_metric_drafts", build),
+        patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()),
+        patch("src.services.metric_workflow.repair_metric_drafts", AsyncMock(side_effect=repair)),
+    ):
+        response = await client.post(
+            f"/api/v1/semantic/{db_id}/metrics/generate",
+            headers=headers,
+            json={"prompt": "Khám phá KPI", "proposal_mode": "discovery"},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["run_status"] == "partial"
+    assert response.json()["suggestions"][0]["proposal_id"]
+    blocked = response.json()["blocked_candidates"][0]
+    assert blocked["review"]["execution_error"]["code"] == "INVALID_AGENT_OUTPUT"
+    assert blocked["review"]["repair_count"] == 1
+
+
 @pytest.fixture
 async def mocked_review_pipeline(async_session, setup_review):
     db_id, _, _ = setup_review
@@ -136,10 +169,13 @@ async def mocked_review_pipeline(async_session, setup_review):
         patch(
             "src.agents.nodes.orchestrator_node.orchestrator_node", AsyncMock(return_value={"intent": "metric_query"})
         ),
-        patch("src.services.metric_proposal_generation.invoke_metric_json", AsyncMock(return_value=batch)) as generate,
         patch(
-            "src.services.metric_review.invoke_metric_json",
-            AsyncMock(return_value=MetricReview(status="pass", summary="Đúng yêu cầu")),
+            "src.services.metric_workflow.generate_metric_drafts",
+            AsyncMock(return_value=[item.model_dump(mode="json") for item in batch.candidates]),
+        ) as generate,
+        patch(
+            "src.services.metric_workflow.review_metric_batch",
+            reviewer_mock(),
         ) as review,
     ):
         yield generate, review
@@ -160,3 +196,21 @@ async def test_chat_persists_report_context_and_replays_without_re_review(client
     report = history.json()["messages"][-1]["metadata_json"]["suggestions"][0]["review"]
     assert first_data["user_message_id"] in report["requirement"]
     assert "trước thuế" in report["requirement"]
+
+
+async def test_partial_chat_status_survives_replay_and_history(client, setup_review, mocked_review_pipeline):
+    db_id, _, headers = setup_review
+    generate, _ = mocked_review_pipeline
+    generate.return_value = [{"name": "Doanh thu", "definition": definition()}, {"name": "Broken", "definition": None}]
+    async def repair(_context, items, _task_id):
+        return [{"candidate_id": i["candidate_id"], "name": "Broken", "definition": None} for i in items]
+    body = {"message": "Khám phá KPI", "proposal_mode": "discovery", "client_message_id": "partial-replay"}
+    with patch("src.services.metric_workflow.repair_metric_drafts", AsyncMock(side_effect=repair)):
+        response = await client.post(f"/api/v1/semantic/{db_id}/chat", headers=headers, json=body)
+        assert response.status_code == 200, response.text
+        replay = await client.post(f"/api/v1/semantic/{db_id}/chat", headers=headers, json=body)
+    assert response.json()["run_status"] == replay.json()["run_status"] == "partial"
+    assert replay.json()["execution_trace"]["status"] == "partial"
+    assert generate.await_count == 1
+    history = await client.get(f"/api/v1/semantic/{db_id}/chat/sessions/{response.json()['session_id']}", headers=headers)
+    assert history.json()["messages"][-1]["metadata_json"]["run_status"] == "partial"

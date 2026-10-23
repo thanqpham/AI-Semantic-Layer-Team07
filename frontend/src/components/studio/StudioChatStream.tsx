@@ -37,6 +37,7 @@ import { AgentThinking } from './AgentThinking';
 import { AgentFlowPanel } from './AgentFlowPanel';
 
 export interface ChatMessage {
+  runStatus?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
   executionTrace?: ExecutionTrace | null;
   reconnecting?: boolean;
   id: string;
@@ -525,6 +526,9 @@ function MessageBubble({
           </div>
         )}
 
+        {message.runStatus === 'partial' && <p role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+          Một phần tác vụ đã hoàn tất. Các KPI đạt vẫn có thể gửi duyệt; phần lỗi được ghi riêng bên dưới.
+        </p>}
         {message.blockedCandidates?.map((candidate, index) => <div key={candidate.proposal_id || index} className="w-full">
           <p className="text-sm font-medium">{candidate.name}</p>
           <MetricReviewPanel review={candidate.review} />

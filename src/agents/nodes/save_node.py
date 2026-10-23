@@ -224,7 +224,14 @@ async def _refresh_legacy_reviews(session: Any, state: AgentState, db_id: int) -
     proposals = []
     for previous in _selected_review_evidence(state):
         context = {**previous["context"], "schema": schema}
-        draft = {"name": previous["name"], "definition": previous["final_definition"]}
+        candidate = previous["context"].get("candidate", {})
+        draft = {
+            "name": previous["name"],
+            "definition": previous["final_definition"],
+            "knowledge_id": candidate.get("knowledge_id"),
+            "variant_id": candidate.get("variant_id"),
+            "criteria": candidate.get("criteria", {}),
+        }
         result = await review_metric_draft(context, draft, allow_repair=False)
         if result["review"]["status"] != "pass" or result["final_definition"] != previous["final_definition"]:
             raise ValueError("Metadata sau lưu cần thẩm định và HITL lại.")

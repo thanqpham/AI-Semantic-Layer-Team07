@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from src.services.metric_context import _token_estimate, build_discovery_context
 from src.services.metric_proposal_generation import prepare_proposal_context
 from src.services.metric_proposals import review_schema_fingerprint
+from tests.metric_review_helpers import scope_mock
 
 
 def _large_schema() -> dict:
@@ -46,11 +47,11 @@ def _loader(schema: dict) -> AsyncMock:
 async def test_large_discovery_reaches_generation_with_complete_selected_metadata():
     schema = _large_schema()
     assert _token_estimate(schema) > 8000
-    selector = AsyncMock(return_value={"table_names": ["orders_2"], "needs_clarification": False})
+    selector = scope_mock({"table_names": ["orders_2"], "needs_clarification": False})
     with (
         patch("src.services.metric_context.load_review_schema", _loader(schema)),
         patch("src.services.metric_context.get_llm"),
-        patch("src.services.metric_context.ainvoke_json", selector),
+        patch("src.services.metric_context.invoke_metric_json", selector),
     ):
         result = await build_discovery_context(None, 1, 8000, question="Doanh thu trước thuế, chỉ đơn hoàn tất")
     assert result.diagnostic["status"] == "ready", result.diagnostic
@@ -79,7 +80,7 @@ async def test_small_discovery_needs_no_scope_llm_call():
     }
     with (
         patch("src.services.metric_context.load_review_schema", _loader(schema)),
-        patch("src.services.metric_context.ainvoke_json", new_callable=AsyncMock) as selector,
+        patch("src.services.metric_context.invoke_metric_json", new_callable=AsyncMock) as selector,
     ):
         result = await build_discovery_context(None, 1, 8000)
     assert result.diagnostic["status"] == "ready"
@@ -90,7 +91,7 @@ async def test_explicit_oversized_targets_are_not_silently_replaced():
     schema = _large_schema()
     with (
         patch("src.services.metric_context.load_review_schema", _loader(schema)),
-        patch("src.services.metric_context.ainvoke_json", new_callable=AsyncMock) as selector,
+        patch("src.services.metric_context.invoke_metric_json", new_callable=AsyncMock) as selector,
     ):
         result = await build_discovery_context(None, 1, 8000, [t["table_name"] for t in schema["tables"]])
     assert result.diagnostic["status"] == "needs_clarification"
@@ -103,7 +104,7 @@ async def test_oversized_model_selection_still_respects_context_budget():
     with (
         patch("src.services.metric_context.load_review_schema", _loader(schema)),
         patch("src.services.metric_context.get_llm"),
-        patch("src.services.metric_context.ainvoke_json", AsyncMock(return_value=selected)),
+        patch("src.services.metric_context.invoke_metric_json", scope_mock(selected)),
     ):
         result = await build_discovery_context(None, 1, 8000)
     assert result.diagnostic["status"] == "needs_clarification"
@@ -116,7 +117,7 @@ async def test_oversized_inventory_is_not_truncated_or_sent_to_llm():
             column["column_name"] = "long_identifier" * 500
     with (
         patch("src.services.metric_context.load_review_schema", _loader(schema)),
-        patch("src.services.metric_context.ainvoke_json", new_callable=AsyncMock) as selector,
+        patch("src.services.metric_context.invoke_metric_json", new_callable=AsyncMock) as selector,
     ):
         result = await build_discovery_context(None, 1, 8000)
     assert result.diagnostic["status"] == "needs_clarification"
@@ -128,7 +129,7 @@ async def test_unknown_table_selection_never_reaches_generation():
     with (
         patch("src.services.metric_context.load_review_schema", _loader(_large_schema())),
         patch("src.services.metric_context.get_llm"),
-        patch("src.services.metric_context.ainvoke_json", AsyncMock(return_value={"table_names": ["invented"]})),
+        patch("src.services.metric_context.invoke_metric_json", scope_mock({"table_names": ["invented"]})),
     ):
         result = await build_discovery_context(None, 1, 8000)
     assert result.diagnostic["status"] == "needs_clarification"

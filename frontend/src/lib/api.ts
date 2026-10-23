@@ -138,9 +138,19 @@ export interface MetricSuggestion {
   conflict?: MetricConflictInfo | null;
   proposal_id?: string | null;
   review?: MetricReview | null;
+  variant_id?: string | null;
+  criteria?: Record<string, string>;
 }
 
 export interface MetricReview {
+  variant_id?: string | null;
+  criteria?: Record<string, string>;
+  execution_error?: {
+    code: 'INVALID_AGENT_OUTPUT' | 'RATE_LIMITED' | 'QUOTA_EXHAUSTED' | 'PROVIDER_ERROR' | 'LLM_BUSY';
+    stage: string; message: string; retryable: boolean; retry_after_seconds?: number | null;
+  } | null;
+  handoffs?: { message_id: string; task_id: string; candidate_id: string; sender: string; recipient: string;
+    intent: string; attempt: number }[];
   status: 'pass' | 'needs_revision' | 'needs_clarification' | 'rejected' | 'unsupported' | 'error';
   summary: string;
   issues: { code: string; message: string; evidence: string; action: string }[];
@@ -661,6 +671,7 @@ function metricResponseToRecord(data: {
 }
 
 export interface GeneratedMetricsResult {
+  run_status?: 'completed' | 'partial' | 'needs_clarification' | 'error';
   suggestions: MetricSuggestion[];
   duplicates: DuplicateMetricNotice[];
   dedupe_performed: boolean;
@@ -708,6 +719,7 @@ export async function generateCustomMetricsApi(
     suggestions,
     duplicates,
     blocked_candidates: data.blocked_candidates || [],
+    run_status: data.run_status,
     clarification: data.clarification,
     dedupe_performed: data.dedupe_performed !== false,
     isLiveLLM: true,
@@ -753,6 +765,7 @@ export interface ChatSemanticQueryResult {
 }
 
 export interface ChatOrchestratorResponse {
+  run_status?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
   blocked_candidates?: MetricCandidateReport[];
   execution_trace?: ExecutionTrace | null;
   intent: 'chitchat' | 'data_question' | 'metric_query' | 'semantic_query' | 'out_of_scope';
@@ -788,6 +801,7 @@ export interface ChatMessageItem {
   content: string;
   intent?: string | null;
   metadata_json?: {
+    run_status?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
     blocked_candidates?: MetricCandidateReport[];
     execution_trace?: ExecutionTrace | null;
     schema_version?: number;

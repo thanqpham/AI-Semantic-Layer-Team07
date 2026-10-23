@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import MetricProposalModel
 from src.models.metric_definition import MetricDefinition
-from src.models.metric_review import MetricDraft, MetricReview
+from src.models.metric_review import MetricReview
 from src.services.metric_context import load_review_schema
 from src.services.metric_dedupe import load_existing_for_dedupe
 from src.services.metric_proposal_generation import check_context_budget
@@ -113,8 +113,15 @@ async def re_review_proposal(
         "existing_metrics": existing or [],
     }
     check_context_budget(context)
-    draft = MetricDraft(name=definition.metric.name, definition=definition.model_dump(mode="json"))
-    evidence = await review_metric_draft(context, draft.model_dump(mode="json"))
+    candidate = proposal.context.get("candidate", {})
+    draft = {
+        "name": definition.metric.name,
+        "definition": definition.model_dump(mode="json"),
+        "knowledge_id": candidate.get("knowledge_id"),
+        "variant_id": candidate.get("variant_id"),
+        "criteria": candidate.get("criteria", {}),
+    }
+    evidence = await review_metric_draft(context, draft, allow_repair=False)
     result = await persist_proposal(db, proposal.db_id, user_id, evidence, proposal.id)
     result.request_id = proposal.request_id
     return result
@@ -185,9 +192,7 @@ async def generate_reviewed_metrics(
     db: AsyncSession, db_id: int, user_id: int, state: dict[str, Any]
 ) -> dict[str, Any]:
     """Use the same generation/review pipeline for non-chat API clients."""
-    from src.agents.nodes.metric_review_node import metric_review_node
     from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
 
     state = {**state, **await on_demand_metric_suggest_node(state)}
-    state.update(await metric_review_node(state))
     return await persist_reviewed_state(db, db_id, user_id, state)

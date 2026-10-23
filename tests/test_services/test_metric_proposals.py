@@ -1,13 +1,12 @@
 """Durable AI-review gates, freshness and append-only re-review tests."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
 
 from src.models.db import MetricProposalModel, SemanticColumnModel, SemanticDatabaseModel, SemanticMetricModel
 from src.models.metric_definition import MetricDefinition
-from src.models.metric_review import MetricReview
 from src.services.metric_context import load_review_schema
 from src.services.metric_proposals import (
     link_saved_proposal,
@@ -16,7 +15,7 @@ from src.services.metric_proposals import (
     review_schema_fingerprint,
 )
 from src.services.metric_service import create_metric
-from tests.metric_review_helpers import definition, schema, seed_proposal
+from tests.metric_review_helpers import definition, reviewer_mock, schema, seed_proposal
 
 
 @pytest.fixture
@@ -85,8 +84,8 @@ async def test_re_review_creates_new_snapshot_and_keeps_original_requirements(as
     original_definition = proposal.final_definition
     edited = MetricDefinition.model_validate(definition("amount * 2"))
     with patch(
-        "src.services.metric_review.invoke_metric_json",
-        AsyncMock(return_value=MetricReview(status="pass", summary="Valid edit")),
+        "src.services.metric_workflow.review_metric_batch",
+        reviewer_mock(),
     ):
         updated = await re_review_proposal(async_session, proposal, 1, edited)
     assert updated.id != proposal.id and updated.parent_id == proposal.id
@@ -94,6 +93,25 @@ async def test_re_review_creates_new_snapshot_and_keeps_original_requirements(as
     assert updated.final_definition["metric"]["formula"]["expression"] == "amount * 2"
     assert proposal.final_definition == original_definition
     assert len(list((await async_session.scalars(select(MetricProposalModel))).all())) == 2
+
+
+async def test_re_review_preserves_variant_identity_and_its_source(async_session, proposal):
+    proposal.context = {
+        **proposal.context,
+        "candidate": {
+            "id": "original",
+            "name": "Doanh thu trước thuế",
+            "knowledge_id": "net_sales",
+            "variant_id": "merchandise_net_sales",
+            "criteria": {"order_status": "all_statuses"},
+        },
+    }
+    with patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()):
+        updated = await re_review_proposal(async_session, proposal, 1, MetricDefinition.model_validate(definition()))
+    assert updated.parent_id == proposal.id
+    assert updated.review["variant_id"] == "merchandise_net_sales"
+    assert updated.review["criteria"]["order_status"] == "all_statuses"
+    assert [source["id"] for source in updated.review["sources"]] == ["woocommerce_analytics"]
 
 
 def test_fingerprint_is_order_independent_but_tracks_relationships():

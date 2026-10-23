@@ -123,6 +123,19 @@ async def test_classifier_failure_keeps_metric_creation_available() -> None:
 
 
 @pytest.mark.asyncio
+async def test_classifier_provider_failure_stops_before_other_agent_calls() -> None:
+    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+        llm = AsyncMock()
+        llm.ainvoke.side_effect = RuntimeError("provider unavailable")
+        mock_get_llm.return_value = llm
+
+        result = await orchestrator_node({"user_message": "Đề xuất KPI phù hợp"})
+
+    assert result["intent"] == "chitchat"
+    assert "thử lại" in result["chat_response"]
+
+
+@pytest.mark.asyncio
 async def test_out_of_scope_returns_response() -> None:
     """Out of scope classification attaches standardized response message."""
     with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:

@@ -13,6 +13,44 @@ const definition: MetricDefinition = { metric: { name: 'Doanh thu', base_entity:
   formula: { function: 'SUM', expression: 'amount' }, filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } };
 
 describe('metric review evidence and gates', () => {
+  it('shows the reviewed variant and its business criteria', () => {
+    render(<MetricReviewPanel review={{ ...passingReview, variant_id: 'merchandise_net_including_vat',
+      criteria: { tax_basis: 'includes_vat' } }} />);
+    fireEvent.click(screen.getByText('AI đã thẩm định — chờ người duyệt'));
+    expect(screen.getByText('merchandise_net_including_vat')).toBeInTheDocument();
+    expect(screen.getByText('Cơ sở thuế: Gồm VAT')).toBeInTheDocument();
+  });
+  it.each([
+    ['INVALID_AGENT_OUTPUT', 'AI chưa tạo được định nghĩa hợp lệ'],
+    ['RATE_LIMITED', 'Đang bị giới hạn API'],
+    ['QUOTA_EXHAUSTED', 'Tài khoản LLM đã hết quota'],
+  ] as const)('distinguishes %s from a business revision', (code, label) => {
+    render(<MetricReviewPanel review={{ ...passingReview, status: 'error', execution_error: {
+      code, stage: 'builder', message: 'Không thể hoàn tất bước model.', retryable: code === 'RATE_LIMITED',
+    } }} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.queryByText('Cần sửa trước khi gửi duyệt')).not.toBeInTheDocument();
+  });
+
+  it('keeps a passing KPI actionable when another KPI failed', () => {
+    render(<StudioChatStream messages={[{ id: 'partial', sender: 'assistant', text: '', timestamp: '', runStatus: 'partial',
+      suggestions: [{ ...reviewedSuggestionFields, definition, yaml_preview: '' }],
+      blockedCandidates: [{ name: 'KPI bị giới hạn', review: { ...passingReview, status: 'error', execution_error: {
+        code: 'RATE_LIMITED', stage: 'reviewer', message: 'Đợi API', retryable: true, retry_after_seconds: 60,
+      } } }],
+    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} onAddMetric={vi.fn()} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Một phần tác vụ đã hoàn tất');
+    expect(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' })).toBeEnabled();
+    expect(screen.getByText('Đang bị giới hạn API')).toBeInTheDocument();
+  });
+
+  it('shows the typed handoff history without exposing payloads', () => {
+    render(<MetricReviewPanel review={{ ...passingReview, handoffs: [{ message_id: 'm', task_id: 't', candidate_id: 'c',
+      sender: 'coordinator', recipient: 'metric_builder', intent: 'request', attempt: 0 }] }} />);
+    fireEvent.click(screen.getByText('AI đã thẩm định — chờ người duyệt'));
+    fireEvent.click(screen.getByText('Lịch sử giao việc giữa các agent'));
+    expect(screen.getByText(/Coordinator → Metric Builder: Giao việc/)).toBeInTheDocument();
+  });
   it('shows original requirements, evidence, curated links and before/after definitions', () => {
     render(<MetricReviewPanel definition={definition} review={{ ...passingReview, revised: true, repair_count: 1,
       original_definition: { metric: { formula: { expression: 'missing' } } },

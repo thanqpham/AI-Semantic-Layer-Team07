@@ -11,11 +11,37 @@ const LABELS: Record<MetricReview['status'], string> = {
   error: 'Thẩm định chưa hoàn tất',
 };
 
+const ROLES: Record<string, string> = { coordinator: 'Coordinator', schema_analyst: 'Schema Analyst',
+  metric_builder: 'Metric Builder', technical_validator: 'Kiểm tra kỹ thuật', data_lead_reviewer: 'Data Lead Reviewer' };
+const INTENTS: Record<string, string> = { request: 'Giao việc', result: 'Trả kết quả', revision_request: 'Yêu cầu sửa',
+  clarification: 'Cần làm rõ', failure: 'Báo lỗi' };
+const CRITERIA: Record<string, string> = { tax_basis: 'Cơ sở thuế', refund_policy: 'Hoàn tiền',
+  order_status: 'Trạng thái đơn', time_basis: 'Mốc thời gian', population: 'Đối tượng tính',
+  numerator: 'Tử số', denominator: 'Mẫu số', formula_basis: 'Cơ sở công thức' };
+const VALUES: Record<string, string> = { excludes_tax: 'Trước thuế', includes_vat: 'Gồm VAT',
+  subtract_sales_reversals: 'Trừ điều chỉnh giảm', confirmed_completed: 'Đơn hoàn tất đã xác nhận' };
+
 export function MetricReviewPanel({ review, definition }: { review: MetricReview; definition?: MetricDefinition | null }) {
+  const error = review.execution_error;
+  const heading = error?.code === 'INVALID_AGENT_OUTPUT'
+    ? (error.stage === 'reviewer' ? 'AI chưa trả được thẩm định hợp lệ' : 'AI chưa tạo được định nghĩa hợp lệ')
+    : error?.code === 'RATE_LIMITED' ? 'Đang bị giới hạn API'
+      : error?.code === 'QUOTA_EXHAUSTED' ? 'Tài khoản LLM đã hết quota'
+        : error?.code === 'LLM_BUSY' ? 'Tài khoản LLM đang bận'
+          : error?.code === 'PROVIDER_ERROR' ? 'Không thể gọi model' : LABELS[review.status];
   return <details className="my-2 rounded-md border border-border bg-secondary/20 p-3 text-xs">
-    <summary className="cursor-pointer font-semibold">{LABELS[review.status]}</summary>
+    <summary className="cursor-pointer font-semibold">{heading}</summary>
     <p className="mt-2 whitespace-pre-wrap">{review.summary}</p>
+    {error && <p className="mt-2">{error.message}
+      {error.retry_after_seconds != null && ` Có thể thử lại sau khoảng ${Math.ceil(error.retry_after_seconds)} giây.`}
+    </p>}
     {review.requirement && <div className="mt-2"><strong>Yêu cầu đã đối chiếu</strong><p className="whitespace-pre-wrap break-words">{review.requirement}</p></div>}
+    {review.variant_id && <p className="mt-2">Biến thể: <code>{review.variant_id}</code></p>}
+    {!!Object.keys(review.criteria || {}).length && <div className="mt-2">
+      <strong>Tiêu chí của biến thể</strong>
+      <ul className="mt-1 list-disc pl-4">{Object.entries(review.criteria || {}).map(([key, value]) =>
+        <li key={key}>{CRITERIA[key] || key}: {VALUES[value] || value}</li>)}</ul>
+    </div>}
     {review.issues.map((issue, index) => <div key={index} className="mt-2 space-y-1">
       <p className="font-medium">{issue.message}</p><p>Bằng chứng: {issue.evidence}</p><p>Cần làm: {issue.action}</p>
     </div>)}
@@ -35,6 +61,12 @@ export function MetricReviewPanel({ review, definition }: { review: MetricReview
         <pre aria-label="Định nghĩa ban đầu" className="overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(review.original_definition, null, 2)}</pre>
         <pre aria-label="Định nghĩa cuối" className="overflow-auto whitespace-pre-wrap break-all">{definition ? JSON.stringify(definition, null, 2) : 'Chưa có định nghĩa được chấp nhận.'}</pre>
       </div>
+    </details>}
+    {!!review.handoffs?.length && <details className="mt-2">
+      <summary className="cursor-pointer">Lịch sử giao việc giữa các agent</summary>
+      <ol className="mt-2 list-decimal space-y-1 pl-4">{review.handoffs.map(message => <li key={message.message_id}>
+        {ROLES[message.sender] || message.sender} → {ROLES[message.recipient] || message.recipient}: {INTENTS[message.intent] || message.intent} · Lượt {message.attempt + 1}
+      </li>)}</ol>
     </details>}
   </details>;
 }

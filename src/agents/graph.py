@@ -2,7 +2,6 @@ from langgraph.graph import END, StateGraph
 
 from src.agents.nodes.enrich_node import enrich_node
 from src.agents.nodes.introspect_node import introspect_node
-from src.agents.nodes.metric_review_node import metric_review_node
 from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
 from src.agents.nodes.save_node import save_node
 from src.agents.state import AgentState
@@ -40,24 +39,26 @@ def build_graph() -> StateGraph:
     # Add nodes
     graph.add_node("introspect", introspect_node)
     graph.add_node("enrich", enrich_node)
-    graph.add_node("metric_suggest", on_demand_metric_suggest_node)  # On-demand AI metric suggestion
-    graph.add_node("metric_review", metric_review_node)
+    graph.add_node("metric_coordinator", on_demand_metric_suggest_node)
     graph.add_node("save", save_node)
 
     # Edges
     graph.set_entry_point("introspect")
     graph.add_conditional_edges("introspect", route_after_introspect)
-    graph.add_edge("enrich", "metric_suggest")
-    graph.add_edge("metric_suggest", "metric_review")
-    graph.add_conditional_edges("metric_review", _route_after_review)
+    graph.add_edge("enrich", "metric_coordinator")
+    graph.add_conditional_edges("metric_coordinator", _route_after_review)
     graph.add_conditional_edges("save", route_after_save)
 
     return graph.compile(interrupt_before=["save"])
 
 
 def _route_after_review(state: AgentState) -> str:
-    """Stop before HITL when any proposed metric lacks a passing review."""
-    return "save" if state.get("suggested_metrics") and not state.get("blocked_candidates") else END
+    """Let HITL select reviewed proposals independently from a partial batch."""
+    return (
+        "save"
+        if any(item.get("review", {}).get("status") == "pass" for item in state.get("suggested_metrics", []))
+        else END
+    )
 
 
 agent = build_graph()

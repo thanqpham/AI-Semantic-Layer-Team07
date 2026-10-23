@@ -1,11 +1,13 @@
 """Small metadata and durable-proof fixtures for metric review tests."""
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 from sqlalchemy import select
 
 from src.models.db import SemanticColumnModel, SemanticTableModel
 from src.models.metric_definition import MetricDefinition
+from src.models.metric_review import MetricScopeSelection
 from src.services.metric_context import load_review_schema
 from src.services.metric_proposal_generation import prepare_proposal_context
 from src.services.metric_proposals import persist_proposal
@@ -25,6 +27,19 @@ def definition(expression: str = "amount", name: str = "Doanh thu trước thu�
             }
         }
     ).model_dump(mode="json")
+
+
+def reviewer_mock(status: str = "pass", summary: str = "Matches the confirmed request", issues=None) -> AsyncMock:
+    """Return correlated judgments while exercising the real coordinator and validators."""
+    async def review(_context, _task_id, items):
+        return [{"candidate_id": item["candidate_id"], "status": status, "summary": summary,
+                 "issues": issues or [], "clarification": summary if status == "needs_clarification" else None} for item in items]
+    return AsyncMock(side_effect=review)
+
+
+def scope_mock(payload: dict) -> AsyncMock:
+    """Mock the managed schema agent contract, never a real model endpoint."""
+    return AsyncMock(return_value=MetricScopeSelection.model_validate(payload))
 
 
 def schema() -> dict[str, Any]:

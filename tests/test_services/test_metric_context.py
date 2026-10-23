@@ -1,7 +1,7 @@
 """Regression tests for relationship-complete Metric AI context."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -12,6 +12,7 @@ from src.services.metric_context import (
     _temporal_context,
     _token_estimate,
 )
+from tests.metric_review_helpers import scope_mock
 
 
 @pytest.mark.asyncio
@@ -24,7 +25,7 @@ async def test_scope_clarification_preserves_selectable_options() -> None:
     }
     with (
         patch("src.services.metric_context.get_llm"),
-        patch("src.services.metric_context.ainvoke_json", new=AsyncMock(return_value=payload)),
+        patch("src.services.metric_context.invoke_metric_json", new=scope_mock(payload)),
     ):
         _, diagnostic = await _select_tables("Tính AOV", [], [_table("order_header")], None)
     assert [item["label"] for item in diagnostic["clarification"]["options"]] == payload["options"]

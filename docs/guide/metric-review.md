@@ -5,9 +5,35 @@ Metric Review Agent → tối đa một lượt sửa và kiểm tra lại → n
 Reviewer gọi model riêng với cùng cấu hình `get_llm(role="metric")`, temperature 0;
 đây chưa phải một model Judge độc lập.
 
+## Coordinator và giao tiếp nội bộ
+
+LangGraph điều phối Metric Designer → kiểm tra kỹ thuật bằng code →
+Data Lead Reviewer AI. Đọc schema và Coordinator là các bước backend, không phải agent độc lập. Khi cần sửa, Coordinator
+chỉ giao lại các KPI lỗi, tối đa một lượt. Reviewer trả JSON hỏng thì chỉ gọi lại
+Reviewer; không sinh lại các định nghĩa đã hợp lệ.
+
+Builder phải trả `MetricDefinition` đầy đủ cho trạng thái `ready`. Mô tả công thức
+trong `reason` hoặc `definition=null` không đủ để chuyển sang thẩm định nghiệp vụ.
+KPI chưa khả thi có contract riêng với lý do và trạng thái rõ ràng. Một phần tử
+hỏng không làm mất các KPI hợp lệ trong cùng batch. Builder và Reviewer đều làm
+việc theo batch để giảm lượt gọi model.
+
+Backend cấp task ID và candidate ID, đối chiếu phản hồi theo từng KPI và không áp dụng
+phản hồi trùng hoặc sai ID. Báo cáo và trace nằm trong JSON proposal/chat hiện có;
+không tạo thông điệp bàn giao giả cho các lời gọi hàm trong cùng backend.
+Không cần migration mới. Đây là giao tiếp trong backend, chưa phải A2A qua mạng.
+
+Thiết kế tham khảo các cơ chế giới hạn hop và chống gửi lặp của
+[Rakazo bot messages](https://github.com/elie222/rakazo/blob/6de958f0608248d82f655cf5b88e8eacdf030341/packages/adapters/src/bot-messages.ts).
+
 ## Sử dụng
 
 Trong Studio, nhập yêu cầu một KPI hoặc chọn **Khám phá KPI từ schema**.
+Yêu cầu chưa chọn công thức có thể tạo tối đa 5 biến thể khả thi thành 5 proposal riêng.
+Mỗi tên nêu rõ các tiêu chí ảnh hưởng kết quả; báo cáo lưu `variant_id`, `criteria`
+và nguồn đúng của biến thể. Yêu cầu đã chọn trước thuế không nhận biến thể gồm VAT.
+Nếu không chứng minh được ánh xạ cột hoặc trạng thái, AI hỏi người yêu cầu thay vì
+đưa giả định ngầm vào proposal đạt. Data Lead chỉ duyệt ở gate cuối.
 Hệ thống giữ yêu cầu gốc, tham chiếu tin nhắn, lựa chọn làm rõ và metadata;
 context vượt ngân sách sẽ yêu cầu thu hẹp phạm vi hoặc mở hội thoại mới.
 Không có bước lấy mẫu hay chạy truy vấn dữ liệu doanh nghiệp.
@@ -44,6 +70,11 @@ Nguồn tham khảo không ghi đè yêu cầu và quy tắc doanh nghiệp đã
   `proposal_mode: requested | discovery`, mặc định `requested`.
 - Suggestion có `proposal_id`, `review`, `definition`, `yaml_preview`;
   response có `blocked_candidates` và `clarification` khi cần hỏi lại.
+- `run_status` gồm `completed`, `partial`, `needs_clarification`, `error` và được
+  giữ khi replay/reload. Với `partial`, các KPI đạt vẫn có thể gửi duyệt.
+- `review.execution_error` phân biệt lỗi đầu ra (`INVALID_AGENT_OUTPUT`), giới hạn
+  API (`RATE_LIMITED`), hết quota (`QUOTA_EXHAUSTED`), provider và tài khoản đang bận.
+  Đây là lỗi thực thi, không phải kết luận KPI sai nghiệp vụ.
 - Tạo metric với `source=ai` phải gửi `proposal_id` cùng định nghĩa đã thẩm định.
   Proposal giả, khác người/database, chưa đạt, bị sửa, đã lưu hoặc lỗi thời bị từ chối.
 - `POST /api/v1/semantic/{db_id}/metric-proposals/{proposal_id}/review` nhận
@@ -69,6 +100,24 @@ Triển khai frontend cùng phiên bản API mới. Đề xuất AI cũ chưa c�
 Langfuse có node `metric_review`, action `metric_review_decision`, `metric_repair`
 và span `metric_review_result`. Span kết quả chỉ ghi status và số lượt sửa trong
 `status_message`; prompt/context vẫn tuân thủ cấu hình che nội dung hiện tại.
+
+## Giới hạn gọi model
+
+Mỗi lời gọi metric chỉ có tối đa hai lần gửi provider, tắt retry ngầm SDK. Fallback
+sang JSON text chỉ áp dụng khi structured output không được hỗ trợ; JSON sai phải
+qua lượt sửa chung của Coordinator, không có vòng retry JSON ẩn.
+
+Rate limit tạm thời được thử lại một lần khi `Retry-After` không quá 10 giây;
+thiếu header thì đợi 2 giây. Header yêu cầu đợi lâu hơn sẽ trả lỗi có thời gian
+chờ, giữ kết quả đã đạt. Hết quota/xác thực sai không tự thử lại hoặc đổi key/model.
+Mỗi credential có một lời gọi metric đang chạy trong một backend worker; chờ
+lấy lượt tối đa 10 giây. Chưa có limiter phân tán hoặc job tiếp tục sau restart.
+
+Test tự động dùng mock. Nghiệm thu model thật là bước riêng: tối đa hai KPI đơn
+giản (đếm đơn và tổng số lượng), kiểm tra định nghĩa bằng máy cùng báo cáo Reviewer,
+không tự lưu catalog/phê duyệt. Thiếu credentials hoặc quota thì ghi chưa đạt,
+không xem mock là bằng chứng chất lượng model, theo cách
+[Rakazo phân tầng kiểm chứng](https://github.com/elie222/rakazo/blob/6de958f0608248d82f655cf5b88e8eacdf030341/docs/agent-verification.md).
 SQL Dump tiếp tục chỉ dùng metadata; compiler/query chỉ chạy metric đã được
 người duyệt theo cơ chế cũ.
 

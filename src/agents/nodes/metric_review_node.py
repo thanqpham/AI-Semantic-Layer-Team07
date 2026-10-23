@@ -10,22 +10,24 @@ from src.models.metric_review import MetricCandidateReport, MetricReview
 from src.models.schemas import MetricSuggestionItem
 from src.observability import trace_node
 from src.services.metric_dedupe import merge_dedupe
-from src.services.metric_review import review_metric_draft
+from src.services.metric_workflow import run_metric_workflow
 
 
 @trace_node("metric_review")
 async def metric_review_node(state: AgentState) -> dict[str, Any]:
     """Review drafts, cap discovery output, and expose clarification without write actions."""
     context = state.get("proposal_context")
+    if "reviewed_proposals" in state:
+        return reviewed_state(state["reviewed_proposals"], state)
     if not context or state.get("error"):
         return {"suggested_metrics": [], "suggestion_action": None}
-    proposals = [await review_metric_draft(context, draft) for draft in state.get("metric_drafts", [])]
+    proposals = await run_metric_workflow(context, drafts=state.get("metric_drafts", []))
     return reviewed_state(proposals, state)
 
 
 def reviewed_state(proposals: list[dict[str, Any]], state: dict[str, Any]) -> dict[str, Any]:
     """Keep only passing definitions actionable and retain blocked decisions for the UI."""
-    limit = 5 if state.get("proposal_mode") == "discovery" else 1
+    limit = 5
     passing = [p for p in proposals if p["review"]["status"] == "pass"][:limit]
     items = [_suggestion(p) for p in passing]
     kept, notices = merge_dedupe(items, [], [], state.get("existing_metrics") or [])
@@ -51,11 +53,25 @@ def reviewed_state(proposals: list[dict[str, Any]], state: dict[str, Any]) -> di
     }
     if questions:
         response["clarification"] = {"prompt": "\n".join(dict.fromkeys(questions)), "options": []}
+    errors = any(p["review"]["status"] == "error" for p in proposals)
+    response["run_status"] = (
+        "partial"
+        if errors and (kept or notices)
+        else "error"
+        if errors
+        else "needs_clarification"
+        if questions and not kept
+        else "completed"
+    )
     return response
 
 
 def _suggestion(proposal: dict[str, Any]) -> MetricSuggestionItem:
     definition = MetricDefinition.model_validate(proposal["final_definition"])
     return MetricSuggestionItem(
-        definition=definition, yaml_preview=definition.to_yaml(), review=MetricReview.model_validate(proposal["review"])
+        definition=definition,
+        yaml_preview=definition.to_yaml(),
+        review=MetricReview.model_validate(proposal["review"]),
+        variant_id=proposal["review"].get("variant_id"),
+        criteria=proposal["review"].get("criteria", {}),
     )

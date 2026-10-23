@@ -135,3 +135,5 @@ class AgentState(TypedDict, total=False):
     """Review evidence awaiting persistence by the request's database session."""
     blocked_candidates: list[dict[str, Any]]
     """KPI decisions that cannot be saved or sent for human approval."""
+    run_status: str
+    """Completed, partial, needs_clarification or execution error for this run."""

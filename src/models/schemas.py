@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from src.models.metric_definition import FilterOperator, MetricDefinition, MetricStatus
-from src.models.metric_review import MetricCandidateReport, MetricReview, ProposalMode
+from src.models.metric_review import MetricCandidateReport, MetricReview, ProposalMode, RunStatus
 from src.models.raw_schema import RawSchema
 from src.models.schema_metadata import ParseDiagnostic, RawSchemaMetadata, SchemaDialect
 
@@ -343,6 +343,8 @@ class MetricSuggestionItem(BaseModel):
     conflict: MetricConflictInfo | None = None
     proposal_id: str | None = None
     review: MetricReview | None = None
+    variant_id: str | None = None
+    criteria: dict[str, str] = Field(default_factory=dict)
 
 
 class DuplicateMetricNotice(BaseModel):
@@ -376,6 +378,7 @@ class CustomMetricGenerateResponse(BaseModel):
     dedupe_performed: bool = True
     blocked_candidates: list[MetricCandidateReport] = Field(default_factory=list)
     clarification: ChatClarificationPayload | None = None
+    run_status: RunStatus = "completed"
 
 
 class GeneratedMetric(MetricDefinition):
@@ -1030,6 +1033,7 @@ class ChatResponse(BaseModel):
         description="Danh sách Business Metrics JSON (khi intent = 'metric_query')",
     )
     blocked_candidates: list[MetricCandidateReport] = Field(default_factory=list)
+    run_status: RunStatus | None = None
     duplicates: list[DuplicateMetricNotice] = Field(default_factory=list)
     dedupe_performed: bool = True
     suggestion_action: Literal["save_metric", "submit_metric_request"] | None = None
