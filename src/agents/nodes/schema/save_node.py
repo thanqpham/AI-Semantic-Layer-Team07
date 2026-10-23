@@ -212,7 +212,7 @@ async def _create_and_approve_metric(
 
 async def _refresh_legacy_reviews(session: Any, state: AgentState, db_id: int) -> None:
     """Recheck newly persisted legacy metadata without changing the human-approved draft."""
-    from src.agents.nodes.metric_review_node import reviewed_state
+    from src.agents.nodes.metric.metric_review_node import reviewed_state
     from src.services.metric_context import load_review_schema
     from src.services.metric_review import review_metric_draft
 

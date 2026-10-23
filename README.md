@@ -102,10 +102,12 @@ graph TB
 P-069/
 ├── src/
 │   ├── agents/                   # 🧠 Hệ thống Agent LangGraph & Multi-Agent
-│   │   ├── nodes/                #    Các node: introspect, enrich, metric_suggest, chitchat, orchestrator, save
+│   │   ├── graphs/               #    Graph assembly: chat_graph, semantic_layer_graph
+│   │   ├── roles/                #    Prompt, model call và output contract của các agent LLM
+│   │   ├── nodes/                #    Adapter AgentState cho chat, metric và schema
+│   │   │   ├── metric/           #    coordinator_node, validate_node, repair_node
+│   │   ├── workflows/            #    Workflow metric: build → validate → review → repair
 │   │   ├── query_clarifier/      #    Query Clarifier Wizard (wizard_init, wizard_step, resolve)
-│   │   ├── graph.py              #    StateGraph Flow 1 chính với HITL interrupt
-│   │   ├── chat_graph.py         #    StateGraph hội thoại đa tác tử
 │   │   └── state.py              #    AgentState TypedDict
 │   ├── api/                      # 🌐 FastAPI REST API Routes
 │   │   ├── auth.py               #    Xác thực JWT, Bcrypt, Google OAuth, Refresh token, RBAC

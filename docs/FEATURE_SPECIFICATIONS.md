@@ -10,7 +10,7 @@ Tài liệu quy định chi tiết các Bản Đặc tả Tính năng (Feature S
 |---|---|
 | **Mã Tính năng** | `[F-03]` / `[US-001]` |
 | **Tên tính năng** | **2-Pass Hierarchical & Clustering AI Schema Enrichment** |
-| **Mô-đun chịu trách nhiệm** | `src/services/pass1_global_glossary.py`, `src/services/clustering.py`, `src/services/pass2_cluster_enrichment.py`, `src/agents/nodes/enrich_node.py` |
+| **Mô-đun chịu trách nhiệm** | `src/services/pass1_global_glossary.py`, `src/services/clustering.py`, `src/services/pass2_cluster_enrichment.py`, `src/agents/nodes/schema/enrich_node.py` |
 | **Trạng thái** | **Đã hiện thực & Hoạt động** |
 
 ### 1. Động lực & Bài toán
@@ -125,7 +125,7 @@ Workspace phải luôn còn ít nhất một Admin; hệ thống từ chối h�
 |---|---|
 | **Mã Tính năng** | `[F-10]`, `[F-11]` / `[US-008]` |
 | **Tên tính năng** | **Multi-Agent Conversational Studio & Multi-turn Query Clarifier Wizard** |
-| **Mô-đun chịu trách nhiệm** | `src/agents/chat_graph.py`, `src/agents/nodes/orchestrator_node.py`, `src/agents/query_clarifier/graph.py`, `src/api/query_clarify_routes.py` |
+| **Mô-đun chịu trách nhiệm** | `src/agents/graphs/chat_graph.py`, `src/agents/nodes/chat/orchestrator_node.py`, `src/agents/query_clarifier/graph.py`, `src/api/query_clarify_routes.py` |
 | **Trạng thái** | **Đã hiện thực & Hoạt động** |
 
 ### 1. Động lực & Bài toán
@@ -134,8 +134,8 @@ Người dùng không chuyên về kỹ thuật (Business Users) thường đưa
 ### 2. Thiết kế Giải pháp
 1. **Chat Orchestrator Multi-Agent Graph (`chat_graph.py`):**
    - `orchestrator_node`: Phân tích ý định của người dùng bằng LLM.
-   - Nếu là chào hỏi/hỏi đáp tổng quan $\rightarrow$ Chuyển tiếp tới `chitchat_node`.
-   - Nếu là yêu cầu định nghĩa chỉ số kinh doanh $\rightarrow$ Chuyển tiếp tới `on_demand_metric_suggest_node` sinh cấu trúc `MetricDefinition` và mẫu SQL.
+   - Nếu là chào hỏi/hỏi đáp tổng quan $\rightarrow$ Chuyển tiếp tới `conversation_node`.
+   - Nếu là yêu cầu định nghĩa chỉ số kinh doanh $\rightarrow$ Chuyển tiếp tới `coordinator_node` sinh cấu trúc `MetricDefinition` và mẫu SQL.
 2. **Query Clarifier Wizard Graph (`query_clarifier/graph.py`):**
    - `wizard_init_node`: Phân tích câu hỏi tự nhiên ban đầu, đối chiếu với danh mục Catalog Semantic Layer để tìm các điểm còn mơ hồ.
    - `wizard_step_node`: Tương tác từng bước hỏi người dùng chọn các chiều phân tích (Dimension) và bộ lọc (Filter) phù hợp.

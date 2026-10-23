@@ -1,6 +1,6 @@
 """Tests for direct conversational graph routing."""
 
-from src.agents.chat_graph import _route_by_intent
+from src.agents.graphs.chat_graph import _route_by_intent
 
 
 def test_metric_query_reaches_metric_generator_for_member() -> None:

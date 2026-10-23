@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 from src.services.metric_context import _token_estimate, build_discovery_context
-from src.services.metric_proposal_generation import prepare_proposal_context
+from src.services.metric_proposal_context import prepare_proposal_context
 from src.services.metric_proposals import review_schema_fingerprint
 from tests.metric_review_helpers import scope_mock
 
@@ -65,7 +65,7 @@ async def test_large_discovery_reaches_generation_with_complete_selected_metadat
         }
     )
     assert all(t["table_name"] in selector.call_args.args[1] for t in schema["tables"])
-    with patch("src.services.metric_proposal_generation.get_settings") as settings:
+    with patch("src.services.metric_proposal_context.get_settings") as settings:
         settings.return_value.metric_context_token_budget = 8000
         context = prepare_proposal_context(
             {"enriched_schema": result.schema, "proposal_mode": "discovery", "user_message": "Khám phá KPI"}

@@ -2285,8 +2285,8 @@ async def _process_standard_chat(
     intent_override: str | None = None,
 ) -> ChatResponse:
     """Process a standard chat query through the graph and execution layer."""
-    from src.agents.chat_graph import chat_agent
-    from src.agents.nodes.orchestrator_node import orchestrator_node
+    from src.agents.graphs.chat_graph import chat_agent
+    from src.agents.nodes.chat.orchestrator_node import orchestrator_node
 
     history = await get_recent_chat_history(db, session.id)
     user_message = await save_chat_message(

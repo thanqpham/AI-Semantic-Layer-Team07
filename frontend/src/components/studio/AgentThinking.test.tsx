@@ -85,8 +85,8 @@ describe('thinking and agent flow', () => {
 
     expect(screen.getByRole('button', { name: /Orchestrator.*Đang chạy/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Data Assistant.*Đang chạy/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Chitchat/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Metric Builder/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Conversation Agent/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Metric Designer Agent/ })).not.toBeInTheDocument();
     const edge = container.querySelector('[data-edge="orchestrator-data_assistant"]');
     expect(edge).toBeInTheDocument();
     expect(edge).toHaveAttribute('stroke-dasharray', '5 5');

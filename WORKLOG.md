@@ -31,7 +31,7 @@
 |---|---|---|---|:---:|
 | Lead Dev | Xây dựng Pass 1 Global Domain Glossary & Graph Clustering | ✅ Done | `src/services/pass1_global_glossary.py`, `clustering.py` | 5h |
 | Dev 1 | Xây dựng Pass 2 Cluster Enrichment & Fallback Generator | ✅ Done | `src/services/pass2_cluster_enrichment.py` | 4.5h |
-| Dev 2 | Xây dựng LangGraph StateGraph Flow 1 và HITL Interrupt Node | ✅ Done | `src/agents/graph.py`, `src/agents/nodes/` | 4h |
+| Dev 2 | Xây dựng LangGraph StateGraph Flow 1 và HITL Interrupt Node | ✅ Done | `src/agents/graphs/semantic_layer_graph.py`, `src/agents/nodes/` | 4h |
 
 **Tổng kết ngày:** Hoàn thành luồng AI tự động sinh tên nghiệp vụ tiếng Việt và mô tả chi tiết cho bảng/cột theo cụm.
 
@@ -51,7 +51,7 @@
 ## 2026-08-14: Multi-Agent Conversational Router & Query Clarifier Wizard
 | Member | Task | Status | Output | Time |
 |---|---|---|---|:---:|
-| Dev 1 | Xây dựng Chat Orchestrator Graph (`chitchat` vs `metric_suggest`) | ✅ Done | `src/agents/chat_graph.py` | 4h |
+| Dev 1 | Xây dựng Chat Orchestrator Graph (`chitchat` vs `metric_suggest`) | ✅ Done | `src/agents/graphs/chat_graph.py` | 4h |
 | Dev 2 | Xây dựng Query Clarifier Wizard Graph hỏi đáp làm rõ từng bước | ✅ Done | `src/agents/query_clarifier/graph.py` | 5h |
 | QA | Viết tests cho multi-agent routes và wizard flows | ✅ Done | `tests/test_agents/`, `tests/test_api/` | 3h |
 

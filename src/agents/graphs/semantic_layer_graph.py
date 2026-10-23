@@ -1,9 +1,9 @@
 from langgraph.graph import END, StateGraph
 
-from src.agents.nodes.enrich_node import enrich_node
-from src.agents.nodes.introspect_node import introspect_node
-from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
-from src.agents.nodes.save_node import save_node
+from src.agents.nodes.metric.coordinator_node import coordinator_node
+from src.agents.nodes.schema.enrich_node import enrich_node
+from src.agents.nodes.schema.introspect_node import introspect_node
+from src.agents.nodes.schema.save_node import save_node
 from src.agents.state import AgentState
 from src.observability import trace_transition
 
@@ -29,7 +29,7 @@ def route_after_save(state: AgentState) -> str:
 def build_graph() -> StateGraph:
     """Build Flow 1 LangGraph pipeline.
 
-    Pipeline: introspect → enrich → metric_suggest → metric_review → save (interrupt_before)
+    Pipeline: introspect → enrich → metric_coordinator → save (interrupt_before)
     When the graph reaches the save node it pauses so external code can set
     ``hitl_approved`` on the state and resume (approve) or leave it False
     (reject → loop back to enrich).
@@ -39,7 +39,7 @@ def build_graph() -> StateGraph:
     # Add nodes
     graph.add_node("introspect", introspect_node)
     graph.add_node("enrich", enrich_node)
-    graph.add_node("metric_coordinator", on_demand_metric_suggest_node)
+    graph.add_node("metric_coordinator", coordinator_node)
     graph.add_node("save", save_node)
 
     # Edges

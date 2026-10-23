@@ -10,7 +10,7 @@ from src.models.metric_review import MetricCandidateReport, MetricReview
 from src.models.schemas import MetricSuggestionItem
 from src.observability import trace_node
 from src.services.metric_dedupe import merge_dedupe
-from src.services.metric_workflow import run_metric_workflow
+from src.agents.workflows.metric_proposal_workflow import run_metric_workflow
 
 
 @trace_node("metric_review")

@@ -14,7 +14,7 @@ from src.models.metric_definition import MetricDefinition
 from src.models.metric_review import MetricReview
 from src.services.metric_context import load_review_schema
 from src.services.metric_dedupe import load_existing_for_dedupe
-from src.services.metric_proposal_generation import check_context_budget
+from src.services.metric_proposal_context import check_context_budget
 from src.services.metric_review import review_metric_draft
 from src.services.metric_review_validation import schema_tables
 
@@ -192,7 +192,7 @@ async def generate_reviewed_metrics(
     db: AsyncSession, db_id: int, user_id: int, state: dict[str, Any]
 ) -> dict[str, Any]:
     """Use the same generation/review pipeline for non-chat API clients."""
-    from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
+    from src.agents.nodes.metric.coordinator_node import coordinator_node
 
-    state = {**state, **await on_demand_metric_suggest_node(state)}
+    state = {**state, **await coordinator_node(state)}
     return await persist_reviewed_state(db, db_id, user_id, state)

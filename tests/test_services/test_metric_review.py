@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from src.services.metric_knowledge import load_metric_knowledge
-from src.services.metric_proposal_generation import prepare_proposal_context
+from src.services.metric_proposal_context import prepare_proposal_context
 from src.services.metric_review_validation import technical_review
 from tests.metric_review_helpers import context, definition, schema
 
@@ -59,7 +59,7 @@ def test_knowledge_keeps_aov_variants_and_no_evaluation_dependencies():
 
 
 def test_oversize_context_is_rejected_without_truncation():
-    with patch("src.services.metric_proposal_generation.get_settings") as settings:
+    with patch("src.services.metric_proposal_context.get_settings") as settings:
         settings.return_value.metric_context_token_budget = 2
         with pytest.raises(ValueError, match="Context"):
             prepare_proposal_context({"user_message": "Tính doanh thu", "enriched_schema": schema()})

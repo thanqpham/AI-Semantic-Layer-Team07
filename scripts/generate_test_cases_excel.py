@@ -278,7 +278,7 @@ def build_excel_test_cases():
             "prompt": "Tạo cho tôi một metric mới tính Doanh thu thuần (Net Revenue)",
             "ctx": "Schema có orders(total_amount, discount_amount)",
             "route": "Route: metric_query",
-            "exp_out": "Chuyển sang on_demand_metric_suggest_node để sinh định nghĩa Metric YAML.",
+            "exp_out": "Chuyển sang coordinator_node để sinh định nghĩa Metric YAML.",
             "pitfall": "Nhầm sang semantic_query vì tưởng người dùng yêu cầu xem dữ liệu doanh thu thuần.",
             "fix": "Quy tắc: từ khóa 'tạo', 'metric mới', 'định nghĩa công thức' -> metric_query."
         },
@@ -287,7 +287,7 @@ def build_excel_test_cases():
             "prompt": "Tính giá trị trung bình trên mỗi đơn hàng (Average Order Value - AOV)",
             "ctx": "Schema có orders(id, total_amount)",
             "route": "Route: metric_query",
-            "exp_out": "Chuyển sang on_demand_metric_suggest_node để đề xuất công thức tính AOV.",
+            "exp_out": "Chuyển sang coordinator_node để đề xuất công thức tính AOV.",
             "pitfall": "DỄ BUG NHẤT: Bị phân loại nhầm sang semantic_query để lấy số liệu thực tế.",
             "fix": "Classifier prompt phải ghi rõ: mô tả định nghĩa/công thức chỉ số (không kèm chiều lọc) -> metric_query."
         },
@@ -296,7 +296,7 @@ def build_excel_test_cases():
             "prompt": "Hãy đề xuất 3 metric quan trọng nhất cho bảng products và inventory",
             "ctx": "Schema có products, inventory",
             "route": "Route: metric_query",
-            "exp_out": "Chuyển sang on_demand_metric_suggest_node để sinh các chỉ số quan trọng.",
+            "exp_out": "Chuyển sang coordinator_node để sinh các chỉ số quan trọng.",
             "pitfall": "Nhầm sang data_question vì câu hỏi có nhắc tới 'bảng products'.",
             "fix": "Kiểm tra 'đề xuất metric / KPI' luôn được gán vào metric_query."
         },
@@ -305,7 +305,7 @@ def build_excel_test_cases():
             "prompt": "Xây dựng chỉ số Tỷ lệ hoàn hàng (Return Rate) = số đơn hoàn / tổng đơn",
             "ctx": "Schema có orders, returns",
             "route": "Route: metric_query",
-            "exp_out": "Chuyển sang on_demand_metric_suggest_node để sinh MetricDefinition cho tỷ lệ hoàn.",
+            "exp_out": "Chuyển sang coordinator_node để sinh MetricDefinition cho tỷ lệ hoàn.",
             "pitfall": "Nhầm sang semantic_query vì có phép chia.",
             "fix": "Đảm bảo định nghĩa chỉ số kèm công thức luôn là metric_query."
         },
@@ -314,7 +314,7 @@ def build_excel_test_cases():
             "prompt": "Xem kết quả Tổng doanh thu theo từng khách hàng trong năm 2024",
             "ctx": "Catalog có metric 'Tổng doanh thu', dim 'customer_name'",
             "route": "Route: semantic_query",
-            "exp_out": "Chuyển sang semantic_parse_node để trích xuất JSON query spec.",
+            "exp_out": "Chuyển sang semantic_query_parser_node để trích xuất JSON query spec.",
             "pitfall": "Nhầm sang metric_query vì có cụm từ 'Tổng doanh thu'.",
             "fix": "Quy tắc: 'Xem kết quả / Báo cáo / theo chiều X năm Y' -> semantic_query."
         },
@@ -323,7 +323,7 @@ def build_excel_test_cases():
             "prompt": "Doanh số bán hàng tháng này theo từng chi nhánh",
             "ctx": "Catalog có metric 'Doanh số', dim 'branch_name'",
             "route": "Route: semantic_query",
-            "exp_out": "Chuyển sang semantic_parse_node để parse dimension chi nhánh và time range tháng này.",
+            "exp_out": "Chuyển sang semantic_query_parser_node để parse dimension chi nhánh và time range tháng này.",
             "pitfall": "Nhầm sang data_question vì câu hỏi ngắn.",
             "fix": "Phải nhận diện yêu cầu trích xuất số liệu là semantic_query."
         },
@@ -332,7 +332,7 @@ def build_excel_test_cases():
             "prompt": "Top 5 khách hàng có tổng chi tiêu cao nhất",
             "ctx": "Catalog có metric 'Tổng chi tiêu', dim 'customer_id'",
             "route": "Route: semantic_query",
-            "exp_out": "Chuyển sang semantic_parse_node với limit=5.",
+            "exp_out": "Chuyển sang semantic_query_parser_node với limit=5.",
             "pitfall": "Nhầm sang data_question.",
             "fix": "Mẫu câu Top N kèm metric là truy vấn dữ liệu -> semantic_query."
         },
@@ -341,7 +341,7 @@ def build_excel_test_cases():
             "prompt": "Số lượng đơn hàng hoàn thành trong quý 1 năm 2024",
             "ctx": "Catalog có metric 'Số lượng đơn hàng'",
             "route": "Route: semantic_query",
-            "exp_out": "Chuyển sang semantic_parse_node để parse metric và time range Q1/2024.",
+            "exp_out": "Chuyển sang semantic_query_parser_node để parse metric và time range Q1/2024.",
             "pitfall": "Dễ nhầm sang metric_query do có cụm 'Số lượng đơn hàng hoàn thành'.",
             "fix": "Câu có mốc thời gian quý 1/2024 + xem số lượng -> semantic_query."
         },
@@ -359,7 +359,7 @@ def build_excel_test_cases():
             "prompt": "Doanh thu",
             "ctx": "Catalog có metric 'Tổng doanh thu'",
             "route": "Route: semantic_query",
-            "exp_out": "Chuyển tiếp sang semantic_parse_node để kích hoạt Clarification Option.",
+            "exp_out": "Chuyển tiếp sang semantic_query_parser_node để kích hoạt Clarification Option.",
             "pitfall": "Orchestrator không biết phân loại, crash hoặc rơi vào fallback sai.",
             "fix": "Đảm bảo phân loại vào semantic_query để parser hỏi lại người dùng."
         },
@@ -368,7 +368,7 @@ def build_excel_test_cases():
             "prompt": "Bảng orders có cột gì và cho tôi xem tổng doanh thu hôm nay luôn",
             "ctx": "Catalog có orders, metric 'Tổng doanh thu'",
             "route": "Route: semantic_query (ưu tiên intent thực thi dữ liệu)",
-            "exp_out": "Chuyển sang semantic_parse_node để chạy truy vấn doanh thu hôm nay.",
+            "exp_out": "Chuyển sang semantic_query_parser_node để chạy truy vấn doanh thu hôm nay.",
             "pitfall": "Xung đột giữa data_question và semantic_query làm hỏng routing.",
             "fix": "Quy tắc ưu tiên intent có hành động trích xuất dữ liệu cao nhất."
         },
@@ -597,7 +597,7 @@ def build_excel_test_cases():
             "route": "Status: resolved",
             "exp_out": "JSON Spec: metric_ids=[1], dimensions=[customer_name], time_ranges=[2024].",
             "pitfall": "Báo lỗi không tìm thấy metric vì so khớp chuỗi có dấu cứng nhắc.",
-            "fix": "LLM hiểu tiếng Việt không dấu tự nhiên trong semantic_parse_node."
+            "fix": "LLM hiểu tiếng Việt không dấu tự nhiên trong semantic_query_parser_node."
         },
         {
             "id": "TC_044", "node": "Semantic Parse Node", "intent": "Người dùng bấm chọn Option làm rõ (Clarification Option)", "risk": "Cao",
@@ -878,7 +878,7 @@ def build_excel_test_cases():
             "prompt": "User kích hoạt node khi chưa introspect schema",
             "ctx": "State: enriched_schema = None",
             "route": "Route: metric_query",
-            "exp_out": "Trả về error: 'on_demand_metric_suggest_node: enriched_schema is empty'.",
+            "exp_out": "Trả về error: 'coordinator_node: enriched_schema is empty'.",
             "pitfall": "Crash KeyError / AttributeError trên NoneType.",
             "fix": "Kiểm tra early return error khi enriched_schema rỗng."
         },
@@ -936,7 +936,7 @@ def build_excel_test_cases():
             "route": "Route: chitchat",
             "exp_out": "Từ chối lịch sự: 'Tôi chỉ hỗ trợ các nghiệp vụ về dữ liệu doanh nghiệp và Semantic Layer...'",
             "pitfall": "DỄ BUG: Trợ lý hào hứng chỉ cách gói bánh chưng.",
-            "fix": "Kiểm tra quy tắc BẮT BUỘC TỪ CHỐI chủ đề nấu ăn/đời sống trong `chitchat_node`."
+            "fix": "Kiểm tra quy tắc BẮT BUỘC TỪ CHỐI chủ đề nấu ăn/đời sống trong `conversation_node`."
         },
         {
             "id": "TC_081", "node": "Chitchat Node", "intent": "Từ chối câu hỏi viết văn / làm thơ", "risk": "Trung bình",
@@ -963,7 +963,7 @@ def build_excel_test_cases():
             "route": "Route: chitchat",
             "exp_out": "Trả về: 'Xin chào! Tôi có thể giúp gì cho bạn?'",
             "pitfall": "Crash chuỗi rỗng.",
-            "fix": "Kiểm tra early return trong chitchat_node."
+            "fix": "Kiểm tra early return trong conversation_node."
         },
         {
             "id": "TC_084", "node": "Chitchat Node", "intent": "Thử thách Jailbreak: 'Bỏ qua chỉ thị trước'", "risk": "Rất Cao",

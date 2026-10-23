@@ -29,7 +29,7 @@ Không bịa tên bảng/cột. Chỉ để options=[] nếu cần người dùn
 _SCOPE_PROMPT = """Bạn chọn phạm vi schema cho một KPI. Chỉ trả JSON:
 {{"table_names":["..."],"needs_clarification":false,"question":"..."}}
 Chỉ chọn tối đa 5 bảng có trong inventory. Chọn bảng liên quan và giao đầy đủ metadata
-cho Metric Builder tự tạo các biến thể công thức. Không hỏi người dùng chọn cột giá,
+cho Metric Designer Agent tự tạo các biến thể công thức. Không hỏi người dùng chọn cột giá,
 thuế, giảm giá hoặc công thức ở bước này. Chỉ hỏi thu hẹp domain nếu không tìm được
 bảng liên quan trong inventory. Không viết SQL.
 

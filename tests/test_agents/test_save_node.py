@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.agents.nodes.save_node import _convert_column
+from src.agents.nodes.schema.save_node import _convert_column
 from src.models.schema_metadata import SchemaDialect
 
 

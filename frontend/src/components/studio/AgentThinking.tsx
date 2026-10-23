@@ -7,9 +7,9 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
 
 const AGENT_NAMES: Record<string, string> = {
-  orchestrator: 'Orchestrator', chitchat: 'Chitchat', data_assistant: 'Data Assistant',
-  metric_coordinator: 'Điều phối metric', metric_suggest: 'Metric Designer', metric_validate: 'Kiểm tra kỹ thuật',
-  metric_review: 'Data Lead Reviewer AI', metric_repair: 'Metric Designer sửa', context: 'Chuẩn bị schema', semantic_parse: 'Semantic Parse',
+  orchestrator: 'Orchestrator Agent', chitchat: 'Conversation Agent', data_assistant: 'Data Assistant Agent',
+  metric_coordinator: 'Metric Workflow Coordinator', metric_suggest: 'Metric Designer Agent', metric_validate: 'Kiểm tra kỹ thuật',
+  metric_review: 'Metric Reviewer Agent', metric_repair: 'Metric Designer Agent', context: 'Chuẩn bị schema', semantic_parse: 'Semantic Query Parser Agent',
 };
 
 export function TraceDuration({ milliseconds, running = false }: { milliseconds: number; running?: boolean }) {

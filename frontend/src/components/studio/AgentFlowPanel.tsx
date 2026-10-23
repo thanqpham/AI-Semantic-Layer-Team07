@@ -10,17 +10,17 @@ import { TraceDuration } from './AgentThinking';
 
 const NODES = [
   { id: 'request', name: 'Yêu cầu', en: 'Request', stage: 0 },
-  { id: 'orchestrator', name: 'Orchestrator', en: 'Orchestrator', stage: 1, agent: true },
-  { id: 'chitchat', name: 'Chitchat', en: 'Chitchat', stage: 2, agent: true },
-  { id: 'data_assistant', name: 'Data Assistant', en: 'Data Assistant', stage: 2, agent: true },
-  { id: 'metric_coordinator', name: 'Điều phối metric', en: 'Metric coordination', stage: 2 },
-  { id: 'metric_suggest', name: 'Metric Builder', en: 'Metric Builder', stage: 3, agent: true },
+  { id: 'orchestrator', name: 'Orchestrator Agent', en: 'Orchestrator Agent', stage: 1, agent: true },
+  { id: 'chitchat', name: 'Conversation Agent', en: 'Conversation Agent', stage: 2, agent: true },
+  { id: 'data_assistant', name: 'Data Assistant Agent', en: 'Data Assistant Agent', stage: 2, agent: true },
+  { id: 'metric_coordinator', name: 'Metric Workflow Coordinator', en: 'Metric Workflow Coordinator', stage: 2 },
+  { id: 'metric_suggest', name: 'Metric Designer Agent', en: 'Metric Designer Agent', stage: 3, agent: true },
   { id: 'metric_validate', name: 'Kiểm tra kỹ thuật', en: 'Technical validation', stage: 4 },
   { id: 'metric_provider_wait', name: 'Đợi thử lại', en: 'Wait to retry', stage: 5 },
-  { id: 'metric_review', name: 'Thẩm định KPI', en: 'Data Lead Reviewer', stage: 5, agent: true },
+  { id: 'metric_review', name: 'Metric Reviewer Agent', en: 'Metric Reviewer Agent', stage: 5, agent: true },
   { id: 'metric_review_decision', name: 'Đánh giá nghiệp vụ', en: 'Business review', stage: 6 },
   { id: 'metric_repair', name: 'Sửa theo phản hồi', en: 'Metric repair', stage: 6 },
-  { id: 'semantic_parse', name: 'Semantic Parse', en: 'Semantic Parse', stage: 2, agent: true },
+  { id: 'semantic_parse', name: 'Semantic Query Parser Agent', en: 'Semantic Query Parser Agent', stage: 2, agent: true },
   { id: 'context', name: 'Chuẩn bị ngữ cảnh', en: 'Prepare context', stage: 3 },
   { id: 'dedupe', name: 'Kiểm tra trùng lặp', en: 'Check duplicates', stage: 4 },
   { id: 'metric_generation', name: 'Sinh metric', en: 'Generate metric', stage: 5 },
@@ -212,13 +212,13 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
           const position = graphPositions.get(node.id)!;
           const style = { left: `${position.x / graphWidth * 100}%`, top: `${position.y / graphHeight * 100}%` };
           const name = t(node.en, node.name);
-          if (node.agent) return <div key={node.id} className="absolute flex w-[64px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[9px] leading-tight" style={style}>
+          if (node.agent) return <div key={node.id} className="absolute flex w-[84px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[9px] leading-tight" style={style}>
             <button type="button" aria-label={`${name} · ${label}`} aria-pressed={selectedNode === node.id}
               onClick={() => setSelected(node.id)}
               className={cn('flex h-10 w-10 items-center justify-center rounded-full border-2 bg-card shadow-xs focus-visible:outline-2 focus-visible:outline-ring', statusClass, selectedClass)}>
               <Bot aria-hidden className="h-4 w-4" />
             </button>
-            <span className="mt-1 line-clamp-2 font-medium">{name}</span>
+            <span className="mt-1 line-clamp-3 font-medium">{name}</span>
             <span>{status === 'completed' ? '✓' : status === 'error' ? '!' : '◌'} {status === 'running' ? t('Running', 'Đang chạy') : label}</span>
           </div>;
           return <button type="button" key={node.id} aria-pressed={selectedNode === node.id}

@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.agents.nodes.enrich_node import _title_case, enrich_node
+from src.agents.nodes.schema.enrich_node import enrich_node
+from src.agents.roles.schema_enrichment_agent import _title_case
 
 
 @pytest.fixture
@@ -102,10 +103,10 @@ async def test_enrich_node_success(sample_raw_schema_state: dict) -> None:
     }
 
     with (
-        patch("src.agents.nodes.enrich_node.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
-        patch("src.agents.nodes.enrich_node.cluster_tables", return_value=mock_clusters),
+        patch("src.agents.roles.schema_enrichment_agent.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
+        patch("src.agents.roles.schema_enrichment_agent.cluster_tables", return_value=mock_clusters),
         patch(
-            "src.agents.nodes.enrich_node.enrich_clusters_parallel", new_callable=AsyncMock, return_value=mock_enriched
+            "src.agents.roles.schema_enrichment_agent.enrich_clusters_parallel", new_callable=AsyncMock, return_value=mock_enriched
         ),
     ):
         result = await enrich_node(sample_raw_schema_state)
@@ -124,9 +125,9 @@ async def test_enrich_node_returns_global_glossary(sample_raw_schema_state: dict
     mock_glossary = {"orders": {"business_name": "Đơn hàng", "description": "Mô tả"}}
 
     with (
-        patch("src.agents.nodes.enrich_node.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
-        patch("src.agents.nodes.enrich_node.cluster_tables", return_value=[]),
-        patch("src.agents.nodes.enrich_node.enrich_clusters_parallel", new_callable=AsyncMock, return_value={}),
+        patch("src.agents.roles.schema_enrichment_agent.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
+        patch("src.agents.roles.schema_enrichment_agent.cluster_tables", return_value=[]),
+        patch("src.agents.roles.schema_enrichment_agent.enrich_clusters_parallel", new_callable=AsyncMock, return_value={}),
     ):
         result = await enrich_node(sample_raw_schema_state)
 
@@ -144,9 +145,9 @@ async def test_enrich_node_fallback_to_glossary(sample_raw_schema_state: dict) -
     mock_glossary = {"orders": {"business_name": "Đơn hàng từ glossary", "description": "Mô tả từ glossary"}}
 
     with (
-        patch("src.agents.nodes.enrich_node.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
-        patch("src.agents.nodes.enrich_node.cluster_tables", return_value=[]),
-        patch("src.agents.nodes.enrich_node.enrich_clusters_parallel", new_callable=AsyncMock, return_value={}),
+        patch("src.agents.roles.schema_enrichment_agent.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
+        patch("src.agents.roles.schema_enrichment_agent.cluster_tables", return_value=[]),
+        patch("src.agents.roles.schema_enrichment_agent.enrich_clusters_parallel", new_callable=AsyncMock, return_value={}),
     ):
         result = await enrich_node(sample_raw_schema_state)
 
@@ -174,9 +175,9 @@ async def test_enrich_node_fallback_to_title_case() -> None:
     }
 
     with (
-        patch("src.agents.nodes.enrich_node.execute_pass1", new_callable=AsyncMock, return_value={}),
-        patch("src.agents.nodes.enrich_node.cluster_tables", return_value=[]),
-        patch("src.agents.nodes.enrich_node.enrich_clusters_parallel", new_callable=AsyncMock, return_value={}),
+        patch("src.agents.roles.schema_enrichment_agent.execute_pass1", new_callable=AsyncMock, return_value={}),
+        patch("src.agents.roles.schema_enrichment_agent.cluster_tables", return_value=[]),
+        patch("src.agents.roles.schema_enrichment_agent.enrich_clusters_parallel", new_callable=AsyncMock, return_value={}),
     ):
         result = await enrich_node(state)
 
@@ -211,10 +212,10 @@ async def test_enrich_node_partial_pass2_coverage(multi_table_state: dict) -> No
     }
 
     with (
-        patch("src.agents.nodes.enrich_node.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
-        patch("src.agents.nodes.enrich_node.cluster_tables", return_value=[]),
+        patch("src.agents.roles.schema_enrichment_agent.execute_pass1", new_callable=AsyncMock, return_value=mock_glossary),
+        patch("src.agents.roles.schema_enrichment_agent.cluster_tables", return_value=[]),
         patch(
-            "src.agents.nodes.enrich_node.enrich_clusters_parallel", new_callable=AsyncMock, return_value=mock_enriched
+            "src.agents.roles.schema_enrichment_agent.enrich_clusters_parallel", new_callable=AsyncMock, return_value=mock_enriched
         ),
     ):
         result = await enrich_node(multi_table_state)
@@ -235,7 +236,7 @@ async def test_enrich_node_partial_pass2_coverage(multi_table_state: dict) -> No
 @pytest.mark.asyncio
 async def test_enrich_node_exception_returns_error(sample_raw_schema_state: dict) -> None:
     with patch(
-        "src.agents.nodes.enrich_node.execute_pass1", new_callable=AsyncMock, side_effect=RuntimeError("LLM down")
+        "src.agents.roles.schema_enrichment_agent.execute_pass1", new_callable=AsyncMock, side_effect=RuntimeError("LLM down")
     ):
         result = await enrich_node(sample_raw_schema_state)
 

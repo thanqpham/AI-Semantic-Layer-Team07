@@ -49,7 +49,7 @@ describe('metric review evidence and gates', () => {
       sender: 'coordinator', recipient: 'metric_builder', intent: 'request', attempt: 0 }] }} />);
     fireEvent.click(screen.getByText('AI đã thẩm định — chờ người duyệt'));
     fireEvent.click(screen.getByText('Lịch sử giao việc giữa các agent'));
-    expect(screen.getByText(/Coordinator → Metric Builder: Giao việc/)).toBeInTheDocument();
+    expect(screen.getByText(/Metric Workflow Coordinator → Metric Designer Agent: Giao việc/)).toBeInTheDocument();
   });
   it('shows original requirements, evidence, curated links and before/after definitions', () => {
     render(<MetricReviewPanel definition={definition} review={{ ...passingReview, revised: true, repair_count: 1,

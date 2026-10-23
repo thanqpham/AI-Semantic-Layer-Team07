@@ -37,11 +37,11 @@ async def test_generate_persists_report_not_catalog_and_save_is_still_pending(cl
     with (
         patch("src.api.routes.build_metric_context", AsyncMock(return_value=context)),
         patch(
-            "src.services.metric_workflow.generate_metric_drafts",
+            "src.agents.workflows.metric_proposal_workflow.generate_metric_drafts",
             AsyncMock(return_value=[item.model_dump(mode="json") for item in batch.candidates]),
         ),
         patch(
-            "src.services.metric_workflow.review_metric_batch",
+            "src.agents.workflows.metric_proposal_workflow.review_metric_batch",
             reviewer_mock(),
         ),
     ):
@@ -101,8 +101,8 @@ async def test_generate_average_variants_without_scope_column_clarification(clie
             "src.services.metric_context.invoke_metric_json",
             new=scope_mock({"table_names": ["orders"], "needs_clarification": True, "question": "Chọn cột giá nào?"}),
         ),
-        patch("src.services.metric_workflow.generate_metric_drafts", AsyncMock(return_value=variants)),
-        patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()) as review,
+        patch("src.agents.workflows.metric_proposal_workflow.generate_metric_drafts", AsyncMock(return_value=variants)),
+        patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()) as review,
     ):
         response = await client.post(
             f"/api/v1/semantic/{db_id}/metrics/generate",
@@ -136,11 +136,11 @@ async def test_generate_discovery_returns_supported_and_blocked_without_inventin
     )
     with (
         patch(
-            "src.services.metric_workflow.generate_metric_drafts",
+            "src.agents.workflows.metric_proposal_workflow.generate_metric_drafts",
             AsyncMock(return_value=[item.model_dump(mode="json") for item in batch.candidates]),
         ),
         patch(
-            "src.services.metric_workflow.review_metric_batch",
+            "src.agents.workflows.metric_proposal_workflow.review_metric_batch",
             reviewer_mock(),
         ),
     ):
@@ -158,7 +158,7 @@ async def test_generate_discovery_returns_supported_and_blocked_without_inventin
 async def test_re_review_endpoint_rejects_forged_scope_and_leaves_original_intact(client, async_session, setup_review):
     db_id, original, headers = setup_review
     with patch(
-        "src.services.metric_workflow.review_metric_batch",
+        "src.agents.workflows.metric_proposal_workflow.review_metric_batch",
         reviewer_mock(),
     ):
         response = await client.post(
@@ -198,9 +198,9 @@ async def test_partial_generate_returns_valid_sibling_and_typed_execution_error(
         return [{"candidate_id": i["candidate_id"], "name": "Broken", "definition": None} for i in items]
 
     with (
-        patch("src.services.metric_workflow.generate_metric_drafts", build),
-        patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()),
-        patch("src.services.metric_workflow.repair_metric_drafts", AsyncMock(side_effect=repair)),
+        patch("src.agents.workflows.metric_proposal_workflow.generate_metric_drafts", build),
+        patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()),
+        patch("src.agents.nodes.metric.repair_node.repair_metric_drafts", AsyncMock(side_effect=repair)),
     ):
         response = await client.post(
             f"/api/v1/semantic/{db_id}/metrics/generate",
@@ -225,14 +225,14 @@ async def mocked_review_pipeline(async_session, setup_review):
     with (
         patch("src.api.routes.build_metric_context", AsyncMock(return_value=metadata)),
         patch(
-            "src.agents.nodes.orchestrator_node.orchestrator_node", AsyncMock(return_value={"intent": "metric_query"})
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node", AsyncMock(return_value={"intent": "metric_query"})
         ),
         patch(
-            "src.services.metric_workflow.generate_metric_drafts",
+            "src.agents.workflows.metric_proposal_workflow.generate_metric_drafts",
             AsyncMock(return_value=[item.model_dump(mode="json") for item in batch.candidates]),
         ) as generate,
         patch(
-            "src.services.metric_workflow.review_metric_batch",
+            "src.agents.workflows.metric_proposal_workflow.review_metric_batch",
             reviewer_mock(),
         ) as review,
     ):
@@ -265,7 +265,7 @@ async def test_partial_chat_status_survives_replay_and_history(client, setup_rev
         return [{"candidate_id": i["candidate_id"], "name": "Broken", "definition": None} for i in items]
 
     body = {"message": "Khám phá KPI", "proposal_mode": "discovery", "client_message_id": "partial-replay"}
-    with patch("src.services.metric_workflow.repair_metric_drafts", AsyncMock(side_effect=repair)):
+    with patch("src.agents.nodes.metric.repair_node.repair_metric_drafts", AsyncMock(side_effect=repair)):
         response = await client.post(f"/api/v1/semantic/{db_id}/chat", headers=headers, json=body)
         assert response.status_code == 200, response.text
         replay = await client.post(f"/api/v1/semantic/{db_id}/chat", headers=headers, json=body)

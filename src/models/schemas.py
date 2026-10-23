@@ -934,7 +934,7 @@ class ChatSemanticQueryResult(BaseModel):
 
 
 class SemanticQueryInterpretation(BaseModel):
-    """Semantic parse interpretation emitted by semantic_parse_node."""
+    """Semantic parse interpretation emitted by semantic_query_parser_node."""
 
     status: Literal["resolved", "needs_clarification"]
     spec: SemanticQuerySpec | None = None

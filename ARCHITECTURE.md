@@ -21,7 +21,7 @@ Hệ thống **AI Semantic Layer Agent** là nền tảng quản trị và khai 
   - **Read-Only Execution:** Thực thi an toàn trên Live Database và trả về bảng kết quả dạng JSON.
 
 - **Conversational & Interactive Layer:**
-  - **Chat Orchestrator Graph:** Tự động phân loại Intent giữa trò chuyện chung (`chitchat_node`) và yêu cầu định nghĩa chỉ số nghiệp vụ (`on_demand_metric_suggest_node`).
+  - **Chat Orchestrator Graph:** Tự động phân loại Intent giữa trò chuyện chung (`conversation_node`) và yêu cầu định nghĩa chỉ số nghiệp vụ (`coordinator_node`).
   - **Query Clarifier Wizard Graph:** Hỗ trợ người dùng làm rõ các câu truy vấn phức tạp hoặc còn mơ hồ qua từng bước gợi ý thông minh (`wizard_init` $\rightarrow$ `wizard_step` $\rightarrow$ `resolve`).
 
 ---
@@ -166,12 +166,12 @@ flowchart TD
 
 ### 3.3. Conversational Multi-Agent & Query Clarifier Graphs
 
-#### A. Chat Orchestrator Graph (`src/agents/chat_graph.py`)
+#### A. Chat Orchestrator Graph (`src/agents/graphs/chat_graph.py`)
 ```mermaid
 flowchart LR
     MSG(["Tin nhắn của người dùng"]) --> ORCH["orchestrator_node\n(Phân loại ý định Intent)"]
-    ORCH -->|"chitchat"| CHIT["chitchat_node\n(Trả lời câu hỏi tổng quan / chào hỏi)"]
-    ORCH -->|"metric_query"| METRIC["on_demand_metric_suggest_node\n(Gợi ý MetricDefinition v2 & SQL)"]
+    ORCH -->|"chitchat"| CHIT["conversation_node\n(Trả lời câu hỏi tổng quan / chào hỏi)"]
+    ORCH -->|"metric_query"| METRIC["coordinator_node\n(Gợi ý MetricDefinition v2 & SQL)"]
     CHIT --> FIN(["Kết thúc lượt hội thoại"])
     METRIC --> FIN
 ```

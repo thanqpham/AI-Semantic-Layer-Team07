@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.nodes.enrich_node import enrich_node
+from src.agents.nodes.schema.enrich_node import enrich_node
 from src.agents.state import AgentState
 from src.models.raw_schema import (
     ColumnMetadata,
@@ -650,12 +650,12 @@ class TestHITLRoundtrip:
 
         mock_save_fn = AsyncMock(return_value={"tables": [], "relationships": []})
 
-        with patch("src.agents.nodes.save_node.raw_schema_to_canonical", return_value=mock_canonical):
-            with patch("src.agents.nodes.save_node.get_db_session", return_value=async_iter([mock_db_session])):
-                with patch("src.agents.nodes.save_node.enrich_and_save_canonical_schema", mock_save_fn):
-                    with patch("src.agents.nodes.save_node._save_approved_metrics", new_callable=AsyncMock):
+        with patch("src.agents.nodes.schema.save_node.raw_schema_to_canonical", return_value=mock_canonical):
+            with patch("src.agents.nodes.schema.save_node.get_db_session", return_value=async_iter([mock_db_session])):
+                with patch("src.agents.nodes.schema.save_node.enrich_and_save_canonical_schema", mock_save_fn):
+                    with patch("src.agents.nodes.schema.save_node._save_approved_metrics", new_callable=AsyncMock):
                         with patch("src.services.llm.get_llm", return_value=tracking_llm):
-                            from src.agents.nodes.save_node import save_node
+                            from src.agents.nodes.schema.save_node import save_node
 
                             save_result = await save_node(save_state)
 

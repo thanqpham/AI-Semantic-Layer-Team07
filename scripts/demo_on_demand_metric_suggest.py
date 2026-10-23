@@ -1,4 +1,4 @@
-"""Demo script to execute on_demand_metric_suggest_node and display user-facing Business Metrics."""
+"""Demo script to execute coordinator_node and display user-facing Business Metrics."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from pathlib import Path
 # Ensure root directory is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.agents.nodes.metric_review_node import metric_review_node
-from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
+from src.agents.nodes.metric.metric_review_node import metric_review_node
+from src.agents.nodes.metric.coordinator_node import coordinator_node
 
 # E-Commerce Canonical Schema Metadata Example
 SAMPLE_CANONICAL_SCHEMA = {
@@ -88,7 +88,7 @@ SAMPLE_CANONICAL_SCHEMA = {
 async def main() -> None:
     """Display reviewed, unsaved suggestions and blocked KPI decisions."""
     state = {"enriched_schema": SAMPLE_CANONICAL_SCHEMA, "proposal_mode": "discovery", "can_generate_metrics": True}
-    result = {**state, **await on_demand_metric_suggest_node(state)}
+    result = {**state, **await coordinator_node(state)}
     result.update(await metric_review_node(result))
     if "error" in result:
         print(f"\n❌ Lỗi: {result['error']}")

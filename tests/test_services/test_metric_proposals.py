@@ -84,7 +84,7 @@ async def test_re_review_creates_new_snapshot_and_keeps_original_requirements(as
     original_definition = proposal.final_definition
     edited = MetricDefinition.model_validate(definition("amount * 2"))
     with patch(
-        "src.services.metric_workflow.review_metric_batch",
+        "src.agents.workflows.metric_proposal_workflow.review_metric_batch",
         reviewer_mock(),
     ):
         updated = await re_review_proposal(async_session, proposal, 1, edited)
@@ -106,7 +106,7 @@ async def test_re_review_preserves_variant_identity_and_its_source(async_session
             "criteria": {"order_status": "all_statuses"},
         },
     }
-    with patch("src.services.metric_workflow.review_metric_batch", reviewer_mock()):
+    with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
         updated = await re_review_proposal(async_session, proposal, 1, MetricDefinition.model_validate(definition()))
     assert updated.parent_id == proposal.id
     assert updated.review["variant_id"] == "merchandise_net_sales"

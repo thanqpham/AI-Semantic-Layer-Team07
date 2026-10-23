@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.nodes.orchestrator_node import orchestrator_node
+from src.agents.nodes.chat.orchestrator_node import orchestrator_node
 
 
 def _response(content: str) -> MagicMock:
@@ -19,7 +19,7 @@ def _response(content: str) -> MagicMock:
 @pytest.mark.asyncio
 async def test_classifies_metric_request_for_direct_generation() -> None:
     """Creating a KPI must not be routed through data assistance."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = _response("metric_query")
         mock_get_llm.return_value = llm
@@ -32,7 +32,7 @@ async def test_classifies_metric_request_for_direct_generation() -> None:
 @pytest.mark.asyncio
 async def test_metric_action_label_cannot_be_classified_as_out_of_scope() -> None:
     """A clarification action label remains a metric request if selection metadata is lost."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = _response("out_of_scope")
         mock_get_llm.return_value = llm
@@ -48,7 +48,7 @@ async def test_metric_action_label_cannot_be_classified_as_out_of_scope() -> Non
 @pytest.mark.asyncio
 async def test_classifies_metric_calculation_prompt() -> None:
     """Computing or defining a metric KPI formula routes to metric_query."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = _response("metric_query")
         mock_get_llm.return_value = llm
@@ -63,7 +63,7 @@ async def test_classifies_metric_calculation_prompt() -> None:
 @pytest.mark.asyncio
 async def test_classifies_semantic_query_request() -> None:
     """Asking for live metric numbers routes to semantic_query."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = _response("semantic_query")
         mock_get_llm.return_value = llm
@@ -76,7 +76,7 @@ async def test_classifies_semantic_query_request() -> None:
 @pytest.mark.asyncio
 async def test_classifies_schema_request_for_data_assistant() -> None:
     """Schema exploration remains on the read-only guidance flow."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = _response("data_question")
         mock_get_llm.return_value = llm
@@ -89,7 +89,7 @@ async def test_classifies_schema_request_for_data_assistant() -> None:
 @pytest.mark.asyncio
 async def test_keeps_preclassified_data_intent_without_another_llm_call() -> None:
     """The graph must preserve the route selected before context construction."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         result = await orchestrator_node({"user_message": "Các trường thời gian?", "intent": "data_question"})
 
     assert result["intent"] == "data_question"
@@ -99,7 +99,7 @@ async def test_keeps_preclassified_data_intent_without_another_llm_call() -> Non
 @pytest.mark.asyncio
 async def test_invalid_classifier_response_falls_back_to_data_assistant() -> None:
     """An unknown classifier value cannot invoke a metric generator."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = _response("semantic_question")
         mock_get_llm.return_value = llm
@@ -112,7 +112,7 @@ async def test_invalid_classifier_response_falls_back_to_data_assistant() -> Non
 @pytest.mark.asyncio
 async def test_classifier_failure_keeps_metric_creation_available() -> None:
     """A failed classifier does not reintroduce the old safe fallback."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.side_effect = RuntimeError("timeout")
         mock_get_llm.return_value = llm
@@ -124,7 +124,7 @@ async def test_classifier_failure_keeps_metric_creation_available() -> None:
 
 @pytest.mark.asyncio
 async def test_classifier_provider_failure_stops_before_other_agent_calls() -> None:
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.side_effect = RuntimeError("provider unavailable")
         mock_get_llm.return_value = llm
@@ -138,7 +138,7 @@ async def test_classifier_provider_failure_stops_before_other_agent_calls() -> N
 @pytest.mark.asyncio
 async def test_out_of_scope_returns_response() -> None:
     """Out of scope classification attaches standardized response message."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = _response("out_of_scope")
         mock_get_llm.return_value = llm
@@ -152,7 +152,7 @@ async def test_out_of_scope_returns_response() -> None:
 @pytest.mark.asyncio
 async def test_empty_or_whitespace_message_returns_prompt_hint() -> None:
     """Empty or whitespace input does not call LLM and returns prompt hint."""
-    with patch("src.agents.nodes.orchestrator_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
         result = await orchestrator_node({"user_message": "   \n\t  "})
 
     assert result["intent"] == "chitchat"

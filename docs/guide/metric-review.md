@@ -1,15 +1,15 @@
 # Thẩm định metric AI trước HITL
 
 Luồng hoạt động: chuẩn bị context → sinh đề xuất → kiểm tra kỹ thuật →
-Metric Review Agent → tối đa một lượt sửa và kiểm tra lại → người duyệt.
+Metric Reviewer Agent → tối đa một lượt sửa và kiểm tra lại → người duyệt.
 Reviewer gọi model riêng với cùng cấu hình `get_llm(role="metric")`, temperature 0;
 đây chưa phải một model Judge độc lập.
 
-## Coordinator và giao tiếp nội bộ
+## Metric Workflow Coordinator và giao tiếp nội bộ
 
-LangGraph điều phối Metric Designer → kiểm tra kỹ thuật bằng code →
-Data Lead Reviewer AI. Đọc schema và Coordinator là các bước backend, không phải agent độc lập. Khi cần sửa, Coordinator
-chỉ giao lại các KPI lỗi, tối đa một lượt. Reviewer trả JSON hỏng thì chỉ gọi lại
+LangGraph điều phối Metric Designer Agent → kiểm tra kỹ thuật bằng code →
+Metric Reviewer Agent. Đọc schema và Metric Workflow Coordinator là các bước backend, không phải agent độc lập. Khi cần sửa, Metric Workflow Coordinator
+chỉ giao lại các KPI lỗi, tối đa một lượt. Metric Reviewer Agent trả JSON hỏng thì chỉ gọi lại
 Reviewer; không sinh lại các định nghĩa đã hợp lệ.
 
 Builder phải trả `MetricDefinition` đầy đủ cho trạng thái `ready`. Mô tả công thức
@@ -54,7 +54,7 @@ trong ngân sách context. Các bảng đã chọn giữ nguyên đầy đủ c�
 giá trị khai báo và quan hệ; không cắt bớt điều kiện để vừa prompt. Phạm vi đã chọn
 được ghi trong context báo cáo, không đại diện cho mọi KPI có thể có của toàn database.
 Bước chọn phạm vi chỉ chọn bảng, không hỏi người dùng chọn cột giá hay công thức AOV;
-Metric Designer tự tạo các biến thể có tiêu chí riêng từ metadata đã nạp.
+Metric Designer Agent tự tạo các biến thể có tiêu chí riêng từ metadata đã nạp.
 AOV tính bằng tỷ số giữa hai phép tổng hợp vẫn chưa hỗ trợ. Khi metadata xác nhận
 một dòng cho mỗi đơn và cột giá không NULL, `AVG` trên giá trị mỗi đơn là biến thể
 có thể kiểm tra và thẩm định. Biên lợi nhuận và tỷ lệ chuyển đổi tổng hợp vẫn chưa

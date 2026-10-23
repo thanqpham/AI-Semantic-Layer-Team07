@@ -11,8 +11,8 @@ const LABELS: Record<MetricReview['status'], string> = {
   error: 'Thẩm định chưa hoàn tất',
 };
 
-const ROLES: Record<string, string> = { coordinator: 'Coordinator', schema_analyst: 'Schema Analyst',
-  metric_builder: 'Metric Builder', technical_validator: 'Kiểm tra kỹ thuật', data_lead_reviewer: 'Data Lead Reviewer' };
+const ROLES: Record<string, string> = { coordinator: 'Metric Workflow Coordinator', schema_analyst: 'Schema Analyst',
+  metric_builder: 'Metric Designer Agent', technical_validator: 'Kiểm tra kỹ thuật', data_lead_reviewer: 'Metric Reviewer Agent' };
 const INTENTS: Record<string, string> = { request: 'Giao việc', result: 'Trả kết quả', revision_request: 'Yêu cầu sửa',
   clarification: 'Cần làm rõ', failure: 'Báo lỗi' };
 const CRITERIA: Record<string, string> = { tax_basis: 'Cơ sở thuế', refund_policy: 'Hoàn tiền',

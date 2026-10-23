@@ -9,7 +9,7 @@ from src.models.db import SemanticColumnModel, SemanticTableModel
 from src.models.metric_definition import MetricDefinition
 from src.models.metric_review import MetricScopeSelection
 from src.services.metric_context import load_review_schema
-from src.services.metric_proposal_generation import prepare_proposal_context
+from src.services.metric_proposal_context import prepare_proposal_context
 from src.services.metric_proposals import persist_proposal
 
 

@@ -22,10 +22,22 @@ async def enrich_node(state: AgentState) -> dict:
 
 | Node | File | Responsibility |
 |------|------|---------------|
-| `introspect_node` | `src/agents/nodes/introspect_node.py` | SQLAlchemy Inspector → raw_schema |
-| `enrich_node` | `src/agents/nodes/enrich_node.py` | LLM → business_name + description |
-| `on_demand_metric_suggest_node` | `src/agents/nodes/on_demand_metric_suggest_node.py` | LLM → Business Metrics (On-demand / Optional) |
-| `save_node` | `src/agents/nodes/save_node.py` | Persist to Metadata Store |
+| `introspect_node` | `src/agents/nodes/schema/introspect_node.py` | SQLAlchemy Inspector → raw_schema |
+| `enrich_node` | `src/agents/nodes/schema/enrich_node.py` | Adapts Schema Enrichment Agent output |
+| `coordinator_node` | `src/agents/nodes/metric/coordinator_node.py` | Prepares context and invokes the metric proposal workflow |
+| `save_node` | `src/agents/nodes/schema/save_node.py` | Persist to Metadata Store |
+
+Agent roles live in `src/agents/roles/`; graph state adapters live in `src/agents/nodes/`.
+Multi-step metric coordination lives in `src/agents/workflows/metric_proposal_workflow.py`.
+
+### Metric Proposal Workflow Nodes
+
+| Workflow step | File | Responsibility |
+|---|---|---|
+| `validate` | `src/agents/nodes/metric/validate_node.py` | Validate the builder contract and technical definition |
+| `repair` | `src/agents/nodes/metric/repair_node.py` | Repair selected candidates once, then return them to validation |
+
+The workflow module owns graph edges and routing; these node modules own the step logic.
 
 ### Node Best Practices
 

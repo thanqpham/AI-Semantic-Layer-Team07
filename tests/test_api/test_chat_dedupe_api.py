@@ -33,7 +33,7 @@ def chat_session_mocks():
         patch("src.api.routes.save_chat_message", new_callable=AsyncMock) as mock_save,
         patch("src.api.routes.get_chat_session_with_messages", new_callable=AsyncMock) as mock_refresh,
         patch("src.api.routes.build_metric_context", new_callable=AsyncMock) as mock_context,
-        patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock) as mock_orch,
+        patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", new_callable=AsyncMock) as mock_orch,
     ):
         mock_can.return_value = True
         mock_resolve.return_value = session
@@ -137,7 +137,7 @@ async def test_scope_selection_continues_metric_generation() -> None:
 
 @pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_returns_duplicates(
     mock_agent: AsyncMock,
     mock_load: AsyncMock,
@@ -169,7 +169,7 @@ async def test_chat_returns_duplicates(
 
 @pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_loads_existing_for_numeric_db(
     mock_agent: AsyncMock,
     mock_load: AsyncMock,
@@ -192,7 +192,7 @@ async def test_chat_loads_existing_for_numeric_db(
 
 @pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_dedupe_unavailable_still_200(
     mock_agent: AsyncMock,
     mock_load: AsyncMock,

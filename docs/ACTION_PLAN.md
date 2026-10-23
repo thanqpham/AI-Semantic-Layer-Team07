@@ -17,8 +17,8 @@
 - [x] **Task 1.7:** Triển khai hệ thống xác thực JWT, Bcrypt, Google OAuth và phân quyền RBAC (`src/api/auth.py`).
 
 ### 🟢 EPIC 2: Multi-Agent Conversational AI & Clarifier
-- [x] **Task 2.1:** Xây dựng LangGraph StateGraph Flow 1 chính với HITL Interrupt (`src/agents/graph.py`).
-- [x] **Task 2.2:** Xây dựng Chat Orchestrator Multi-Agent Graph điều phối `chitchat` vs `metric_suggest` (`src/agents/chat_graph.py`).
+- [x] **Task 2.1:** Xây dựng LangGraph StateGraph Flow 1 chính với HITL Interrupt (`src/agents/graphs/semantic_layer_graph.py`).
+- [x] **Task 2.2:** Xây dựng Chat Orchestrator Multi-Agent Graph điều phối `chitchat` vs `metric_suggest` (`src/agents/graphs/chat_graph.py`).
 - [x] **Task 2.3:** Xây dựng Query Clarifier Wizard Graph hỏi đáp làm rõ câu truy vấn từng bước (`src/agents/query_clarifier/graph.py`).
 - [x] **Task 2.4:** Đăng ký đầy đủ 25+ REST API endpoints trong `src/api/routes.py` và `src/api/query_clarify_routes.py`.
 

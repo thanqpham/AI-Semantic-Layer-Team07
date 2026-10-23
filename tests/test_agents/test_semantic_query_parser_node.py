@@ -1,4 +1,4 @@
-"""Unit tests for semantic_parse_node."""
+"""Unit tests for semantic_query_parser_node."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.agents.nodes.semantic_parse_node import semantic_parse_node
+from src.agents.nodes.chat.semantic_query_parser_node import semantic_query_parser_node
 
 
 @pytest.fixture
@@ -65,8 +65,8 @@ async def test_empty_catalog_returns_needs_clarification() -> None:
         "user_message": "Tổng doanh thu 2024",
         "parser_catalog": {"metrics": []},
     }
-    with patch("src.agents.nodes.semantic_parse_node.get_llm") as mock_get_llm:
-        result = await semantic_parse_node(state)
+    with patch("src.agents.roles.semantic_query_parser_agent.get_llm") as mock_get_llm:
+        result = await semantic_query_parser_node(state)
         mock_get_llm.assert_not_called()
 
     assert result["intent"] == "semantic_query"
@@ -99,9 +99,9 @@ async def test_resolved_query_mapping(sample_catalog: dict) -> None:
         "parser_catalog": sample_catalog,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "resolved"
@@ -128,9 +128,9 @@ async def test_unknown_metric_id_falls_back_to_clarification(sample_catalog: dic
         "parser_catalog": sample_catalog,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "needs_clarification"
@@ -171,9 +171,9 @@ async def test_needs_clarification_with_options(sample_catalog: dict) -> None:
         "parser_catalog": sample_catalog,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "needs_clarification"
@@ -190,9 +190,9 @@ async def test_llm_exception_falls_back_gracefully(sample_catalog: dict) -> None
         "parser_catalog": sample_catalog,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.side_effect = RuntimeError("LLM connection timeout")
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     assert result["interpretation"]["status"] == "needs_clarification"
     assert "chưa hiểu rõ" in result["chat_response"]
@@ -216,9 +216,9 @@ async def test_missing_metric_returns_create_metric_option_for_lead(sample_catal
         "can_generate_metrics": True,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "needs_clarification"
@@ -250,9 +250,9 @@ async def test_missing_metric_returns_submit_request_option_for_member(sample_ca
         "can_generate_metrics": False,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "needs_clarification"
@@ -280,9 +280,9 @@ async def test_forced_mismatch_intercepted_and_converted_to_clarification(sample
         "can_generate_metrics": True,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "needs_clarification"
@@ -316,9 +316,9 @@ async def test_invalid_option_spec_is_skipped(sample_catalog: dict) -> None:
         "parser_catalog": sample_catalog,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "needs_clarification"
@@ -354,9 +354,9 @@ async def test_stale_catalog_metric_id_dropped_from_options(sample_catalog: dict
         "parser_catalog": sample_catalog,
     }
 
-    with patch("src.agents.nodes.semantic_parse_node.ainvoke_json", new_callable=AsyncMock) as mock_json:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
         mock_json.return_value = llm_payload
-        result = await semantic_parse_node(state)
+        result = await semantic_query_parser_node(state)
 
     interp = result["interpretation"]
     assert interp["status"] == "needs_clarification"

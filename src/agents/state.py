@@ -73,11 +73,11 @@ class AgentState(TypedDict, total=False):
     error: str
     """Thông báo lỗi nếu có bất kỳ node nào thất bại."""
 
-    # Chat Orchestrator — Input
+    # Orchestrator Agent — Input
     user_message: str
     """Câu hỏi / tin nhắn ngôn ngữ tự nhiên từ người dùng gửi vào chatbot."""
 
-    # Chat Orchestrator — Router output
+    # Orchestrator Agent — Router output
     intent: str
     """Intent: 'chitchat', 'data_question', 'metric_query', 'semantic_query', or 'out_of_scope'."""
 
@@ -101,7 +101,7 @@ class AgentState(TypedDict, total=False):
     """Bounded catalog of approved metrics, safe dimensions, and safe filter columns."""
 
     interpretation: dict[str, Any]
-    """Validated SemanticQueryInterpretation from semantic_parse_node."""
+    """Validated SemanticQueryInterpretation from semantic_query_parser_node."""
 
     clarification: dict[str, Any] | None
     """Clarification questions/options when intent is ambiguous or requires user selection."""
@@ -112,7 +112,7 @@ class AgentState(TypedDict, total=False):
     semantic_query_result: dict[str, Any] | None
     """Result snapshot of the executed semantic query."""
 
-    # Chitchat Agent — Output
+    # Conversation Agent — Output
     chat_response: str
     """Câu trả lời ngôn ngữ tự nhiên khi intent = 'chitchat', 'data_question', hoặc 'out_of_scope'."""
 
