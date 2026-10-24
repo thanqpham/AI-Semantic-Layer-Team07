@@ -141,7 +141,7 @@ metrics:
     required_data: [giá trị theo biến thể đã chọn, khóa đơn hàng]
     unit: Tiền tệ trên đơn
     confirm: [biến thể công thức, trả hàng, trạng thái đơn, NULL ở giá trị]
-    limitations: Compiler v1 không hỗ trợ ratio giữa các phép tổng hợp; AVG ở grain một dòng mỗi đơn chỉ dùng khi metadata chứng minh tương đương và NULL không đổi mẫu số.
+    limitations: Dùng formula.ratio với tử số SUM giá trị theo biến thể và mẫu số COUNT_DISTINCT khóa đơn hàng trên cùng base_entity, cùng tập đơn đã xác nhận; không viết phép chia aggregates trong expression. AVG ở grain một dòng mỗi đơn chỉ dùng khi metadata chứng minh tương đương và NULL không đổi mẫu số. Mẫu số bằng 0 trả NULL.
   - id: gross_margin
     name: Biên lợi nhuận gộp
     aliases: [biên lợi nhuận, gross margin, margin]
@@ -156,7 +156,7 @@ metrics:
     required_data: [doanh số thuần, giá vốn tại lúc bán]
     unit: Tỷ lệ hoặc phần trăm
     confirm: [nguồn giá vốn, phạm vi hàng trả, mẫu số bằng không]
-    limitations: Thiếu giá vốn thì không khả thi; compiler v1 chưa hỗ trợ ratio tổng hợp.
+    limitations: Thiếu giá vốn thì không khả thi; dùng formula.ratio với tử số SUM(doanh số thuần - giá vốn) và mẫu số SUM(doanh số thuần), các cột phải thuộc cùng base_entity và cùng grain. Không hỗ trợ tổng hợp từ nhiều bảng gốc. Dùng scale=100 nếu biểu diễn phần trăm; mẫu số bằng 0 trả NULL.
   - id: conversion
     name: Tỷ lệ chuyển đổi mua hàng
     aliases: [chuyển đổi, conversion, checkout]
@@ -171,10 +171,10 @@ metrics:
     required_data: [khóa phiên, bằng chứng mua hàng theo phiên]
     unit: Tỷ lệ hoặc phần trăm
     confirm: [định nghĩa chuyển đổi, bot, attribution, kỳ quan sát]
-    limitations: Biến thể nội bộ cần doanh nghiệp xác nhận; không dùng số đơn chia ID phiên; compiler v1 chưa hỗ trợ ratio tổng hợp.
+    limitations: Biến thể nội bộ cần doanh nghiệp xác nhận; dùng formula.ratio với COUNT_DISTINCT khóa phiên ở cả hai phía trên cùng base_entity, filter mua hàng đã xác nhận chỉ đặt ở numerator.filters. Không dùng số đơn chia ID phiên; nếu bằng chứng mua hàng cần cột từ bảng khác thì chưa hỗ trợ. Dùng scale=100 nếu biểu diễn phần trăm; mẫu số bằng 0 trả NULL.
   - id: cancellation
     name: Tỷ lệ hủy đơn hàng
-    aliases: [hủy đơn, cancellation, cancel rate]
+    aliases: [hủy đơn, đơn hàng bị hủy, tỷ lệ đơn hàng bị hủy, cancellation, cancel rate]
     meaning: Tỷ phần đơn bị hủy trong cùng tập đơn hợp lệ.
     variants:
       - name: enterprise_cancellation_rate
@@ -186,7 +186,7 @@ metrics:
     required_data: [khóa đơn hàng, trạng thái hủy]
     unit: Tỷ lệ hoặc phần trăm
     confirm: [phạm vi mẫu số, ánh xạ trạng thái hủy, kỳ ghi nhận]
-    limitations: Biến thể nội bộ; không áp filter hủy cho cả mẫu số; compiler v1 chưa hỗ trợ ratio tổng hợp.
+    limitations: Biến thể nội bộ; dùng formula.ratio với COUNT_DISTINCT khóa đơn hàng ở cả hai phía trên cùng base_entity. Filter hủy chỉ đặt ở numerator.filters; metric.filters áp dụng cho cả hai phía để xác định tập đơn hợp lệ. Khi người dùng xác nhận tính tất cả đơn, denominator.filters=[] là đủ và không cần filter trạng thái cho mẫu số. Dùng scale=100 nếu biểu diễn phần trăm; mẫu số bằng 0 trả NULL.
   - id: units_per_transaction
     name: Số sản phẩm trên mỗi giao dịch
     aliases: [sản phẩm trên, units per transaction, upt]
@@ -201,4 +201,4 @@ metrics:
     required_data: [lượng bán ròng, khóa đơn hàng]
     unit: Sản phẩm trên đơn
     confirm: [trả hàng, trạng thái đơn, quan hệ dòng hàng với đơn]
-    limitations: Compiler v1 chưa hỗ trợ ratio tổng hợp hoặc phép tính nhiều bảng.
+    limitations: Dùng formula.ratio với tử số SUM(số lượng bán - số lượng trả) và mẫu số COUNT_DISTINCT khóa đơn hàng khi các cột cùng base_entity và grain đã xác nhận. Không hỗ trợ công thức lấy cột từ nhiều bảng hoặc JOIN một-nhiều gây nhân bản; thiếu khóa đơn ở bảng chứa lượng bán thì chưa khả thi. Mẫu số bằng 0 trả NULL.

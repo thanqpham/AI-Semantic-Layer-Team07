@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from src.agents.roles.metric_prompt_rules import CONTEXT_RULES
@@ -17,7 +17,7 @@ async def generate_metric_drafts(context: dict[str, Any], task_id: str | None = 
     """Generate candidates without discarding invalid definitions before review."""
     discovery = context["proposal_mode"] == "discovery"
     prompt = "Bạn là Metric Designer Agent. Schema và yêu cầu đầy đủ nằm trong context JSON đính kèm.\n" + _BASE_RULES
-    prompt += "\n" + CONTEXT_RULES + "\n" + _draft_instructions(discovery)
+    prompt += "\n" + CONTEXT_RULES + "\n" + _draft_instructions(discovery) + "\n" + _knowledge_instructions(context)
     task_id = task_id or str(uuid4())
     payload = {"task_id": task_id, "context": context}
     batch = await trace_action(
@@ -29,8 +29,9 @@ async def generate_metric_drafts(context: dict[str, Any], task_id: str | None = 
     )
     if batch.task_id != task_id:
         raise MetricCallError(execution_failure("INVALID_AGENT_OUTPUT", "builder"))
-    ready = [item for item in batch.candidates if item.get("status", "ready") in {"ready", "candidate"}][:5]
-    blocked = [item for item in batch.candidates if item.get("status") not in {"ready", "candidate", None}][:5]
+    raw_candidates = cast(list[dict[str, Any]], batch.candidates)
+    ready = [item for item in raw_candidates if item.get("status", "ready") in {"ready", "candidate"}][:5]
+    blocked = [item for item in raw_candidates if item.get("status") not in {"ready", "candidate", None}][:5]
     candidates = ready + blocked
     if not candidates:
         raise MetricCallError(execution_failure("INVALID_AGENT_OUTPUT", "builder"))
@@ -57,9 +58,10 @@ TUYỆT ĐỐI KHÔNG chỉ viết công thức trong reason hoặc trả defini
 Khi chưa thể xây dựng: trả {{"name":"KPI", "status":"needs_clarification|unsupported|rejected",
 "reason":"Bằng chứng thiếu và hành động cần làm", "knowledge_id":null}}, không giả định nghĩa.
 Nếu metric khớp một mục knowledge, knowledge_id, variant_id và toàn bộ criteria của biến thể là bắt buộc.
-Không trả AOV mơ hồ thiếu variant_id/criteria; dùng đúng order_average_pre_tax, order_average_after_tax,
-hoặc order_average_after_tax_discount khi tên, công thức và schema cùng chứng minh biến thể.
-AOV ở grain đơn hàng chỉ dùng AVG trên cột số không NULL, một dòng mỗi đơn; không dùng SUM/SUM hoặc chia ID.
+Không trả AOV mơ hồ thiếu variant_id/criteria; shopify_order_value và woocommerce_order_value phải theo đúng knowledge.
+AOV dạng tỷ số dùng formula.ratio: SUM giá trị theo biến thể / COUNT_DISTINCT khóa đơn hàng, cùng base_entity và tập đơn, không nhân bản giá trị đơn trên dòng hàng.
+AVG chỉ dùng cho order_average_pre_tax, order_average_after_tax hoặc order_average_after_tax_discount
+khi metadata chứng minh một dòng mỗi đơn, cột số không NULL và tương đương cách tính đã chọn; không chia ID.
 Trả mỗi biến thể khả thi thành candidate riêng, tên nêu thuế/giảm giá; loại biến thể không có cột chứng minh.
 Tên metric phải ghi các tiêu chí ảnh hưởng kết quả. Không gắn nguồn hoặc tiêu chí không có trong biến thể được chọn.
 Khi yêu cầu chưa chọn thuế, hoàn tiền, trạng thái hay mốc thời gian, có thể tạo nhiều biến thể riêng nếu mỗi biến thể được schema chứng minh.
@@ -72,13 +74,18 @@ async def repair_metric_drafts(
     context: dict[str, Any], items: list[dict[str, Any]], task_id: str
 ) -> list[dict[str, Any]]:
     """Repair only failed items once, preserving server-owned task and candidate IDs."""
-    payload = {"task_id": task_id, "context": context, "items": items}
+    payload = {
+        "task_id": task_id,
+        "candidate_ids": [item["candidate_id"] for item in items],
+        "context": context,
+        "items": items,
+    }
     prompt = (
         _BASE_RULES
         + CONTEXT_RULES
         + "\nSửa các KPI được giao, giữ nguyên candidate_id và mục tiêu; không sinh lại KPI khác.\n"
     )
-    prompt += _repair_instructions()
+    prompt += _repair_instructions() + "\n" + _knowledge_instructions(context)
     result = await trace_action(
         "metric_repair",
         {"attempt": 1},
@@ -88,7 +95,7 @@ async def repair_metric_drafts(
     )
     if result.task_id != task_id:
         raise MetricCallError(execution_failure("INVALID_AGENT_OUTPUT", "repair"))
-    return result.candidates
+    return cast(list[dict[str, Any]], result.candidates)
 
 
 def _repair_instructions() -> str:
@@ -97,11 +104,27 @@ def _repair_instructions() -> str:
 {"task_id":"giữ nguyên task_id","candidates":[{"candidate_id":"ID hiện có",
 "name":"tên metric có tiêu chí","status":"ready","definition":{"metric":{
 "name":"cùng tên","base_entity":"bảng thật","formula":{"function":"AVG","expression":"cột thật"},
-"filters":[],"grain":{"column_ids":[]},"status":"pending_approval"}},
+"filters":[],"status":"pending_approval"}},
 "knowledge_id":"đúng id hoặc null","variant_id":"đúng id hoặc null","criteria":{},"reason":""}]}
 Trả đúng một phần tử cho mỗi candidate_id đã giao, không thêm hoặc bỏ candidate.
 Bản sửa phải có definition đầy đủ; giữ hoặc sửa variant_id và criteria đúng feedback.
 Chỉ sửa phần có bằng chứng sai; không đổi KPI, không tự chọn metric có sẵn để thay thế.
-Backend tự thay grain bằng khóa chính đã xác thực. Không bịa filter nghiệp vụ chưa được xác nhận.
-Nếu vẫn không thể tạo một định nghĩa hợp lệ, trả status unsupported hoặc needs_clarification với reason cụ thể.
+Không trả grain, column_id, base_entity_id hoặc expression_ast; backend tự ánh xạ từ metadata.
+candidate_id phải lấy đúng từ danh sách candidate_ids và giữ ở ngoài definition. Không bịa filter nghiệp vụ.
+Nếu không thể tạo định nghĩa hợp lệ, trả status unsupported hoặc needs_clarification, definition=null và reason cụ thể.
 """
+
+
+def _knowledge_instructions(context: dict[str, Any]) -> str:
+    """Expose the exact family-to-variant mapping and the disabled contract."""
+    metrics = context.get("knowledge", {}).get("metrics", [])
+    if not metrics:
+        return (
+            "Knowledge không được nạp: knowledge_id=null và variant_id=null; giữ các điều kiện nghiệp vụ đã xác nhận."
+        )
+    identities = {metric["id"]: [variant["id"] for variant in metric["variants"]] for metric in metrics}
+    return (
+        "knowledge_id là ID NHÓM, variant_id là ID BIẾN THỂ, đặt cả hai ngoài definition. "
+        "Ví dụ knowledge_id=aov, variant_id=woocommerce_order_value; không dùng ID biến thể làm knowledge_id. "
+        "Ánh xạ hợp lệ: " + json.dumps(identities, ensure_ascii=False)
+    )

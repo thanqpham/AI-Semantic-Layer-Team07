@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from src.models.metric_definition import MetricDefinition
 from src.services.metric_knowledge import load_metric_knowledge
@@ -85,7 +86,8 @@ def test_ratio_filters_validate_metadata_on_both_sides(side, field, value):
 
 
 @pytest.mark.parametrize(
-    "expression", ["id / id", "amount / amount", "amount / 0", "CASE WHEN id > 0 THEN amount ELSE 0 END"]
+    "expression",
+    ["id / id", "amount / amount", "amount / 0", "amount / 100", "CASE WHEN id > 0 THEN amount ELSE 0 END"],
 )
 def test_compiler_unsupported_arithmetic_never_passes(expression):
     _, review = technical_review(definition(expression), context())
@@ -130,6 +132,20 @@ def test_knowledge_keeps_aov_variants_and_no_evaluation_dependencies():
     )
     assert all(s["url"].startswith("https://") for s in data["sources"])
     assert "eval/" not in str(data) and "expected" not in str(data)
+
+
+def test_knowledge_reload_reads_updated_bundle_without_changing_previous_snapshot():
+    original = yaml.safe_dump(load_metric_knowledge(), allow_unicode=True)
+    changed = yaml.safe_load(original)
+    changed["metrics"][0]["meaning"] = "Updated business meaning"
+    with patch(
+        "src.services.metric_knowledge.Path.read_text",
+        side_effect=[original, yaml.safe_dump(changed, allow_unicode=True)],
+    ):
+        previous = load_metric_knowledge()
+        current = load_metric_knowledge()
+    assert current["metrics"][0]["meaning"] == "Updated business meaning"
+    assert previous["metrics"][0]["meaning"] != "Updated business meaning"
 
 
 def test_oversize_context_is_rejected_without_truncation():

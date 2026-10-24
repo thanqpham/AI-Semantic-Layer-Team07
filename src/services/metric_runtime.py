@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import math
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -126,8 +127,12 @@ async def _invoke_bounded(llm: Any, contract: type[_ModelT], messages: Any, stag
 
 async def _submit(llm: Any, contract: type[BaseModel], messages: Any, structured: bool) -> Any:
     if structured:
-        return await llm.with_structured_output(contract, method="function_calling").ainvoke(messages, temperature=0.0)
-    raw = await llm.ainvoke(messages, temperature=0.0)
+        method = "json_mode" if getattr(llm, "_llm_type", None) == "openai-chat" else "function_calling"
+        prompt = _json_messages(contract, messages) if method == "json_mode" else messages
+        return await llm.with_structured_output(contract, method=method).ainvoke(
+            prompt, temperature=0.0, max_tokens=4096
+        )
+    raw = await llm.ainvoke(messages, temperature=0.0, max_tokens=4096)
     try:
         return extract_json(response_text(raw))
     except (ValueError, TypeError):
@@ -143,6 +148,13 @@ async def _submit(llm: Any, contract: type[BaseModel], messages: Any, structured
                 ],
             )
         ) from None
+
+
+def _json_messages(contract: type[BaseModel], messages: Any) -> list[Any]:
+    schema = json.dumps(contract.model_json_schema(), ensure_ascii=False)
+    instruction = "Return only one valid JSON object matching this schema: " + schema
+    original = [("user", messages)] if isinstance(messages, str) else list(messages)
+    return [("system", instruction), *original]
 
 
 def _unsupported_structured(exc: Exception) -> bool:
