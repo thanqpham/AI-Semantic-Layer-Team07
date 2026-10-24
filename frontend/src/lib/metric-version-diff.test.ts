@@ -23,6 +23,15 @@ function makeDefinition(
   };
 }
 
+function makeRatioDefinition(): MetricDefinition {
+  const definition = makeDefinition('amount');
+  definition.metric.formula.ratio = {
+    numerator: { function: 'SUM', expression: 'amount', filters: [] },
+    denominator: { function: 'COUNT_DISTINCT', expression: 'order_id', filters: [] },
+  };
+  return definition;
+}
+
 describe('buildMetricVersionLines', () => {
   it('renders the formula first and filters after in sorted stable order', () => {
     const lines = buildMetricVersionLines(
@@ -80,6 +89,43 @@ describe('diffMetricVersionLines', () => {
 });
 
 describe('buildMetricVersionDiff', () => {
+  it.each(['numerator', 'denominator', 'scale', 'offset', 'numeratorFilter', 'denominatorFilter'])(
+    'detects a ratio %s change even when the outer formula stays the same',
+    (change) => {
+      const previous = makeRatioDefinition();
+      const current = makeRatioDefinition();
+      const ratio = current.metric.formula.ratio!;
+      if (change === 'numerator') ratio.numerator.expression = 'amount - discount';
+      if (change === 'denominator') ratio.denominator.expression = 'customer_id';
+      if (change === 'scale') ratio.scale = 100;
+      if (change === 'offset') ratio.offset = 1;
+      if (change === 'numeratorFilter') {
+        ratio.numerator.filters = [{ field: 'status', operator: 'eq', value: 'cancelled' }];
+      }
+      if (change === 'denominatorFilter') {
+        ratio.denominator.filters = [{ field: 'status', operator: 'eq', value: 'eligible' }];
+      }
+      const result = buildMetricVersionDiff(previous, current);
+      expect(result.available).toBe(true);
+      if (result.available) expect(result.rows.map((row) => row.status)).toEqual(['removed', 'added']);
+    },
+  );
+
+  it('keeps ratio filters stable across order changes without losing literal types', () => {
+    const previous = makeRatioDefinition();
+    const current = makeRatioDefinition();
+    const filters = [
+      { field: 'status', operator: 'eq' as const, value: 'eligible' },
+      { field: 'channel', operator: 'eq' as const, value: 'online' },
+    ];
+    previous.metric.formula.ratio!.denominator.filters = filters;
+    current.metric.formula.ratio!.denominator.filters = [...filters].reverse();
+    expect(buildMetricVersionLines(previous)).toEqual(buildMetricVersionLines(current));
+    current.metric.formula.ratio!.denominator.filters = [{ field: 'status', operator: 'eq', value: false }];
+    previous.metric.formula.ratio!.denominator.filters = [{ field: 'status', operator: 'eq', value: 'false' }];
+    expect(buildMetricVersionLines(previous)).not.toEqual(buildMetricVersionLines(current));
+  });
+
   it('shows only unchanged rows when formula and filters are identical', () => {
     const definition = makeDefinition('amount', [{ field: 'status', operator: 'eq', value: 'DONE' }]);
 

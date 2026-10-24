@@ -1,4 +1,5 @@
 import type { MetricDefinition, MetricFilter } from '@/lib/api';
+import { formatMetricFormula } from '@/lib/metrics';
 
 /** Change status of a single display line in a metric version diff. */
 export type DiffRowStatus = 'unchanged' | 'removed' | 'added';
@@ -31,7 +32,7 @@ export function buildMetricVersionLines(
   definition: MetricDefinition | null | undefined,
 ): string[] | null {
   if (!definition?.metric?.formula) return null;
-  const lines = [`${definition.metric.formula.function}(${definition.metric.formula.expression})`];
+  const lines = [formatMetricFormula(definition)];
   const filterLines = (definition.metric.filters ?? []).map(renderFilterLine);
   return [...lines, ...filterLines.sort(compareStrings)];
 }

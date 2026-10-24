@@ -60,9 +60,37 @@ def _parse_definition(raw: dict[str, Any]) -> MetricDefinition:
     raw_filters = spec.get("filters", [])
     if not isinstance(raw_filters, list):
         raise ValueError("filters phải là danh sách, không được bỏ qua điều kiện sai contract.")
+    raw_filters = _named_filters(raw_filters)
     for item in raw_filters:
         MetricFilter.model_validate(item)
-    return MetricDefinition.model_validate(raw)
+    spec = {key: value for key, value in spec.items() if key not in {"grain", "base_entity_id"}}
+    spec.update(filters=raw_filters, formula=_unresolved_formula(spec.get("formula")))
+    if "ratio" in spec:
+        spec["ratio"] = _unresolved_formula({"ratio": spec["ratio"]})["ratio"]
+    return MetricDefinition.model_validate({**raw, "metric": spec} if "metric" in raw else spec)
+
+
+def _named_filters(filters: Any) -> Any:
+    if not isinstance(filters, list):
+        return filters
+    return [
+        {key: value for key, value in item.items() if key != "column_id"} if isinstance(item, dict) else item
+        for item in filters
+    ]
+
+
+def _unresolved_formula(formula: Any) -> Any:
+    if not isinstance(formula, dict):
+        return formula
+    clean = {key: value for key, value in formula.items() if key != "expression_ast"}
+    if "filters" in clean:
+        clean["filters"] = _named_filters(clean["filters"])
+    if isinstance(clean.get("ratio"), dict):
+        ratio = dict(clean["ratio"])
+        for side in ("numerator", "denominator"):
+            ratio[side] = _unresolved_formula(ratio.get(side))
+        clean["ratio"] = ratio
+    return clean
 
 
 def _validate_schema(definition: MetricDefinition, schema: dict[str, Any]) -> None:
@@ -126,6 +154,8 @@ def _validate_grain(definition: MetricDefinition, columns: dict[str, Any]) -> No
 
 def _validate_compiler_expression(definition: MetricDefinition, columns: dict[str, Any]) -> None:
     formula = definition.metric.formula
+    if formula.ratio is None and sqlglot.parse_one(formula.expression).find(exp.Div):
+        raise ValueError("UNSUPPORTED_RATIO: phép chia giữa aggregates phải dùng formula.ratio.")
     _validate_aggregate_expression(formula, columns)
     if formula.ratio is not None:
         for aggregate in (formula.ratio.numerator, formula.ratio.denominator):

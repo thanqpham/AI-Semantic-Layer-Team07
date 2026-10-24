@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import unicodedata
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from src.config import get_settings
 from src.models.metric_review import KnowledgeSource
 
 
@@ -19,9 +19,8 @@ def normalized_text(value: str) -> str:
     )
 
 
-@lru_cache(maxsize=1)
 def load_metric_knowledge() -> dict[str, Any]:
-    """Read and validate the bundled knowledge source registry."""
+    """Read and validate the current bundle for each new review context."""
     path = Path(__file__).resolve().parents[1] / "knowledge" / "retail_metrics.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     sources = {KnowledgeSource.model_validate(s).id for s in data["sources"]}
@@ -41,6 +40,8 @@ def load_metric_knowledge() -> dict[str, Any]:
 
 def metric_knowledge(question: str, discovery: bool = False) -> dict[str, Any]:
     """Select recipes by their declared aliases; discovery considers the full bundle."""
+    if not get_settings().metric_knowledge_enabled:
+        return {"metrics": [], "sources": []}
     data = load_metric_knowledge()
     query = normalized_text(question)
     matches = [m for m in data["metrics"] if any(normalized_text(a) in query for a in [m["name"], *m["aliases"]])]
