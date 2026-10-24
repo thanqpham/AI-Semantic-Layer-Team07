@@ -13,7 +13,7 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import React, { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { MetricSuggestion, MetricCandidateReport } from '@/lib/api';
 import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { cn } from '@/lib/utils';
-import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
 import { StatusPill } from '@/components/workspace/shared';
 import {
   ChatDuplicateNotice,
@@ -30,6 +29,7 @@ import {
 } from '@/components/studio/DedupeWarnings';
 import { ChatSemanticQueryResult, ChatClarificationPayload } from '@/lib/api';
 import { ChatQueryResultCard } from '@/components/studio/ChatQueryResultCard';
+import { formatMetricFormula, getMetricUsedColumns } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 import { ExecutionTrace } from '@/lib/chatTrace';
@@ -257,11 +257,6 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     return list;
   }, [canGenerateMetrics, props.tableNames]);
 
-  const hasUserSentMessage = useMemo(
-    () => props.messages.some((m) => m.sender === 'user'),
-    [props.messages],
-  );
-
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
@@ -478,7 +473,7 @@ function MessageBubble({
         {!isUser && message.executionTrace && <AgentThinking trace={message.executionTrace}
           reconnecting={message.reconnecting} onOpenGraph={(trigger) => onOpenGraph?.(trigger)} />}
         {/* The description line is hidden once every duplicate notice is settled. */}
-        {message.text ? (
+        {message.text && !message.suggestions?.length ? (
           <div
             className={cn(
               'inline-block rounded-xl px-4 py-3 text-sm leading-relaxed shadow-2xs',
@@ -535,11 +530,15 @@ function MessageBubble({
         </div>)}
 
         {message.suggestions && message.suggestions.length > 0 && (
-          <div className="w-full space-y-4 pt-1">
+          <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+            <div className="border-b border-border bg-secondary/20 px-4 py-3 text-sm leading-relaxed text-card-foreground">
+              <AssistantMarkdown content={message.text || `Đề xuất ${message.suggestions.length} Metric Definition`} />
+            </div>
             {message.suggestions.map((sug, idx) => (
               <SuggestionCard
                 key={idx}
                 suggestion={sug}
+                embedded
                 isSaved={saved.has(sug.definition.metric.name.trim().toLowerCase())}
                 onSave={() => onSave(sug)}
                 onEdit={() => onEdit?.(sug)}
@@ -660,6 +659,7 @@ function AssistantMarkdown({ content }: { content: string }) {
 
 function SuggestionCard({
   suggestion,
+  embedded = false,
   isSaved,
   onSave,
   onEdit,
@@ -673,6 +673,7 @@ function SuggestionCard({
   onSubmitRequest,
 }: {
   suggestion: MetricSuggestion;
+  embedded?: boolean;
   isSaved: boolean;
   onSave: () => Promise<void>;
   onEdit?: () => void;
@@ -691,6 +692,13 @@ function SuggestionCard({
 
   const def = suggestion.definition.metric;
   const yamlContent = suggestion.yaml_preview || JSON.stringify(suggestion.definition, null, 2);
+  const usedColumns = getMetricUsedColumns(suggestion.definition);
+  const ratio = def.formula.ratio;
+  const filters = [
+    ...(def.filters || []).map((filter) => ({ ...filter, scope: '' })),
+    ...(ratio?.numerator.filters || []).map((filter) => ({ ...filter, scope: 'Tử số' })),
+    ...(ratio?.denominator.filters || []).map((filter) => ({ ...filter, scope: 'Mẫu số' })),
+  ];
 
   const handleSave = async () => {
     setSaving(true);
@@ -721,7 +729,7 @@ function SuggestionCard({
   };
 
   return (
-    <div className="w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+    <div className={cn('w-full overflow-hidden', !embedded && 'rounded-lg border border-border bg-card shadow-xs')}>
       {/* ⚠️ Conflict clarify strip — same name as a saved metric, different formula */}
       {suggestion.conflict && (
         <div className="border-b border-border bg-secondary/20 p-3">
@@ -739,17 +747,10 @@ function SuggestionCard({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-foreground text-sm">{def.name}</h3>
             <StatusPill status={def.status || 'pending_approval'} />
-            <span className="font-mono text-[10px] text-muted-foreground">
-              <Translated text={"Chờ phê duyệt"} />
-            </span>
             <span className="rounded bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
               <Translated text={"Độ tin cậy:"} after /><Translated text={def.confidence === 'high' ? 'Cao' : def.confidence === 'medium' ? 'Trung bình' : 'Thấp'} />
             </span>
           </div>
-          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-            <Translated text={"Bảng:"} after /><span className="text-foreground">{def.base_entity}</span>
-            <span className="ml-2 opacity-60"><Translated text={"YAML preview sẵn sàng"} /></span>
-          </p>
         </div>
 
         <div className="flex items-center gap-1">
@@ -809,67 +810,85 @@ function SuggestionCard({
             </p>
           </div>
         </div>
-
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="rounded-md border border-border bg-secondary/30 p-2.5">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              <Translated text={"Cột dữ liệu sử dụng"} />
-            </span>
-            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-              {def.formula.expression}
-            </p>
-          </div>
-          <div className="rounded-md border border-border bg-secondary/30 p-2.5">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              <Translated text={"Bộ lọc điều kiện"} />
-            </span>
-            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-              {def.filters && def.filters.length > 0
-                ? def.filters.map((f) => `${f.field} ${f.operator} ${f.value ?? ''}`).join(', ')
-                : 'Không có bộ lọc'}
-            </p>
+        <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
+          <span className="font-mono text-[10px] uppercase text-muted-foreground">
+            <Translated text={"Dựa vào bảng gốc"} />
+          </span>
+          <p className="mt-1 break-words font-mono text-xs font-medium text-foreground">
+            {def.base_entity}
+          </p>
+        </div>
+        <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
+          <span className="font-mono text-[10px] uppercase text-muted-foreground">
+            <Translated text={"Cột dữ liệu sử dụng"} />
+          </span>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {usedColumns.length ? usedColumns.map((column) => (
+              <code key={column} className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                {column}
+              </code>
+            )) : <span className="text-muted-foreground">Không có cột dữ liệu</span>}
           </div>
         </div>
-
-        {def.excluded_notes && (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5">
-            <span className="font-mono text-[10px] uppercase text-amber-700 dark:text-amber-300 font-semibold">
-              <Translated text={"Giả định cần xác nhận"} />
-            </span>
-            <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
-              {def.excluded_notes}
-            </p>
-          </div>
-        )}
-
-        {/* YAML Preview */}
-        {showYaml && (
-          <div className="mt-3 overflow-hidden rounded-md border border-border bg-secondary/20">
-            <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-              <span className="font-mono text-[11px] text-muted-foreground"><Translated text={"YAML preview"} /></span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 text-[11px] cursor-pointer"
-                onClick={copyYaml}
-              >
-                {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                <Translated text={copied ? 'Đã copy' : 'Copy YAML'} />
-              </Button>
-            </div>
-            <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed text-foreground">
-              {yamlContent}
-            </pre>
-          </div>
-        )}
+        <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
+          <span className="font-mono text-[10px] uppercase text-muted-foreground">
+            <Translated text={"Bộ lọc điều kiện"} />
+          </span>
+          <p className="mt-1 break-words text-xs text-muted-foreground">
+            {filters.length
+              ? filters.map((filter) => {
+                const scope = filter.scope ? `${filter.scope}: ` : '';
+                const value = Array.isArray(filter.value)
+                  ? filter.value.join(', ')
+                  : String(filter.value ?? '');
+                return `${scope}${filter.field} ${filter.operator}${value ? ` ${value}` : ''}`;
+              }).join(' · ')
+              : 'Không có bộ lọc'}
+          </p>
+        </div>
       </div>
+
+      {(def.excluded_notes || showYaml) && (
+        <div className="space-y-2 px-4 pb-4 text-xs">
+          {def.excluded_notes && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5">
+              <span className="font-mono text-[10px] uppercase text-amber-700 dark:text-amber-300 font-semibold">
+                <Translated text={"Giả định cần xác nhận"} />
+              </span>
+              <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
+                {def.excluded_notes}
+              </p>
+            </div>
+          )}
+
+          {showYaml && (
+            <div className="overflow-hidden rounded-md border border-border bg-secondary/20">
+              <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+                <span className="font-mono text-[11px] text-muted-foreground"><Translated text={"YAML preview"} /></span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 text-[11px] cursor-pointer"
+                  onClick={copyYaml}
+                >
+                  {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                  <Translated text={copied ? 'Đã copy' : 'Copy YAML'} />
+                </Button>
+              </div>
+              <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed text-foreground">
+                {yamlContent}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 border-t border-border bg-secondary/20 px-4 py-2.5">
         <span className="font-mono text-[11px] text-muted-foreground">
           <Translated text={suggestion.conflict
             ? 'Xử lý cảnh báo trùng tên trước khi lưu'
-            : 'Pending status · Phê duyệt trong catalog trước khi truy vấn'} />
+            : 'Chỉ khả dụng để truy vấn sau khi được phê duyệt'} />
         </span>
 
         {/* ⛔ No Save/Submit while the conflict strip is unresolved — user must clarify first */}

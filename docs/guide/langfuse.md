@@ -77,6 +77,9 @@ tùy chỉnh có thể cần khai báo bảng giá trên Langfuse; không có us
 - Input/output/metadata của SDK bị thay bằng `[REDACTED]` khi
   `LANGFUSE_CAPTURE_CONTENT=false`. HTTP body, headers, graph state, connection
   string và kết quả SQL không được đưa vào các span thủ công.
+- Root HTTP observation không ghi request/response body hoặc I/O tổng thể, giữ
+  đúng chính sách không gửi application state. Bật capture content chỉ ảnh
+  hưởng dữ liệu từ callback LLM, không mở rộng dữ liệu của span thủ công.
 - `LANGFUSE_CAPTURE_CONTENT=true` cho phép callback gửi prompt/response và
   metadata LLM. Chỉ bật khi chấp nhận gửi nội dung câu hỏi/schema lên máy chủ
   Langfuse; đây không phải chế độ tự động lọc PII hay bí mật trong prompt.

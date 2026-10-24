@@ -3,6 +3,7 @@
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import (
@@ -40,7 +41,12 @@ async def _seed_filtered_metrics(db: AsyncSession) -> tuple[int, list[int]]:
             business_name=name,
             is_primary_key=name == "id",
         )
-        for name, data_type in [("id", "INTEGER"), ("amount", "NUMERIC"), ("status", "TEXT")]
+        for name, data_type in [
+            ("id", "INTEGER"),
+            ("amount", "NUMERIC"),
+            ("status", "TEXT"),
+            ("is_test", "BOOLEAN"),
+        ]
     ]
     db.add_all(columns)
     await db.flush()
@@ -422,32 +428,53 @@ async def test_numeric_column_coerces_float_string(async_session: AsyncSession) 
 
 
 @pytest.mark.asyncio
-async def test_compile_ratio_metric(async_session: AsyncSession) -> None:
-    """Ratio metric with div and filters compiles to scaled percentage formula."""
-    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+@pytest.mark.parametrize(
+    ("scale", "scope_status", "expected"),
+    [(1, "completed", 50.0), (100, "completed", 5000.0), (1, "missing", None)],
+)
+async def test_compile_ratio_metric_uses_independent_aggregates_and_filters(
+    async_session: AsyncSession,
+    scale: int,
+    scope_status: str,
+    expected: float | None,
+) -> None:
+    """Ratio sides aggregate independently and apply shared and side-specific filters."""
+    db_id, _ = await _seed_filtered_metrics(async_session)
     table = await _table(async_session, db_id, "orders")
     id_col = await _column(async_session, table.id, "id")
+    amount_col = await _column(async_session, table.id, "amount")
     status_col = await _column(async_session, table.id, "status")
+    test_col = await _column(async_session, table.id, "is_test")
 
     ratio_def = {
         "schema_version": 2,
         "metric": {
-            "name": "Cancellation Rate",
+            "name": "Average completed amount",
             "formula": {
-                "function": "COUNT_DISTINCT",
-                "expression": "id / id",
-                "expression_ast": {
-                    "kind": "div",
-                    "children": [
-                        {"kind": "column", "column_id": id_col.id},
-                        {"kind": "column", "column_id": id_col.id},
-                    ],
+                "function": "SUM",
+                "expression": "amount",
+                "expression_ast": {"kind": "column", "column_id": amount_col.id},
+                "ratio": {
+                    "numerator": {
+                        "function": "SUM",
+                        "expression": "amount",
+                        "expression_ast": {"kind": "column", "column_id": amount_col.id},
+                        "filters": [
+                            {"field": "is_test", "column_id": test_col.id, "operator": "eq", "value": 0}
+                        ],
+                    },
+                    "denominator": {
+                        "function": "COUNT_DISTINCT",
+                        "expression": "id",
+                        "expression_ast": {"kind": "column", "column_id": id_col.id},
+                    },
+                    "scale": scale,
                 },
             },
             "base_entity": "orders",
             "base_entity_id": table.id,
             "grain": {"column_ids": [id_col.id]},
-            "filters": [{"field": "status", "column_id": status_col.id, "operator": "eq", "value": "cancelled"}],
+            "filters": [{"field": "status", "column_id": status_col.id, "operator": "eq", "value": scope_status}],
             "status": "approved",
             "confidence": "high",
             "excluded_notes": "",
@@ -456,24 +483,93 @@ async def test_compile_ratio_metric(async_session: AsyncSession) -> None:
     ratio_metric = SemanticMetricModel(
         db_id=db_id,
         created_by=1,
-        name="Cancellation Rate",
+        name="Average completed amount",
         description="",
         sql_template="",
         source="ai",
         status="approved",
         base_entity_id=table.id,
         formula="",
-        aggregation_type="COUNT_DISTINCT",
+        aggregation_type="SUM",
         definition=ratio_def,
     )
     async_session.add(ratio_metric)
     await async_session.commit()
+    await async_session.execute(text(
+        'CREATE TABLE "orders" ("id" INTEGER, "amount" NUMERIC, "status" TEXT, "is_test" INTEGER)'
+    ))
+    await async_session.execute(
+        text('INSERT INTO "orders" VALUES (1, 100, \'completed\', 0), (2, 300, \'completed\', 1), (3, 200, \'cancelled\', 0)')
+    )
 
     query = SemanticQuerySpec(metric_ids=[ratio_metric.id])
     compiled = await SemanticQueryCompiler(async_session).compile(db_id, query)
-    assert "ROUND" in compiled.sql
     assert "NULLIF" in compiled.sql
+    assert "SUM(CASE WHEN" in compiled.sql
     assert "COUNT(DISTINCT" in compiled.sql
+    result = await async_session.execute(text(compiled.sql), compiled.parameters)
+    value = result.scalar_one()
+    if expected is None:
+        assert value is None
+    else:
+        assert value == pytest.approx(expected)
+
+
+@pytest.mark.asyncio
+async def test_legacy_division_metric_requires_review(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    metric = await async_session.get(SemanticMetricModel, metric_ids[0])
+    assert metric is not None
+    definition = dict(metric.definition)
+    amount_id = (await _column(async_session, metric.base_entity_id, "amount")).id
+    id_id = (await _column(async_session, metric.base_entity_id, "id")).id
+    definition["metric"]["formula"]["expression"] = "amount / id"
+    definition["metric"]["formula"]["expression_ast"] = {
+        "kind": "div",
+        "children": [
+            {"kind": "column", "column_id": amount_id},
+            {"kind": "column", "column_id": id_id},
+        ],
+    }
+    metric.definition = definition
+    await async_session.commit()
+
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert error.value.code == "METRIC_NEEDS_REVIEW"
+
+
+@pytest.mark.asyncio
+async def test_compiler_rejects_sum_over_boolean_column(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    metric = await async_session.get(SemanticMetricModel, metric_ids[0])
+    assert metric is not None
+    definition = dict(metric.definition)
+    test_id = (await _column(async_session, metric.base_entity_id, "is_test")).id
+    definition["metric"]["formula"]["expression"] = "is_test"
+    definition["metric"]["formula"]["expression_ast"] = {"kind": "column", "column_id": test_id}
+    metric.definition = definition
+    await async_session.commit()
+
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert error.value.code == "METRIC_NEEDS_REVIEW"
+
+
+@pytest.mark.asyncio
+async def test_compiler_rejects_ast_mismatch(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    metric = await async_session.get(SemanticMetricModel, metric_ids[0])
+    assert metric is not None
+    definition = dict(metric.definition)
+    id_id = (await _column(async_session, metric.base_entity_id, "id")).id
+    definition["metric"]["formula"]["expression_ast"] = {"kind": "column", "column_id": id_id}
+    metric.definition = definition
+    await async_session.commit()
+
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert error.value.code == "METRIC_NEEDS_REVIEW"
 
 
 async def _table(db: AsyncSession, db_id: int, name: str) -> SemanticTableModel:

@@ -103,7 +103,8 @@ _V1_OUTPUT_FORMAT = """Trả về kết quả ở định dạng JSON thuần t�
         "name": "Tên metric tiếng Việt",
         "formula": {
           "function": "SUM",
-          "expression": "cột_tính_toán"
+          "expression": "cột_tính_toán",
+          "ratio": null
         },
         "base_entity": "tên_bảng_chính",
         "filters": [],
@@ -123,7 +124,8 @@ _V2_OUTPUT_FORMAT = """Trả về kết quả ở định dạng JSON thuần t�
         "name": "Tên metric tiếng Việt",
         "formula": {
           "function": "SUM",
-          "expression": "cột_tính_toán"
+          "expression": "cột_tính_toán",
+          "ratio": null
         },
         "base_entity": "tên_bảng_chính",
         "filters": [],
@@ -299,10 +301,19 @@ def _references_schema(definition: MetricDefinition, valid: dict[str, set[str]])
     definition.metric.base_entity = actual_table_name
     col_lower = {c.lower(): c for c in columns}
     try:
-        parsed = sqlglot.parse_one(definition.metric.formula.expression)
-        referenced = {col.name.lower() for col in parsed.find_all(exp.Column)}
-        for item in definition.metric.filters:
-            referenced.add(item.field.lower())
+        formula = definition.metric.formula
+        expressions = [formula.expression]
+        filters = list(definition.metric.filters)
+        if formula.ratio is not None:
+            for aggregate in (formula.ratio.numerator, formula.ratio.denominator):
+                expressions.append(aggregate.expression)
+                filters.extend(aggregate.filters)
+        referenced = {
+            col.name.lower()
+            for expression in expressions
+            for col in sqlglot.parse_one(expression).find_all(exp.Column)
+        }
+        referenced.update(item.field.lower() for item in filters)
         return referenced.issubset(set(col_lower.keys()))
     except Exception:
         return False

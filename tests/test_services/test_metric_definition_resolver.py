@@ -79,6 +79,42 @@ async def test_resolve_records_canonical_ids_expression_and_grain(async_session:
 
 
 @pytest.mark.asyncio
+async def test_resolve_resolves_ratio_side_asts_and_filters(async_session: AsyncSession) -> None:
+    db_id, _ = await _seed_table(async_session)
+    draft = MetricDefinition.model_validate(
+        {
+            "metric": {
+                "name": "Doanh thu trên đơn hàng",
+                "formula": {
+                    "function": "SUM",
+                    "expression": "unit_price",
+                    "ratio": {
+                        "numerator": {
+                            "function": "SUM",
+                            "expression": "unit_price",
+                            "filters": [{"field": "status", "operator": "eq", "value": "completed"}],
+                        },
+                        "denominator": {"function": "COUNT_DISTINCT", "expression": "id"},
+                        "scale": 1,
+                    },
+                },
+                "base_entity": "order_items",
+                "filters": [],
+            }
+        }
+    )
+
+    resolved = await MetricDefinitionResolver(async_session).resolve(db_id, draft)
+    ratio = resolved.metric.formula.ratio
+    assert ratio is not None
+    assert ratio.numerator.expression_ast is not None
+    assert ratio.numerator.expression_ast.column_id is not None
+    assert ratio.numerator.filters[0].column_id is not None
+    assert ratio.denominator.expression_ast is not None
+    assert ratio.denominator.expression_ast.column_id == resolved.metric.grain.column_ids[0]
+
+
+@pytest.mark.asyncio
 async def test_resolve_builds_timestamp_difference_expression_tree(async_session: AsyncSession) -> None:
     db_id, _ = await _seed_table(async_session)
     draft = MetricDefinition.model_validate(
@@ -108,6 +144,24 @@ async def test_resolve_marks_metric_without_grain_for_review(async_session: Asyn
     assert resolved.metric.status == "needs_review"
     assert resolved.metric.grain.column_ids == []
     assert resolved.diagnostics[0].code == "MISSING_GRAIN"
+
+
+@pytest.mark.asyncio
+async def test_resolve_rejects_boolean_sum(async_session: AsyncSession) -> None:
+    db_id, _ = await _seed_flagged_table(async_session)
+    draft = MetricDefinition.model_validate(
+        {
+            "metric": {
+                "name": "Test flag total",
+                "formula": {"function": "SUM", "expression": "is_test_order"},
+                "base_entity": "fact_orders",
+                "filters": [],
+            }
+        }
+    )
+
+    with pytest.raises(ValueError, match="SUM requires numeric columns"):
+        await MetricDefinitionResolver(async_session).resolve(db_id, draft)
 
 
 async def _seed_flagged_table(db: AsyncSession) -> tuple[int, SemanticTableModel]:

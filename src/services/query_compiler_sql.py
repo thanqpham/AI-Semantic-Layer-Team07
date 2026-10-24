@@ -10,7 +10,13 @@ import sqlglot
 from sqlglot import exp
 
 from src.models.db import SemanticColumnModel, SemanticMetricModel, SemanticTableModel
-from src.models.metric_definition import MetricDefinition, MetricExpressionNode, MetricFilter
+from src.models.metric_definition import (
+    MetricAggregate,
+    MetricDefinition,
+    MetricExpressionNode,
+    MetricFilter,
+    MetricRatio,
+)
 from src.observability import trace_value
 from src.services.semantic_compile_error import SemanticCompileError
 
@@ -161,23 +167,6 @@ def _dimension_alias(item: dict[str, Any]) -> str:
     return f"dimension_{item['column_id']}"
 
 
-def _is_ratio_node(
-    node: MetricExpressionNode | None,
-) -> tuple[bool, MetricExpressionNode | None, MetricExpressionNode | None, float]:
-    """Identify a division or scaled division used as a percentage metric."""
-    if node is None:
-        return False, None, None, 1.0
-    if node.kind == "div" and len(node.children) == 2:
-        return True, node.children[0], node.children[1], 100.0
-    if node.kind == "mul" and len(node.children) == 2:
-        left, right = node.children
-        if left.kind == "div" and right.kind == "literal":
-            return True, left.children[0], left.children[1], float(right.value or 100.0)
-        if right.kind == "div" and left.kind == "literal":
-            return True, right.children[0], right.children[1], float(left.value or 100.0)
-    return False, None, None, 1.0
-
-
 def _compile_metric(
     definition: MetricDefinition,
     table: str,
@@ -189,6 +178,15 @@ def _compile_metric(
     residual: list[MetricFilter],
 ) -> str:
     formula = definition.metric.formula
+    if formula.ratio is not None:
+        return _compile_ratio(
+            formula.ratio, residual, table, columns, column_types, dialect, parameters, alias
+        )
+    if _tree_contains_division(formula.expression_ast):
+        raise SemanticCompileError(
+            "METRIC_NEEDS_REVIEW",
+            "Division metrics require explicit numerator and denominator aggregations",
+        )
     predicates = [
         _predicate(
             table, _resolved_filter(item, columns), dialect, parameters, "metric", column_types.get(item.column_id)
@@ -196,19 +194,6 @@ def _compile_metric(
         for item in residual
     ]
     condition = " AND ".join(predicates)
-    is_ratio, numerator, denominator, scale = _is_ratio_node(formula.expression_ast)
-    if is_ratio and numerator is not None and denominator is not None:
-        return _compile_ratio(
-            formula.function,
-            numerator,
-            denominator,
-            scale,
-            condition,
-            table,
-            columns,
-            dialect,
-            alias,
-        )
     argument = _compile_argument(formula.expression_ast, table, columns, dialect)
     if condition:
         inner = argument if argument != "*" else "1"
@@ -223,28 +208,58 @@ def _compile_metric(
 
 
 def _compile_ratio(
-    function: str,
-    numerator: MetricExpressionNode,
-    denominator: MetricExpressionNode,
-    scale: float,
-    condition: str,
+    ratio: MetricRatio,
+    scope_filters: list[MetricFilter],
     table: str,
     columns: dict[int, str],
+    column_types: dict[int, str],
     dialect: str,
+    parameters: dict[str, Any],
     alias: str,
 ) -> str:
-    """Compile a ratio while applying metric-specific filters to its numerator."""
-    left = _compile_argument(numerator, table, columns, dialect)
-    right = _compile_argument(denominator, table, columns, dialect)
-    guarded_left = f"CASE WHEN {condition} THEN {left if left != '*' else '1'} END" if condition else left
-    left_aggregate = (
-        f"COUNT(DISTINCT {guarded_left})" if function == "COUNT_DISTINCT" else f"{function}({guarded_left})"
+    """Compile separate aggregate expressions and filters for both ratio sides."""
+    numerator_sql = _compile_aggregate(
+        ratio.numerator, scope_filters, table, columns, column_types, dialect, parameters, "ratio_num"
     )
-    right_value = right if right != "*" else "1"
-    right_aggregate = f"COUNT(DISTINCT {right_value})" if function == "COUNT_DISTINCT" else f"{function}({right_value})"
+    denominator_sql = _compile_aggregate(
+        ratio.denominator, scope_filters, table, columns, column_types, dialect, parameters, "ratio_den"
+    )
     cast_type = "REAL" if dialect == "sqlite" else "NUMERIC"
-    aggregate = f"ROUND((CAST({left_aggregate} AS {cast_type}) * {scale} / NULLIF({right_aggregate}, 0)), 2)"
+    aggregate = (
+        f"({ratio.offset} + {ratio.scale} * CAST(({numerator_sql}) AS {cast_type}) "
+        f"/ NULLIF(({denominator_sql}), 0))"
+    )
     return f"{aggregate} AS {_quoted(alias, dialect)}"
+
+
+def _compile_aggregate(
+    aggregate: MetricAggregate,
+    scope_filters: list[MetricFilter],
+    table: str,
+    columns: dict[int, str],
+    column_types: dict[int, str],
+    dialect: str,
+    parameters: dict[str, Any],
+    prefix: str,
+) -> str:
+    filters = [*scope_filters, *aggregate.filters]
+    predicates = [
+        _predicate(
+            table, _resolved_filter(item, columns), dialect, parameters, prefix, column_types.get(item.column_id)
+        )
+        for item in filters
+    ]
+    argument = _compile_argument(aggregate.expression_ast, table, columns, dialect)
+    if predicates:
+        value = argument if argument != "*" else "1"
+        argument = f"CASE WHEN {' AND '.join(predicates)} THEN {value} END"
+    if aggregate.function == "COUNT_DISTINCT":
+        return f"COUNT(DISTINCT {argument})"
+    return f"{aggregate.function}({argument})"
+
+
+def _tree_contains_division(node: MetricExpressionNode | None) -> bool:
+    return node is not None and (node.kind == "div" or any(_tree_contains_division(child) for child in node.children))
 
 
 _COLUMN_REFERENCE_PATTERN = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")

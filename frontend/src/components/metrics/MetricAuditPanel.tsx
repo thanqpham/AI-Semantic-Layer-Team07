@@ -87,6 +87,17 @@ function AuditStat({ label, value, tone = 'default' }: { label: string; value: n
 }
 
 function AuditGroup({ group, canEdit, onEdit, onEditMetric }: { group: MetricComparisonGroup; canEdit?: boolean; onEdit: (id: number) => MetricRecord | undefined; onEditMetric?: (metric: MetricRecord) => void }) {
+  const memberFilters = (member: MetricComparisonGroup['members'][number]) => {
+    const filters = member.filters.map((filter) => `${filter.field} ${filter.operator} ${String(filter.value)}`);
+    filters.push(...(member.ratio?.numerator.filters ?? []).map(
+      (filter) => `Tử: ${filter.field} ${filter.operator} ${String(filter.value)}`,
+    ));
+    filters.push(...(member.ratio?.denominator.filters ?? []).map(
+      (filter) => `Mẫu: ${filter.field} ${filter.operator} ${String(filter.value)}`,
+    ));
+    return filters.length ? filters.join('; ') : 'Không có filter';
+  };
+
   return <article className="rounded-lg border border-border bg-card p-4">
     <div className="flex items-start justify-between gap-3">
       <div><div className="flex items-center gap-2"><GitCompare className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold"><Translated text={group.group_type === 'exact_duplicate' ? 'Metric trùng hoàn toàn' : 'Metric cùng lõi, khác filter'} /></h3></div><p className="mt-1 font-mono text-xs text-muted-foreground">{group.core_formula} · {group.base_entity}</p></div>
@@ -94,7 +105,7 @@ function AuditGroup({ group, canEdit, onEdit, onEditMetric }: { group: MetricCom
     </div>
     {group.group_type === 'near_duplicate' && <p className="mt-3 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300"><Translated text={"Cùng công thức lõi, khác bộ lọc nghiệp vụ. Hãy xác nhận các filter này có thực sự là định nghĩa riêng."} /></p>}
     <div className="mt-3 divide-y divide-border rounded-md border border-border">
-      {group.members.map((member) => <div key={member.metric_id} className="flex items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate text-xs font-medium">{member.name}</p><p className="mt-1 text-[11px] text-muted-foreground">{member.filters.length ? member.filters.map((filter) => `${filter.field} ${filter.operator} ${String(filter.value)}`).join('; ') : 'Không có filter'}</p></div>{canEdit && onEditMetric && <Button size="sm" variant="ghost" onClick={() => { const metric = onEdit(member.metric_id); if (metric) onEditMetric(metric); }}><Pencil className="mr-1 h-3 w-3" /><Translated text={"Sửa"} /></Button>}</div>)}
+      {group.members.map((member) => <div key={member.metric_id} className="flex items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate text-xs font-medium">{member.name}</p><p className="mt-1 text-[11px] text-muted-foreground">{memberFilters(member)}</p></div>{canEdit && onEditMetric && <Button size="sm" variant="ghost" onClick={() => { const metric = onEdit(member.metric_id); if (metric) onEditMetric(metric); }}><Pencil className="mr-1 h-3 w-3" /><Translated text={"Sửa"} /></Button>}</div>)}
     </div>
   </article>;
 }

@@ -5,6 +5,7 @@ import {
   applySuggestedName,
   coerceFilterValue,
   createMetricDefinition,
+  getMetricUsedColumns,
   renderMetricYaml,
 } from '@/lib/metrics';
 
@@ -24,6 +25,45 @@ describe('metric definition utilities', () => {
     expect(coerceFilterValue('in', '1, 2, active')).toEqual([1, 2, 'active']);
     expect(coerceFilterValue('is_null', 'ignored')).toBeNull();
     expect(coerceFilterValue('eq', 'true')).toBe(true);
+  });
+
+  it('lists formula, ratio, and filter columns once without including function names', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.formula = {
+      function: 'SUM',
+      expression: 'amount',
+      ratio: {
+        numerator: {
+          function: 'SUM',
+          expression: 'price_after_discount',
+          filters: [{ field: 'region', operator: 'eq', value: 'north' }],
+        },
+        denominator: {
+          function: 'COUNT_DISTINCT',
+          expression: 'order_id',
+          filters: [{ field: 'channel', operator: 'eq', value: 'online' }],
+        },
+      },
+    };
+    definition.metric.filters = [{ field: 'status', operator: 'eq', value: 'paid' }];
+
+    expect(getMetricUsedColumns(definition)).toEqual([
+      'price_after_discount',
+      'order_id',
+      'status',
+      'region',
+      'channel',
+    ]);
+  });
+
+  it('extracts timestamp-difference columns and ignores literals and functions', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.formula = {
+      function: 'AVG',
+      expression: 'TIMESTAMP_DIFF_HOURS(delivered_at, created_at) + 2',
+    };
+
+    expect(getMetricUsedColumns(definition)).toEqual(['delivered_at', 'created_at']);
   });
 });
 

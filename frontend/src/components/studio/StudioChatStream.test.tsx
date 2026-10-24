@@ -9,14 +9,14 @@ describe('StudioChatStream', () => {
     cleanup();
   });
 
-  it('shows the server YAML preview and visual property rows for AI suggestion', () => {
+  it('shows used column names and keeps the proposal text inside its definition card', () => {
     render(
       <StudioChatStream
         messages={[
           {
             id: '1',
             sender: 'assistant',
-            text: 'Gợi ý',
+            text: 'Đã đề xuất 1 Metric Definition.',
             timestamp: '10:00',
             suggestions: [
               { ...reviewedSuggestionFields,
@@ -46,9 +46,16 @@ describe('StudioChatStream', () => {
     expect(screen.getByText(/Dựa vào bảng gốc/i)).toBeInTheDocument();
     expect(screen.getByText(/Cột dữ liệu sử dụng/i)).toBeInTheDocument();
     expect(screen.getByText(/Bộ lọc điều kiện/i)).toBeInTheDocument();
+    expect(screen.getByTestId('metric-properties-grid')).toHaveClass('sm:grid-cols-2');
+    expect(screen.getByTestId('metric-properties-grid').children).toHaveLength(4);
+    const columnSection = screen.getByText(/Cột dữ liệu sử dụng/i).parentElement;
+    expect(columnSection).toHaveTextContent('quantity');
+    expect(columnSection).toHaveTextContent('unit_price');
+    expect(columnSection).not.toHaveTextContent('SUM');
+    expect(screen.getAllByText('Đã đề xuất 1 Metric Definition.')).toHaveLength(1);
 
-    // YAML preview check
-    expect(screen.getAllByText(/YAML preview/i).length).toBeGreaterThanOrEqual(1);
+    // YAML preview is only shown when requested, not as another status line.
+    expect(screen.queryByText(/YAML preview sẵn sàng/i)).not.toBeInTheDocument();
     const toggleYamlBtn = screen.getByRole('button', { name: /Hiển thị mã YAML/i });
     fireEvent.click(toggleYamlBtn);
     expect(screen.getByText(/name: Doanh thu/)).toBeInTheDocument();
@@ -279,7 +286,7 @@ describe('StudioChatStream', () => {
     // Metric name heading
     expect(screen.getByText('Doanh thu thuần')).toBeInTheDocument();
     // Status badge
-    expect(screen.getByText(/Chờ phê duyệt/)).toBeInTheDocument();
+    expect(screen.getByText(/Chờ duyệt/)).toBeInTheDocument();
     // Confidence badge
     expect(screen.getByText(/Độ tin cậy: Cao/)).toBeInTheDocument();
     // YAML toggle button
@@ -453,8 +460,7 @@ describe('StudioChatStream', () => {
       />
     );
     // Formula should show function and expression
-    expect(screen.getByText('AVG')).toBeInTheDocument();
-    expect(screen.getAllByText('total_amount').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('AVG(total_amount)')).toBeInTheDocument();
   });
 
   it('renders refine and edit buttons on suggestion cards', () => {
@@ -566,6 +572,3 @@ describe('StudioChatStream', () => {
     expect(handleSelect).toHaveBeenCalledWith('msg-clar-1', 'opt_by_customer', 'Theo khách hàng');
   });
 });
-
-
-

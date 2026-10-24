@@ -837,6 +837,7 @@ class MetricComparisonMember(BaseModel):
     expression: str
     base_entity: str
     filters: list[dict[str, Any]] = Field(default_factory=list)
+    ratio: MetricRatio | None = None
 
 
 class MetricComparisonGroup(BaseModel):

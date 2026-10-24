@@ -36,7 +36,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
-import { metricName } from '@/lib/metrics';
+import { formatMetricFormula, metricName } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -310,7 +310,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               <article key={request.id} className="rounded-lg border border-border bg-card p-3 text-xs">
                 <p className="font-semibold text-foreground">{request.definition.metric.name}</p>
                 <p className="mt-1 font-mono text-muted-foreground">
-                  {request.definition.metric.formula.function}({request.definition.metric.formula.expression})
+                  {formatMetricFormula(request.definition)}
                 </p>
                 {request.review && <MetricReviewPanel review={request.review} definition={request.definition} />}
                 {editingRequestId === request.id && editedReview && <MetricReviewPanel review={editedReview.review} definition={editedReview.definition} />}

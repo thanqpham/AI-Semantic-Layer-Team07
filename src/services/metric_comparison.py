@@ -57,7 +57,7 @@ def _metric_entry(item: dict[str, Any]) -> dict[str, Any] | None:
         "full_key": full_key,
         "spec": spec,
         "metric": item,
-        "filters": filters,
+        "filters": scoped_filters,
     }
 
 
@@ -81,7 +81,7 @@ def _normalize_expression(expression: str) -> str:
 
 
 def _filter_key(data: dict[str, Any]) -> tuple[str, str, str]:
-    field = str(data.get("column_id") or data.get("field") or "").casefold()
+    field = str(data.get("field") or data.get("column_id") or "").casefold()
     operator = str(data.get("operator") or "").casefold()
     value = data.get("value")
     if operator in {"in", "not_in"} and isinstance(value, list):
@@ -93,12 +93,24 @@ def _make_group(group_type: str, entries: list[dict[str, Any]]) -> MetricCompari
     members = [_member(entry) for entry in entries]
     unique_filters = list(dict.fromkeys(filter_item for entry in entries for filter_item in entry["filters"]))
     first = entries[0]["spec"]
+    ratio = first.formula.ratio
+    if ratio is None:
+        core_formula = f"{first.formula.function}({first.formula.expression})"
+    else:
+        core_formula = (
+            f"{ratio.offset} + {ratio.scale} × "
+            f"({ratio.numerator.function}({ratio.numerator.expression})) / "
+            f"({ratio.denominator.function}({ratio.denominator.expression}))"
+        )
     return MetricComparisonGroup(
         group_type=group_type,
-        core_formula=f"{first.formula.function}({first.formula.expression})",
+        core_formula=core_formula,
         base_entity=first.base_entity,
         members=members,
-        differing_filters=[{"field": f[0], "operator": f[1], "value": json.loads(f[2])} for f in unique_filters],
+        differing_filters=[
+            {"scope": scope, "field": fields[0], "operator": fields[1], "value": json.loads(fields[2])}
+            for scope, fields in unique_filters
+        ],
     )
 
 
@@ -114,4 +126,5 @@ def _member(entry: dict[str, Any]) -> MetricComparisonMember:
         expression=spec.formula.expression,
         base_entity=spec.base_entity,
         filters=[filter_item.model_dump(mode="json") for filter_item in spec.filters],
+        ratio=spec.formula.ratio,
     )
