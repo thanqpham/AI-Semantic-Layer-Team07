@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import { MessageSquare, Plus } from 'lucide-react';
+import { MessageSquare, Plus, Sparkles } from 'lucide-react';
 
 import {
   ChatMessageItem,
@@ -21,6 +21,7 @@ import {
 } from '@/lib/api';
 import { ChatMessage, metricRequestKey, StudioChatStream } from '@/components/studio/StudioChatStream';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
+import { Button } from '@/components/ui/button';
 import { applySuggestedName, metricName } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
@@ -430,35 +431,42 @@ export function AIStudioView({
         }
         database={dbProp}
         actions={
-          activeSession ? (
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1 font-sans text-xs text-secondary-foreground">
-                <MessageSquare className="h-3.5 w-3.5 text-primary" />
-                <span className="max-w-[200px] truncate">{activeSession.title}</span>
-              </span>
-              {onNewChat && (
-                <button
-                  type="button"
-                  onClick={onNewChat}
-                  className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
-                  title={translate("Tạo cuộc trò chuyện mới")}
-                >
-                  <Plus className="h-3 w-3" />
-                  <span><Translated text={"Đoạn chat mới"} /></span>
-                </button>
-              )}
-            </div>
-          ) : onNewChat && layer.source_type === 'live' && semanticDbId ? (
-            <button
-              type="button"
-              onClick={onNewChat}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
-              title={translate("Tạo cuộc trò chuyện mới")}
-            >
-              <Plus className="h-3 w-3" />
-              <span><Translated text={"Đoạn chat mới"} /></span>
-            </button>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="gap-2"
+              disabled={loading || loadingSessions}
+              onClick={() => void send('Khám phá các KPI phù hợp với schema bán lẻ/ecommerce này.', [], undefined, undefined, undefined, 'discovery')}>
+              <Sparkles className="h-4 w-4" />Đề xuất KPI
+            </Button>
+            {activeSession ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1 font-sans text-xs text-secondary-foreground">
+                  <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                  <span className="max-w-[200px] truncate">{activeSession.title}</span>
+                </span>
+                {onNewChat && (
+                  <button
+                    type="button"
+                    onClick={onNewChat}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
+                    title={translate("Tạo cuộc trò chuyện mới")}
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span><Translated text={"Đoạn chat mới"} /></span>
+                  </button>
+                )}
+              </>
+            ) : onNewChat && layer.source_type === 'live' && semanticDbId ? (
+              <button
+                type="button"
+                onClick={onNewChat}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
+                title={translate("Tạo cuộc trò chuyện mới")}
+              >
+                <Plus className="h-3 w-3" />
+                <span><Translated text={"Đoạn chat mới"} /></span>
+              </button>
+            ) : undefined}
+          </div>
         }
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -467,7 +475,6 @@ export function AIStudioView({
             <Translated text={"Yêu cầu của bạn:"} after />{metricRequests.filter((item) => item.status === 'pending').length} <Translated text={"chờ xử lý ·"} after />{metricRequests.filter((item) => item.status === 'approved').length} <Translated text={"đã duyệt."} /></div>
         )}
         <StudioChatStream
-          onDiscoverMetrics={() => void send('Khám phá các KPI phù hợp với schema bán lẻ/ecommerce này.', [], undefined, undefined, undefined, 'discovery')}
           conversationKey={activeSessionId}
           reconnecting={reconnecting}
           messages={messages}

@@ -28,7 +28,7 @@ Thiết kế tham khảo các cơ chế giới hạn hop và chống gửi lặp
 
 ## Sử dụng
 
-Trong Studio, nhập yêu cầu một KPI hoặc chọn **Khám phá KPI từ schema**.
+Trong Studio, nhập yêu cầu một KPI hoặc chọn **Đề xuất KPI** để nhận gợi ý dựa trên schema.
 Yêu cầu chưa chọn công thức có thể tạo tối đa 5 biến thể khả thi thành 5 proposal riêng.
 Mỗi tên nêu rõ các tiêu chí ảnh hưởng kết quả; báo cáo lưu `variant_id`, `criteria`
 và nguồn đúng của biến thể. Yêu cầu đã chọn trước thuế không nhận biến thể gồm VAT.

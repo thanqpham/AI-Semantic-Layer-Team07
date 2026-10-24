@@ -1,5 +1,5 @@
 import { reviewedSuggestionFields } from '@/test/metricReviewFixture';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIStudioView } from './AIStudioView';
 import * as api from '@/lib/api';
@@ -42,7 +42,7 @@ describe('AIStudioView', () => {
     vi.mocked(api.sendChatOrchestratorApi).mockResolvedValue({ intent: 'metric_query', suggestions: [],
       session_id: 'sess-1', user_message_id: 'u-1', assistant_message_id: 'a-1' });
     render(<AIStudioView layer={mockLayer} theme="light" onMetricsChanged={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Khám phá KPI từ schema' }));
+    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Đề xuất KPI' }));
     await waitFor(() => expect(api.sendChatOrchestratorApi).toHaveBeenCalled());
     expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[0][7]).toBe('discovery');
   });

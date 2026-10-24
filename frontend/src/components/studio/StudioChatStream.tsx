@@ -58,7 +58,6 @@ export interface ChatMessage {
 type SuggestionIndexHandler = (messageId: string, index: number) => void;
 
 interface StudioChatStreamProps {
-  onDiscoverMetrics?: () => void;
   conversationKey?: string | null;
   reconnecting?: boolean;
   messages: ChatMessage[];
@@ -371,10 +370,6 @@ export function StudioChatStream(props: StudioChatStreamProps) {
           </div>
 
           {/* Composer Input Box */}
-          {props.onDiscoverMetrics && <Button type="button" variant="outline" size="sm"
-            disabled={props.isLoading} onClick={props.onDiscoverMetrics} className="mb-2 gap-2">
-            <Sparkles className="h-4 w-4" />Khám phá KPI từ schema
-          </Button>}
           <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2 shadow-xs focus-within:border-foreground/30 focus-within:ring-1 focus-within:ring-ring/20">
             <textarea
               value={input}

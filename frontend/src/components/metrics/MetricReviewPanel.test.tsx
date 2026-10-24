@@ -76,13 +76,10 @@ describe('metric review evidence and gates', () => {
     expect(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' })).toBeDisabled();
   });
 
-  it('offers discovery and keeps blocked candidates visible after history reload', () => {
-    const discover = vi.fn();
+  it('keeps blocked candidates visible after history reload', () => {
     render(<StudioChatStream messages={[{ id: 'reloaded', sender: 'assistant', text: '', timestamp: '',
       blockedCandidates: [{ name: 'Biên lợi nhuận', review: { ...passingReview, status: 'rejected', summary: 'Thiếu giá vốn' } }],
-    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} onDiscoverMetrics={discover} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Khám phá KPI từ schema' }));
-    expect(discover).toHaveBeenCalledOnce();
+    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} />);
     expect(screen.getByText('Biên lợi nhuận')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Chưa phù hợp hoặc thiếu dữ liệu'));
     expect(screen.getByText('Thiếu giá vốn')).toBeInTheDocument();
