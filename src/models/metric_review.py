@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
+from src.models.metric_agent_output import AgentCandidate
 from src.models.metric_definition import MetricDefinition
 
 ProposalMode = Literal["requested", "discovery"]
@@ -64,14 +65,16 @@ class BlockedMetricArtifact(BaseModel):
 class MetricBuildBatch(BaseModel):
     """Parse individual untrusted items separately to preserve valid siblings."""
 
-    task_id: str
-    candidates: list[dict[str, Any]] = Field(
+    task_id: str = Field(description="Copy the exact server task_id from the user payload. Never invent an ID.")
+    candidates: list[SkipValidation[AgentCandidate]] = Field(
         max_length=10,
         description=(
             'Each ready candidate must have name, status="ready", definition={"metric":{'
             '"name":...,"base_entity":...,"formula":{"function":...,"expression":...,"ratio":...},'
             '"filters":[],"excluded_notes":""}}, knowledge_id, variant_id, criteria, reason. '
             "Repairs must also include the supplied candidate_id. Put ratio inside formula. "
+            "knowledge_id is the family ID, e.g. aov; variant_id is its variant, e.g. woocommerce_order_value. "
+            "Never emit grain, base_entity_id, column_id, or expression_ast; the backend resolves these. "
             "Blocked candidates have status needs_clarification/unsupported/rejected and a reason, no definition."
         ),
     )
@@ -81,7 +84,7 @@ class MetricReviewDecision(BaseModel):
     """Model judgment only; audit, sources and retry counts belong to the server."""
 
     model_config = ConfigDict(extra="forbid")
-    candidate_id: str
+    candidate_id: str = Field(description="Copy the exact candidate_id assigned to this item in the user payload.")
     status: Literal["pass", "needs_revision", "needs_clarification", "rejected", "unsupported"]
     summary: str = Field(min_length=1)
     issues: list[ReviewIssue] = Field(default_factory=list)
@@ -91,8 +94,8 @@ class MetricReviewDecision(BaseModel):
 class MetricReviewBatch(BaseModel):
     """Correlate business decisions to exactly one coordinator task."""
 
-    task_id: str
-    decisions: list[dict[str, Any]]
+    task_id: str = Field(description="Copy the exact server task_id from the user payload.")
+    decisions: list[SkipValidation[MetricReviewDecision]]
 
 
 class MetricScopeSelection(BaseModel):

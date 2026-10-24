@@ -55,10 +55,12 @@ giá trị khai báo và quan hệ; không cắt bớt điều kiện để vừ
 được ghi trong context báo cáo, không đại diện cho mọi KPI có thể có của toàn database.
 Bước chọn phạm vi chỉ chọn bảng, không hỏi người dùng chọn cột giá hay công thức AOV;
 Metric Designer Agent tự tạo các biến thể có tiêu chí riêng từ metadata đã nạp.
-AOV tính bằng tỷ số giữa hai phép tổng hợp vẫn chưa hỗ trợ. Khi metadata xác nhận
-một dòng cho mỗi đơn và cột giá không NULL, `AVG` trên giá trị mỗi đơn là biến thể
-có thể kiểm tra và thẩm định. Biên lợi nhuận và tỷ lệ chuyển đổi tổng hợp vẫn chưa
-hỗ trợ; compiler v1 không nhận phép chia ID giả công thức.
+AOV, biên lợi nhuận và các KPI tỷ lệ có thể dùng `formula.ratio` với hai phép tổng hợp
+trên cùng `base_entity`, mỗi phía có `function`, `expression` và `filters` riêng.
+`metric.filters` áp dụng cho cả hai phía; `scale=100` biểu diễn phần trăm và mẫu số
+bằng 0 trả `NULL`. Không viết phép chia aggregates trong `expression` hoặc chia ID.
+Với AOV, `AVG` chỉ tương đương khi metadata xác nhận một dòng mỗi đơn, cột giá
+không NULL và cùng tập đơn. Công thức lấy cột từ nhiều bảng gốc vẫn chưa hỗ trợ.
 
 ## Tri thức tham khảo
 
@@ -67,6 +69,29 @@ Các biến thể Shopify/WooCommerce được giữ riêng. Các công thức v
 được ghi rõ là cần doanh nghiệp xác nhận, không gán cho chuẩn bên ngoài.
 Không tìm web runtime, không dùng vector database hoặc đáp án evaluation.
 Nguồn tham khảo không ghi đè yêu cầu và quy tắc doanh nghiệp đã xác nhận.
+Context mới đọc Knowledge hiện tại; thẩm định lại proposal cũng nạp Knowledge mới
+theo yêu cầu gốc và chế độ requested/discovery. Proposal cha và lịch sử cũ giữ nguyên
+context, định nghĩa và báo cáo đã lưu; không tự thay đổi kết luận cũ.
+
+Đặt `METRIC_KNOWLEDGE_ENABLED=false` và khởi động lại backend để tạm tắt tri thức
+tham khảo. Sinh mới và thẩm định lại vẫn dùng yêu cầu, metadata, kiểm tra kỹ thuật
+và Reviewer; không gắn family/variant hoặc nguồn Knowledge. Các điều kiện nghiệp vụ
+đã xác nhận và snapshot cũ được giữ nguyên. Metric đã lưu vẫn biên dịch từ definition.
+Mặc định là `true`. Công tắc này không tắt HITL, kiểm tra tỷ lệ hoặc guardrails SQL.
+
+Designer/Repair chỉ cung cấp tên bảng/cột và công thức nghiệp vụ. Backend dựng lại
+grain, ID và AST từ metadata, đồng thời đối chiếu family/variant với registry.
+Một ID biến thể duy nhất có thể được quy về family tương ứng; ID lạ, family mâu
+thuẫn hoặc criteria sai vẫn bị từ chối. Phản hồi sửa thiếu/trùng/sai candidate ID
+không được áp dụng sang KPI khác.
+Schema đầu ra của Designer/Repair không chứa ID hay AST do backend quản lý.
+OpenAI dùng JSON mode kèm schema trong prompt để tránh JSON tool-call bị lặp dấu
+đóng hoặc hỏng cú pháp; các client khác giữ function calling và fallback hiện có.
+Mỗi lời gọi metric giới hạn 4096 output token. Backend vẫn kiểm tra riêng từng
+candidate/decision, không chấp nhận cả batch chỉ vì model trả JSON hợp lệ.
+Reviewer nhận thêm `filter_scope` do backend dựng từ filters thật. Phạm vi không
+có filter được ghi rõ là toàn bộ tập chung, tránh hiểu nhầm là thiếu mẫu số.
+Đây là bằng chứng cơ học, không thay thế thẩm định nghiệp vụ hoặc phê duyệt của người dùng.
 
 ## API và lưu dấu vết
 

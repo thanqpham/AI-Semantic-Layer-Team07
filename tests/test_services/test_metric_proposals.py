@@ -5,9 +5,11 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import select
 
+from src.config import get_settings
 from src.models.db import MetricProposalModel, SemanticColumnModel, SemanticDatabaseModel, SemanticMetricModel
 from src.models.metric_definition import MetricDefinition
 from src.services.metric_context import load_review_schema
+from src.services.metric_knowledge import metric_knowledge
 from src.services.metric_proposals import (
     link_saved_proposal,
     re_review_proposal,
@@ -95,6 +97,24 @@ async def test_re_review_creates_new_snapshot_and_keeps_original_requirements(as
     assert len(list((await async_session.scalars(select(MetricProposalModel))).all())) == 2
 
 
+@pytest.mark.parametrize("mode", ["requested", "discovery"])
+async def test_re_review_refreshes_knowledge_without_rewriting_original_evidence(async_session, proposal, mode):
+    stale = {"metrics": [], "sources": [], "outdated": True}
+    proposal.context = {
+        **proposal.context,
+        "knowledge": stale,
+        "proposal_mode": mode,
+        "candidate": {"knowledge_id": "net_sales", "variant_id": "merchandise_net_sales"},
+    }
+    expected = metric_knowledge(proposal.context["requirement"], mode == "discovery")
+    with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()) as review:
+        updated = await re_review_proposal(async_session, proposal, 1, MetricDefinition.model_validate(definition()))
+    assert review.call_args.args[0]["knowledge"] == expected
+    assert updated.context["knowledge"] == expected
+    assert updated.context["requirement"] == proposal.context["requirement"]
+    assert proposal.context["knowledge"] == stale
+
+
 async def test_save_rechecks_duplicate_created_after_review(async_session, proposal):
     await create_metric(async_session, proposal.db_id, {"source": "manual", "definition": definition()}, 1)
     with pytest.raises(ValueError, match="đã tồn tại"):
@@ -120,6 +140,29 @@ async def test_re_review_preserves_variant_identity_and_its_source(async_session
     assert updated.review["variant_id"] == "merchandise_net_sales"
     assert updated.review["criteria"]["order_status"] == "all_statuses"
     assert [source["id"] for source in updated.review["sources"]] == ["woocommerce_analytics"]
+
+
+async def test_re_review_with_knowledge_disabled_keeps_the_original_snapshot(async_session, proposal):
+    proposal.context = {
+        **proposal.context,
+        "candidate": {
+            "knowledge_id": "net_sales",
+            "variant_id": "merchandise_net_sales",
+            "criteria": {"tax_basis": "excludes_tax"},
+        },
+    }
+    original = proposal.context
+    with (
+        patch.object(get_settings(), "metric_knowledge_enabled", False),
+        patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()),
+    ):
+        updated = await re_review_proposal(async_session, proposal, 1, MetricDefinition.model_validate(definition()))
+    assert updated.status == "pass"
+    assert updated.context["knowledge"] == {"metrics": [], "sources": []}
+    assert updated.context["candidate"]["knowledge_id"] is None
+    assert updated.review["sources"] == []
+    assert updated.review["criteria"]["tax_basis"] == "excludes_tax"
+    assert proposal.context == original
 
 
 def test_fingerprint_is_order_independent_but_tracks_relationships():

@@ -45,6 +45,18 @@ async def test_cancellation_ratio_reaches_reviewer_without_repair():
     repair.assert_not_awaited()
 
 
+async def test_designer_prompt_supports_aov_ratio_and_keeps_avg_conditional():
+    batch = MetricBuildBatch(task_id="aov-task", candidates=[draft()])
+    with patch("src.agents.roles.metric_designer_agent.invoke_metric_json", AsyncMock(return_value=batch)) as invoke:
+        await generate_metric_drafts(context(), "aov-task")
+    prompt = invoke.call_args.args[1][0][1]
+    assert "AOV dạng tỷ số dùng formula.ratio" in prompt
+    assert "COUNT_DISTINCT" in prompt
+    assert "AVG chỉ dùng" in prompt
+    assert "shopify_order_value" in prompt and "woocommerce_order_value" in prompt
+    assert "chỉ dùng AVG" not in prompt
+
+
 def repair_mock(raw):
     async def repair(_context, items, _task_id):
         return [{**raw, "candidate_id": item["candidate_id"]} for item in items]

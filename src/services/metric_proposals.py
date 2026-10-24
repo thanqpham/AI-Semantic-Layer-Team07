@@ -14,6 +14,7 @@ from src.models.metric_definition import MetricDefinition
 from src.models.metric_review import MetricReview
 from src.services.metric_context import load_review_schema
 from src.services.metric_dedupe import dedupe_reviewed_suggestions, load_existing_for_dedupe
+from src.services.metric_knowledge import metric_knowledge
 from src.services.metric_proposal_context import check_context_budget
 from src.services.metric_review import review_metric_draft
 from src.services.metric_review_validation import schema_tables
@@ -115,6 +116,9 @@ async def re_review_proposal(
         **proposal.context,
         "schema": await load_review_schema(db, proposal.db_id, names),
         "existing_metrics": existing or [],
+        "knowledge": metric_knowledge(
+            proposal.context["requirement"], proposal.context.get("proposal_mode") == "discovery"
+        ),
     }
     check_context_budget(context)
     candidate = proposal.context.get("candidate", {})

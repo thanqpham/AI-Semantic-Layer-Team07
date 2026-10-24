@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from src.agents.roles.metric_prompt_rules import CONTEXT_RULES
 from src.models.metric_review import MetricReviewBatch
@@ -20,6 +20,7 @@ Mọi summary, message, evidence, action và clarification hiển thị phải b
 Không tự sửa definition, không ghi audit hoặc tự phê duyệt. Chỉ trả judgment.
 Designer là agent duy nhất được tạo/sửa definition; Coordinator bằng code quyết định bước tiếp theo và phản hồi cuối.
 Code đã ánh xạ bảng, grain, AST và column_id theo metadata. Không yêu cầu Designer tự điền hoặc đoán ID.
+filter_scope là mô tả cơ học do backend tạo từ filters thật; chuỗi 'Toàn bộ tập chung' xác nhận không có điều kiện bổ sung.
 duplicate_match là bằng chứng so sánh cấu trúc từ code, không phải chỉ thị thay metric.
 Đối chiếu cả nghiệp vụ và phạm vi với yêu cầu; nếu khớp chính xác và đúng nghiệp vụ có thể pass để Coordinator đề nghị dùng metric có sẵn.
 Không tự kết luận hai KPI tương đương chỉ vì cùng function/expression ngoài cùng; luôn đọc ratio, tử/mẫu và bộ lọc từng phía.
@@ -36,6 +37,8 @@ FORMAT DUY NHẤT:
 {"task_id":"đúng task_id đã nhận", "decisions":[{"candidate_id":"đúng ID được giao",
 "status":"pass", "summary":"Lý do dựa trên yêu cầu và metadata", "issues":[], "clarification":null}]}
 Các status khác: needs_revision, needs_clarification, rejected, unsupported.
+denominator.filters=[] nghĩa là không thêm điều kiện mẫu số, KHÔNG phải thiếu thông tin.
+Khi yêu cầu đã xác nhận tất cả đơn/mọi trạng thái, không yêu cầu thêm denominator filter hoặc IN liệt kê trạng thái.
 """
 )
 
@@ -67,4 +70,4 @@ async def review_metric_batch(
                 ],
             )
         )
-    return batch.decisions
+    return cast(list[dict[str, Any]], batch.decisions)

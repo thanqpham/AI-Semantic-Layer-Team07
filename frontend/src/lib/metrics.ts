@@ -78,7 +78,9 @@ export function getMetricUsedColumns(definition: MetricDefinition): string[] {
 }
 
 function formatAggregate(aggregate: NonNullable<MetricDefinition['metric']['formula']['ratio']>['numerator']): string {
-  const filters = aggregate.filters?.map((item) => `${item.field} ${item.operator} ${String(item.value ?? '')}`);
+  const filters = aggregate.filters
+    ?.map((item) => `${item.field} ${item.operator} ${JSON.stringify(item.value)}`)
+    .sort();
   const filterText = filters?.length ? ` WHERE ${filters.join(' AND ')}` : '';
   return `${aggregate.function}(${aggregate.expression})${filterText}`;
 }
