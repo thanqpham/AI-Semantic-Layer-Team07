@@ -13,6 +13,7 @@ from src.agents.nodes.metric.repair_node import repair_node
 from src.agents.nodes.metric.validate_node import validate_node
 from src.agents.roles.metric_designer_agent import generate_metric_drafts
 from src.agents.roles.metric_reviewer_agent import review_metric_batch
+from src.models.metric_definition import MetricDefinition
 from src.models.metric_review import (
     MetricReview,
     MetricReviewDecision,
@@ -154,10 +155,24 @@ def _review_request(state: MetricWorkflowState, item: dict[str, Any]) -> dict[st
     return {
         "candidate_id": item["id"],
         "definition": item["definition"].model_dump(mode="json"),
+        "filter_scope": _filter_scope(item["definition"]),
         "variant_id": item["raw"].get("variant_id"),
         "criteria": item["raw"].get("criteria", {}),
         "output_feedback": item["report"].summary if item["report"] else None,
         "duplicate_match": item["duplicate"],
+    }
+
+
+def _filter_scope(definition: MetricDefinition) -> dict[str, Any]:
+    scopes = {"metric": definition.metric.filters}
+    ratio = definition.metric.formula.ratio
+    if ratio is not None:
+        scopes.update(numerator=ratio.numerator.filters, denominator=ratio.denominator.filters)
+    return {
+        scope: [item.model_dump(mode="json", exclude={"column_id"}) for item in filters]
+        if filters
+        else "Toàn bộ tập chung, không thêm điều kiện lọc ở phạm vi này."
+        for scope, filters in scopes.items()
     }
 
 

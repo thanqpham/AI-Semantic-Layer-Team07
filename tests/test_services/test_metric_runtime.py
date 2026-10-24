@@ -25,6 +25,7 @@ class ProviderTestError(Exception):
 
 def _client(responses):
     client = MagicMock()
+    client._llm_type = "openai-chat"
     client.openai_api_key = SecretStr("private-test-key")
     client.openai_api_base = "https://model.invalid/"
     client.with_structured_output.return_value.ainvoke = AsyncMock(side_effect=responses)
@@ -38,6 +39,10 @@ async def test_rate_limit_retries_same_operation_once_without_plain_fallback():
         result = await invoke_metric_json(Answer, "payload")
     assert result.value == 3
     assert client.with_structured_output.return_value.ainvoke.await_count == 2
+    client.with_structured_output.assert_called_with(Answer, method="json_mode")
+    messages = client.with_structured_output.return_value.ainvoke.call_args.args[0]
+    assert messages[-1] == ("user", "payload")
+    assert "Answer" in messages[0][1] and "schema" in messages[0][1]
     client.ainvoke.assert_not_awaited()
     get_llm.assert_called_once_with(role="metric", max_retries=0)
 
@@ -75,7 +80,7 @@ async def test_unsupported_structured_output_has_exactly_one_plain_attempt():
     client.ainvoke.return_value = SimpleNamespace(content='{"value":7}')
     with patch("src.services.metric_runtime.get_llm", return_value=client):
         assert (await invoke_metric_json(Answer, "payload")).value == 7
-    client.ainvoke.assert_awaited_once_with("payload", temperature=0.0)
+    client.ainvoke.assert_awaited_once_with("payload", temperature=0.0, max_tokens=4096)
 
 
 async def test_invalid_json_is_not_transport_retried():

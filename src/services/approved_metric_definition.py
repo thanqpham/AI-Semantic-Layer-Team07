@@ -104,16 +104,31 @@ def _render_definition(metric: dict[str, Any]) -> str:
     lines = [
         f"**Metric đã được phê duyệt:** **{metric['name']}**",
         "",
-        f"- **Công thức:** `{spec.formula.function}({spec.formula.expression})`",
+        f"- **Công thức:** `{_formula_text(definition)}`",
         f"- **Thực thể cơ sở:** `{spec.base_entity}`",
     ]
     if spec.filters:
         lines.append(f"- **Bộ lọc cố định:** {_filter_text(spec.filters)}")
+    if spec.formula.ratio is not None:
+        for scope, label in (("numerator", "tử số"), ("denominator", "mẫu số")):
+            filters = getattr(spec.formula.ratio, scope).filters
+            if filters:
+                lines.append(f"- **Bộ lọc {label}:** {_filter_text(filters)}")
     if spec.confidence:
         lines.append(f"- **Mức độ tin cậy:** `{spec.confidence}`")
     if spec.excluded_notes:
         lines.append(f"- **Lưu ý:** {spec.excluded_notes}")
     return "\n".join(lines)
+
+
+def _formula_text(definition: MetricDefinition) -> str:
+    formula = definition.metric.formula
+    ratio = formula.ratio
+    if ratio is None:
+        return f"{formula.function}({formula.expression})"
+    numerator = f"{ratio.numerator.function}({ratio.numerator.expression})"
+    denominator = f"{ratio.denominator.function}({ratio.denominator.expression})"
+    return f"{ratio.offset:g} + {ratio.scale:g} × ({numerator}) / ({denominator})"
 
 
 def _metric_definition(value: Any) -> MetricDefinition | None:

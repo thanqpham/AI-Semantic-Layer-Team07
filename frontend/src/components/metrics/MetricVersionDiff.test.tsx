@@ -89,4 +89,21 @@ describe('MetricVersionDiff', () => {
     expect(screen.queryByTestId('metric-version-diff')).not.toBeInTheDocument();
     expect(screen.getByText(/legacy/i)).toBeInTheDocument();
   });
+
+  it('labels ratio changes as formulas and displays their scoped filters', () => {
+    const previous = makeDefinition('amount');
+    previous.metric.formula.ratio = {
+      numerator: { function: 'SUM', expression: 'amount' },
+      denominator: { function: 'COUNT_DISTINCT', expression: 'order_id' },
+    };
+    const current = structuredClone(previous);
+    current.metric.formula.ratio!.scale = 100;
+    current.metric.formula.ratio!.numerator.filters = [{ field: 'status', operator: 'eq', value: 'cancelled' }];
+    render(<MetricVersionDiff previousDefinition={previous} currentDefinition={current} />);
+    const rows = screen.getByTestId('metric-version-diff').querySelectorAll('[data-status]');
+    expect(Array.from(rows).map((row) => row.getAttribute('data-status'))).toEqual(['removed', 'added']);
+    for (const row of rows) expect(row).toHaveTextContent('Công thức');
+    expect(rows[1]).toHaveTextContent('COUNT_DISTINCT(order_id)');
+    expect(rows[1]).toHaveTextContent('cancelled');
+  });
 });
