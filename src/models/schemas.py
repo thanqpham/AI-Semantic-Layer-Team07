@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from src.models.metric_definition import FilterOperator, MetricDefinition, MetricStatus
+from src.models.metric_definition import FilterOperator, MetricDefinition, MetricRatio, MetricStatus
 from src.models.metric_review import MetricCandidateReport, MetricReview, ProposalMode, RunStatus
 from src.models.raw_schema import RawSchema
 from src.models.schema_metadata import ParseDiagnostic, RawSchemaMetadata, SchemaDialect

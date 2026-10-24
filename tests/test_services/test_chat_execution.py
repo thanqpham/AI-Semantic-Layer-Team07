@@ -96,5 +96,5 @@ async def test_parallel_runs_do_not_share_context():
 
     left, right = await asyncio.gather(run("context"), run("dedupe"))
     assert left["run_id"] != right["run_id"]
-    assert {event["action"] for event in left["events"]} == {"context"}
-    assert {event["action"] for event in right["events"]} == {"dedupe"}
+    assert {event["action"] for event in left["events"] if event["kind"] == "step"} == {"context"}
+    assert {event["action"] for event in right["events"] if event["kind"] == "step"} == {"dedupe"}

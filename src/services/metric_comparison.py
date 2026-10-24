@@ -51,25 +51,42 @@ def _metric_entry(item: dict[str, Any]) -> dict[str, Any] | None:
             return None
     spec = parsed.metric
     full_key = metric_identity(parsed)
-    filters = [_filter_key(filter_item.model_dump(mode="json")) for filter_item in spec.filters]
     return {
         "core_key": full_key[:-1],
         "full_key": full_key,
         "spec": spec,
         "metric": item,
-        "filters": scoped_filters,
+        "filters": list(full_key[-1]),
     }
 
 
 def metric_identity(definition: MetricDefinition) -> tuple[Any, ...]:
     """Identify a metric by its calculation, independent of its display name."""
     spec = definition.metric
+    ratio = spec.formula.ratio
+    ratio_key = (
+        None
+        if ratio is None
+        else (
+            ratio.numerator.function,
+            _normalize_expression(ratio.numerator.expression),
+            ratio.denominator.function,
+            _normalize_expression(ratio.denominator.expression),
+            ratio.scale,
+            ratio.offset,
+        )
+    )
+    filters = [("metric", _filter_key(item.model_dump(mode="json"))) for item in spec.filters]
+    if ratio is not None:
+        for scope in ("numerator", "denominator"):
+            filters.extend((scope, _filter_key(item.model_dump(mode="json"))) for item in getattr(ratio, scope).filters)
     return (
         spec.formula.function,
         _normalize_expression(spec.formula.expression),
+        ratio_key,
         spec.base_entity_id or spec.base_entity.casefold(),
         tuple(sorted(spec.grain.column_ids)),
-        tuple(sorted(_filter_key(item.model_dump(mode="json")) for item in spec.filters)),
+        tuple(sorted(filters)),
     )
 
 

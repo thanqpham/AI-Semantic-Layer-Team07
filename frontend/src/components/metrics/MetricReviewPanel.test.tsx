@@ -13,6 +13,18 @@ const definition: MetricDefinition = { metric: { name: 'Doanh thu', base_entity:
   formula: { function: 'SUM', expression: 'amount' }, filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } };
 
 describe('metric review evidence and gates', () => {
+  it('shows the invalid reviewer field, candidate and attempt', () => {
+    render(<MetricReviewPanel review={{ ...passingReview, status: 'error', execution_error: {
+      code: 'INVALID_AGENT_OUTPUT', stage: 'reviewer', message: 'Phản hồi sai cấu trúc.', retryable: false,
+      candidate_id: 'candidate-123', attempt: 1,
+      validation_errors: [{ field: 'issues.0.action', type: 'missing', message: 'Field required' }],
+    } }} />);
+    fireEvent.click(screen.getByText('AI chưa trả được thẩm định hợp lệ'));
+    expect(screen.getByText('issues.0.action')).toBeInTheDocument();
+    expect(screen.getByText('missing')).toBeInTheDocument();
+    expect(screen.getByText('candidate-123')).toBeInTheDocument();
+    expect(screen.getByText(/Lần thử 2/)).toBeInTheDocument();
+  });
   it('shows the reviewed variant and its business criteria', () => {
     render(<MetricReviewPanel review={{ ...passingReview, variant_id: 'merchandise_net_including_vat',
       criteria: { tax_basis: 'includes_vat' } }} />);

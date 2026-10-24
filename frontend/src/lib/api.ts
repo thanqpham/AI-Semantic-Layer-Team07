@@ -161,6 +161,9 @@ export interface MetricReview {
   criteria?: Record<string, string>;
   execution_error?: {
     code: 'INVALID_AGENT_OUTPUT' | 'RATE_LIMITED' | 'QUOTA_EXHAUSTED' | 'PROVIDER_ERROR' | 'LLM_BUSY';
+    candidate_id?: string | null;
+    attempt?: number | null;
+    validation_errors?: { field: string; type: string; message: string }[];
     stage: string; message: string; retryable: boolean; retry_after_seconds?: number | null;
   } | null;
   handoffs?: { message_id: string; task_id: string; candidate_id: string; sender: string; recipient: string;

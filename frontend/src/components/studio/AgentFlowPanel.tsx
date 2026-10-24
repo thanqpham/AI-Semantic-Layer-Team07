@@ -20,6 +20,7 @@ const NODES = [
   { id: 'metric_review', name: 'Metric Reviewer Agent', en: 'Metric Reviewer Agent', stage: 5, agent: true },
   { id: 'metric_review_decision', name: 'Đánh giá nghiệp vụ', en: 'Business review', stage: 6 },
   { id: 'metric_repair', name: 'Sửa theo phản hồi', en: 'Metric repair', stage: 6 },
+  { id: 'metric_conclude', name: 'Coordinator kết luận', en: 'Coordinator decision', stage: 7 },
   { id: 'semantic_parse', name: 'Semantic Query Parser Agent', en: 'Semantic Query Parser Agent', stage: 2, agent: true },
   { id: 'context', name: 'Chuẩn bị ngữ cảnh', en: 'Prepare context', stage: 3 },
   { id: 'dedupe', name: 'Kiểm tra trùng lặp', en: 'Check duplicates', stage: 4 },

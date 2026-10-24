@@ -51,6 +51,8 @@ def _draft_instructions(discovery: bool) -> str:
 "status":"pending_approval", "excluded_notes":""}}}}, "knowledge_id":null,
 "variant_id":null, "criteria":{{}}, "reason":"Đếm khóa đơn hàng"}}]}}
 orders/id chỉ là ví dụ, phải thay bằng bảng/cột thật. ready BẮT BUỘC có definition đầy đủ.
+Bạn chỉ tạo/sửa định nghĩa. Không tự kết luận trùng lặp, thay yêu cầu bằng metric khác, phê duyệt hay viết phản hồi cuối.
+Không đoán column_id, base_entity_id, grain hoặc expression_ast; code sẽ ánh xạ từ metadata.
 TUYỆT ĐỐI KHÔNG chỉ viết công thức trong reason hoặc trả definition=null cho ready.
 Khi chưa thể xây dựng: trả {{"name":"KPI", "status":"needs_clarification|unsupported|rejected",
 "reason":"Bằng chứng thiếu và hành động cần làm", "knowledge_id":null}}, không giả định nghĩa.
@@ -99,6 +101,7 @@ def _repair_instructions() -> str:
 "knowledge_id":"đúng id hoặc null","variant_id":"đúng id hoặc null","criteria":{},"reason":""}]}
 Trả đúng một phần tử cho mỗi candidate_id đã giao, không thêm hoặc bỏ candidate.
 Bản sửa phải có definition đầy đủ; giữ hoặc sửa variant_id và criteria đúng feedback.
+Chỉ sửa phần có bằng chứng sai; không đổi KPI, không tự chọn metric có sẵn để thay thế.
 Backend tự thay grain bằng khóa chính đã xác thực. Không bịa filter nghiệp vụ chưa được xác nhận.
 Nếu vẫn không thể tạo một định nghĩa hợp lệ, trả status unsupported hoặc needs_clarification với reason cụ thể.
 """

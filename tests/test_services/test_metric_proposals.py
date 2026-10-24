@@ -95,6 +95,14 @@ async def test_re_review_creates_new_snapshot_and_keeps_original_requirements(as
     assert len(list((await async_session.scalars(select(MetricProposalModel))).all())) == 2
 
 
+async def test_save_rechecks_duplicate_created_after_review(async_session, proposal):
+    await create_metric(async_session, proposal.db_id, {"source": "manual", "definition": definition()}, 1)
+    with pytest.raises(ValueError, match="đã tồn tại"):
+        await require_passing_proposal(
+            async_session, proposal.db_id, proposal.id, 1, MetricDefinition.model_validate(proposal.final_definition)
+        )
+
+
 async def test_re_review_preserves_variant_identity_and_its_source(async_session, proposal):
     proposal.context = {
         **proposal.context,

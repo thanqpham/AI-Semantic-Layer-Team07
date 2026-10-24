@@ -267,6 +267,20 @@ class MetricSpec(BaseModel):
     confidence: MetricConfidence | None = None
     excluded_notes: str = Field(default="", max_length=2000)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_ratio_location(cls, value: Any) -> Any:
+        """Preserve an unambiguous legacy ratio without changing its calculation."""
+        if isinstance(value, dict) and "ratio" in value:
+            formula = value.get("formula")
+            if not isinstance(formula, dict):
+                raise ValueError("formula.ratio cần formula hợp lệ.")
+            if formula.get("ratio") is not None and formula["ratio"] != value["ratio"]:
+                raise ValueError("metric.ratio và formula.ratio mâu thuẫn; chỉ cung cấp một cách tính.")
+            value = {**value, "formula": {**formula, "ratio": value["ratio"]}}
+            value.pop("ratio")
+        return value
+
     @field_validator("filters", mode="before")
     @classmethod
     def normalize_filters(cls, value: Any) -> list[Any]:
@@ -321,6 +335,12 @@ class MetricDefinition(BaseModel):
         """Wrap flat metric specification in a 'metric' container if needed."""
         if isinstance(data, dict):
             if "metric" in data and isinstance(data["metric"], dict):
+                if "excluded_notes" in data:
+                    metric = data["metric"]
+                    if "excluded_notes" in metric and metric["excluded_notes"] != data["excluded_notes"]:
+                        raise ValueError("excluded_notes trong và ngoài metric mâu thuẫn.")
+                    data = {**data, "metric": {**metric, "excluded_notes": data["excluded_notes"]}}
+                    data.pop("excluded_notes")
                 return data
             if "name" in data or "formula" in data or "base_entity" in data:
                 return {"metric": data}

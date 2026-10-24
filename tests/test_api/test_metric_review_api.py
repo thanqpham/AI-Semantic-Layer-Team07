@@ -30,15 +30,19 @@ async def setup_review(async_session):
     return database.id, proposal, headers
 
 
-async def test_generate_persists_report_not_catalog_and_save_is_still_pending(client, async_session, setup_review):
+@pytest.mark.parametrize("legacy_envelope", [False, True])
+async def test_generate_persists_report_not_catalog_and_save_is_still_pending(
+    client, async_session, setup_review, legacy_envelope
+):
     db_id, _, headers = setup_review
     context = MetricContextResult(schema=await load_review_schema(async_session, db_id), diagnostic={"status": "ready"})
     batch = MetricDraftBatch(candidates=[MetricDraft(name="Doanh thu trước thuế", definition=definition())])
+    candidates = [definition()] if legacy_envelope else [item.model_dump(mode="json") for item in batch.candidates]
     with (
         patch("src.api.routes.build_metric_context", AsyncMock(return_value=context)),
         patch(
             "src.agents.workflows.metric_proposal_workflow.generate_metric_drafts",
-            AsyncMock(return_value=[item.model_dump(mode="json") for item in batch.candidates]),
+            AsyncMock(return_value=candidates),
         ),
         patch(
             "src.agents.workflows.metric_proposal_workflow.review_metric_batch",

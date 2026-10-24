@@ -460,7 +460,7 @@ describe('StudioChatStream', () => {
       />
     );
     // Formula should show function and expression
-    expect(screen.getByText('AVG(total_amount)')).toBeInTheDocument();
+    expect(screen.getByText('Công thức tính').parentElement).toHaveTextContent('AVG(total_amount)');
   });
 
   it('renders refine and edit buttons on suggestion cards', () => {

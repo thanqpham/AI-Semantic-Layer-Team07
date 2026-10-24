@@ -66,7 +66,8 @@ async def test_reviewed_proposal_reuses_same_metric_with_different_name(async_se
         "duplicate_notices": [],
     }
 
-    result = await persist_reviewed_state(async_session, db_id, 1, state)
+    await dedupe_reviewed_suggestions(async_session, db_id, state)
+    result = state
 
     assert result["suggested_metrics"] == []
     assert result["suggestion_action"] is None
@@ -86,20 +87,19 @@ async def test_prefers_approved_existing_and_ignores_deleted(async_session) -> N
         async_session, db_id, {"definition": _definition("Later approved")}, 1, status_override="approved"
     )
     state = {"suggested_metrics": [{"definition": _definition("New")}]}
-    result = await persist_reviewed_state(async_session, db_id, 1, state)
+    await dedupe_reviewed_suggestions(async_session, db_id, state)
+    result = state
     assert result["duplicate_notices"][0]["existing_metric_id"] == approved.id
 
     approved.is_deleted = True
     later.is_deleted = True
-    result = await persist_reviewed_state(
-        async_session, db_id, 1, {"suggested_metrics": [{"definition": _definition("New")}]}
-    )
+    result = {"suggested_metrics": [{"definition": _definition("New")}]}
+    await dedupe_reviewed_suggestions(async_session, db_id, result)
     assert result["duplicate_notices"][0]["existing_metric_id"] == older.id
 
     older.is_deleted = True
-    result = await persist_reviewed_state(
-        async_session, db_id, 1, {"suggested_metrics": [{"definition": _definition("New")}]}
-    )
+    result = {"suggested_metrics": [{"definition": _definition("New")}]}
+    await dedupe_reviewed_suggestions(async_session, db_id, result)
     assert len(result["suggested_metrics"]) == 1
     assert result.get("duplicate_notices", []) == []
 
@@ -111,7 +111,8 @@ async def test_uncanonical_existing_preserves_suggestion_and_reports_incomplete(
     existing.definition = {}
     state = {"suggested_metrics": [{"definition": _definition("New")}]}
 
-    result = await persist_reviewed_state(async_session, db_id, 1, state)
+    await dedupe_reviewed_suggestions(async_session, db_id, state)
+    result = state
 
     assert len(result["suggested_metrics"]) == 1
     assert result["dedupe_performed"] is False
@@ -125,7 +126,8 @@ async def test_unresolvable_proposal_preserves_suggestion_and_reports_incomplete
     draft["metric"]["base_entity"] = "missing_table"
     state = {"suggested_metrics": [{"definition": draft}]}
 
-    result = await persist_reviewed_state(async_session, db_id, 1, state)
+    await dedupe_reviewed_suggestions(async_session, db_id, state)
+    result = state
 
     assert len(result["suggested_metrics"]) == 1
     assert result["dedupe_performed"] is False
@@ -141,3 +143,13 @@ async def test_unavailable_catalog_preserves_suggestion_and_reports_incomplete()
 
     assert len(state["suggested_metrics"]) == 1
     assert state["dedupe_performed"] is False
+
+
+async def test_persistence_cannot_reclassify_reviewed_decision():
+    db = AsyncMock()
+    state = {"suggested_metrics": [{"definition": _definition("Reviewed")}], "reviewed_proposals": []}
+    result = await persist_reviewed_state(db, 1, 1, state)
+    assert result is state
+    assert len(result["suggested_metrics"]) == 1
+    assert "duplicate_notices" not in result
+    db.scalars.assert_not_awaited()

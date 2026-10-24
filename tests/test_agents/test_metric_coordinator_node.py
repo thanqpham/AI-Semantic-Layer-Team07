@@ -6,12 +6,12 @@ import pytest
 
 from src.agents.graphs.chat_graph import build_chat_graph
 from src.agents.graphs.semantic_layer_graph import END, _route_after_review
-from src.agents.nodes.metric.metric_review_node import metric_review_node, reviewed_state
 from src.agents.nodes.metric.coordinator_node import coordinator_node
+from src.agents.nodes.metric.metric_review_node import metric_review_node, reviewed_state
 from src.agents.nodes.schema.save_node import _selected_review_evidence
-from src.models.metric_review import MetricBuildBatch, MetricReview
 from src.agents.roles.metric_designer_agent import generate_metric_drafts
 from src.agents.workflows.metric_proposal_workflow import _graph
+from src.models.metric_review import MetricBuildBatch, MetricReview
 from tests.metric_review_helpers import context, definition, reviewer_mock, schema
 
 
@@ -50,7 +50,7 @@ def test_chat_graph_has_mandatory_review_edge_and_legacy_blocks_unreviewed_state
     edges = {(edge.source, edge.target) for edge in graph.edges}
     assert ("orchestrator", "metric_coordinator") in edges
     workflow_edges = {(edge.source, edge.target) for edge in _graph().get_graph().edges}
-    assert {("build", "validate"), ("validate", "review"), ("repair", "validate")} <= workflow_edges
+    assert {("build", "validate"), ("validate", "dedupe"), ("dedupe", "review"), ("repair", "validate")} <= workflow_edges
     assert _route_after_review({}) == END
     assert _route_after_review({"suggested_metrics": [{}], "blocked_candidates": [{}]}) == END
     assert (
@@ -102,7 +102,7 @@ def test_passing_variant_does_not_pause_for_another_variant_clarification():
     assert "clarification" not in result
 
 
-def test_dedupe_still_removes_existing_reviewed_metric():
+def test_projection_cannot_replace_a_reviewed_metric_without_duplicate_evidence():
     raw = definition()
     proposal = {
         "name": "Metric",
@@ -125,7 +125,7 @@ def test_dedupe_still_removes_existing_reviewed_metric():
             ]
         },
     )
-    assert result["suggested_metrics"] == [] and len(result["duplicate_notices"]) == 1
+    assert len(result["suggested_metrics"]) == 1 and result["duplicate_notices"] == []
 
 
 def test_legacy_save_preserves_human_selection_and_refuses_unreviewed_edits():

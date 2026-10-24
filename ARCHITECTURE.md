@@ -167,6 +167,9 @@ flowchart TD
 ### 3.3. Conversational Multi-Agent & Query Clarifier Graphs
 
 #### A. Chat Orchestrator Graph (`src/agents/graphs/chat_graph.py`)
+
+Vai trò, thứ tự kiểm tra và quyền kết luận của luồng metric: [Metric workflow](docs/guide/metric-workflow.md).
+
 ```mermaid
 flowchart LR
     MSG(["Tin nhắn của người dùng"]) --> ORCH["orchestrator_node\n(Phân loại ý định Intent)"]

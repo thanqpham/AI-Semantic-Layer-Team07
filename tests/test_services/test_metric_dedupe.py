@@ -428,7 +428,18 @@ def test_metric_summary_projects_row() -> None:
         },
     )
     summary = _metric_summary(row)
-    assert set(summary) == {"id", "name", "status", "function", "expression", "ratio", "base_entity", "filters"}
+    assert set(summary) == {
+        "id",
+        "name",
+        "status",
+        "function",
+        "expression",
+        "ratio",
+        "base_entity",
+        "filters",
+        "definition",
+    }
+    assert summary["definition"] == row.definition
     assert summary["id"] == 7
     assert summary["name"] == "Doanh thu"
     assert summary["status"] == "approved"
@@ -459,6 +470,16 @@ async def test_list_existing_returns_none_on_error(async_session: AsyncSession) 
     async_session.execute = AsyncMock(side_effect=Exception("metadata store down"))
 
     assert await list_existing_metric_summaries(async_session, 101) is None
+
+
+async def test_deleted_metric_does_not_block_recreation(async_session: AsyncSession) -> None:
+    await _seed_db(async_session, 101)
+    metric = await _seed_metric(async_session, 101, "Doanh thu", "quantity * unit_price")
+    metric.is_deleted = True
+    await async_session.flush()
+    assert await list_existing_metric_summaries(async_session, 101) == []
+    summaries, performed = await load_existing_for_dedupe(async_session, "101")
+    assert performed and summaries == []
 
 
 @pytest.mark.asyncio
