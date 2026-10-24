@@ -8,7 +8,7 @@ import sqlglot
 from sqlglot import exp
 
 from src.models.metric_definition import MetricDefinition
-from src.models.metric_review import KnowledgeSource, MetricDraft, MetricReview
+from src.models.metric_review import KnowledgeSource, MetricDraft, MetricReview, ReviewIssue
 from src.observability.langfuse_tracing import observation
 from src.services.metric_knowledge import find_variant, normalized_text
 from src.services.metric_review_validation import schema_tables, technical_review
@@ -41,11 +41,24 @@ def validate_review_draft(
             clarification=definition.metric.excluded_notes,
         )
     carrier = MetricDraft.model_validate({**draft, "status": "candidate"})
-    if _requires_ratio(carrier, context):
-        return None, MetricReview(
-            status="unsupported", summary="Compiler chưa hỗ trợ ratio giữa các tổng hợp của KPI này."
-        )
+    if definition.metric.formula.ratio is None and _requires_ratio(carrier, context):
+        return None, _missing_ratio_review()
     return definition, None
+
+
+def _missing_ratio_review() -> MetricReview:
+    return MetricReview(
+        status="needs_revision",
+        summary="KPI này cần tỷ lệ giữa các tổng hợp qua formula.ratio.",
+        issues=[
+            ReviewIssue(
+                code="MISSING_RATIO",
+                message="Thiếu công thức tỷ lệ tường minh.",
+                evidence="KPI tỷ lệ chỉ có một aggregation, chưa có formula.ratio.",
+                action="Khai báo formula.ratio với numerator và denominator trên cùng base_entity; không đổi mục tiêu KPI.",
+            )
+        ],
+    )
 
 
 def _enforce_review(review: MetricReview, technical: MetricReview | None, context: dict[str, Any]) -> MetricReview:

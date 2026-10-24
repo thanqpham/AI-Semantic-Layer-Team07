@@ -90,3 +90,48 @@ def test_identity_ignores_name_filter_order_and_in_order() -> None:
     assert metric_identity(MetricDefinition.model_validate(first["definition"])) == metric_identity(
         MetricDefinition.model_validate(second["definition"])
     )
+
+
+def _ratio_metric(metric_id=1):
+    metric = _metric(metric_id, "Cancellation rate", function="COUNT_DISTINCT")
+    formula = metric["definition"]["metric"]["formula"]
+    formula.update(
+        expression="id",
+        ratio={
+            "numerator": {
+                "function": "COUNT_DISTINCT",
+                "expression": "id",
+                "filters": [{"field": "status", "operator": "eq", "value": "Canceled"}],
+            },
+            "denominator": {"function": "COUNT_DISTINCT", "expression": "id"},
+        },
+    )
+    return metric
+
+
+def test_cancellation_ratio_is_not_total_orders():
+    ratio = _ratio_metric()
+    total = deepcopy(ratio)
+    total["definition"]["metric"]["formula"].pop("ratio")
+    assert metric_identity(MetricDefinition.model_validate(ratio["definition"])) != metric_identity(
+        MetricDefinition.model_validate(total["definition"])
+    )
+    assert compare_catalog_metrics([ratio, total]) == []
+
+
+@pytest.mark.parametrize("change", ["numerator", "denominator", "scale", "offset", "filter_scope", "filter_value"])
+def test_ratio_identity_includes_both_sides_transforms_and_scoped_filters(change):
+    first = _ratio_metric()
+    second = deepcopy(first)
+    ratio = second["definition"]["metric"]["formula"]["ratio"]
+    if change in {"scale", "offset"}:
+        ratio[change] = 100
+    elif change == "filter_scope":
+        ratio["denominator"]["filters"] = ratio["numerator"].pop("filters")
+    elif change == "filter_value":
+        ratio["numerator"]["filters"][0]["value"] = "Completed"
+    else:
+        ratio[change]["expression"] = "amount"
+    assert metric_identity(MetricDefinition.model_validate(first["definition"])) != metric_identity(
+        MetricDefinition.model_validate(second["definition"])
+    )

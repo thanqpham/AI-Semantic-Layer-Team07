@@ -84,7 +84,23 @@ async def test_invalid_json_is_not_transport_retried():
         with pytest.raises(MetricCallError) as raised:
             await invoke_metric_json(Answer, "payload")
     assert raised.value.error.code == "INVALID_AGENT_OUTPUT"
+    assert raised.value.error.validation_errors[0].field == "value"
     assert client.with_structured_output.return_value.ainvoke.await_count == 1
+
+
+async def test_sdk_wrapped_validation_error_keeps_field_without_provider_response():
+    try:
+        Answer.model_validate({"value": "private-provider-response"})
+    except ValueError as validation:
+        failure = RuntimeError("private-parser-response")
+        failure.__cause__ = validation
+    client = _client([failure])
+    with patch("src.services.metric_runtime.get_llm", return_value=client):
+        with pytest.raises(MetricCallError) as raised:
+            await invoke_metric_json(Answer, "payload", "reviewer")
+    assert raised.value.error.validation_errors[0].field == "value"
+    assert raised.value.error.code == "INVALID_AGENT_OUTPUT"
+    assert "private" not in raised.value.error.model_dump_json()
 
 
 async def test_same_credential_models_share_a_limiter_and_busy_never_calls_provider():

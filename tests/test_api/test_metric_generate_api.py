@@ -130,7 +130,7 @@ async def test_generate_returns_duplicates_in_response(
 @pytest.mark.asyncio
 @patch("src.api.routes.build_metric_context")
 @patch("src.agents.nodes.metric.coordinator_node.coordinator_node", new_callable=AsyncMock)
-async def test_generate_detects_existing_definition_with_different_name(
+async def test_generate_preserves_coordinator_decision_when_catalog_has_similar_metric(
     mock_coordinator: AsyncMock,
     mock_context: AsyncMock,
     client: AsyncClient,
@@ -142,7 +142,7 @@ async def test_generate_detects_existing_definition_with_different_name(
         SemanticColumnModel(table_id=10, column_name="id", data_type="INTEGER", business_name="ID", is_primary_key=True)
     )
     await async_session.flush()
-    existing = await create_metric(
+    await create_metric(
         async_session, 10, {"definition": _definition().model_dump(mode="json")}, 1, status_override="approved"
     )
     draft = _definition("Tổng doanh thu").model_dump(mode="json")
@@ -159,8 +159,9 @@ async def test_generate_detects_existing_definition_with_different_name(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["suggestions"] == []
-    assert body["duplicates"][0]["existing_metric_id"] == existing.id
+    assert len(body["suggestions"]) == 1
+    assert body["suggestions"][0]["definition"] == draft
+    assert body["duplicates"] == []
     assert body["dedupe_performed"] is True
 
 

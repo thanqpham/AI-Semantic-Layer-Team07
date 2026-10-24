@@ -34,7 +34,6 @@ def review_schema_fingerprint(schema: dict[str, Any]) -> str:
 
 async def persist_reviewed_state(db: AsyncSession, db_id: int, user_id: int, state: dict[str, Any]) -> dict[str, Any]:
     """Assign durable proposal IDs before suggestions leave the backend."""
-    await dedupe_reviewed_suggestions(db, db_id, state)
     for evidence in state.get("reviewed_proposals", []):
         proposal = await persist_proposal(db, db_id, user_id, evidence)
         for item in state.get("suggested_metrics", []):
@@ -99,6 +98,10 @@ async def require_passing_proposal(
     current = await load_review_schema(db, db_id, names)
     if review_schema_fingerprint(current) != proposal.schema_fingerprint:
         raise ValueError("Metadata đã thay đổi. Hãy thẩm định lại trước khi lưu hoặc gửi duyệt.")
+    check = {"suggested_metrics": [{"definition": definition.model_dump(mode="json")}]}
+    await dedupe_reviewed_suggestions(db, db_id, check)
+    if not check["suggested_metrics"]:
+        raise ValueError("Metric có cùng công thức và phạm vi đã tồn tại trong catalog. Hãy dùng metric có sẵn.")
     return proposal
 
 

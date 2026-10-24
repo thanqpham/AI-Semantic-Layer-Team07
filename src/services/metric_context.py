@@ -301,6 +301,7 @@ def _expand_context(
 def _table_payload(table: SemanticTableModel) -> dict[str, Any]:
     """Serialize one table without sample values or other data-bearing metadata."""
     return {
+        "id": table.id,
         "table_name": table.table_name,
         "business_name": table.business_name,
         "description": table.description,
@@ -312,6 +313,7 @@ def _table_payload(table: SemanticTableModel) -> dict[str, Any]:
 def _column_payload(column: Any) -> dict[str, Any]:
     """Serialize one semantic column without data values."""
     return {
+        "id": column.id,
         "column_name": column.column_name,
         "data_type": column.data_type,
         "business_name": column.business_name,

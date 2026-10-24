@@ -115,9 +115,10 @@ def _same_logic(definition: MetricDefinition, existing: dict[str, Any]) -> bool:
     if ratio is None:
         return True
     existing_ratio = existing.get("ratio") or {}
-    return (
-        _norm_filters(ratio.numerator.filters) == _norm_filters(existing_ratio.get("numerator", {}).get("filters"))
-        and _norm_filters(ratio.denominator.filters) == _norm_filters(existing_ratio.get("denominator", {}).get("filters"))
+    return _norm_filters(ratio.numerator.filters) == _norm_filters(
+        existing_ratio.get("numerator", {}).get("filters")
+    ) and _norm_filters(ratio.denominator.filters) == _norm_filters(
+        existing_ratio.get("denominator", {}).get("filters")
     )
 
 
@@ -455,6 +456,7 @@ def _metric_summary(row: SemanticMetricModel) -> dict[str, Any]:
         "ratio": formula.get("ratio"),
         "base_entity": metric.get("base_entity", ""),
         "filters": metric.get("filters", []),
+        "definition": definition,
     }
 
 
@@ -519,6 +521,32 @@ def _canonical_duplicate(row: SemanticMetricModel, definition: MetricDefinition)
         existing_definition=definition,
         existing_yaml=definition.to_yaml(),
     )
+
+
+def find_catalog_duplicate(
+    definition: MetricDefinition, existing: list[dict[str, Any]]
+) -> DuplicateMetricNotice | None:
+    """Return exact catalog evidence without modifying a proposed definition."""
+    identity = metric_identity(definition)
+    for item in sorted(existing, key=lambda row: (row.get("status") != "approved", row.get("id") or 0)):
+        if not item.get("id") or not item.get("definition"):
+            continue
+        try:
+            saved = MetricDefinition.model_validate(item["definition"])
+        except (ValueError, TypeError):
+            continue
+        if metric_identity(saved) == identity:
+            return DuplicateMetricNotice(
+                proposed_metric_name=definition.metric.name,
+                existing_metric_id=item["id"],
+                existing_metric_name=item["name"],
+                existing_metric_status=item["status"],
+                user_message=_duplicate_message(item["name"], item["status"]),
+                similarity_reason="Trùng bảng nguồn, grain, toàn bộ công thức và bộ lọc từng phạm vi.",
+                existing_definition=saved,
+                existing_yaml=saved.to_yaml(),
+            )
+    return None
 
 
 async def dedupe_reviewed_suggestions(db: AsyncSession, db_id: int, state: dict[str, Any]) -> None:

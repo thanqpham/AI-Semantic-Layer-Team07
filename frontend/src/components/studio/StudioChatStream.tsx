@@ -786,60 +786,52 @@ function SuggestionCard({
       {/* Visual Properties */}
       <div className="space-y-2 p-4 text-xs">
         {suggestion.review && <MetricReviewPanel review={suggestion.review} definition={suggestion.definition} />}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="rounded-md border border-border bg-secondary/30 p-2.5">
+        <div data-testid="metric-properties-grid" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               <Translated text={"Công thức tính"} />
             </span>
-            <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
+            <p className="mt-0.5 break-words font-mono text-xs font-medium text-foreground">
               <span className="text-primary font-bold">{def.formula.function}</span>(
               <span>{def.formula.expression}</span>)
             </p>
           </div>
-          <div className="rounded-md border border-border bg-secondary/30 p-2.5">
+          <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               <Translated text={"Dựa vào bảng gốc"} />
             </span>
-            <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
+            <p className="mt-1 break-words font-mono text-xs font-medium text-foreground">
               {def.base_entity}
             </p>
           </div>
-        </div>
-        <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            <Translated text={"Dựa vào bảng gốc"} />
-          </span>
-          <p className="mt-1 break-words font-mono text-xs font-medium text-foreground">
-            {def.base_entity}
-          </p>
-        </div>
-        <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            <Translated text={"Cột dữ liệu sử dụng"} />
-          </span>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {usedColumns.length ? usedColumns.map((column) => (
-              <code key={column} className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-                {column}
-              </code>
-            )) : <span className="text-muted-foreground">Không có cột dữ liệu</span>}
+          <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              <Translated text={"Cột dữ liệu sử dụng"} />
+            </span>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {usedColumns.length ? usedColumns.map((column) => (
+                <code key={column} className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                  {column}
+                </code>
+              )) : <span className="text-muted-foreground">Không có cột dữ liệu</span>}
+            </div>
           </div>
-        </div>
-        <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            <Translated text={"Bộ lọc điều kiện"} />
-          </span>
-          <p className="mt-1 break-words text-xs text-muted-foreground">
-            {filters.length
-              ? filters.map((filter) => {
-                const scope = filter.scope ? `${filter.scope}: ` : '';
-                const value = Array.isArray(filter.value)
-                  ? filter.value.join(', ')
-                  : String(filter.value ?? '');
-                return `${scope}${filter.field} ${filter.operator}${value ? ` ${value}` : ''}`;
-              }).join(' · ')
-              : 'Không có bộ lọc'}
-          </p>
+          <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              <Translated text={"Bộ lọc điều kiện"} />
+            </span>
+            <p className="mt-1 break-words text-xs text-muted-foreground">
+              {filters.length
+                ? filters.map((filter) => {
+                  const scope = filter.scope ? `${filter.scope}: ` : '';
+                  const value = Array.isArray(filter.value)
+                    ? filter.value.join(', ')
+                    : String(filter.value ?? '');
+                  return `${scope}${filter.field} ${filter.operator}${value ? ` ${value}` : ''}`;
+                }).join(' · ')
+                : 'Không có bộ lọc'}
+            </p>
+          </div>
         </div>
       </div>
 

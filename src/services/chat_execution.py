@@ -12,6 +12,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
+from src.models.metric_review import MetricOutputIssue
 from src.observability import activate_trace
 
 LABELS = {
@@ -21,9 +22,11 @@ LABELS = {
     "metric_suggest": "Đề xuất định nghĩa metric",
     "metric_coordinator": "Điều phối các agent metric",
     "metric_validate": "Kiểm tra kỹ thuật bằng code",
+    "metric_conclude": "Coordinator chốt kết quả thẩm định",
     "metric_provider_wait": "Đợi nhà cung cấp cho phép thử lại",
     "metric_review": "Thẩm định metric trước HITL",
     "metric_review_decision": "Đối chiếu yêu cầu và kiểm tra nghiệp vụ",
+    "metric_output_validation": "Phản hồi AI sai cấu trúc",
     "metric_repair": "Sửa metric theo kết quả thẩm định",
     "semantic_parse": "Phân tích câu hỏi theo danh mục metric",
     "context": "Chuẩn bị ngữ cảnh dữ liệu",
@@ -169,6 +172,9 @@ class ChatExecution:
 
     def record(self, kind: str, payload: Mapping[str, Any]) -> None:
         """Project raw trace events onto an explicit public allowlist."""
+        if kind == "metric_output_error":
+            self._metric_output_error(payload)
+            return
         if kind == "transition":
             self._graph_transition(payload)
             return
@@ -187,6 +193,27 @@ class ChatExecution:
             pending = self.active.get((safe_node, action), [])
             if pending:
                 self.end(pending[-1], "failed" if kind.endswith("_failed") else "finished")
+
+    def _metric_output_error(self, payload: Mapping[str, Any]) -> None:
+        issues = [MetricOutputIssue.model_validate(item) for item in payload.get("validation_errors", [])]
+        if not issues:
+            return
+        stage = payload.get("stage")
+        node = {"reviewer": "metric_review", "builder": "metric_suggest", "repair": "metric_repair"}.get(
+            stage, "metric_validate"
+        )
+        summary = "; ".join(f"{item.field} ({item.type})" for item in issues)
+        self.emit(
+            kind="step",
+            node=node,
+            action="metric_output_validation",
+            step_id=str(uuid.uuid4()),
+            status="failed",
+            summary=f"Phản hồi {stage} sai cấu trúc: {summary}",
+            candidate_id=payload.get("candidate_id"),
+            attempt=payload.get("attempt"),
+            validation_errors=[item.model_dump() for item in issues],
+        )
 
     def _graph_transition(self, payload: Mapping[str, Any]) -> None:
         source = payload.get("node")

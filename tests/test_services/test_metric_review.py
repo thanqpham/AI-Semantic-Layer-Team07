@@ -4,10 +4,84 @@ from unittest.mock import patch
 
 import pytest
 
+from src.models.metric_definition import MetricDefinition
 from src.services.metric_knowledge import load_metric_knowledge
 from src.services.metric_proposal_context import prepare_proposal_context
+from src.services.metric_review import validate_review_draft
 from src.services.metric_review_validation import technical_review
 from tests.metric_review_helpers import context, definition, schema
+
+
+def cancellation_definition():
+    raw = definition("id", "Tỷ lệ đơn hàng bị hủy")
+    raw["metric"]["formula"] = {
+        "function": "COUNT_DISTINCT",
+        "expression": "id",
+        "ratio": {
+            "numerator": {
+                "function": "COUNT_DISTINCT",
+                "expression": "id",
+                "filters": [{"field": "status", "operator": "eq", "value": "cancelled"}],
+            },
+            "denominator": {"function": "COUNT_DISTINCT", "expression": "id", "filters": []},
+        },
+    }
+    return raw
+
+
+def test_technical_review_accepts_column_metadata():
+    resolved, review = technical_review(definition(), context())
+    assert review is None, str(review)
+    assert resolved.metric.grain.column_ids == [1]
+
+
+@pytest.mark.parametrize("knowledge_id", [None, "cancellation"])
+def test_explicit_cancellation_ratio_reaches_business_review(knowledge_id):
+    raw = cancellation_definition()
+    resolved, review = validate_review_draft(
+        context(),
+        {
+            "name": raw["metric"]["name"],
+            "definition": raw,
+            "knowledge_id": knowledge_id,
+        },
+    )
+    assert review is None, str(review)
+    assert resolved.metric.formula.ratio.numerator.filters[0].value == "cancelled"
+
+
+def test_misplaced_ratio_is_preserved_in_canonical_formula():
+    raw = cancellation_definition()
+    raw["metric"]["ratio"] = raw["metric"]["formula"].pop("ratio")
+    parsed = MetricDefinition.model_validate(raw)
+    assert parsed.metric.formula.ratio.numerator.filters[0].value == "cancelled"
+    assert "ratio" not in parsed.model_dump()["metric"]
+
+
+def test_cancellation_without_ratio_requires_repair():
+    raw = cancellation_definition()
+    del raw["metric"]["formula"]["ratio"]
+    _, review = validate_review_draft(context(), {"name": raw["metric"]["name"], "definition": raw})
+    assert review.status == "needs_revision"
+    assert review.issues[0].code == "MISSING_RATIO"
+
+
+@pytest.mark.parametrize("side", ["numerator", "denominator"])
+@pytest.mark.parametrize("expression", ["id / id", "amount / amount", "amount / 0"])
+def test_ratio_sides_cannot_bypass_expression_validation(side, expression):
+    raw = cancellation_definition()
+    raw["metric"]["formula"]["ratio"][side]["expression"] = expression
+    _, review = technical_review(raw, context())
+    assert review.status == "unsupported"
+
+
+@pytest.mark.parametrize("side", ["numerator", "denominator"])
+@pytest.mark.parametrize("field,value", [("status", "invented"), ("is_test_order", "false")])
+def test_ratio_filters_validate_metadata_on_both_sides(side, field, value):
+    raw = cancellation_definition()
+    raw["metric"]["formula"]["ratio"][side]["filters"] = [{"field": field, "operator": "eq", "value": value}]
+    _, review = technical_review(raw, context())
+    assert review is not None
 
 
 @pytest.mark.parametrize(

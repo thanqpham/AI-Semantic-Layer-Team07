@@ -9,9 +9,9 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from src.models.metric_review import MetricExecutionError
+from src.models.metric_review import MetricExecutionError, MetricOutputIssue
 from src.observability import trace_action
 from src.services.llm import get_llm
 from src.services.llm_json import extract_json, response_text
@@ -62,6 +62,31 @@ async def invoke_metric_json(contract: type[_ModelT], messages: Any, stage: str 
         lock.release()
 
 
+def invalid_output(stage: str, details: list[dict[str, str]]) -> MetricExecutionError:
+    """Build field diagnostics without including provider inputs or responses."""
+    issues = [MetricOutputIssue.model_validate(item) for item in details]
+    summary = "; ".join(f"{item.field} ({item.type})" for item in issues)
+    return execution_failure("INVALID_AGENT_OUTPUT", stage).model_copy(
+        update={
+            "validation_errors": issues,
+            "message": f"Phản hồi {stage} không hợp lệ: {summary}.",
+        }
+    )
+
+
+def validation_failure(stage: str, error: ValidationError) -> MetricExecutionError:
+    """Keep validation locations and types, excluding raw values and context."""
+    details = [
+        {
+            "field": ".".join(map(str, item["loc"]))[:200] or "$",
+            "type": item["type"],
+            "message": item["msg"],
+        }
+        for item in error.errors(include_input=False, include_context=False, include_url=False)
+    ]
+    return invalid_output(stage, details)
+
+
 def _credential_lock(llm: Any) -> asyncio.Semaphore:
     key = getattr(llm, "openai_api_key", None) or getattr(llm, "anthropic_api_key", None)
     secret = key.get_secret_value() if hasattr(key, "get_secret_value") else str(key or id(llm))
@@ -78,6 +103,8 @@ async def _invoke_bounded(llm: Any, contract: type[_ModelT], messages: Any, stag
     for attempt in range(2):
         try:
             result = await _submit(llm, contract, messages, structured)
+        except ValidationError as exc:
+            raise MetricCallError(validation_failure(stage, exc)) from None
         except Exception as exc:
             if structured and _unsupported_structured(exc) and attempt == 0:
                 structured = False
@@ -89,8 +116,11 @@ async def _invoke_bounded(llm: Any, contract: type[_ModelT], messages: Any, stag
             raise MetricCallError(error) from None
         try:
             return result if isinstance(result, contract) else contract.model_validate(result)
+        except ValidationError as exc:
+            raise MetricCallError(validation_failure(stage, exc)) from None
         except (ValueError, TypeError):
-            raise MetricCallError(execution_failure("INVALID_AGENT_OUTPUT", stage)) from None
+            details = [{"field": "$", "type": "invalid_output_type", "message": "Sai kiểu dữ liệu phản hồi."}]
+            raise MetricCallError(invalid_output(stage, details)) from None
     raise MetricCallError(execution_failure("PROVIDER_ERROR", stage))
 
 
@@ -101,7 +131,18 @@ async def _submit(llm: Any, contract: type[BaseModel], messages: Any, structured
     try:
         return extract_json(response_text(raw))
     except (ValueError, TypeError):
-        raise MetricCallError(execution_failure("INVALID_AGENT_OUTPUT", "output")) from None
+        raise MetricCallError(
+            invalid_output(
+                "output",
+                [
+                    {
+                        "field": "$",
+                        "type": "invalid_json",
+                        "message": "Phản hồi không phải JSON hợp lệ.",
+                    }
+                ],
+            )
+        ) from None
 
 
 def _unsupported_structured(exc: Exception) -> bool:
@@ -118,6 +159,14 @@ def _unsupported_structured(exc: Exception) -> bool:
 def _provider_error(exc: Exception, stage: str) -> MetricExecutionError:
     if isinstance(exc, MetricCallError):
         return exc.error.model_copy(update={"stage": stage})
+    cause = exc
+    # shortcut: unwraps three parser layers; extend if a provider adds deeper wrapping.
+    for _ in range(3):
+        if isinstance(cause, ValidationError):
+            return validation_failure(stage, cause)
+        cause = cause.__cause__ or cause.__context__
+        if cause is None:
+            break
     body = getattr(exc, "body", {}) or {}
     nested = body.get("error", body) if isinstance(body, dict) else {}
     code = str(nested.get("code", "") or nested.get("type", "")).lower() if isinstance(nested, dict) else ""

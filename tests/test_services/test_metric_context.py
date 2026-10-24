@@ -66,6 +66,7 @@ def test_scope_clarification_ignores_invalid_options(options) -> None:
 
 def _column(name: str) -> SimpleNamespace:
     return SimpleNamespace(
+        id=1,
         column_name=name,
         data_type="INTEGER",
         business_name=name,
@@ -82,7 +83,7 @@ def _column(name: str) -> SimpleNamespace:
 
 def _table(name: str) -> SimpleNamespace:
     return SimpleNamespace(
-        table_name=name, business_name=name, description="", columns=[_column("id")], review_status="approved"
+        id=1, table_name=name, business_name=name, description="", columns=[_column("id")], review_status="approved"
     )
 
 

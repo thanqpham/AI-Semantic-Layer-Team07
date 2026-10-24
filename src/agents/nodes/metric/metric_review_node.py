@@ -5,12 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from src.agents.state import AgentState
+from src.agents.workflows.metric_proposal_workflow import run_metric_workflow
 from src.models.metric_definition import MetricDefinition
 from src.models.metric_review import MetricCandidateReport, MetricReview
-from src.models.schemas import MetricSuggestionItem
+from src.models.schemas import DuplicateMetricNotice, MetricSuggestionItem
 from src.observability import trace_node
-from src.services.metric_dedupe import merge_dedupe
-from src.agents.workflows.metric_proposal_workflow import run_metric_workflow
 
 
 @trace_node("metric_review")
@@ -29,8 +28,8 @@ def reviewed_state(proposals: list[dict[str, Any]], state: dict[str, Any]) -> di
     """Keep only passing definitions actionable and retain blocked decisions for the UI."""
     limit = 5
     passing = [p for p in proposals if p["review"]["status"] == "pass"][:limit]
-    items = [_suggestion(p) for p in passing]
-    kept, notices = merge_dedupe(items, [], [], state.get("existing_metrics") or [])
+    kept = [_suggestion(p) for p in passing if not p.get("duplicate")]
+    notices = [DuplicateMetricNotice.model_validate(p["duplicate"]) for p in passing if p.get("duplicate")]
     blocked = [
         MetricCandidateReport(name=p["name"], review=MetricReview.model_validate(p["review"])).model_dump(mode="json")
         for p in proposals

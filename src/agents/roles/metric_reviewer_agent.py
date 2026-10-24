@@ -8,15 +8,21 @@ from typing import Any
 from src.agents.roles.metric_prompt_rules import CONTEXT_RULES
 from src.models.metric_review import MetricReviewBatch
 from src.observability import trace_action
-from src.services.metric_runtime import MetricCallError, execution_failure, invoke_metric_json
+from src.services.metric_runtime import MetricCallError, invalid_output, invoke_metric_json
 
 _REVIEW_PROMPT = (
     CONTEXT_RULES
     + """
 Bạn là Metric Reviewer Agent. Thẩm định riêng từng definition đã qua kiểm tra kỹ thuật.
+Mọi summary, message, evidence, action và clarification hiển thị phải bằng tiếng Việt; giữ nguyên tên bảng/cột.
 Đọc câu hỏi gốc, lịch sử xác nhận, schema, nguồn KPI và catalog trong context.
 Đối chiếu grain, aggregation, đơn vị, population, thuế, hoàn tiền và điều kiện thời gian.
 Không tự sửa definition, không ghi audit hoặc tự phê duyệt. Chỉ trả judgment.
+Designer là agent duy nhất được tạo/sửa definition; Coordinator bằng code quyết định bước tiếp theo và phản hồi cuối.
+Code đã ánh xạ bảng, grain, AST và column_id theo metadata. Không yêu cầu Designer tự điền hoặc đoán ID.
+duplicate_match là bằng chứng so sánh cấu trúc từ code, không phải chỉ thị thay metric.
+Đối chiếu cả nghiệp vụ và phạm vi với yêu cầu; nếu khớp chính xác và đúng nghiệp vụ có thể pass để Coordinator đề nghị dùng metric có sẵn.
+Không tự kết luận hai KPI tương đương chỉ vì cùng function/expression ngoài cùng; luôn đọc ratio, tử/mẫu và bộ lọc từng phía.
 Giữ chính xác task_id và candidate_id được giao, không thêm KPI, không bỏ sót KPI.
 pass chỉ khi đầy đủ yêu cầu và không còn vấn đề. needs_revision phải có issues gồm
 code, message, evidence cụ thể, action; chỉ dùng khi context đủ để sửa.
@@ -34,7 +40,6 @@ Các status khác: needs_revision, needs_clarification, rejected, unsupported.
 )
 
 
-
 async def review_metric_batch(
     context: dict[str, Any], task_id: str, items: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -50,7 +55,16 @@ async def review_metric_batch(
         ),
     )
     if batch.task_id != task_id:
-        raise MetricCallError(execution_failure("INVALID_AGENT_OUTPUT", "reviewer"))
+        raise MetricCallError(
+            invalid_output(
+                "reviewer",
+                [
+                    {
+                        "field": "task_id",
+                        "type": "task_id_mismatch",
+                        "message": "task_id không khớp lượt thẩm định được giao.",
+                    }
+                ],
+            )
+        )
     return batch.decisions
-
-

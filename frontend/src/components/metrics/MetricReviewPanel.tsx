@@ -35,6 +35,13 @@ export function MetricReviewPanel({ review, definition }: { review: MetricReview
     {error && <p className="mt-2">{error.message}
       {error.retry_after_seconds != null && ` Có thể thử lại sau khoảng ${Math.ceil(error.retry_after_seconds)} giây.`}
     </p>}
+    {!!error?.validation_errors?.length && <div className="mt-2">
+      <strong>Trường phản hồi không hợp lệ</strong>
+      <ul className="mt-1 list-disc pl-4">{error.validation_errors.map((issue, index) =>
+        <li key={`${issue.field}-${index}`}><code>{issue.field}</code> · <code>{issue.type}</code>: {issue.message}</li>
+      )}</ul>
+      {error.candidate_id && <p className="mt-1 break-all">Candidate: <code>{error.candidate_id}</code> · Lần thử {(error.attempt ?? 0) + 1}</p>}
+    </div>}
     {review.requirement && <div className="mt-2"><strong>Yêu cầu đã đối chiếu</strong><p className="whitespace-pre-wrap break-words">{review.requirement}</p></div>}
     {review.variant_id && <p className="mt-2">Biến thể: <code>{review.variant_id}</code></p>}
     {!!Object.keys(review.criteria || {}).length && <div className="mt-2">

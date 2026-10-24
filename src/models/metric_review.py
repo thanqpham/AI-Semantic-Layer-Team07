@@ -13,6 +13,14 @@ ReviewStatus = Literal["pass", "needs_revision", "needs_clarification", "rejecte
 RunStatus = Literal["completed", "partial", "needs_clarification", "error"]
 
 
+class MetricOutputIssue(BaseModel):
+    """Identify an invalid output field without retaining its input value."""
+
+    field: str
+    type: str
+    message: str
+
+
 class MetricExecutionError(BaseModel):
     """Expose a sanitized operational failure separately from business judgment."""
 
@@ -22,6 +30,9 @@ class MetricExecutionError(BaseModel):
     message: str
     retryable: bool = False
     retry_after_seconds: float | None = None
+    validation_errors: list[MetricOutputIssue] = Field(default_factory=list)
+    candidate_id: str | None = None
+    attempt: int | None = None
 
 
 class MetricBuildArtifact(BaseModel):
@@ -54,7 +65,16 @@ class MetricBuildBatch(BaseModel):
     """Parse individual untrusted items separately to preserve valid siblings."""
 
     task_id: str
-    candidates: list[dict[str, Any]] = Field(max_length=10)
+    candidates: list[dict[str, Any]] = Field(
+        max_length=10,
+        description=(
+            'Each ready candidate must have name, status="ready", definition={"metric":{'
+            '"name":...,"base_entity":...,"formula":{"function":...,"expression":...,"ratio":...},'
+            '"filters":[],"excluded_notes":""}}, knowledge_id, variant_id, criteria, reason. '
+            "Repairs must also include the supplied candidate_id. Put ratio inside formula. "
+            "Blocked candidates have status needs_clarification/unsupported/rejected and a reason, no definition."
+        ),
+    )
 
 
 class MetricReviewDecision(BaseModel):

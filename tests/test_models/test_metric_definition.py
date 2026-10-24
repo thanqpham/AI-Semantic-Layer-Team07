@@ -81,3 +81,29 @@ def test_metric_spec_coerces_weird_status_to_pending_approval() -> None:
         status="WEIRD",
     )
     assert spec.status == "pending_approval"
+
+
+def test_conflicting_ratio_locations_are_rejected():
+    payload = _payload()
+    ratio = {
+        "numerator": {"function": "SUM", "expression": "quantity"},
+        "denominator": {"function": "SUM", "expression": "unit_price"},
+    }
+    payload["metric"]["ratio"] = {**ratio, "scale": 100}
+    payload["metric"]["formula"]["ratio"] = {**ratio, "scale": 1}
+    with pytest.raises(ValidationError, match="mâu thuẫn"):
+        MetricDefinition.model_validate(payload)
+
+
+def test_misplaced_ratio_still_requires_valid_aggregates():
+    payload = _payload()
+    payload["metric"]["ratio"] = {"numerator": {"function": "SUM", "expression": "quantity"}}
+    with pytest.raises(ValidationError, match="denominator"):
+        MetricDefinition.model_validate(payload)
+
+
+def test_conflicting_notes_are_rejected():
+    payload = _payload()
+    payload["excluded_notes"] = "Đã trừ hoàn tiền"
+    with pytest.raises(ValidationError, match="mâu thuẫn"):
+        MetricDefinition.model_validate(payload)

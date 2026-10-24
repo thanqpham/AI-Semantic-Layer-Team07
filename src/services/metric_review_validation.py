@@ -8,9 +8,9 @@ from typing import Any
 import sqlglot
 from sqlglot import exp
 
-from src.models.metric_definition import MetricDefinition, MetricFilter, MetricGrain
+from src.models.metric_definition import MetricAggregate, MetricDefinition, MetricFilter, MetricFormula, MetricGrain
 from src.models.metric_review import MetricReview, ReviewIssue
-from src.services.metric_definition_resolver import _node
+from src.services.metric_definition_resolver import _resolve_filters, _resolve_ratio, expression_tree_for_columns
 from src.services.metric_definitions import _validate_expression_columns, _validate_filter_columns
 from src.services.metric_hygiene import hygiene_flag_filters
 
@@ -84,6 +84,20 @@ def _validate_schema(definition: MetricDefinition, schema: dict[str, Any]) -> No
         )
     )
     _validate_filters(definition, columns)
+    _resolve_metadata(definition, table, columns)
+
+
+def _resolve_metadata(definition: MetricDefinition, table: dict[str, Any], columns: dict[str, Any]) -> None:
+    by_name = {name.lower(): column for name, column in columns.items()}
+    formula = definition.metric.formula
+    formula.expression_ast = expression_tree_for_columns(
+        formula.expression, {name: c.id for name, c in by_name.items()}
+    )
+    formula.ratio = _resolve_ratio(formula.ratio, by_name)
+    definition.metric.filters = _resolve_filters(definition.metric.filters, by_name)
+    definition.metric.base_entity_id = table.get("id")
+    if table.get("id"):
+        definition.schema_version = 2
 
 
 def _columns(table: dict[str, Any]) -> dict[str, Any]:
@@ -92,7 +106,7 @@ def _columns(table: dict[str, Any]) -> dict[str, Any]:
             **{
                 **c,
                 "column_name": c.get("column_name", c.get("name")),
-                "id": i,
+                "id": c.get("id", i),
                 "data_type": c.get("data_type", ""),
                 "is_primary_key": c.get("is_primary_key", False),
                 "is_nullable": c.get("is_nullable", True),
@@ -112,11 +126,18 @@ def _validate_grain(definition: MetricDefinition, columns: dict[str, Any]) -> No
 
 def _validate_compiler_expression(definition: MetricDefinition, columns: dict[str, Any]) -> None:
     formula = definition.metric.formula
+    _validate_aggregate_expression(formula, columns)
+    if formula.ratio is not None:
+        for aggregate in (formula.ratio.numerator, formula.ratio.denominator):
+            _validate_aggregate_expression(aggregate, columns)
+
+
+def _validate_aggregate_expression(formula: MetricFormula | MetricAggregate, columns: dict[str, Any]) -> None:
     if formula.expression == "*":
         return
     parsed = sqlglot.parse_one(formula.expression)
     by_name = {name.casefold(): column for name, column in columns.items()}
-    _node(parsed, by_name)
+    expression_tree_for_columns(formula.expression, {name: column.id for name, column in by_name.items()})
     for column in parsed.find_all(exp.Column):
         data_type = by_name[column.name.casefold()].data_type.upper()
         if formula.function in {"SUM", "AVG"} and any(t in data_type for t in ("BOOL", "BIT")):
@@ -134,7 +155,11 @@ def _validate_compiler_expression(definition: MetricDefinition, columns: dict[st
 
 def _validate_filters(definition: MetricDefinition, columns: dict[str, Any]) -> None:
     by_name = {name.casefold(): c for name, c in columns.items()}
-    for item in definition.metric.filters:
+    filters = list(definition.metric.filters)
+    ratio = definition.metric.formula.ratio
+    if ratio is not None:
+        filters.extend([*ratio.numerator.filters, *ratio.denominator.filters])
+    for item in filters:
         column = by_name[item.field.casefold()]
         item.field = column.column_name
         if item.operator in {"is_null", "is_not_null"}:

@@ -151,6 +151,11 @@ def trace_llm_usage(payload: Mapping[str, Any]) -> None:
     _emit("llm_usage", event)
 
 
+def trace_metric_output_error(error: Mapping[str, Any]) -> None:
+    """Emit structured field diagnostics separately from raw model output."""
+    _emit("metric_output_error", error)
+
+
 def _action_payload(
     action: str,
     inputs: Mapping[str, Any],

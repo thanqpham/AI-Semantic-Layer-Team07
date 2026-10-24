@@ -13,6 +13,9 @@ export interface TraceEvent {
   duration_ms?: number;
   source?: string;
   target?: string;
+  candidate_id?: string | null;
+  attempt?: number | null;
+  validation_errors?: { field: string; type: string; message: string }[];
 }
 
 export interface ExecutionTrace {

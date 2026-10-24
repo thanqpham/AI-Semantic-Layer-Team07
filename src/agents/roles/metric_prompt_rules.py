@@ -8,8 +8,16 @@ Không gán một biến thể mặc định khi thuế, hoàn tiền, trạng t
 nếu schema đủ căn cứ, tạo các biến thể riêng có tên và tiêu chí rõ ràng để Reviewer đánh giá từng bản.
 Chỉ needs_clarification khi không thể ánh xạ bất kỳ cách tính nào vào schema; thiếu thành phần dữ liệu thì rejected;
 compiler không biểu diễn đúng thì unsupported. Không hỏi Data Lead để chọn cột hay biến thể.
-Compiler chỉ hỗ trợ một aggregation trên một bảng với arithmetic và TIMESTAMP_DIFF_HOURS;
-không hỗ trợ ratio giữa aggregates, CASE, COALESCE, JOIN hay SQL tùy ý.
+Compiler hỗ trợ aggregation đơn hoặc ratio giữa hai aggregates trên cùng base_entity qua formula.ratio;
+mỗi phía có function, expression và filters riêng; bộ lọc metric.filters áp dụng cho cả hai phía.
+Tỷ lệ phải dùng numerator/denominator tường minh, không viết phép chia aggregates trong expression.
+ratio phải nằm trong metric.formula.ratio, không đặt cạnh formula trong metric.
+Ví dụ cấu trúc formula cho tỷ lệ đếm thực thể (thay id/status và giá trị bằng metadata thật):
+{"function":"COUNT_DISTINCT","expression":"id","ratio":{"numerator":{"function":"COUNT_DISTINCT",
+"expression":"id","filters":[{"field":"status","operator":"eq","value":"cancelled"}]},
+"denominator":{"function":"COUNT_DISTINCT","expression":"id","filters":[]},"scale":1,"offset":0}}.
+Compiler có thể JOIN nhiều-một theo metadata cho dimension/filter truy vấn; công thức metric vẫn chỉ dùng cột base_entity.
+Không hỗ trợ aggregates từ nhiều base_entity, JOIN một-nhiều gây nhân bản, CASE, COALESCE hay SQL tùy ý trong expression.
 Không giả dạng ratio bằng phép chia ID, SUM(a/b) hoặc AVG tỷ lệ khi không chứng minh được tương đương.
 Không bịa bảng, cột, giá trị trạng thái hoặc nguồn. Nguồn chỉ được lấy từ registry đính kèm.
 Chỉ dẫn hiển thị bằng tiếng Việt. Không tự phê duyệt metric.
