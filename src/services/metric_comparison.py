@@ -50,20 +50,27 @@ def _metric_entry(item: dict[str, Any]) -> dict[str, Any] | None:
         except Exception:
             return None
     spec = parsed.metric
+    full_key = metric_identity(parsed)
     filters = [_filter_key(filter_item.model_dump(mode="json")) for filter_item in spec.filters]
-    core_key = (
-        spec.formula.function,
-        _normalize_expression(spec.formula.expression),
-        spec.base_entity_id or spec.base_entity.casefold(),
-        tuple(sorted(spec.grain.column_ids)),
-    )
     return {
-        "core_key": core_key,
-        "full_key": (*core_key, tuple(sorted(filters))),
+        "core_key": full_key[:-1],
+        "full_key": full_key,
         "spec": spec,
         "metric": item,
         "filters": filters,
     }
+
+
+def metric_identity(definition: MetricDefinition) -> tuple[Any, ...]:
+    """Identify a metric by its calculation, independent of its display name."""
+    spec = definition.metric
+    return (
+        spec.formula.function,
+        _normalize_expression(spec.formula.expression),
+        spec.base_entity_id or spec.base_entity.casefold(),
+        tuple(sorted(spec.grain.column_ids)),
+        tuple(sorted(_filter_key(item.model_dump(mode="json")) for item in spec.filters)),
+    )
 
 
 def _normalize_expression(expression: str) -> str:
@@ -99,8 +106,12 @@ def _member(entry: dict[str, Any]) -> MetricComparisonMember:
     spec = entry["spec"]
     metric = entry["metric"]
     return MetricComparisonMember(
-        metric_id=metric["metric_id"], name=metric["name"], status=metric["status"],
-        version=metric.get("version") or 1, function=spec.formula.function,
-        expression=spec.formula.expression, base_entity=spec.base_entity,
+        metric_id=metric["metric_id"],
+        name=metric["name"],
+        status=metric["status"],
+        version=metric.get("version") or 1,
+        function=spec.formula.function,
+        expression=spec.formula.expression,
+        base_entity=spec.base_entity,
         filters=[filter_item.model_dump(mode="json") for filter_item in spec.filters],
     )

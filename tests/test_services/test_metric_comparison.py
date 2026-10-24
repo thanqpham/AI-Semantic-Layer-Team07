@@ -1,6 +1,11 @@
 """Tests for deterministic catalog metric comparison."""
 
-from src.services.metric_comparison import compare_catalog_metrics
+from copy import deepcopy
+
+import pytest
+
+from src.models.metric_definition import MetricDefinition
+from src.services.metric_comparison import compare_catalog_metrics, metric_identity
 
 
 def _metric(metric_id: int, name: str, filters: list[dict] | None = None, function: str = "SUM") -> dict:
@@ -27,10 +32,12 @@ def test_same_core_and_filters_is_exact_duplicate() -> None:
 
 
 def test_same_core_different_filters_is_near_duplicate() -> None:
-    groups = compare_catalog_metrics([
-        _metric(1, "Revenue", [{"field": "status", "operator": "eq", "value": "done"}]),
-        _metric(2, "Revenue Done", [{"field": "status", "operator": "eq", "value": "paid"}]),
-    ])
+    groups = compare_catalog_metrics(
+        [
+            _metric(1, "Revenue", [{"field": "status", "operator": "eq", "value": "done"}]),
+            _metric(2, "Revenue Done", [{"field": "status", "operator": "eq", "value": "paid"}]),
+        ]
+    )
     assert len(groups) == 1
     assert groups[0].group_type == "near_duplicate"
 
@@ -51,3 +58,35 @@ def test_filter_order_and_in_value_order_do_not_change_identity() -> None:
 def test_different_core_and_invalid_definition_are_ignored() -> None:
     metrics = [_metric(1, "Revenue"), _metric(2, "Count", function="COUNT"), {"metric_id": 3, "definition": None}]
     assert compare_catalog_metrics(metrics) == []
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        ("base_entity_id", 9),
+        ("grain", {"column_ids": [9]}),
+        ("formula", {"function": "COUNT", "expression": "amount"}),
+        ("formula", {"function": "SUM", "expression": "amount + 1"}),
+        ("filters", [{"field": "status", "column_id": 3, "operator": "eq", "value": 0}]),
+        ("filters", [{"field": "region", "column_id": 4, "operator": "eq", "value": "0"}]),
+    ],
+)
+def test_identity_distinguishes_calculation_changes(change: tuple[str, object]) -> None:
+    original = _metric(1, "A", [{"field": "status", "column_id": 3, "operator": "eq", "value": "0"}])
+    changed = deepcopy(original)
+    changed["definition"]["metric"][change[0]] = change[1]
+    first = MetricDefinition.model_validate(original["definition"])
+    second = MetricDefinition.model_validate(changed["definition"])
+    assert metric_identity(first) != metric_identity(second)
+
+
+def test_identity_ignores_name_filter_order_and_in_order() -> None:
+    filters = [
+        {"field": "status", "column_id": 3, "operator": "in", "value": ["done", "paid"]},
+        {"field": "region", "column_id": 4, "operator": "eq", "value": "north"},
+    ]
+    first = _metric(1, "A", filters)
+    second = _metric(2, "B", [filters[1], {**filters[0], "value": ["paid", "done"]}])
+    assert metric_identity(MetricDefinition.model_validate(first["definition"])) == metric_identity(
+        MetricDefinition.model_validate(second["definition"])
+    )

@@ -8,8 +8,10 @@ import pytest
 from httpx import AsyncClient
 
 from src.api.auth import create_access_token
-from src.models.db import UserModel
+from src.models.db import SemanticColumnModel, SemanticDatabaseModel, SemanticTableModel, UserModel
+from src.models.metric_definition import MetricDefinition
 from src.services.metric_context import MetricContextResult
+from src.services.metric_service import create_metric
 
 
 @pytest.fixture
@@ -165,6 +167,51 @@ async def test_chat_returns_duplicates(
     # The duplicate notice is persisted on the assistant message for replay.
     metadata = chat_session_mocks.save.call_args_list[-1].kwargs["metadata_json"]
     assert metadata["duplicates"] == [_DUPLICATE_NOTICE]
+
+
+@pytest.mark.asyncio
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
+async def test_chat_detects_existing_definition_with_different_name(
+    mock_agent: AsyncMock,
+    client: AsyncClient,
+    async_session,
+    auth_headers: dict[str, str],
+    chat_session_mocks: SimpleNamespace,
+) -> None:
+    async_session.add(
+        SemanticDatabaseModel(id=101, created_by=1, display_name="Orders", db_type="sqlite", conn_url_enc="enc")
+    )
+    async_session.add(SemanticTableModel(id=101, db_id=101, table_name="orders", business_name="Orders"))
+    await async_session.flush()
+    async_session.add_all(
+        [
+            SemanticColumnModel(
+                table_id=101, column_name="id", business_name="ID", data_type="INTEGER", is_primary_key=True
+            ),
+            SemanticColumnModel(table_id=101, column_name="amount", business_name="Amount", data_type="NUMERIC"),
+        ]
+    )
+    await async_session.flush()
+    original = MetricDefinition.model_validate(
+        {"metric": {"name": "Revenue", "formula": {"function": "SUM", "expression": "amount"}, "base_entity": "orders"}}
+    )
+    existing = await create_metric(async_session, 101, {"definition": original.model_dump(mode="json")}, 1)
+    draft = original.model_copy(deep=True)
+    draft.metric.name = "Total revenue"
+    mock_agent.ainvoke.return_value = {
+        "intent": "metric_query",
+        "suggested_metrics": [{"definition": draft.model_dump(mode="json"), "yaml_preview": "metric:"}],
+        "suggestion_action": "save_metric",
+    }
+
+    response = await client.post("/api/v1/semantic/101/chat", json={"message": "Revenue"}, headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["suggestions"] == []
+    assert response.json()["duplicates"][0]["existing_metric_id"] == existing.id
+    metadata = chat_session_mocks.save.call_args_list[-1].kwargs["metadata_json"]
+    assert metadata["suggestions"] == []
+    assert metadata["duplicates"][0]["existing_metric_id"] == existing.id
 
 
 @pytest.mark.asyncio

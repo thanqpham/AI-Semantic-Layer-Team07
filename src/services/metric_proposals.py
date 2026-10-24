@@ -13,7 +13,7 @@ from src.models.db import MetricProposalModel
 from src.models.metric_definition import MetricDefinition
 from src.models.metric_review import MetricReview
 from src.services.metric_context import load_review_schema
-from src.services.metric_dedupe import load_existing_for_dedupe
+from src.services.metric_dedupe import dedupe_reviewed_suggestions, load_existing_for_dedupe
 from src.services.metric_proposal_context import check_context_budget
 from src.services.metric_review import review_metric_draft
 from src.services.metric_review_validation import schema_tables
@@ -34,6 +34,7 @@ def review_schema_fingerprint(schema: dict[str, Any]) -> str:
 
 async def persist_reviewed_state(db: AsyncSession, db_id: int, user_id: int, state: dict[str, Any]) -> dict[str, Any]:
     """Assign durable proposal IDs before suggestions leave the backend."""
+    await dedupe_reviewed_suggestions(db, db_id, state)
     for evidence in state.get("reviewed_proposals", []):
         proposal = await persist_proposal(db, db_id, user_id, evidence)
         for item in state.get("suggested_metrics", []):

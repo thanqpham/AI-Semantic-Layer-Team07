@@ -894,7 +894,7 @@ async def generate_custom_metrics(
         return CustomMetricGenerateResponse(
             suggestions=result.get("suggested_metrics", []),
             duplicates=result.get("duplicate_notices", []),
-            dedupe_performed=dedupe_performed,
+            dedupe_performed=result.get("dedupe_performed", dedupe_performed),
             blocked_candidates=result.get("blocked_candidates", []),
             clarification=result.get("clarification"),
             run_status=result.get("run_status", "completed"),

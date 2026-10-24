@@ -11,6 +11,7 @@ from src.models.db import SemanticColumnModel, SemanticDatabaseModel, SemanticMe
 from src.models.metric_definition import MetricDefinition
 from src.models.schemas import DuplicateMetricNotice, MetricSuggestionItem
 from src.services.metric_context import MetricContextResult
+from src.services.metric_service import create_metric
 
 
 @pytest.fixture
@@ -128,6 +129,43 @@ async def test_generate_returns_duplicates_in_response(
 
 @pytest.mark.asyncio
 @patch("src.api.routes.build_metric_context")
+@patch("src.agents.nodes.metric.coordinator_node.coordinator_node", new_callable=AsyncMock)
+async def test_generate_detects_existing_definition_with_different_name(
+    mock_coordinator: AsyncMock,
+    mock_context: AsyncMock,
+    client: AsyncClient,
+    async_session: AsyncSession,
+    auth_headers: dict[str, str],
+) -> None:
+    await _seed(async_session, 10)
+    async_session.add(
+        SemanticColumnModel(table_id=10, column_name="id", data_type="INTEGER", business_name="ID", is_primary_key=True)
+    )
+    await async_session.flush()
+    existing = await create_metric(
+        async_session, 10, {"definition": _definition().model_dump(mode="json")}, 1, status_override="approved"
+    )
+    draft = _definition("Tổng doanh thu").model_dump(mode="json")
+    draft["metric"]["grain"] = {"column_ids": [1]}
+    mock_context.return_value = MetricContextResult(schema={}, diagnostic={"status": "ready"})
+    mock_coordinator.return_value = {
+        "suggested_metrics": [{"definition": draft, "yaml_preview": "metric:"}],
+        "suggestion_action": "save_metric",
+    }
+
+    response = await client.post(
+        "/api/v1/semantic/10/metrics/generate", json={"prompt": "Tính doanh thu"}, headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["suggestions"] == []
+    assert body["duplicates"][0]["existing_metric_id"] == existing.id
+    assert body["dedupe_performed"] is True
+
+
+@pytest.mark.asyncio
+@patch("src.api.routes.build_metric_context")
 @patch("src.api.routes.generate_reviewed_metrics")
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
 async def test_generate_dedupe_unavailable_flag(
@@ -151,6 +189,31 @@ async def test_generate_dedupe_unavailable_flag(
     assert response.json()["dedupe_performed"] is False
     mock_generate.assert_awaited_once()
     assert mock_generate.call_args.args[-1]["existing_metrics"] == []
+
+
+@pytest.mark.asyncio
+@patch("src.api.routes.build_metric_context")
+@patch("src.api.routes.generate_reviewed_metrics")
+@patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
+async def test_generate_reports_post_review_dedupe_failure(
+    mock_load: AsyncMock,
+    mock_generate: AsyncMock,
+    mock_context: AsyncMock,
+    client: AsyncClient,
+    async_session: AsyncSession,
+    auth_headers: dict[str, str],
+) -> None:
+    await _seed(async_session, 10)
+    mock_load.return_value = ([], True)
+    mock_context.return_value = MetricContextResult(schema={}, diagnostic={"status": "ready"})
+    mock_generate.return_value = {"dedupe_performed": False}
+
+    response = await client.post(
+        "/api/v1/semantic/10/metrics/generate", json={"prompt": "Tính doanh thu"}, headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["dedupe_performed"] is False
 
 
 @pytest.mark.asyncio

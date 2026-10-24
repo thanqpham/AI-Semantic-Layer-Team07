@@ -140,12 +140,9 @@ class ChatExecution:
 
     def start(self, node: str, action: str) -> str:
         """Start one uniquely identified invocation, retaining repeated invocations."""
-        if node in AGENTS and node == action:
-            self.transition(self.last_node, node)
-            self.last_node = node
-        if action == "sql_compile":
-            self.transition(self.last_node, "sql")
-            self.last_node = "sql"
+        flow_node = "sql" if action == "sql_compile" else node
+        self.transition(self.last_node, flow_node)
+        self.last_node = flow_node
         step_id = str(uuid.uuid4())
         event = self.emit(
             kind="step", node=node, action=action, step_id=step_id, status="started", summary=LABELS[action]

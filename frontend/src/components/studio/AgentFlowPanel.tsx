@@ -79,26 +79,9 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
   const graphWidth = graphSize.width;
   const graphHeight = graphSize.height;
-  const stages = [...new Set(visibleNodes.map((node) => node.stage))];
-  const columns = Math.min(stages.length, Math.max(2, Math.floor((graphWidth - 32) / 80)));
-  const bands = Math.ceil(stages.length / columns);
-  const graphPositions = new Map(visibleNodes.map((node) => {
-    const stageIndex = stages.indexOf(node.stage);
-    const band = Math.floor(stageIndex / columns);
-    const column = stageIndex % columns;
-    const nodesInStage = visibleNodes.filter((candidate) => candidate.stage === node.stage);
-    const row = nodesInStage.indexOf(node);
-    const bandHeight = (graphHeight - 48) / bands;
-    const rowSpacing = Math.min(88, Math.max(58, (bandHeight - 36) / Math.max(1, nodesInStage.length)));
-    const direction = band % 2 === 0 ? 1 : -1;
-    const left = 36;
-    const right = graphWidth - 36;
-    const x = columns === 1 ? graphWidth / 2
-      : direction === 1
-        ? left + column * (right - left) / (columns - 1)
-        : right - column * (right - left) / (columns - 1);
-    const y = 24 + band * bandHeight + bandHeight / 2 + (row - (nodesInStage.length - 1) / 2) * rowSpacing;
-    return [node.id, { x, y }] as const;
+  const graphContentWidth = Math.max(graphWidth, 120 + Math.max(0, visibleNodes.length - 1) * 136);
+  const graphPositions = new Map(visibleNodes.map((node, index) => {
+    return [node.id, { x: 60 + index * 136, y: graphHeight / 2 }] as const;
   }));
   const edges = [...new Map(trace.events
     .filter((event) => event.kind === 'transition'
@@ -183,21 +166,21 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
         className="rounded p-2 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"><X className="h-4 w-4" /></button>
     </div>
     <div className="flex min-h-0 flex-1 flex-col px-3 py-2">
-      <div ref={graphRef} data-layout-columns={columns} data-layout-bands={bands}
-        className="relative mx-auto min-h-0 w-full flex-1" aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
-        <svg viewBox={`0 0 ${graphWidth} ${graphHeight}`} preserveAspectRatio="none" aria-hidden className="absolute inset-0 h-full w-full">
+      <div ref={graphRef} className="relative mx-auto min-h-0 w-full flex-1 overflow-x-auto overflow-y-hidden" aria-label={t('Agent execution graph', 'Sơ đồ thực thi agent')}>
+        <div className="relative h-full" style={{ width: graphContentWidth }}>
+        <svg viewBox={`0 0 ${graphContentWidth} ${graphHeight}`} preserveAspectRatio="none" aria-hidden className="absolute inset-0 h-full w-full">
           <defs><marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
           {edges.map(([source, target]) => {
             const a = graphPositions.get(source)!;
             const b = graphPositions.get(target)!;
             const status = nodeStatus(trace, target);
             const forward = b.x >= a.x;
-            const startX = a.x + (forward ? 34 : -34);
-            const endX = b.x + (forward ? -34 : 34);
-            const controlX = (startX + endX) / 2;
-            return <path key={`${source}-${target}`} data-taken="true" data-edge={`${source}-${target}`}
-              d={`M ${startX} ${a.y} C ${controlX} ${a.y}, ${controlX} ${b.y}, ${endX} ${b.y}`}
-              fill="none" markerEnd={`url(#${markerId})`} strokeWidth={2} strokeDasharray="5 5"
+            const startX = a.x + (forward ? 44 : -44);
+            const endX = b.x + (forward ? -44 : 44);
+            const controlY = forward ? a.y : Math.max(24, a.y - 72);
+            return <path key={`${source}-${target}`} data-taken="true" data-edge={`${source}-${target}`} data-edge-status={status}
+              d={`M ${startX} ${a.y} C ${(startX + endX) / 2} ${controlY}, ${(startX + endX) / 2} ${controlY}, ${endX} ${b.y}`}
+              fill="none" markerEnd={`url(#${markerId})`} strokeWidth={2} strokeDasharray={status === 'running' ? undefined : '5 5'}
               className={status === 'running' ? 'stroke-blue-500' : status === 'error' ? 'stroke-red-500' : 'stroke-emerald-500'} />;
           })}
         </svg>
@@ -210,7 +193,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
             : status === 'completed' ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
             : 'border-red-500 text-red-600 dark:text-red-400';
           const position = graphPositions.get(node.id)!;
-          const style = { left: `${position.x / graphWidth * 100}%`, top: `${position.y / graphHeight * 100}%` };
+          const style = { left: `${position.x / graphContentWidth * 100}%`, top: `${position.y / graphHeight * 100}%` };
           const name = t(node.en, node.name);
           if (node.agent) return <div key={node.id} className="absolute flex w-[84px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[9px] leading-tight" style={style}>
             <button type="button" aria-label={`${name} · ${label}`} aria-pressed={selectedNode === node.id}
@@ -221,20 +204,21 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
             <span className="mt-1 line-clamp-3 font-medium">{name}</span>
             <span>{status === 'completed' ? '✓' : status === 'error' ? '!' : '◌'} {status === 'running' ? t('Running', 'Đang chạy') : label}</span>
           </div>;
-          return <button type="button" key={node.id} aria-pressed={selectedNode === node.id}
+          return <button type="button" key={node.id} data-node-kind="step" aria-pressed={selectedNode === node.id}
             aria-label={`${name} · ${label}`} onClick={() => setSelected(node.id)} style={style}
-            className={cn('absolute flex w-[70px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 border border-dashed bg-card px-1 py-1.5 text-center text-[9px] leading-tight shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
+            className={cn('absolute flex w-[96px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 border border-dashed bg-card px-1.5 py-2 text-center text-[10px] leading-tight shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
               'rounded', selectedClass,
               status === 'idle' && 'border-border text-muted-foreground',
               status === 'running' && 'animate-pulse border-blue-500 text-blue-600 motion-reduce:animate-none dark:text-blue-400',
               status === 'completed' && 'border-emerald-500 text-emerald-700 dark:text-emerald-400',
               status === 'error' && 'border-red-500 text-red-600 dark:text-red-400')}>
-            <span className="flex items-center gap-1 font-medium"><Cog className="h-3 w-3" />{name}</span>
+            <span className="flex items-center justify-center gap-1 font-medium"><Cog className="h-3 w-3 shrink-0" />{name}</span>
             <span>{status === 'completed' ? '✓ ' : status === 'error' ? '! ' : status === 'running' ? '◌ ' : '○ '}{label}</span>
           </button>;
         }) }
+        </div>
       </div>
-      <p className="shrink-0 pt-1 text-[10px] text-muted-foreground">{t('Solid border: agent · Dashed border: system step', 'Viền liền: agent · Viền nét đứt: bước hệ thống')}</p>
+      <p className="shrink-0 pt-1 text-[10px] text-muted-foreground">{t('Agents: solid border · System steps: dashed border · Active route: solid line · Completed route: dashed line', 'Agent: viền liền · Bước hệ thống: viền nét đứt · Luồng đang chạy: đường liền · Luồng đã chạy: đường gạch')}</p>
       <div className="max-h-[22vh] shrink-0 overflow-hidden border-t border-border px-3 py-2">
         <h3 className="truncate text-xs font-semibold">{t(NODES.find((node) => node.id === selectedNode)!.en, NODES.find((node) => node.id === selectedNode)!.name)}</h3>
         {traceSteps(trace).filter((step) => step.node === selectedNode || (selectedNode === 'sql' && step.action?.startsWith('sql_'))).slice(-1).map((step) =>

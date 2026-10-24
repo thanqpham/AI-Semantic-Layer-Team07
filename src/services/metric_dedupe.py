@@ -16,6 +16,8 @@ from src.models.schemas import (
     MetricConflictInfo,
     MetricSuggestionItem,
 )
+from src.services.metric_comparison import metric_identity
+from src.services.metric_definition_resolver import MetricDefinitionResolver
 
 
 def format_existing_metrics_context(existing: list[dict[str, Any]]) -> str:
@@ -434,3 +436,89 @@ async def load_existing_for_dedupe(
     if summaries is None:
         return [], False
     return summaries, True
+
+
+def _canonical_existing(
+    rows: list[SemanticMetricModel],
+) -> tuple[dict[tuple[Any, ...], tuple[SemanticMetricModel, MetricDefinition]], bool]:
+    """Prefer an approved saved metric, then the oldest ID, for each identity."""
+    found: dict[tuple[Any, ...], tuple[SemanticMetricModel, MetricDefinition]] = {}
+    complete = True
+    for row in sorted(rows, key=lambda item: (item.status != "approved", item.id)):
+        try:
+            definition = MetricDefinition.model_validate(row.definition)
+        except Exception:  # noqa: BLE001, S112 — legacy rows may have no canonical definition
+            complete = False
+            continue
+        spec = definition.metric
+        if not spec.base_entity_id or not spec.grain.column_ids or any(not item.column_id for item in spec.filters):
+            complete = False
+            continue
+        found.setdefault(metric_identity(definition), (row, definition))
+    return found, complete
+
+
+def _canonical_duplicate(row: SemanticMetricModel, definition: MetricDefinition) -> DuplicateMetricNotice:
+    """Return the saved definition in the existing duplicate-notice contract."""
+    return DuplicateMetricNotice(
+        existing_metric_id=row.id,
+        existing_metric_name=row.name,
+        existing_metric_status=row.status,
+        user_message=_duplicate_message(row.name, row.status),
+        similarity_reason="Trùng bảng nguồn, grain, công thức và bộ lọc sau chuẩn hóa.",
+        existing_definition=definition,
+        existing_yaml=definition.to_yaml(),
+    )
+
+
+async def dedupe_reviewed_suggestions(db: AsyncSession, db_id: int, state: dict[str, Any]) -> None:
+    """Replace exact reviewed duplicates with notices before proposals are exposed."""
+    if not state.get("suggested_metrics"):
+        return
+    try:
+        rows = (
+            await db.scalars(
+                select(SemanticMetricModel).where(
+                    SemanticMetricModel.db_id == db_id, SemanticMetricModel.is_deleted.is_(False)
+                )
+            )
+        ).all()
+        existing, complete = _canonical_existing(rows)
+    except Exception:  # noqa: BLE001 — advisory dedupe must not block suggestions
+        state["dedupe_performed"] = False
+        return
+    if not existing:
+        state["dedupe_performed"] = complete
+        return
+    kept, notices, performed = await _match_reviewed_suggestions(db, db_id, state, existing)
+    state["suggested_metrics"] = kept
+    state["duplicate_notices"] = [notice.model_dump(mode="json") for notice in _collapse_notices(notices)]
+    if not kept:
+        state["suggestion_action"] = None
+    state["dedupe_performed"] = complete and performed
+
+
+async def _match_reviewed_suggestions(
+    db: AsyncSession,
+    db_id: int,
+    state: dict[str, Any],
+    existing: dict[tuple[Any, ...], tuple[SemanticMetricModel, MetricDefinition]],
+) -> tuple[list[dict[str, Any]], list[DuplicateMetricNotice], bool]:
+    """Match canonical proposals while preserving any that cannot be resolved."""
+    kept = []
+    notices = [DuplicateMetricNotice.model_validate(item) for item in state.get("duplicate_notices") or []]
+    resolver = MetricDefinitionResolver(db)
+    performed = True
+    for item in state["suggested_metrics"]:
+        try:
+            definition = await resolver.resolve(db_id, MetricDefinition.model_validate(item["definition"]))
+        except Exception:  # noqa: BLE001 — preserve suggestions when canonicalization is unavailable
+            performed = False
+            kept.append(item)
+            continue
+        match = existing.get(metric_identity(definition))
+        if match is None:
+            kept.append(item)
+        else:
+            notices.append(_canonical_duplicate(*match))
+    return kept, notices, performed
