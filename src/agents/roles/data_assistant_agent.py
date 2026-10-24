@@ -7,8 +7,6 @@ import logging
 import unicodedata
 from typing import Any
 
-from src.agents.state import AgentState
-from src.observability import trace_node
 from src.services.llm import get_llm
 
 logger = logging.getLogger(__name__)
@@ -23,7 +21,7 @@ _MISSING_INPUT_LABELS = {
     "grain": "Khóa định danh hoặc grain xác định mỗi bản ghi được đếm một lần.",
 }
 
-_SYSTEM_PROMPT = """Bạn là Data Assistant của AI Semantic Layer Agent.
+_SYSTEM_PROMPT = """Bạn là Data Assistant Agent của AI Semantic Layer.
 Chỉ hỗ trợ người dùng hiểu schema, glossary, quan hệ bảng, metric đã được phê duyệt,
 và cách chọn Metric/Dimension/Filter để truy vấn an toàn.
 
@@ -40,32 +38,31 @@ GFM table hợp lệ có dòng trống trước và sau. Không nối nhiều ý
 _MAX_HISTORY_CHARS = 10000
 
 
-@trace_node("data_assistant")
-async def data_assistant_node(state: AgentState) -> dict[str, Any]:
+async def answer_data_question(user_message: str, context: dict[str, Any]) -> str:
     """Answer read-only schema and approved-metric questions."""
-    user_message = state.get("user_message", "").strip()
+    user_message = user_message.strip()
     if not user_message:
-        return {"intent": "data_question", "chat_response": "Bạn muốn tìm hiểu phần dữ liệu nào?"}
-    metric_list_response = _approved_metric_list_response(user_message, state.get("approved_metrics", []))
+        return "Bạn muốn tìm hiểu phần dữ liệu nào?"
+    metric_list_response = _approved_metric_list_response(user_message, context.get("approved_metrics", []))
     if metric_list_response:
-        return {"intent": "data_question", "chat_response": metric_list_response}
-    direct_response = _direct_decision_response(state)
+        return metric_list_response
+    direct_response = _direct_decision_response(context)
     if direct_response:
-        return {"intent": "data_question", "chat_response": direct_response}
-    context = _format_context(state)
+        return direct_response
+    formatted_context = _format_context(context)
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "system", "content": f"Context semantic layer được phép đọc:\n{context}"},
+        {"role": "system", "content": f"Context semantic layer được phép đọc:\n{formatted_context}"},
     ]
-    messages.extend(_history_messages(state.get("chat_history", [])))
+    messages.extend(_history_messages(context.get("chat_history", [])))
     messages.append({"role": "user", "content": user_message})
     try:
         response = await get_llm().ainvoke(messages)
         reply = (response.content if hasattr(response, "content") else str(response)).strip()
-        return {"intent": "data_question", "chat_response": reply}
+        return reply
     except Exception as exc:
         logger.warning("Data assistant failed: %s", exc)
-        return {"intent": "data_question", "chat_response": "Không thể đọc semantic layer lúc này."}
+        return "Không thể đọc semantic layer lúc này."
 
 
 def _history_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -110,10 +107,10 @@ def _without_accents(value: str) -> str:
     return "".join(char for char in decomposed if unicodedata.category(char) != "Mn").replace("đ", "d")
 
 
-def _direct_decision_response(state: AgentState) -> str | None:
+def _direct_decision_response(context: dict[str, Any]) -> str | None:
     """Return deterministic safe guidance for unsupported or failed decisions."""
-    decision = state.get("metric_decision", {})
-    if state.get("error"):
+    decision = context.get("metric_decision", {})
+    if context.get("error"):
         return "Không thể tạo Metric Definition hợp lệ từ schema hiện tại. Vui lòng thử lại sau."
     if decision.get("fallback"):
         return "Không thể xác định metric chắc chắn lúc này. Vui lòng diễn đạt rõ KPI hoặc thử lại sau."
@@ -134,17 +131,17 @@ def _missing_input_items(codes: Any) -> str:
     return "\n".join(f"- {label}" for label in labels) or "- Bảng, cột hoặc quan hệ cần thiết để định nghĩa metric."
 
 
-def _format_context(state: AgentState) -> str:
+def _format_context(context: dict[str, Any]) -> str:
     """Serialize bounded semantic context and its verified metric decision."""
-    metrics = state.get("approved_metrics", [])
-    decision = state.get("metric_decision", {})
+    metrics = context.get("approved_metrics", [])
+    decision = context.get("metric_decision", {})
     matched_id = decision.get("matched_metric_id")
     matched = next(
         (item for item in metrics if isinstance(item, dict) and item.get("id") == matched_id),
         None,
     )
     payload = {
-        "schema": state.get("enriched_schema", {}),
+        "schema": context.get("enriched_schema", {}),
         "approved_metrics": metrics,
         "metric_decision": decision,
         "matched_metric": matched,

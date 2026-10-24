@@ -11,7 +11,8 @@ tests/
 ├── conftest.py              ← Fixtures dung chung (async_session, client, mock_llm)
 ├── test_auth.py             ← Auth unit + integration tests
 ├── test_agents/
-│   └── test_graph.py        ← AgentState + node tests
+│   ├── test_semantic_layer_graph.py ← Flow 1 graph tests
+│   └── test_metric_proposal_workflow.py ← Metric workflow tests
 ├── test_api/
 │   └── test_routes.py       ← API endpoint tests
 └── test_models/
@@ -55,7 +56,7 @@ async def test_agent_state_has_required_fields():
 
 @pytest.mark.asyncio
 async def test_introspect_node_returns_raw_schema():
-    with patch("src.agents.nodes.introspect_node.introspect_node", new_callable=AsyncMock) as mock:
+    with patch("src.agents.nodes.schema.introspect_node.introspect_node", new_callable=AsyncMock) as mock:
         mock.return_value = {"raw_schema": {"users": {"columns": []}}}
         result = await mock(state={"db_id": 1})
         assert "raw_schema" in result

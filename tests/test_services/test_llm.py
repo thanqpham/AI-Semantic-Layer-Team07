@@ -49,6 +49,21 @@ def test_agent_generic_overrides_remain_supported() -> None:
     assert config.model == "deepseek-chat"
 
 
+def test_managed_retries_do_not_reuse_the_default_sdk_client(monkeypatch):
+    """Metric retry policy gets its own cache entry without changing other callers."""
+    from unittest.mock import MagicMock
+
+    factory = MagicMock(side_effect=lambda config: object())
+    monkeypatch.setattr(llm_module, "_settings_with_hot_reload", lambda: _settings())
+    monkeypatch.setattr(llm_module, "_CLIENT_BUILDERS", {"openai": factory})
+    monkeypatch.setattr(llm_module, "_client_cache", {})
+    normal = llm_module.get_llm(role="metric")
+    managed = llm_module.get_llm(role="metric", max_retries=0)
+    assert normal is not managed
+    assert llm_module.get_llm(role="metric", max_retries=0) is managed
+    assert [call.args[0].max_retries for call in factory.call_args_list] == [None, 0]
+
+
 def test_agent_role_model_overrides_remain_supported() -> None:
     settings = _settings(
         llm_model="shared-model",

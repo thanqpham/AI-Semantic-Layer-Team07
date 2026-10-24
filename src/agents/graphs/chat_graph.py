@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
 
-from src.agents.nodes.chitchat_node import chitchat_node
-from src.agents.nodes.data_assistant_node import data_assistant_node
-from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
-from src.agents.nodes.orchestrator_node import orchestrator_node
-from src.agents.nodes.semantic_parse_node import semantic_parse_node
+from src.agents.nodes.chat.conversation_node import conversation_node
+from src.agents.nodes.chat.data_assistant_node import data_assistant_node
+from src.agents.nodes.chat.orchestrator_node import orchestrator_node
+from src.agents.nodes.chat.semantic_query_parser_node import semantic_query_parser_node
+from src.agents.nodes.metric.coordinator_node import coordinator_node
 from src.agents.state import AgentState
 from src.observability import trace_transition
 
@@ -30,10 +30,10 @@ def build_chat_graph() -> StateGraph:
     """Build the direct chitchat, data-assistant, metric-proposal, and semantic-query flows."""
     graph = StateGraph(AgentState)
     graph.add_node("orchestrator", orchestrator_node)
-    graph.add_node("chitchat", chitchat_node)
+    graph.add_node("chitchat", conversation_node)
     graph.add_node("data_assistant", data_assistant_node)
-    graph.add_node("metric_suggest", on_demand_metric_suggest_node)
-    graph.add_node("semantic_parse", semantic_parse_node)
+    graph.add_node("metric_coordinator", coordinator_node)
+    graph.add_node("semantic_parse", semantic_query_parser_node)
     graph.set_entry_point("orchestrator")
     graph.add_conditional_edges(
         "orchestrator",
@@ -41,7 +41,7 @@ def build_chat_graph() -> StateGraph:
         {
             "chitchat": "chitchat",
             "data_question": "data_assistant",
-            "metric_query": "metric_suggest",
+            "metric_query": "metric_coordinator",
             "semantic_query": "semantic_parse",
             "out_of_scope": END,
             "chitchat_done": END,
@@ -49,7 +49,7 @@ def build_chat_graph() -> StateGraph:
     )
     graph.add_edge("chitchat", END)
     graph.add_edge("data_assistant", END)
-    graph.add_edge("metric_suggest", END)
+    graph.add_edge("metric_coordinator", END)
     graph.add_edge("semantic_parse", END)
     return graph.compile()
 

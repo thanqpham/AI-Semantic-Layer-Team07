@@ -11,7 +11,6 @@ from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 
-from src.agents.state import AgentState
 from src.models.schemas import (
     ChatClarificationOption,
     ChatClarificationPayload,
@@ -21,7 +20,7 @@ from src.models.schemas import (
     SemanticQuerySpec,
     SemanticTimeRange,
 )
-from src.observability import trace_action, trace_node
+from src.observability import trace_action
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 
@@ -29,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
-_PARSE_PROMPT = """Bạn là chuyên gia Semantic Query Parser của hệ thống AI Semantic Layer.
+_PARSE_PROMPT = """Bạn là Semantic Query Parser Agent của hệ thống AI Semantic Layer.
 Nhiệm vụ: Chuyển đổi câu hỏi tiếng Việt của người dùng thành cấu trúc truy vấn Semantic Query hoặc yêu cầu làm rõ (Clarification) nếu mơ hồ hoặc chưa có chỉ số.
 
 Thời gian hiện tại tại Việt Nam (Asia/Ho_Chi_Minh): {current_time}
@@ -93,22 +92,25 @@ CHỈ TRẢ VỀ DUY NHẤT 1 JSON OBJECT hợp lệ theo cấu trúc sau:
 }}"""
 
 
-@trace_node("semantic_parse")
-async def semantic_parse_node(state: AgentState) -> dict[str, Any]:
+async def parse_semantic_query(
+    user_message: str,
+    parser_catalog: dict[str, Any],
+    can_generate_metrics: bool = False,
+    chat_history: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """Parse user query against catalog using LLM without direct DB execution."""
-    catalog = state.get("parser_catalog") or {}
+    catalog = parser_catalog or {}
     metrics = catalog.get("metrics") or []
     if not metrics:
         return _empty_catalog_fallback()
 
-    user_message = state.get("user_message", "").strip()
-    can_generate = state.get("can_generate_metrics", False)
-    prompt = _build_parse_prompt(state, user_message, catalog, can_generate)
+    user_message = user_message.strip()
+    prompt = _build_parse_prompt(user_message, catalog, can_generate_metrics, chat_history or [])
     try:
         raw_json = await trace_action(
             "semantic_parse", {"catalog_metrics": len(metrics)}, ainvoke_json(get_llm(), prompt, retries=1)
         )
-        interpretation = _parse_interpretation(raw_json, catalog, can_generate, user_message)
+        interpretation = _parse_interpretation(raw_json, catalog, can_generate_metrics, user_message)
     except Exception as exc:
         logger.warning("Semantic parse node failed: %s", exc)
         interpretation = _fallback_interpretation(
@@ -129,11 +131,14 @@ def _empty_catalog_fallback() -> dict[str, Any]:
 
 
 def _build_parse_prompt(
-    state: AgentState, user_message: str, catalog: dict[str, Any], can_generate_metrics: bool
+    user_message: str,
+    catalog: dict[str, Any],
+    can_generate_metrics: bool,
+    chat_history: list[dict[str, str]],
 ) -> str:
     """Format catalog, history, and current Vietnam time into the prompt."""
     now_vn = datetime.now(_VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
-    history_str = _format_history(state.get("chat_history", []))
+    history_str = _format_history(chat_history)
     compact_catalog = json.dumps(catalog, ensure_ascii=False, indent=2)
     if can_generate_metrics:
         role_desc = "Data Lead / Quản trị viên (có quyền tạo và phê duyệt Metric)"

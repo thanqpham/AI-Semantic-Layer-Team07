@@ -1,4 +1,4 @@
-"""Enrich Node — Flow 1 Step 2.
+"""Schema Enrichment Agent — Flow 1 Step 2.
 
 Two-Pass Semantic Enrichment pipeline:
   Pass 1 — Global table glossary (business_name + description for all tables)
@@ -11,8 +11,7 @@ import asyncio
 import logging
 from typing import Any
 
-from src.agents.state import AgentState
-from src.observability import trace_action, trace_node
+from src.observability import trace_action
 from src.services.clustering import cluster_tables, table_key
 from src.services.enrichment_config import DEFAULT_CONFIG
 from src.services.pass1_global_glossary import execute_pass1
@@ -69,38 +68,24 @@ def _assemble_enriched_tables(
     return enriched_list
 
 
-@trace_node("enrich")
-async def enrich_node(state: AgentState) -> dict[str, Any]:
-    """Two-Pass enrichment: Pass 1 global glossary + Pass 2 cluster enrichment.
-
-    Input state fields: raw_schema, db_type
-    Output state fields: enriched_schema, global_glossary | error
-    """
-    raw_schema = state.get("raw_schema", {})
+async def enrich_schema(raw_schema: dict[str, Any], dialect: str = "postgresql") -> dict[str, Any]:
+    """Build business glossary and enriched schema from technical metadata."""
     if not raw_schema or not raw_schema.get("tables"):
-        return {"error": "enrich_node: raw_schema is empty"}
+        raise ValueError("raw_schema is empty")
 
-    try:
-        tables = raw_schema["tables"]
-        dialect = state.get("db_type", "postgresql")
-        sem = asyncio.Semaphore(DEFAULT_CONFIG.max_concurrency)
+    tables = raw_schema["tables"]
+    sem = asyncio.Semaphore(DEFAULT_CONFIG.max_concurrency)
 
-        global_glossary = await trace_action(
-            "llm_glossary", {"table_count": len(tables)}, execute_pass1(tables, dialect, sem)
-        )
-        clusters = cluster_tables(tables)
-        enriched_dict = await trace_action(
-            "llm_enrichment",
-            {"cluster_count": len(clusters)},
-            enrich_clusters_parallel(clusters, global_glossary, dialect, sem),
-        )
+    global_glossary = await trace_action(
+        "llm_glossary", {"table_count": len(tables)}, execute_pass1(tables, dialect, sem)
+    )
+    clusters = cluster_tables(tables)
+    enriched_dict = await trace_action(
+        "llm_enrichment",
+        {"cluster_count": len(clusters)},
+        enrich_clusters_parallel(clusters, global_glossary, dialect, sem),
+    )
 
-        enriched_list = _assemble_enriched_tables(tables, enriched_dict, global_glossary)
-        logger.info("enrich_node: successfully enriched %d tables", len(enriched_list))
-        return {
-            "enriched_schema": {"tables": enriched_list},
-            "global_glossary": global_glossary,
-        }
-    except Exception as exc:
-        logger.error("enrich_node error: %s", exc)
-        return {"error": f"enrich_node: {exc}"}
+    enriched_list = _assemble_enriched_tables(tables, enriched_dict, global_glossary)
+    logger.info("schema enrichment agent: successfully enriched %d tables", len(enriched_list))
+    return {"enriched_schema": {"tables": enriched_list}, "global_glossary": global_glossary}

@@ -880,8 +880,15 @@ async def test_create_metric_rejects_duplicate_name(
     async_session.add_all([sem_db, table, column])
     await async_session.commit()
     payload = {"definition": _make_route_def("Net Revenue", "SUM", "total_amount", "orders"), "source": "ai"}
+    from tests.metric_review_helpers import seed_proposal
+
+    first_proposal = await seed_proposal(async_session, 231, 1, payload["definition"])
+    second_proposal = await seed_proposal(async_session, 231, 1, payload["definition"])
+    await async_session.commit()
+    payload["proposal_id"] = first_proposal.id
 
     first = await client.post("/api/v1/semantic/231/metric", json=payload, headers=auth_headers)
+    payload["proposal_id"] = second_proposal.id
     second = await client.post("/api/v1/semantic/231/metric", json=payload, headers=auth_headers)
 
     assert first.status_code == 201

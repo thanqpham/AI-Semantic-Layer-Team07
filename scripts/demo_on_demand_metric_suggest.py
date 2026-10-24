@@ -1,4 +1,4 @@
-"""Demo script to execute on_demand_metric_suggest_node and display user-facing Business Metrics."""
+"""Demo script to execute coordinator_node and display user-facing Business Metrics."""
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ from pathlib import Path
 # Ensure root directory is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.agents.nodes.on_demand_metric_suggest_node import on_demand_metric_suggest_node
+from src.agents.nodes.metric.metric_review_node import metric_review_node
+from src.agents.nodes.metric.coordinator_node import coordinator_node
 
 # E-Commerce Canonical Schema Metadata Example
 SAMPLE_CANONICAL_SCHEMA = {
@@ -85,37 +86,23 @@ SAMPLE_CANONICAL_SCHEMA = {
 
 
 async def main() -> None:
-    print("=" * 80)
-    print(" 🔍 Đang chạy Agent On-demand Metric Generator (on_demand_metric_suggest_node)...")
-    print("=" * 80)
-
-    state = {"enriched_schema": SAMPLE_CANONICAL_SCHEMA}
-    result = await on_demand_metric_suggest_node(state)
-
+    """Display reviewed, unsaved suggestions and blocked KPI decisions."""
+    state = {"enriched_schema": SAMPLE_CANONICAL_SCHEMA, "proposal_mode": "discovery", "can_generate_metrics": True}
+    result = {**state, **await coordinator_node(state)}
+    result.update(await metric_review_node(result))
     if "error" in result:
         print(f"\n❌ Lỗi: {result['error']}")
         return
-
     metrics = result.get("suggested_metrics", [])
-    print(f"\n✅ Agent đã sinh thành công {len(metrics)} Business Metrics!\n")
-
-    # Format table for terminal output
-    print("-" * 100)
-    print(f"{'STT':<4} | {'Tên nghiệp vụ (business_name)':<25} | {'Tên kỹ thuật (name)':<20} | {'Bảng gốc':<12} | {'Phép toán':<10} | {'Cột tính':<15}")
-    print("-" * 100)
-
-    for idx, m in enumerate(metrics, 1):
-        b_name = m.get("business_name", "")
-        name = m.get("name", "")
-        tbl = m.get("target_table", "")
-        agg = m.get("aggregation", "")
-        fld = m.get("field", "")
-        print(f"{idx:<4} | {b_name:<25} | {name:<20} | {tbl:<12} | {agg:<10} | {fld:<15}")
-        print(f"     Mô tả: {m.get('description', '')}")
-        print(f"     SQL Mẫu: {m.get('sql_template', '')}")
-        print("-" * 100)
-
-    print("\n📦 Cấu trúc JSON chi tiết nhận được từ Agent:")
+    print(f"Có {len(metrics)} đề xuất đạt AI review; chưa lưu hoặc được người phê duyệt.")
+    for item in metrics:
+        metric = item["definition"]["metric"]
+        print(f"{metric['name']}: {metric['formula']['function']}({metric['formula']['expression']})")
+        print(item["review"]["summary"])
+    for item in result.get("blocked_candidates", []):
+        print(f"{item['name']}: {item['review']['status']} — {item['review']['summary']}")
+    if result.get("clarification"):
+        print(result["clarification"]["prompt"])
     print(json.dumps(metrics, indent=2, ensure_ascii=False))
 
 

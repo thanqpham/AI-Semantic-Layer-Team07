@@ -59,7 +59,7 @@ async def test_agent_state_has_required_fields():
 @patch("src.services.llm.get_llm")
 async def test_enrich_node_skipped_when_raw_schema_empty(mock_get_llm):
     """Enrich node phải trả về error khi raw_schema rỗng."""
-    from src.agents.nodes.enrich_node import enrich_node
+    from src.agents.nodes.schema.enrich_node import enrich_node
 
     mock_get_llm.return_value = AsyncMock()
     result = await enrich_node({"raw_schema": {}})
@@ -199,7 +199,7 @@ def _make_approved_state() -> dict:
 @pytest.mark.asyncio
 async def test_save_node_returns_error_when_not_approved():
     """save_node phải trả về error nếu hitl_approved=False."""
-    from src.agents.nodes.save_node import save_node
+    from src.agents.nodes.schema.save_node import save_node
 
     state = _make_approved_state()
     state["hitl_approved"] = False
@@ -209,11 +209,11 @@ async def test_save_node_returns_error_when_not_approved():
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.save_node.get_db_session")
-@patch("src.agents.nodes.save_node.enrich_and_save_canonical_schema")
+@patch("src.agents.nodes.schema.save_node.get_db_session")
+@patch("src.agents.nodes.schema.save_node.enrich_and_save_canonical_schema")
 async def test_save_node_calls_enrichment_when_approved(mock_enrich: AsyncMock, mock_get_db: MagicMock):
     """save_node phải gọi enrich_and_save_canonical_schema khi HITL approved."""
-    from src.agents.nodes.save_node import save_node
+    from src.agents.nodes.schema.save_node import save_node
 
     mock_session = AsyncMock()
     mock_get_db.return_value = _async_gen(mock_session)
@@ -235,11 +235,11 @@ async def test_save_node_calls_enrichment_when_approved(mock_enrich: AsyncMock, 
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.save_node.get_db_session")
-@patch("src.agents.nodes.save_node.enrich_and_save_canonical_schema")
+@patch("src.agents.nodes.schema.save_node.get_db_session")
+@patch("src.agents.nodes.schema.save_node.enrich_and_save_canonical_schema")
 async def test_save_node_handles_enrichment_error(mock_enrich: AsyncMock, mock_get_db: MagicMock):
     """save_node phải trả về error nếu enrichment service raise exception."""
-    from src.agents.nodes.save_node import save_node
+    from src.agents.nodes.schema.save_node import save_node
 
     mock_session = AsyncMock()
     mock_get_db.return_value = _async_gen(mock_session)
@@ -258,7 +258,7 @@ async def test_save_node_handles_enrichment_error(mock_enrich: AsyncMock, mock_g
 
 def test_raw_schema_to_canonical_converts_table_names():
     """raw_schema_to_canonical phải convert table_name từ str sang Identifier."""
-    from src.agents.nodes.save_node import raw_schema_to_canonical
+    from src.agents.nodes.schema.save_node import raw_schema_to_canonical
 
     raw = _make_raw_schema_dict()
     result = raw_schema_to_canonical(raw, "postgresql")
@@ -271,7 +271,7 @@ def test_raw_schema_to_canonical_converts_table_names():
 
 def test_raw_schema_to_canonical_converts_columns():
     """raw_schema_to_canonical phải convert columns từ TypedDict sang Pydantic ColumnMetadata."""
-    from src.agents.nodes.save_node import raw_schema_to_canonical
+    from src.agents.nodes.schema.save_node import raw_schema_to_canonical
 
     raw = _make_raw_schema_dict()
     result = raw_schema_to_canonical(raw, "postgresql")
@@ -287,7 +287,7 @@ def test_raw_schema_to_canonical_converts_columns():
 
 def test_raw_schema_to_canonical_converts_foreign_keys():
     """raw_schema_to_canonical phải convert foreign_keys từ TypedDict sang Pydantic ForeignKeyMetadata."""
-    from src.agents.nodes.save_node import raw_schema_to_canonical
+    from src.agents.nodes.schema.save_node import raw_schema_to_canonical
 
     raw = _make_raw_schema_dict()
     result = raw_schema_to_canonical(raw, "postgresql")
@@ -302,7 +302,7 @@ def test_raw_schema_to_canonical_converts_foreign_keys():
 
 def test_raw_schema_to_canonical_converts_primary_key():
     """raw_schema_to_canonical phải convert primary_keys từ list[str] sang PrimaryKeyMetadata."""
-    from src.agents.nodes.save_node import raw_schema_to_canonical
+    from src.agents.nodes.schema.save_node import raw_schema_to_canonical
 
     raw = _make_raw_schema_dict()
     result = raw_schema_to_canonical(raw, "postgresql")
@@ -319,7 +319,7 @@ def test_raw_schema_to_canonical_converts_primary_key():
 
 def test_graph_compiled_with_interrupt_before_save():
     """Graph phải compile với interrupt_before=['save']."""
-    from src.agents.graph import build_graph
+    from src.agents.graphs.semantic_layer_graph import build_graph
 
     graph = build_graph()
     # CompiledGraph stores interrupt config as interrupt_before_nodes
@@ -329,7 +329,7 @@ def test_graph_compiled_with_interrupt_before_save():
 @pytest.mark.asyncio
 async def test_route_after_save_routes_to_end_when_saved():
     """route_after_save phải trả về END khi semantic_layer_id > 0."""
-    from src.agents.graph import END, route_after_save
+    from src.agents.graphs.semantic_layer_graph import END, route_after_save
 
     state: AgentState = {"semantic_layer_id": 42}  # type: ignore[typeddict-item]
     assert route_after_save(state) == END
@@ -338,7 +338,7 @@ async def test_route_after_save_routes_to_end_when_saved():
 @pytest.mark.asyncio
 async def test_route_after_save_routes_to_enrich_when_rejected():
     """route_after_save phải trả về 'enrich' khi semantic_layer_id chưa set."""
-    from src.agents.graph import route_after_save
+    from src.agents.graphs.semantic_layer_graph import route_after_save
 
     state: AgentState = {"semantic_layer_id": 0}  # type: ignore[typeddict-item]
     assert route_after_save(state) == "enrich"

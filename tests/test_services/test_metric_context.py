@@ -6,29 +6,53 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.services.metric_context import (
+    _DATA_SCOPE_PROMPT,
     _SCOPE_PROMPT,
     _expand_context,
     _select_tables,
     _temporal_context,
     _token_estimate,
 )
+from tests.metric_review_helpers import scope_mock
 
 
 @pytest.mark.asyncio
-async def test_scope_clarification_preserves_selectable_options() -> None:
-    """An ambiguous AOV scope must retain choices instead of returning only text."""
+async def test_data_scope_clarification_preserves_selectable_options() -> None:
+    """Data questions can still ask users to narrow an unclear domain."""
     payload = {
         "needs_clarification": True,
-        "question": "AOV theo giá nào?",
-        "options": ["Giá trước thuế (price)", "Giá sau thuế (price_after_tax)"],
+        "question": "Bạn muốn xem bảng nào?",
+        "options": ["Bảng đơn hàng", "Bảng khách hàng"],
     }
     with (
         patch("src.services.metric_context.get_llm"),
         patch("src.services.metric_context.ainvoke_json", new=AsyncMock(return_value=payload)),
     ):
-        _, diagnostic = await _select_tables("Tính AOV", [], [_table("order_header")], None)
+        _, diagnostic = await _select_tables(
+            "Tìm thông tin", [], [_table("order_header"), _table("customer")], None, _DATA_SCOPE_PROMPT
+        )
     assert [item["label"] for item in diagnostic["clarification"]["options"]] == payload["options"]
-    assert all(item["action"] == "create_metric" for item in diagnostic["clarification"]["options"])
+    assert all(item.get("action") is None for item in diagnostic["clarification"]["options"])
+
+
+@pytest.mark.asyncio
+async def test_metric_scope_uses_selected_table_without_asking_for_price_column() -> None:
+    payload = {
+        "table_names": ["order_header"],
+        "needs_clarification": True,
+        "question": "Chọn price_after_tax hay price_after_discount?",
+        "options": ["price_after_tax", "price_after_discount"],
+    }
+    model = scope_mock(payload)
+    with patch("src.services.metric_context.invoke_metric_json", new=model):
+        selected, diagnostic = await _select_tables(
+            "Tính giá trị trung bình mỗi đơn", [], [_table("order_header")], None
+        )
+    assert selected == {"order_header"}
+    assert diagnostic is None
+    prompt = model.call_args.args[1]
+    assert "Không hỏi người dùng chọn cột giá" in prompt
+    assert "Ví dụ hỏi AOV theo giá nào" not in prompt
 
 
 @pytest.mark.parametrize("options", [None, "price", [None, {}, "  "]])
@@ -47,6 +71,9 @@ def _column(name: str) -> SimpleNamespace:
         business_name=name,
         description="",
         is_primary_key=name == "id",
+        is_nullable=False,
+        allowed_values=None,
+        review_status="approved",
         is_foreign_key=name.endswith("_id") and name != "id",
         fk_target_table=None,
         fk_target_column=None,
@@ -54,7 +81,9 @@ def _column(name: str) -> SimpleNamespace:
 
 
 def _table(name: str) -> SimpleNamespace:
-    return SimpleNamespace(table_name=name, business_name=name, description="", columns=[_column("id")])
+    return SimpleNamespace(
+        table_name=name, business_name=name, description="", columns=[_column("id")], review_status="approved"
+    )
 
 
 def test_context_keeps_late_business_tables_and_relationships() -> None:

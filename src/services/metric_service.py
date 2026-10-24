@@ -125,8 +125,20 @@ async def create_metric(
     metric_data: dict[str, Any],
     user_id: int,
     status_override: str | None = None,
+    proposal_owner_id: int | None = None,
 ) -> SemanticMetricModel:
     """Create a metric and its initial version with a server-controlled status."""
+    from src.services.metric_proposals import link_saved_proposal, require_passing_proposal
+
+    proposal = None
+    if metric_data.get("source") == "ai":
+        proposal = await require_passing_proposal(
+            db,
+            connection_id,
+            metric_data.get("proposal_id"),
+            proposal_owner_id or user_id,
+            MetricDefinition.model_validate(metric_data["definition"]),
+        )
     definition, status = await _resolve_definition(db, connection_id, metric_data["definition"])
     await _ensure_unique_metric_name(db, connection_id, definition.metric.name)
     if status_override:
@@ -151,6 +163,8 @@ async def create_metric(
     db.add(metric)
     await db.flush()
     await record_version(db, metric.id, payload, definition.metric.name, version_status_for(status), user_id, version=1)
+    if proposal is not None:
+        await link_saved_proposal(db, proposal, metric.id, 1)
     return metric
 
 

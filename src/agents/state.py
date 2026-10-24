@@ -12,8 +12,9 @@ class AgentState(TypedDict, total=False):
     1. Introspect Node  → raw_schema
     2. Enrich Node      → enriched_schema
     3. MetricSuggest    → suggested_metrics
-    4. HITL Interrupt   → reviewed (chờ user approve)
-    5. Save Node        → semantic_layer_id
+    4. MetricReview     → reviewed_proposals, passing suggested_metrics
+    5. HITL Interrupt   → reviewed (chờ user approve)
+    6. Save Node        → semantic_layer_id
     """
 
     # Input
@@ -54,7 +55,7 @@ class AgentState(TypedDict, total=False):
 
     suggested_metrics: list[dict[str, Any]]
     """Danh sách Business Metrics do LLM đề xuất.
-    Mỗi metric là một MetricDefinition JSON, không chứa SQL.
+    Mỗi item chứa definition, YAML preview, proposal_id và review; không chứa SQL.
     """
 
     duplicate_notices: list[dict[str, Any]]
@@ -72,11 +73,11 @@ class AgentState(TypedDict, total=False):
     error: str
     """Thông báo lỗi nếu có bất kỳ node nào thất bại."""
 
-    # Chat Orchestrator — Input
+    # Orchestrator Agent — Input
     user_message: str
     """Câu hỏi / tin nhắn ngôn ngữ tự nhiên từ người dùng gửi vào chatbot."""
 
-    # Chat Orchestrator — Router output
+    # Orchestrator Agent — Router output
     intent: str
     """Intent: 'chitchat', 'data_question', 'metric_query', 'semantic_query', or 'out_of_scope'."""
 
@@ -89,7 +90,7 @@ class AgentState(TypedDict, total=False):
     metric_decision: dict[str, Any]
     """Validated metric availability and schema-support decision for one chat turn."""
 
-    suggestion_action: str
+    suggestion_action: str | None
     """Server-derived action for metric suggestions: save or submit for review."""
 
     context_diagnostic: dict[str, Any]
@@ -100,7 +101,7 @@ class AgentState(TypedDict, total=False):
     """Bounded catalog of approved metrics, safe dimensions, and safe filter columns."""
 
     interpretation: dict[str, Any]
-    """Validated SemanticQueryInterpretation from semantic_parse_node."""
+    """Validated SemanticQueryInterpretation from semantic_query_parser_node."""
 
     clarification: dict[str, Any] | None
     """Clarification questions/options when intent is ambiguous or requires user selection."""
@@ -111,7 +112,7 @@ class AgentState(TypedDict, total=False):
     semantic_query_result: dict[str, Any] | None
     """Result snapshot of the executed semantic query."""
 
-    # Chitchat Agent — Output
+    # Conversation Agent — Output
     chat_response: str
     """Câu trả lời ngôn ngữ tự nhiên khi intent = 'chitchat', 'data_question', hoặc 'out_of_scope'."""
 
@@ -121,3 +122,18 @@ class AgentState(TypedDict, total=False):
 
     chat_history: list[dict[str, str]]
     """Prior user/assistant messages used as conversational context."""
+
+    proposal_mode: str
+    """Requested metric or retail KPI discovery."""
+    user_message_id: str | None
+    """Reference to the persisted current request."""
+    proposal_context: dict[str, Any]
+    """Complete shared evidence supplied to generator and reviewer."""
+    metric_drafts: list[dict[str, Any]]
+    """Untrusted drafts, not actionable suggestions."""
+    reviewed_proposals: list[dict[str, Any]]
+    """Review evidence awaiting persistence by the request's database session."""
+    blocked_candidates: list[dict[str, Any]]
+    """KPI decisions that cannot be saved or sent for human approval."""
+    run_status: str
+    """Completed, partial, needs_clarification or execution error for this run."""

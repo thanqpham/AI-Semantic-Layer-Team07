@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 
 from eval.agent_runner.bootstrap import AgentRunContext
-from src.agents.graph import build_graph
+from src.agents.graphs.semantic_layer_graph import build_graph
 from src.services.database import encrypt_conn_url
 
 

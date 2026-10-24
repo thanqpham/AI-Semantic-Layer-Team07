@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.agents.nodes.introspect_node import introspect_node
+from src.agents.nodes.schema.introspect_node import introspect_node
 from src.models.raw_schema import RawSchema
 from src.services.introspection import InvalidCredentialError
 
@@ -26,7 +26,7 @@ async def test_introspect_node_passes_persisted_connection_id() -> None:
     response = {"raw_schema": {**RAW_SCHEMA, "tables": [{"table_name": "orders"}]}, "warnings": ["partial"]}
     state = {"db_id": 9, "conn_url_enc": "ciphertext", "db_type": "sqlite"}
     with patch(
-        "src.agents.nodes.introspect_node.extract_raw_schema",
+        "src.agents.nodes.schema.introspect_node.extract_raw_schema",
         new_callable=AsyncMock,
         return_value=response,
     ) as extract:
@@ -40,7 +40,7 @@ async def test_introspect_node_passes_persisted_connection_id() -> None:
 async def test_introspect_node_rejects_missing_connection_id() -> None:
     """Do not synthesize connection_id=0 when graph state is incomplete."""
     with patch(
-        "src.agents.nodes.introspect_node.extract_raw_schema",
+        "src.agents.nodes.schema.introspect_node.extract_raw_schema",
         new_callable=AsyncMock,
     ) as extract:
         result = await introspect_node({"conn_url_enc": "ciphertext", "db_type": "sqlite"})
@@ -53,7 +53,7 @@ async def test_introspect_node_rejects_empty_table_list() -> None:
     """Stop the graph when live extraction finds no base tables."""
     response = {"raw_schema": RAW_SCHEMA, "warnings": []}
     with patch(
-        "src.agents.nodes.introspect_node.extract_raw_schema",
+        "src.agents.nodes.schema.introspect_node.extract_raw_schema",
         new_callable=AsyncMock,
         return_value=response,
     ):
@@ -66,7 +66,7 @@ async def test_introspect_node_hides_plaintext_credentials() -> None:
     """Map internal failures without leaking their messages."""
     secret_url = "sqlite:///password-is-secret.db"
     with patch(
-        "src.agents.nodes.introspect_node.extract_raw_schema",
+        "src.agents.nodes.schema.introspect_node.extract_raw_schema",
         new_callable=AsyncMock,
         side_effect=InvalidCredentialError(secret_url),
     ):

@@ -16,6 +16,7 @@ from src.models.db import (
     SemanticDatabaseModel,
 )
 from src.models.metric_definition import MetricDefinition
+from src.services.metric_proposals import proposal_for_request, require_passing_proposal
 from src.services.notification_bus import publish
 from src.services.semantic_service import approve_metric, create_metric
 
@@ -30,6 +31,10 @@ async def create_metric_request(
     """Create a request from one immutable assistant suggestion."""
     suggestion = await _owned_suggestion(db, db_id, requester_id, assistant_message_id, suggestion_index)
     await _reject_duplicate_pending(db, db_id, requester_id, assistant_message_id, suggestion_index)
+    proposal_id = await proposal_for_request(db, assistant_message_id, suggestion_index)
+    proposal = await require_passing_proposal(
+        db, db_id, proposal_id, requester_id, MetricDefinition.model_validate(suggestion)
+    )
     request = MetricRequestModel(
         db_id=db_id,
         requester_id=requester_id,
@@ -39,6 +44,7 @@ async def create_metric_request(
     )
     db.add(request)
     await db.flush()
+    proposal.request_id = request.id
     recipients = await _notify_data_leads(db, db_id, request)
     await db.commit()
     await db.refresh(request)
@@ -94,15 +100,29 @@ async def list_metric_requests(
 
 
 async def approve_metric_request(
-    db: AsyncSession, request_id: int, reviewer_id: int, definition: MetricDefinition | None, note: str | None
+    db: AsyncSession,
+    request_id: int,
+    reviewer_id: int,
+    definition: MetricDefinition | None,
+    note: str | None,
+    proposal_id: str | None = None,
 ) -> MetricRequestModel:
     """Create and approve the reviewed metric atomically."""
     request = await _pending_request(db, request_id)
     chosen = definition or MetricDefinition.model_validate(request.definition)
+    proposal_id = proposal_id or await proposal_for_request(db, request.assistant_message_id, request.suggestion_index)
+    proposal = await require_passing_proposal(db, request.db_id, proposal_id, reviewer_id, chosen, allow_lead=True)
+    if proposal.request_id != request.id:
+        raise MetricRequestError("Proposal không thuộc yêu cầu metric này.")
     metric = await create_metric(
-        db, request.db_id, {"definition": chosen.model_dump(mode="json"), "source": "ai"}, reviewer_id
+        db,
+        request.db_id,
+        {"definition": chosen.model_dump(mode="json"), "source": "ai", "proposal_id": proposal.id},
+        reviewer_id,
+        proposal_owner_id=proposal.created_by,
     )
     await approve_metric(db, metric.id, reviewer_id)
+    request.definition = chosen.model_dump(mode="json")
     request.status, request.reviewed_by, request.review_note = "approved", reviewer_id, note
     request.metric_id, request.reviewed_at = metric.id, datetime.now(UTC)
     await _notify_requester(db, request, "metric_request_approved", "Metric request đã được duyệt")

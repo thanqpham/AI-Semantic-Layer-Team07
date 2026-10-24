@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import { MessageSquare, Plus } from 'lucide-react';
+import { MessageSquare, Plus, Sparkles } from 'lucide-react';
 
 import {
   ChatMessageItem,
@@ -17,9 +17,11 @@ import {
   sendChatOrchestratorApi,
   listMetricRequestsApi,
   submitMetricRequestApi,
+  reviewMetricProposalApi,
 } from '@/lib/api';
 import { ChatMessage, metricRequestKey, StudioChatStream } from '@/components/studio/StudioChatStream';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
+import { Button } from '@/components/ui/button';
 import { applySuggestedName, metricName } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
@@ -115,6 +117,7 @@ export function AIStudioView({
   const send = async (
     prompt: string, _targetTables: string[], reuseMetricId?: number,
     selection?: ChatClarificationSelection, pending?: PendingChat,
+    proposalMode: 'requested' | 'discovery' = pending?.proposalMode || 'requested',
   ) => {
     const clientMessageId = pending?.clientMessageId || crypto.randomUUID();
     const requestSessionId = pending ? pending.sessionId : activeSessionId;
@@ -131,7 +134,7 @@ export function AIStudioView({
       );
     }
     const storageKey = pendingChatKey(semanticDbId, requestSessionId);
-    storePendingChat(storageKey, { prompt, clientMessageId, sessionId: requestSessionId, reuseMetricId, selection });
+    storePendingChat(storageKey, { prompt, clientMessageId, sessionId: requestSessionId, reuseMetricId, selection, proposalMode });
     setLoading(true);
     setReconnecting(false);
     requestController.current?.abort();
@@ -154,7 +157,7 @@ export function AIStudioView({
     };
     try {
       const response = await sendChatOrchestratorApi(
-        String(semanticDbId), prompt, requestSessionId, clientMessageId, selection || null, reuseMetricId ?? null, progress,
+        String(semanticDbId), prompt, requestSessionId, clientMessageId, selection || null, reuseMetricId ?? null, progress, proposalMode,
       );
       if (readPendingChat(storageKey)?.clientMessageId === clientMessageId) storePendingChat(storageKey, null);
       if (version !== requestVersion.current) return;
@@ -220,6 +223,8 @@ export function AIStudioView({
                 ? 'Hệ thống nhận thấy chỉ số này đã tồn tại trong Semantic Layer. Bạn có thể sử dụng trực tiếp chỉ số có sẵn bên dưới để tính toán kết quả.'
                 : 'Tôi chưa tìm thấy cấu trúc dữ liệu phù hợp trong hệ thống để tự động đề xuất chỉ số này. Bạn có thể thử mô tả chi tiết hơn về các trường dữ liệu cần dùng nhé!'),
           suggestions,
+          blockedCandidates: response.blocked_candidates,
+          runStatus: response.run_status,
           clarification: response.clarification,
           duplicates: response.duplicates,
           dedupeSkipped: response.dedupe_performed === false,
@@ -303,13 +308,27 @@ export function AIStudioView({
     setMessages((current) => current.map((message) => (message.id === messageId ? updater(message) : message)));
   };
 
-  const renameSuggestion = (messageId: string, index: number): void =>
-    updateMessage(messageId, (message) => ({
-      ...message,
-      suggestions: message.suggestions?.map((item, itemIndex) =>
-        itemIndex === index ? applySuggestedName(item) : item,
-      ),
-    }));
+  const renameSuggestion = async (messageId: string, index: number): Promise<void> => {
+    const current = messages.find(message => message.id === messageId)?.suggestions?.[index];
+    if (!current?.proposal_id || !semanticDbId) return;
+    try {
+      const renamed = applySuggestedName(current);
+      if (!canGenerateMetrics) {
+        await send(`Tạo lại metric ${current.definition.metric.name} theo yêu cầu đã xác nhận, đặt tên: ${renamed.definition.metric.name}.`, []);
+        return;
+      }
+      const result = await reviewMetricProposalApi(String(semanticDbId), current.proposal_id, renamed.definition);
+      if (result.review.status !== 'pass' || !result.definition) throw new Error(result.review.summary);
+      updateMessage(messageId, (message) => ({
+        ...message,
+        suggestions: message.suggestions?.map((item, itemIndex) =>
+          itemIndex === index ? { ...renamed, ...result, definition: result.definition! } : item,
+        ),
+      }));
+    } catch (error) {
+      appendError(setMessages, error instanceof Error ? error.message : 'Không thể thẩm định tên mới.');
+    }
+  };
 
   const useExistingSuggestion = (messageId: string, index: number): void => {
     const conflict = messages.find((message) => message.id === messageId)?.suggestions?.[index]?.conflict;
@@ -363,6 +382,7 @@ export function AIStudioView({
       await createMetricApi(String(semanticDbId), {
         definition: suggestion.definition,
         source: 'ai',
+        proposal_id: suggestion.proposal_id,
       });
       await onMetricsChanged();
     } catch (error) {
@@ -411,35 +431,42 @@ export function AIStudioView({
         }
         database={dbProp}
         actions={
-          activeSession ? (
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1 font-sans text-xs text-secondary-foreground">
-                <MessageSquare className="h-3.5 w-3.5 text-primary" />
-                <span className="max-w-[200px] truncate">{activeSession.title}</span>
-              </span>
-              {onNewChat && (
-                <button
-                  type="button"
-                  onClick={onNewChat}
-                  className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
-                  title={translate("Tạo cuộc trò chuyện mới")}
-                >
-                  <Plus className="h-3 w-3" />
-                  <span><Translated text={"Đoạn chat mới"} /></span>
-                </button>
-              )}
-            </div>
-          ) : onNewChat && layer.source_type === 'live' && semanticDbId ? (
-            <button
-              type="button"
-              onClick={onNewChat}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
-              title={translate("Tạo cuộc trò chuyện mới")}
-            >
-              <Plus className="h-3 w-3" />
-              <span><Translated text={"Đoạn chat mới"} /></span>
-            </button>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="gap-2"
+              disabled={loading || loadingSessions}
+              onClick={() => void send('Khám phá các KPI phù hợp với schema bán lẻ/ecommerce này.', [], undefined, undefined, undefined, 'discovery')}>
+              <Sparkles className="h-4 w-4" />Đề xuất KPI
+            </Button>
+            {activeSession ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1 font-sans text-xs text-secondary-foreground">
+                  <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                  <span className="max-w-[200px] truncate">{activeSession.title}</span>
+                </span>
+                {onNewChat && (
+                  <button
+                    type="button"
+                    onClick={onNewChat}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
+                    title={translate("Tạo cuộc trò chuyện mới")}
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span><Translated text={"Đoạn chat mới"} /></span>
+                  </button>
+                )}
+              </>
+            ) : onNewChat && layer.source_type === 'live' && semanticDbId ? (
+              <button
+                type="button"
+                onClick={onNewChat}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
+                title={translate("Tạo cuộc trò chuyện mới")}
+              >
+                <Plus className="h-3 w-3" />
+                <span><Translated text={"Đoạn chat mới"} /></span>
+              </button>
+            ) : undefined}
+          </div>
         }
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -487,6 +514,8 @@ function toChatMessage(message: ChatMessageItem): ChatMessage {
     sender: message.sender === 'user' ? 'user' : 'assistant',
     text: message.content,
     suggestions: message.metadata_json?.suggestions,
+    blockedCandidates: message.metadata_json?.blocked_candidates,
+    runStatus: message.metadata_json?.run_status,
     duplicates: message.metadata_json?.duplicates,
     dedupeSkipped: message.metadata_json?.dedupe_performed === false,
     suggestionAction: message.metadata_json?.suggestion_action,

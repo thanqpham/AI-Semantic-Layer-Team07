@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 
 import { MetricCard } from '@/components/metrics/MetricCard';
+import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { MetricAuditPanel } from '@/components/metrics/MetricAuditPanel';
 import { MetricHistoryDialog } from '@/components/metrics/MetricHistoryDialog';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,8 @@ import {
   MetricRecord,
   MetricRequest,
   rejectMetricRequestApi,
+  reviewMetricProposalApi,
+  ReviewedMetricProposal,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { WorkspaceDatabase } from '@/components/workspace/shared';
@@ -70,6 +73,9 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
   const [requests, setRequests] = useState<MetricRequest[]>([]);
   const [editingRequestId, setEditingRequestId] = useState<number | null>(null);
   const [editedDefinition, setEditedDefinition] = useState('');
+  const [editedReview, setEditedReview] = useState<ReviewedMetricProposal | null>(null);
+  const [requestError, setRequestError] = useState('');
+  const [reviewingRequest, setReviewingRequest] = useState(false);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'trash' | 'audit'>('all');
   const canManage = Boolean(props.canManageMetrics);
   const canApprove = Boolean(props.canApproveMetrics);
@@ -92,21 +98,34 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
     request: MetricRequest,
     approved: boolean,
     definition?: MetricDefinition,
+    proposalId?: string,
   ) => {
     if (!props.dbId) return;
     const result = approved
-      ? await approveMetricRequestApi(String(props.dbId), request.id, definition)
+      ? await approveMetricRequestApi(String(props.dbId), request.id, definition || request.definition, undefined, proposalId || request.proposal_id || undefined)
       : await rejectMetricRequestApi(String(props.dbId), request.id);
     setRequests((current) => current.map((item) => (item.id === result.id ? result : item)));
     await props.onMetricsChanged?.();
   };
 
   const approveEditedRequest = async (request: MetricRequest) => {
+    setRequestError('');
+    setReviewingRequest(true);
     try {
-      await resolveRequest(request, true, JSON.parse(editedDefinition) as MetricDefinition);
+      if (!editedReview) {
+        if (!props.dbId || !request.proposal_id) throw new Error('Đề xuất cũ cần được sinh và gửi lại.');
+        const result = await reviewMetricProposalApi(String(props.dbId), request.proposal_id, JSON.parse(editedDefinition));
+        setEditedReview(result);
+        if (result.definition) setEditedDefinition(JSON.stringify(result.definition, null, 2));
+        return;
+      }
+      if (editedReview.review.status !== 'pass' || !editedReview.definition) throw new Error(editedReview.review.summary);
+      await resolveRequest(request, true, editedReview.definition, editedReview.proposal_id);
       setEditingRequestId(null);
-    } catch {
-      window.alert('Definition JSON không hợp lệ hoặc không thể được duyệt.');
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Không thể thẩm định hoặc duyệt definition.');
+    } finally {
+      setReviewingRequest(false);
     }
   };
 
@@ -293,21 +312,24 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 <p className="mt-1 font-mono text-muted-foreground">
                   {formatMetricFormula(request.definition)}
                 </p>
+                {request.review && <MetricReviewPanel review={request.review} definition={request.definition} />}
+                {editingRequestId === request.id && editedReview && <MetricReviewPanel review={editedReview.review} definition={editedReview.definition} />}
+                {editingRequestId === request.id && requestError && <p role="alert" className="mt-2 text-destructive">{requestError}</p>}
                 {editingRequestId === request.id && (
                   <textarea
                     aria-label={translate("Definition metric request")}
                     className="mt-2 min-h-36 w-full rounded border border-border bg-background p-2 font-mono text-[11px]"
                     value={editedDefinition}
-                    onChange={(event) => setEditedDefinition(event.target.value)}
+                    onChange={(event) => { setEditedDefinition(event.target.value); setEditedReview(null); }}
                   />
                 )}
                 <div className="mt-3 flex gap-2">
                   {editingRequestId === request.id ? (
-                    <Button size="sm" className="h-7 text-xs" onClick={() => void approveEditedRequest(request)}>
-                      <Translated text={"Duyệt definition đã sửa"} />
+                    <Button size="sm" className="h-7 text-xs" disabled={reviewingRequest || (Boolean(editedReview) && editedReview?.review.status !== 'pass')} onClick={() => void approveEditedRequest(request)}>
+                      <Translated text={editedReview?.review.status === 'pass' ? 'Duyệt definition đã thẩm định' : 'Thẩm định definition đã sửa'} />
                     </Button>
                   ) : (
-                    <Button size="sm" className="h-7 text-xs" onClick={() => void resolveRequest(request, true)}>
+                    <Button size="sm" className="h-7 text-xs" disabled={request.review?.status !== 'pass'} onClick={() => void resolveRequest(request, true).catch(error => window.alert(error instanceof Error ? error.message : 'Không thể duyệt'))}>
                       <Translated text={"Duyệt & tạo"} />
                     </Button>
                   )}
@@ -317,6 +339,8 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                     className="h-7 text-xs"
                     onClick={() => {
                       setEditingRequestId(request.id);
+                      setEditedReview(null);
+                      setRequestError('');
                       setEditedDefinition(JSON.stringify(request.definition, null, 2));
                     }}
                   >

@@ -8,8 +8,10 @@ import pytest
 from httpx import AsyncClient
 
 from src.api.auth import create_access_token
-from src.models.db import UserModel
+from src.models.db import SemanticColumnModel, SemanticDatabaseModel, SemanticTableModel, UserModel
+from src.models.metric_definition import MetricDefinition
 from src.services.metric_context import MetricContextResult
+from src.services.metric_service import create_metric
 
 
 @pytest.fixture
@@ -33,7 +35,7 @@ def chat_session_mocks():
         patch("src.api.routes.save_chat_message", new_callable=AsyncMock) as mock_save,
         patch("src.api.routes.get_chat_session_with_messages", new_callable=AsyncMock) as mock_refresh,
         patch("src.api.routes.build_metric_context", new_callable=AsyncMock) as mock_context,
-        patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock) as mock_orch,
+        patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", new_callable=AsyncMock) as mock_orch,
     ):
         mock_can.return_value = True
         mock_resolve.return_value = session
@@ -137,7 +139,7 @@ async def test_scope_selection_continues_metric_generation() -> None:
 
 @pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_returns_duplicates(
     mock_agent: AsyncMock,
     mock_load: AsyncMock,
@@ -168,8 +170,53 @@ async def test_chat_returns_duplicates(
 
 
 @pytest.mark.asyncio
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
+async def test_chat_detects_existing_definition_with_different_name(
+    mock_agent: AsyncMock,
+    client: AsyncClient,
+    async_session,
+    auth_headers: dict[str, str],
+    chat_session_mocks: SimpleNamespace,
+) -> None:
+    async_session.add(
+        SemanticDatabaseModel(id=101, created_by=1, display_name="Orders", db_type="sqlite", conn_url_enc="enc")
+    )
+    async_session.add(SemanticTableModel(id=101, db_id=101, table_name="orders", business_name="Orders"))
+    await async_session.flush()
+    async_session.add_all(
+        [
+            SemanticColumnModel(
+                table_id=101, column_name="id", business_name="ID", data_type="INTEGER", is_primary_key=True
+            ),
+            SemanticColumnModel(table_id=101, column_name="amount", business_name="Amount", data_type="NUMERIC"),
+        ]
+    )
+    await async_session.flush()
+    original = MetricDefinition.model_validate(
+        {"metric": {"name": "Revenue", "formula": {"function": "SUM", "expression": "amount"}, "base_entity": "orders"}}
+    )
+    existing = await create_metric(async_session, 101, {"definition": original.model_dump(mode="json")}, 1)
+    draft = original.model_copy(deep=True)
+    draft.metric.name = "Total revenue"
+    mock_agent.ainvoke.return_value = {
+        "intent": "metric_query",
+        "suggested_metrics": [{"definition": draft.model_dump(mode="json"), "yaml_preview": "metric:"}],
+        "suggestion_action": "save_metric",
+    }
+
+    response = await client.post("/api/v1/semantic/101/chat", json={"message": "Revenue"}, headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["suggestions"] == []
+    assert response.json()["duplicates"][0]["existing_metric_id"] == existing.id
+    metadata = chat_session_mocks.save.call_args_list[-1].kwargs["metadata_json"]
+    assert metadata["suggestions"] == []
+    assert metadata["duplicates"][0]["existing_metric_id"] == existing.id
+
+
+@pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_loads_existing_for_numeric_db(
     mock_agent: AsyncMock,
     mock_load: AsyncMock,
@@ -192,7 +239,7 @@ async def test_chat_loads_existing_for_numeric_db(
 
 @pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_dedupe_unavailable_still_200(
     mock_agent: AsyncMock,
     mock_load: AsyncMock,

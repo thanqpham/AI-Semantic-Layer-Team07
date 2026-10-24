@@ -7,8 +7,9 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
 
 const AGENT_NAMES: Record<string, string> = {
-  orchestrator: 'Orchestrator', chitchat: 'Chitchat', data_assistant: 'Data Assistant',
-  metric_suggest: 'Metric Suggest', semantic_parse: 'Semantic Parse',
+  orchestrator: 'Orchestrator Agent', chitchat: 'Conversation Agent', data_assistant: 'Data Assistant Agent',
+  metric_coordinator: 'Metric Workflow Coordinator', metric_suggest: 'Metric Designer Agent', metric_validate: 'Kiểm tra kỹ thuật',
+  metric_review: 'Metric Reviewer Agent', metric_repair: 'Metric Designer Agent', context: 'Chuẩn bị schema', semantic_parse: 'Semantic Query Parser Agent',
 };
 
 export function TraceDuration({ milliseconds, running = false }: { milliseconds: number; running?: boolean }) {
@@ -62,6 +63,7 @@ export function AgentThinking({ trace, reconnecting, onOpenGraph }: {
   const status = reconnecting ? t('Reconnecting', 'Đang kết nối lại') : {
     running: t('Processing', 'Đang xử lý'), completed: t('Completed', 'Hoàn tất'),
     needs_clarification: t('Needs clarification', 'Cần làm rõ'), error: t('Error', 'Có lỗi'),
+    partial: t('Partially completed', 'Hoàn tất một phần'),
   }[trace.status];
   return <div className="w-full rounded-lg border border-border bg-card/60 text-xs">
     <div className="flex flex-wrap items-center justify-between gap-1 px-2 py-1">

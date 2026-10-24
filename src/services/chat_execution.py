@@ -19,6 +19,12 @@ LABELS = {
     "chitchat": "Soạn phản hồi hội thoại",
     "data_assistant": "Tra cứu semantic layer và metric đã duyệt",
     "metric_suggest": "Đề xuất định nghĩa metric",
+    "metric_coordinator": "Điều phối các agent metric",
+    "metric_validate": "Kiểm tra kỹ thuật bằng code",
+    "metric_provider_wait": "Đợi nhà cung cấp cho phép thử lại",
+    "metric_review": "Thẩm định metric trước HITL",
+    "metric_review_decision": "Đối chiếu yêu cầu và kiểm tra nghiệp vụ",
+    "metric_repair": "Sửa metric theo kết quả thẩm định",
     "semantic_parse": "Phân tích câu hỏi theo danh mục metric",
     "context": "Chuẩn bị ngữ cảnh dữ liệu",
     "dedupe": "Kiểm tra metric trùng lặp",
@@ -30,7 +36,14 @@ LABELS = {
     "clarification": "Yêu cầu làm rõ câu hỏi",
     "response": "Hoàn tất phản hồi",
 }
-AGENTS = {"orchestrator", "chitchat", "data_assistant", "metric_suggest", "semantic_parse"}
+AGENTS = {
+    "orchestrator",
+    "chitchat",
+    "data_assistant",
+    "metric_suggest",
+    "metric_review",
+    "semantic_parse",
+}
 SAFE_ERROR = "Không thể hoàn tất xử lý. Vui lòng thử lại."
 _CURRENT: ContextVar[ChatExecution | None] = ContextVar("chat_execution", default=None)
 
@@ -127,12 +140,9 @@ class ChatExecution:
 
     def start(self, node: str, action: str) -> str:
         """Start one uniquely identified invocation, retaining repeated invocations."""
-        if node in AGENTS and node == action:
-            self.transition(self.last_node, node)
-            self.last_node = node
-        if action == "sql_compile":
-            self.transition(self.last_node, "sql")
-            self.last_node = "sql"
+        flow_node = "sql" if action == "sql_compile" else node
+        self.transition(self.last_node, flow_node)
+        self.last_node = flow_node
         step_id = str(uuid.uuid4())
         event = self.emit(
             kind="step", node=node, action=action, step_id=step_id, status="started", summary=LABELS[action]
@@ -181,7 +191,7 @@ class ChatExecution:
     def _graph_transition(self, payload: Mapping[str, Any]) -> None:
         source = payload.get("node")
         target = {
-            "metric_query": "metric_suggest",
+            "metric_query": "metric_coordinator",
             "data_question": "data_assistant",
             "semantic_query": "semantic_parse",
             "chitchat_done": "response",

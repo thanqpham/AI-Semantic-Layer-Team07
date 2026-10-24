@@ -7,6 +7,7 @@ export interface PendingChat {
   sessionId: string | null;
   reuseMetricId?: number;
   selection?: ChatClarificationSelection;
+  proposalMode?: 'requested' | 'discovery';
 }
 
 export function pendingChatKey(dbId: number, sessionId: string | null): string {

@@ -1,4 +1,4 @@
-export type TraceStatus = 'running' | 'completed' | 'needs_clarification' | 'error';
+export type TraceStatus = 'running' | 'completed' | 'partial' | 'needs_clarification' | 'error';
 
 export interface TraceEvent {
   seq: number;

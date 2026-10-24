@@ -23,6 +23,7 @@ import {
   ChatSessionItem,
   convertRawSchemaToLayer,
   createMetricApi,
+  reviewMetricProposalApi,
   deleteChatSessionApi,
   deleteDatabaseApi,
   deleteLayer,
@@ -642,11 +643,24 @@ export default function WorkspacePage() {
       if (editingMetric) {
         const result = await updateMetricApi(dbId, editingMetric.metric_id, definition, changeReason);
         draftVersion = result.pendingVersion?.version ?? null;
-      } else
+      } else {
+        if (editingSuggestion && JSON.stringify(definition.metric) !== JSON.stringify(editingSuggestion.definition.metric)) {
+          if (!editingSuggestion.proposal_id) throw new Error('Đề xuất cũ chưa được thẩm định. Hãy sinh lại trong Studio.');
+          const result = await reviewMetricProposalApi(dbId, editingSuggestion.proposal_id, definition);
+          setEditingSuggestion({
+            ...editingSuggestion, ...result, definition: result.definition || definition,
+          });
+          throw new Error(result.review.status === 'pass'
+            ? 'Đã thẩm định bản sửa. Hãy xem kết quả và nhấn Lưu lần nữa để xác nhận.'
+            : result.review.summary);
+        }
+        if (editingSuggestion && editingSuggestion.review?.status !== 'pass') throw new Error('Bản sửa chưa thẩm định đạt.');
         await createMetricApi(dbId, {
           definition,
           source: editingSuggestion ? 'ai' : 'manual',
+          proposal_id: editingSuggestion?.proposal_id,
         });
+      }
       await refreshSemanticData();
       notify(
         draftVersion !== null
@@ -1036,6 +1050,11 @@ export default function WorkspacePage() {
           onSave={saveDefinition}
           tables={activeLayer?.tables || []}
           initialDefinition={editingMetric?.definition || editingSuggestion?.definition}
+          review={editingSuggestion?.review}
+          onReview={editingSuggestion?.proposal_id && activeLayer?.semantic_db_id ? async definition => {
+            const result = await reviewMetricProposalApi(String(activeLayer.semantic_db_id), editingSuggestion.proposal_id!, definition);
+            setEditingSuggestion({ ...editingSuggestion, ...result, definition: result.definition || definition });
+          } : undefined}
           initialName={editingMetric?.name}
           canSave={canManageMetrics}
           saveDisabledReason={METRIC_WRITE_PERMISSION_MESSAGE}

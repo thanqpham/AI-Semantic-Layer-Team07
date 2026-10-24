@@ -1,12 +1,10 @@
-"""Chitchat node: answer general questions in natural Vietnamese."""
+"""Conversation Agent: answer greetings and supported general questions."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from src.agents.state import AgentState
-from src.observability import trace_node
 from src.services.llm import get_llm
 
 logger = logging.getLogger(__name__)
@@ -25,29 +23,28 @@ _FALLBACK_RESPONSE = "Xin lỗi, tôi không thể phản hồi lúc này. Vui l
 _MAX_HISTORY_CHARS = 12000
 
 
-@trace_node("chitchat")
-async def chitchat_node(state: AgentState) -> dict[str, Any]:
+async def respond(user_message: str, chat_history: list[dict[str, str]] | None = None) -> str:
     """Generate a friendly natural-language response to chitchat messages.
 
     Uses the shared deterministic LLM configuration.
     """
-    user_message = state.get("user_message", "").strip()
+    user_message = user_message.strip()
     if not user_message:
-        return {"chat_response": "Xin chào! Tôi có thể giúp gì cho bạn?"}
+        return "Xin chào! Tôi có thể giúp gì cho bạn?"
 
     try:
         llm = get_llm()
         messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
-        messages.extend(_history_messages(state.get("chat_history", [])))
+        messages.extend(_history_messages(chat_history or []))
         messages.append({"role": "user", "content": user_message})
         response = await llm.ainvoke(messages)
         reply = (response.content if hasattr(response, "content") else str(response)).strip()
-        logger.info("Chitchat node replied (len=%d chars)", len(reply))
-        return {"chat_response": reply}
+        logger.info("Conversation Agent replied (len=%d chars)", len(reply))
+        return reply
 
     except Exception as exc:
         logger.warning("Chitchat node failed: %s", exc)
-        return {"chat_response": _FALLBACK_RESPONSE}
+        return _FALLBACK_RESPONSE
 
 
 def _history_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:

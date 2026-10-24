@@ -2,7 +2,7 @@
 
 Tích hợp dùng Python SDK v4.7 trở lên (vẫn dưới v5) và callback LangChain
 chính thức. Không cần đổi frontend, schema DB hay API response. Cấu hình được
-đọc một lần mỗi process; sau khi đổi cấu hình cần khởi động lại backend.
+đọc một lần mỗi process; đổi cấu hình cần khởi động lại backend.
 
 ## Cấu trúc trace
 
@@ -13,15 +13,21 @@ POST /api/v1/...                 # một trace cho mỗi request
   metric_suggest
     metric_generation           # action đã được instrument trong code
       ChatOpenAI
+  metric_review
+    metric_review_decision       # đối chiếu nghiệp vụ với context gốc
+      ChatOpenAI
+    metric_repair                # chỉ khi cần, tối đa một lượt sửa
+      ChatOpenAI
+    metric_review_result         # status và repair_count, không chứa context
 ```
 
 Tên root dùng route template, không chứa query string hoặc ID thực trong URL.
 Middleware ASGI giữ context xuyên suốt response streaming và background task
 được await trong request. Các tác vụ cron hoặc lời gọi LLM ngoài HTTP vẫn có
 span/generation riêng. Các node có `session_id` truyền thuộc tính session trước
-khi tạo observation. Với request đang có root span, propagation cũng áp dụng
-session vào root hiện hành và mọi observation con để lọc và tổng hợp usage.
-Session không đồng nghĩa một trace: mỗi lượt HTTP vẫn tạo trace riêng.
+khi tạo observation; Langfuse v4 áp dụng nó cho observation đang hoạt động và
+các observation con, gồm root request và generation có usage. Session không
+đồng nghĩa một trace: mỗi lượt HTTP vẫn tạo trace riêng.
 
 Tái sử dụng `trace_node`, `trace_action`, `trace_value` và `get_llm()` hiện có;
 không thay thế trace sink của benchmark. Chỉ những bước đã có các hook này
@@ -88,6 +94,9 @@ LangSmith là cấu hình độc lập. Nếu không dùng, đặt `LANGCHAIN_TR
 để tránh gửi trace sang cả hai hệ thống. Masking ở đây chỉ áp dụng cho Langfuse.
 
 ## Tài liệu SDK
+
+Luồng thẩm định, giới hạn compiler và migration được mô tả ở
+[Thẩm định metric AI trước HITL](metric-review.md).
 
 - [Python SDK v3 → v4 migration](https://langfuse.com/docs/observability/sdk/upgrade-path/python-v3-to-v4)
 - [LangChain integration](https://langfuse.com/integrations/frameworks/langchain)

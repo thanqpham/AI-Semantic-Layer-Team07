@@ -127,8 +127,8 @@ async def test_reuse_metric_id_executes_existing_metric_without_llm(
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_resolved_nl_query_for_data_lead_includes_sql(
     mock_agent: AsyncMock,
     mock_orch: AsyncMock,
@@ -164,8 +164,8 @@ async def test_resolved_nl_query_for_data_lead_includes_sql(
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_out_of_scope_chat_returns_without_context_or_metric_pipeline(
     mock_agent: AsyncMock,
     mock_orch: AsyncMock,
@@ -203,8 +203,8 @@ async def test_out_of_scope_chat_returns_without_context_or_metric_pipeline(
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_resolved_nl_query_for_member_redacts_sql(
     mock_agent: AsyncMock,
     mock_orch: AsyncMock,
@@ -332,8 +332,8 @@ async def test_replay_returns_persisted_semantic_query_snapshot(
 
 
 @pytest.mark.asyncio
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
-@patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
 @patch("src.api.routes.get_chat_message", new_callable=AsyncMock)
 async def test_clarification_selection_for_create_metric_delegates_to_standard_chat(
     mock_get_msg: AsyncMock,
@@ -393,8 +393,8 @@ async def test_clarification_selection_for_create_metric_delegates_to_standard_c
 
 
 @pytest.mark.asyncio
-@patch("src.agents.chat_graph.chat_agent", new_callable=AsyncMock)
-@patch("src.agents.nodes.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
+@patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
+@patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", new_callable=AsyncMock)
 @patch("src.api.routes.get_chat_message", new_callable=AsyncMock)
 async def test_clarification_selection_with_stale_metric_id_delegates_to_standard_chat(
     mock_get_msg: AsyncMock,

@@ -4,14 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.nodes.data_assistant_node import _format_context, data_assistant_node
+from src.agents.nodes.chat.data_assistant_node import data_assistant_node
+from src.agents.roles.data_assistant_agent import _format_context
 
 
 @pytest.mark.asyncio
 async def test_data_assistant_returns_data_question_response() -> None:
     """The node answers from semantic context without producing metric suggestions."""
     response = MagicMock(content="Bảng customers chứa thông tin khách hàng.")
-    with patch("src.agents.nodes.data_assistant_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.data_assistant_agent.get_llm") as mock_get_llm:
         llm = AsyncMock()
         llm.ainvoke.return_value = response
         mock_get_llm.return_value = llm
@@ -35,7 +36,7 @@ async def test_metric_catalog_question_lists_approved_metrics_without_llm() -> N
         "user_message": "Có những metric gì trong semantic layer?",
         "approved_metrics": [{"name": "Doanh thu thuần"}, {"name": "Số đơn hoàn thành"}],
     }
-    with patch("src.agents.nodes.data_assistant_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.data_assistant_agent.get_llm") as mock_get_llm:
         result = await data_assistant_node(state)
 
     mock_get_llm.assert_not_called()
@@ -54,7 +55,7 @@ async def test_unsupported_metric_returns_missing_schema_inputs_without_llm() ->
             "missing_input_codes": ["transaction_table", "customer_link_column"],
         },
     }
-    with patch("src.agents.nodes.data_assistant_node.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.data_assistant_agent.get_llm") as mock_get_llm:
         result = await data_assistant_node(state)
 
     mock_get_llm.assert_not_called()

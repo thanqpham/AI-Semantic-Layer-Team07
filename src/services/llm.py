@@ -69,6 +69,7 @@ class LLMConfig(NamedTuple):
     base_url: str
     model: str
     temperature: float
+    max_retries: int | None = None
 
 
 account_llm_config: ContextVar[LLMConfig | None] = ContextVar("account_llm_config", default=None)
@@ -241,6 +242,7 @@ def _build_openai_client(config: LLMConfig) -> BaseChatModel:
         base_url=config.base_url,
         temperature=config.temperature,
         callbacks=[BenchmarkUsageCallback(config.provider, config.model), *llm_trace_callbacks()],
+        **({"max_retries": config.max_retries} if config.max_retries is not None else {}),
     )
 
 
@@ -260,6 +262,7 @@ def _build_anthropic_client(config: LLMConfig) -> BaseChatModel:
         base_url=config.base_url,
         temperature=config.temperature,
         callbacks=[BenchmarkUsageCallback(config.provider, config.model), *llm_trace_callbacks()],
+        **({"max_retries": config.max_retries} if config.max_retries is not None else {}),
     )
 
 
@@ -305,7 +308,7 @@ def _settings_with_hot_reload() -> Settings:
     return get_settings()
 
 
-def get_llm(role: str | None = None) -> BaseChatModel:
+def get_llm(role: str | None = None, *, max_retries: int | None = None) -> BaseChatModel:
     """Reuse clients for account settings or environment role/Judge settings."""
     settings = _settings_with_hot_reload()
     override = account_llm_config.get()
@@ -315,6 +318,8 @@ def get_llm(role: str | None = None) -> BaseChatModel:
     else:
         config = _resolve_llm_config(settings, role=role)
 
+    if max_retries is not None:
+        config = config._replace(max_retries=max_retries)
     cached = _client_cache.get(config)
     if cached is not None:
         return cached

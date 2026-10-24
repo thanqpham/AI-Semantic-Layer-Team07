@@ -18,7 +18,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/components/ui/button';
-import { MetricSuggestion } from '@/lib/api';
+import { MetricSuggestion, MetricCandidateReport } from '@/lib/api';
+import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { cn } from '@/lib/utils';
 import { StatusPill } from '@/components/workspace/shared';
 import {
@@ -36,12 +37,14 @@ import { AgentThinking } from './AgentThinking';
 import { AgentFlowPanel } from './AgentFlowPanel';
 
 export interface ChatMessage {
+  runStatus?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
   executionTrace?: ExecutionTrace | null;
   reconnecting?: boolean;
   id: string;
   sender: 'user' | 'assistant';
   text: string;
   suggestions?: MetricSuggestion[];
+  blockedCandidates?: MetricCandidateReport[];
   duplicates?: ChatDuplicateNotice[];
   dedupeSkipped?: boolean;
   suggestionAction?: 'save_metric' | 'submit_metric_request' | null;
@@ -513,6 +516,14 @@ function MessageBubble({
           </div>
         )}
 
+        {message.runStatus === 'partial' && <p role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+          Một phần tác vụ đã hoàn tất. Các KPI đạt vẫn có thể gửi duyệt; phần lỗi được ghi riêng bên dưới.
+        </p>}
+        {message.blockedCandidates?.map((candidate, index) => <div key={candidate.proposal_id || index} className="w-full">
+          <p className="text-sm font-medium">{candidate.name}</p>
+          <MetricReviewPanel review={candidate.review} />
+        </div>)}
+
         {message.suggestions && message.suggestions.length > 0 && (
           <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-xs">
             <div className="border-b border-border bg-secondary/20 px-4 py-3 text-sm leading-relaxed text-card-foreground">
@@ -773,14 +784,26 @@ function SuggestionCard({
       </div>
 
       {/* Visual Properties */}
-      <div data-testid="metric-properties-grid" className="grid grid-cols-1 gap-2 p-4 text-xs sm:grid-cols-2">
-        <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
-          <span className="font-mono text-[10px] uppercase text-muted-foreground">
-            <Translated text={"Công thức tính"} />
-          </span>
-          <p className="mt-1 break-words font-mono text-xs font-medium text-foreground">
-            {formatMetricFormula({ metric: def })}
-          </p>
+      <div className="space-y-2 p-4 text-xs">
+        {suggestion.review && <MetricReviewPanel review={suggestion.review} definition={suggestion.definition} />}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-md border border-border bg-secondary/30 p-2.5">
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              <Translated text={"Công thức tính"} />
+            </span>
+            <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
+              <span className="text-primary font-bold">{def.formula.function}</span>(
+              <span>{def.formula.expression}</span>)
+            </p>
+          </div>
+          <div className="rounded-md border border-border bg-secondary/30 p-2.5">
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              <Translated text={"Dựa vào bảng gốc"} />
+            </span>
+            <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
+              {def.base_entity}
+            </p>
+          </div>
         </div>
         <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
           <span className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -891,7 +914,7 @@ function SuggestionCard({
                 size="sm"
                 className="h-8 gap-1.5 text-xs cursor-pointer"
                 onClick={() => void handleSubmitRequest()}
-                disabled={saving}
+                disabled={saving || !suggestion.proposal_id || suggestion.review?.status !== 'pass'}
               >
                 <Save className="h-3.5 w-3.5" />
                 <Translated text={saving ? 'Đang gửi...' : 'Gửi Data Lead xem xét'} />
@@ -912,7 +935,7 @@ function SuggestionCard({
               size="sm"
               className="h-8 gap-1.5 text-xs cursor-pointer"
               onClick={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || !suggestion.proposal_id || suggestion.review?.status !== 'pass'}
             >
               <Save className="h-3.5 w-3.5" />
               <Translated text={saving ? 'Đang lưu...' : 'Lưu vào Semantic Layer'} />

@@ -27,7 +27,7 @@ async def test_reload_during_first_message_and_replay_after_completion(async_ses
 
     with (
         patch("src.api.routes._chat_can_generate_metrics", new=AsyncMock(return_value=True)),
-        patch("src.agents.nodes.orchestrator_node.orchestrator_node", side_effect=classify) as agent,
+        patch("src.agents.nodes.chat.orchestrator_node.orchestrator_node", side_effect=classify) as agent,
     ):
         first = asyncio.create_task(chat_orchestrator(str(database.id), body, None, user, async_session))
         await asyncio.wait_for(started.wait(), timeout=3)

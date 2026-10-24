@@ -634,9 +634,9 @@ asyncio: mode=Mode.AUTO
 collected 622 items
 
 tests\\test_agents\\test_enrich_node.py ..........                         [  1%]
-tests\\test_agents\\test_graph.py ............                             [  3%]
+tests\\test_agents\\test_semantic_layer_graph.py ............             [  3%]
 tests\\test_agents\\test_introspect_node.py ....                           [  4%]
-tests\\test_agents\\test_on_demand_metric_suggest_node.py ...              [  4%]
+tests\\test_agents\\test_metric_coordinator_node.py ...       [  4%]
 tests\\test_agents\\test_orchestrator_node.py ........                     [  5%]
 tests\\test_agents\\test_query_clarifier\\test_agent.py ....                [  6%]
 tests\\test_agents\\test_save_node.py .....                                [  7%]
