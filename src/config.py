@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
-    langfuse_capture_content: bool = False
     cors_origins: str = "http://localhost:3000"
     frontend_app_url: str = "http://localhost:3000"
     secret_key: str = "dev-secret-key-change-in-prod-semantic-layer-2026"

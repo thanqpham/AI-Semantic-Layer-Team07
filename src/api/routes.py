@@ -86,6 +86,7 @@ from src.models.schemas import (
     SemanticTableUpdate,
     SqlDumpPreviewResponse,
 )
+from src.observability.langfuse_tracing import observation, trace_summary
 from src.services.chat_execution import SAFE_ERROR, ChatExecution, current_execution, execution_step, stream_execution
 from src.services.chat_service import (
     ChatAuthorizationError,
@@ -2275,6 +2276,32 @@ async def _invalid_clarification_option_response(
 
 
 async def _process_standard_chat(
+    db: AsyncSession,
+    session: ChatSessionModel,
+    current_user: UserModel,
+    numeric_db_id: int,
+    body: ChatRequest,
+    can_generate_metrics: bool,
+    org_id: int | None = None,
+    intent_override: str | None = None,
+) -> ChatResponse:
+    """Trace one chat agent run independently of its HTTP request."""
+    with observation("chat_agent", session_id=session.id, agent=True) as span:
+        response = await _process_standard_chat_inner(
+            db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id, intent_override
+        )
+        if span is not None:
+            span.update(
+                output=trace_summary(
+                    intent=response.intent,
+                    run_status=response.run_status or "completed",
+                    proposal_count=len(response.suggestions or []),
+                )
+            )
+        return response
+
+
+async def _process_standard_chat_inner(
     db: AsyncSession,
     session: ChatSessionModel,
     current_user: UserModel,

@@ -18,7 +18,7 @@ from src.api.review_routes import review_router
 from src.api.routes import router
 from src.api.sync_routes import sync_router
 from src.config import get_settings
-from src.observability.langfuse_tracing import LangfuseMiddleware, shutdown_tracing
+from src.observability.langfuse_tracing import shutdown_tracing
 from src.services.rate_limiter import RateLimitMiddleware
 from src.services.schema_cron_service import start_schema_cron_scheduler, stop_schema_cron_scheduler
 
@@ -65,7 +65,6 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 settings = get_settings()
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(RateLimitMiddleware)
-app.add_middleware(LangfuseMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),
