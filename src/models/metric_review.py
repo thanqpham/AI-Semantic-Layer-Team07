@@ -70,9 +70,10 @@ class MetricBuildBatch(BaseModel):
         max_length=10,
         description=(
             'Each ready candidate must have name, status="ready", definition={"metric":{'
-            '"name":...,"base_entity":...,"formula":{"function":...,"expression":...,"ratio":...},'
-            '"filters":[],"excluded_notes":""}}, knowledge_id, variant_id, criteria, reason. '
-            "Repairs must also include the supplied candidate_id. Put ratio inside formula. "
+            '"name":...,"base_entity":...,"formula":... (omit only with query_plan),'
+            '"query_plan":...,"filters":[],"excluded_notes":""}}, knowledge_id, variant_id, criteria, reason. '
+            "For schema v3 query_plan, formula may be omitted or contain a regular aggregate; the backend normalizes it. "
+            "Repairs must also include the supplied candidate_id. Put legacy ratios inside formula. "
             "knowledge_id is the family ID, e.g. aov; variant_id is its variant, e.g. woocommerce_order_value. "
             "Never emit grain, base_entity_id, column_id, or expression_ast; the backend resolves these. "
             "Blocked candidates have status needs_clarification/unsupported/rejected and a reason, no definition."

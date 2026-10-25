@@ -337,7 +337,8 @@ export function buildStarterDashboardWidgets(input: {
   for (const item of input.metrics) {
     if (widgets.length >= DASHBOARD_STARTER_WIDGET_LIMIT) break;
     const definition = item.definition;
-    if (item.status !== 'approved' || !definition || definition.schema_version !== 2) continue;
+    if (item.status !== 'approved' || !definition || ![2, 3].includes(definition.schema_version ?? 0)) continue;
+    if (definition.metric.query_plan?.stages.some((stage) => stage.group_by.length > 0)) continue;
     if (!Array.isArray(definition.metric.filters)) continue;
     if (definition.diagnostics && definition.diagnostics.length > 0) continue;
     const table = findBaseTable(input.catalog, definition);

@@ -41,7 +41,7 @@ def validate_review_draft(
             clarification=definition.metric.excluded_notes,
         )
     carrier = MetricDraft.model_validate({**draft, "status": "candidate"})
-    if definition.metric.formula.ratio is None and _requires_ratio(carrier, context):
+    if definition.metric.query_plan is None and definition.metric.formula.ratio is None and _requires_ratio(carrier, context):
         return None, _missing_ratio_review()
     return definition, None
 

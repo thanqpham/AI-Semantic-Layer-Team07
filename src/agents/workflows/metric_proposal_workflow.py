@@ -165,6 +165,12 @@ def _review_request(state: MetricWorkflowState, item: dict[str, Any]) -> dict[st
 
 def _filter_scope(definition: MetricDefinition) -> dict[str, Any]:
     scopes = {"metric": definition.metric.filters}
+    if definition.metric.query_plan is not None:
+        scopes["query_plan"] = [
+            item
+            for stage in definition.metric.query_plan.stages
+            for item in [*stage.filters, *(filter_item for aggregate in stage.aggregates for filter_item in aggregate.filters)]
+        ]
     ratio = definition.metric.formula.ratio
     if ratio is not None:
         scopes.update(numerator=ratio.numerator.filters, denominator=ratio.denominator.filters)

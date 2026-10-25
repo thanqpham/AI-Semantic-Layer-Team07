@@ -99,6 +99,7 @@ export function MetricModal(props: MetricModalProps) {
     [definition.metric.base_entity, props.tables],
   );
   const hasExplicitRatio = Boolean(definition.metric.formula.ratio);
+  const hasQueryPlan = Boolean(definition.metric.query_plan);
 
   const setMetric = (patch: Partial<MetricDefinition['metric']>) => {
     setDefinition((current) => ({ metric: { ...current.metric, ...patch } }));
@@ -212,6 +213,7 @@ export function MetricModal(props: MetricModalProps) {
                     <Label className="mb-1.5 block text-xs font-medium"><Translated text={"Base entity"} /></Label>
                     <select
                       value={definition.metric.base_entity}
+                      disabled={hasQueryPlan}
                       onChange={(e) => setMetric({ base_entity: e.target.value, filters: [] })}
                       className="h-9 w-full rounded-md border border-border bg-card text-foreground px-2.5 text-xs outline-none focus:ring-1 focus:ring-ring dark:bg-zinc-900 dark:text-zinc-100 [&>option]:bg-white [&>option]:text-zinc-900 dark:[&>option]:bg-zinc-900 dark:[&>option]:text-zinc-100"
                     >
@@ -231,7 +233,7 @@ export function MetricModal(props: MetricModalProps) {
                     <Label className="mb-1.5 block text-xs font-medium"><Translated text={"Hàm tổng hợp"} /></Label>
                     <select
                       value={definition.metric.formula.function}
-                      disabled={hasExplicitRatio}
+                      disabled={hasExplicitRatio || hasQueryPlan}
                       onChange={(e) =>
                         setMetric({
                           formula: {
@@ -260,8 +262,8 @@ export function MetricModal(props: MetricModalProps) {
                   <Input
                     required
                     list="metric-columns"
-                    disabled={hasExplicitRatio}
-                    value={definition.metric.formula.expression}
+                    disabled={hasExplicitRatio || hasQueryPlan}
+                    value={definition.metric.query_plan?.output_expression || definition.metric.formula.expression}
                     onChange={(e) =>
                       setMetric({
                         formula: {
@@ -277,6 +279,11 @@ export function MetricModal(props: MetricModalProps) {
                     <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
                       Công thức tỷ lệ được cấu hình theo tử số/mẫu số riêng; chỉnh sửa công thức hiện chưa hỗ trợ.
                       {` ${formatMetricFormula(definition)}`}
+                    </p>
+                  )}
+                  {hasQueryPlan && (
+                    <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                      Metric nhiều bảng dùng query plan; sửa cấu trúc plan hiện chưa hỗ trợ trong biểu mẫu này.
                     </p>
                   )}
                   <datalist id="metric-columns">
