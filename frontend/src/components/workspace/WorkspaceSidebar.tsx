@@ -1,24 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ComponentType, type SVGProps } from 'react';
 import {
-  Bot,
-  BookMarked,
-  Building2,
   ChevronDown,
   ChevronLeft,
-  ClipboardCheck,
   Compass,
   History,
-  LayoutDashboard,
-  Moon,
   PanelLeftClose,
   Plus,
-  RefreshCw,
-  Settings,
-  Sun,
   Trash2,
-  Upload,
   Users,
 } from 'lucide-react';
 
@@ -28,9 +18,19 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { useLanguage } from '@/context/LanguageContext';
 
 import { ChatHistorySection } from './ChatHistorySection';
+import { MoonAltToSunnyOutlineLoopTransitionIcon } from './MoonAltToSunnyOutlineLoopTransitionIcon';
+import { Settings01Icon } from './Settings01Icon';
 import { NotificationCenter } from './NotificationCenter';
 import { EngineIcon, engineLabels, SectionLabel, type ViewId, type WorkspaceDatabase } from './shared';
 import { Translated } from '@/components/ui/translated';
+import { BotMessageSquareIcon } from '@/components/ui/BotMessageSquareIcon';
+import { ClipboardDocumentListIcon } from '@/components/ui/ClipboardDocumentListIcon';
+import { ChartBarSquareIcon } from '@/components/ui/ChartBarSquareIcon';
+import { BuildingOffice2Icon } from '@/components/ui/BuildingOffice2Icon';
+import { CircleStackIcon } from '@/components/ui/CircleStackIcon';
+import { ArrowUpTrayIcon } from '@/components/ui/ArrowUpTrayIcon';
+import { ArrowPathRoundedSquareIcon } from '@/components/ui/ArrowPathRoundedSquareIcon';
+import { PlusIcon } from '@/components/ui/PlusIcon';
 
 interface WorkspaceSidebarProps {
   databases: WorkspaceDatabase[];
@@ -69,13 +69,13 @@ interface WorkspaceSidebarProps {
   onRenameChatSession?: (sessionId: string, newTitle: string) => Promise<void> | void;
 }
 
-const navItems: { id: ViewId; label: string; icon: typeof Bot }[] = [
-  { id: 'ai-studio', label: 'AI Studio', icon: Bot },
-  { id: 'schema', label: 'Schema Review', icon: ClipboardCheck },
-  { id: 'catalog', label: 'Metrics Catalog', icon: BookMarked },
+const navItems: { id: ViewId; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
+  { id: 'ai-studio', label: 'AI Studio', icon: BotMessageSquareIcon },
+  { id: 'schema', label: 'Schema Review', icon: CircleStackIcon },
+  { id: 'catalog', label: 'Metrics Catalog', icon: ClipboardDocumentListIcon },
   { id: 'explorer', label: 'Metric Explorer', icon: Compass },
-  { id: 'dashboard', label: 'Metrics Dashboard', icon: LayoutDashboard },
-  { id: 'export', label: 'Export Playground', icon: Upload },
+  { id: 'dashboard', label: 'Metrics Dashboard', icon: ChartBarSquareIcon },
+  { id: 'export', label: 'Export Playground', icon: ArrowUpTrayIcon },
 ];
 
 const vietnameseNavLabels: Record<ViewId, string> = {
@@ -125,6 +125,7 @@ export function WorkspaceSidebar({
   const { t } = useLanguage();
   const { workspaces, currentWorkspace, role, permissions, isLoading, switchWorkspace } = useWorkspace();
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
+  const [sourcesExpanded, setSourcesExpanded] = useState(true);
   const canManageWorkspace = Boolean(
     permissions.can_manage_members || permissions.can_manage_invitations,
   );
@@ -168,7 +169,7 @@ export function WorkspaceSidebar({
             title={t('Manage workspace and members', 'Quản lý Workspace & Thành viên')}
             aria-label={t('Manage workspace', 'Quản lý workspace')}
           >
-            <Building2 className="h-4 w-4" />
+            <BuildingOffice2Icon className="h-4 w-4" />
           </button>
         )}
         <nav className="flex flex-1 flex-col gap-1">
@@ -200,7 +201,7 @@ export function WorkspaceSidebar({
               aria-label={t('Sync logs', 'Lịch sử đồng bộ')}
               title={pendingDriftCount > 0 ? t(`Sync logs (${pendingDriftCount} changes)`, `Lịch sử đồng bộ (${pendingDriftCount} thay đổi)`) : t('Sync logs', 'Lịch sử đồng bộ')}
             >
-              <RefreshCw className="h-4 w-4" />
+              <ArrowPathRoundedSquareIcon className="h-4 w-4" />
               {pendingDriftCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-mono font-bold text-amber-950 shadow animate-pulse">
                   {pendingDriftCount}
@@ -232,20 +233,20 @@ export function WorkspaceSidebar({
           <button
             type="button"
             onClick={onToggleTheme}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
+            className="group flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
             aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
             title={t('Toggle theme', 'Đổi giao diện sáng/tối')}
           >
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <MoonAltToSunnyOutlineLoopTransitionIcon key={theme} theme={theme} size={16} />
           </button>
           <button
             type="button"
             onClick={onOpenSettings}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
+            className="group flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent"
             aria-label={t('Settings', 'Cài đặt')}
             title={t('Settings', 'Cài đặt')}
           >
-            <Settings className="h-4 w-4" />
+            <Settings01Icon />
           </button>
         </div>
       </aside>
@@ -272,9 +273,9 @@ export function WorkspaceSidebar({
 
       {/* Workspace Switcher */}
       <div className="relative px-3 pb-2">
-        <div className="flex items-center gap-1.5 rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-2">
+        <div className="workspace-switcher flex items-center gap-1.5 rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <Building2 className="h-3.5 w-3.5" />
+            <BuildingOffice2Icon className="h-3.5 w-3.5" />
           </div>
           <div
             className="min-w-0 flex-1 cursor-pointer"
@@ -407,7 +408,7 @@ export function WorkspaceSidebar({
                 : 'text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground',
             )}
           >
-            <History
+            <ArrowPathRoundedSquareIcon
               className={cn(
                 'h-4 w-4 shrink-0',
                 pendingDriftCount > 0 ? 'text-amber-400 animate-pulse' : 'text-amber-400',
@@ -438,9 +439,12 @@ export function WorkspaceSidebar({
       )}
 
       {/* Data Sources */}
-      <div className="flex min-h-0 flex-1 flex-col px-3 pt-4">
+      <div className={cn('flex min-h-0 flex-col px-3 pt-4', sourcesExpanded ? 'flex-1' : 'shrink-0')}>
         <div className="mb-2 flex items-center justify-between px-1">
-          <SectionLabel><Translated text={"Data Sources"} /></SectionLabel>
+          <button type="button" aria-expanded={sourcesExpanded} aria-controls="data-sources-list" onClick={() => setSourcesExpanded((open) => !open)} className="flex items-center gap-1.5 rounded px-1 py-1 text-left hover:bg-sidebar-accent cursor-pointer">
+            <ChevronDown className={cn('h-3 w-3 text-sidebar-foreground/60 transition-transform', !sourcesExpanded && '-rotate-90')} />
+            <SectionLabel><Translated text={"Data Sources"} /></SectionLabel>
+          </button>
           {canManageSchema && onConnectDatabase && (
             <button
               type="button"
@@ -448,11 +452,11 @@ export function WorkspaceSidebar({
               className="rounded p-1 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
               aria-label={t('Connect database', 'Kết nối cơ sở dữ liệu')}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <PlusIcon className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
-        <div className="flex-1 space-y-1 overflow-y-auto pb-2">
+        <div id="data-sources-list" hidden={!sourcesExpanded} className={sourcesExpanded ? 'flex-1 space-y-1 overflow-y-auto pb-2' : undefined}>
           {databases.map((db) => {
             const active = db.id === activeDbId;
             return (
@@ -505,7 +509,7 @@ export function WorkspaceSidebar({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between gap-3 border-t border-sidebar-border px-4 py-3">
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-sidebar-border px-4 py-3">
         <div className="min-w-0 flex-1">
           {userName && <p className="truncate text-sm font-semibold leading-5 text-sidebar-foreground">{userName}</p>}
           <p className="mt-1.5 flex w-fit max-w-full items-center gap-1.5 rounded-full border border-sidebar-border bg-sidebar-accent/60 px-2.5 py-0.5 text-[11px] leading-4">
@@ -521,16 +525,16 @@ export function WorkspaceSidebar({
             aria-label={t('Toggle theme', 'Đổi giao diện sáng/tối')}
             title={t('Toggle theme', 'Đổi giao diện sáng/tối')}
           >
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <MoonAltToSunnyOutlineLoopTransitionIcon key={theme} theme={theme} size={16} />
           </button>
           <button
             type="button"
             onClick={onOpenSettings}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
+            className="group flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground cursor-pointer"
             aria-label={t('Settings', 'Cài đặt')}
             title={t('Settings', 'Cài đặt')}
           >
-            <Settings className="h-4 w-4" />
+            <Settings01Icon />
           </button>
         </div>
       </div>

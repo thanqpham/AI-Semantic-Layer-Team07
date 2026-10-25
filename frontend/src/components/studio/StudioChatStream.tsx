@@ -2,7 +2,6 @@
 
 import {
   ArrowUp,
-  Bot,
   Check,
   Code2,
   Copy,
@@ -18,6 +17,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/components/ui/button';
+import { BotMessageSquareIcon } from '@/components/ui/BotMessageSquareIcon';
 import { MetricSuggestion, MetricCandidateReport } from '@/lib/api';
 import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { cn } from '@/lib/utils';
@@ -295,7 +295,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
           {props.isLoading && !props.messages.some((message) => message.executionTrace?.status === 'running') && (
             <div className="flex gap-4">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-primary text-primary-foreground">
-                <Bot className="h-4 w-4" />
+                <BotMessageSquareIcon className="h-4 w-4" />
               </div>
               <div className="flex flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3.5 shadow-xs">
                 <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
@@ -453,7 +453,7 @@ function MessageBubble({
             : 'border-border bg-primary text-primary-foreground',
         )}
       >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+        {isUser ? <User className="h-4 w-4" /> : <BotMessageSquareIcon className="h-4 w-4" />}
       </div>
 
       <div className={cn('min-w-0 flex-1 space-y-3', isUser && 'flex flex-col items-end')}>
