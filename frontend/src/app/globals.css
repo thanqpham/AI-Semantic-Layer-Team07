@@ -142,6 +142,15 @@
     container-name: view-header;
   }
 
+  .view-header-container button {
+    height: 1.875rem;
+    font-family: var(--font-sans);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1rem;
+    white-space: nowrap;
+  }
+
   .view-header-layout {
     display: flex;
     flex-direction: column;
@@ -161,7 +170,7 @@
   @container view-header (min-width: 60rem) {
     .view-header-layout {
       flex-direction: row;
-      align-items: flex-start;
+      align-items: flex-end;
       justify-content: space-between;
       gap: 1rem;
     }

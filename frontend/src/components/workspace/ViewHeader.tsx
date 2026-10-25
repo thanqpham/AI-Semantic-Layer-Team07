@@ -28,20 +28,20 @@ export function ViewHeader({
 }: ViewHeaderProps) {
   const { translate } = useLanguage();
   return (
-    <header className="view-header-container relative w-full shrink-0 overflow-hidden border-b border-border px-4 py-5 sm:px-6">
+    <header className="view-header-container relative w-full shrink-0 overflow-hidden border-b border-border px-4 py-2 sm:px-6">
       {/* Editorial grid backdrop */}
       <div className="ws-grid-bg pointer-events-none absolute inset-0" aria-hidden />
 
       <div className="view-header-layout relative">
         <div className="min-w-0">
           {eyebrow && (
-            <span className="ws-reveal mb-2 inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="ws-reveal mb-0.5 inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
               <span className="h-px w-7 bg-foreground/30" />
               {translate(eyebrow)}
             </span>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="ws-reveal font-display text-3xl leading-none tracking-tight text-foreground [animation-delay:60ms]">
+            <h1 className="ws-reveal font-display text-xl leading-none tracking-tight text-foreground [animation-delay:60ms]">
               {translate(title)}
             </h1>
             {database && (
@@ -64,7 +64,7 @@ export function ViewHeader({
                 size="sm"
                 onClick={onOpenSyncLogs}
                 title={translate("Lịch sử đồng bộ & tự phục hồi schema")}
-                className="ws-reveal h-7 gap-1.5 rounded-full border-border/80 px-2.5 font-mono text-[11px] text-muted-foreground hover:text-foreground [animation-delay:140ms]"
+                className="ws-reveal gap-1.5 rounded-full border-border/80 px-2.5 text-muted-foreground hover:text-foreground [animation-delay:140ms]"
               >
                 <div className="relative flex items-center justify-center">
                   <NotificationIcon className="h-3.5 w-3.5" />
@@ -76,7 +76,7 @@ export function ViewHeader({
               </Button>
             )}
           </div>
-          <p className="ws-reveal mt-1.5 max-w-2xl text-pretty text-sm text-muted-foreground [animation-delay:160ms]">
+          <p className="ws-reveal mt-0.5 max-w-2xl text-pretty text-xs leading-tight text-muted-foreground [animation-delay:160ms]">
             {translate(description)}
           </p>
         </div>
