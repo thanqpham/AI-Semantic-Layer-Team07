@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Bell } from 'lucide-react';
+import { NotificationIcon } from '@/components/ui/NotificationIcon';
 import { Button } from '@/components/ui/button';
 import { EngineIcon, engineLabels, type WorkspaceDatabase } from './shared';
 import { Translated } from '@/components/ui/translated';
@@ -67,7 +67,7 @@ export function ViewHeader({
                 className="ws-reveal h-7 gap-1.5 rounded-full border-border/80 px-2.5 font-mono text-[11px] text-muted-foreground hover:text-foreground [animation-delay:140ms]"
               >
                 <div className="relative flex items-center justify-center">
-                  <Bell className="h-3.5 w-3.5" />
+                  <NotificationIcon className="h-3.5 w-3.5" />
                   {hasHealedLogs && (
                     <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-background" />
                   )}

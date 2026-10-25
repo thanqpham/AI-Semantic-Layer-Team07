@@ -128,6 +128,21 @@ describe('WorkspaceSidebar', () => {
       expect(screen.getByText('Analytics SQLite')).toBeInTheDocument();
     });
 
+    it('collapses and reopens data sources while keeping connect available', () => {
+      workspaceState.permissions = { can_manage_schema: true };
+      render(<WorkspaceSidebar {...defaultProps} />);
+
+      const toggle = screen.getByRole('button', { name: 'Data Sources' });
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getByText('Production DB')).not.toBeVisible();
+      expect(screen.getByRole('button', { name: 'Connect database' }).querySelector('svg')).toHaveClass('data-source-plus-icon');
+
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Production DB')).toBeInTheDocument();
+    });
+
     it('shows footer with settings button', () => {
       render(<WorkspaceSidebar {...defaultProps} collapsed={false} />);
 
@@ -254,6 +269,7 @@ describe('WorkspaceSidebar', () => {
       const theme = screen.getByRole('button', { name: 'Toggle theme' });
       expect(theme.parentElement).toHaveClass('flex-col');
       expect(theme.nextElementSibling).toBe(settings);
+      expect(settings).toHaveClass('group');
       fireEvent.click(theme);
       fireEvent.click(settings);
       expect(onToggleTheme).toHaveBeenCalledOnce();
@@ -278,13 +294,13 @@ describe('WorkspaceSidebar', () => {
       expect(studioButton).not.toHaveAttribute('aria-current');
     });
 
-    it('renders the Metrics Dashboard nav item with the LayoutDashboard icon', () => {
+    it('renders the Metrics Dashboard nav item with the chart bar icon', () => {
       render(<WorkspaceSidebar {...defaultProps} />);
 
       const nav = screen.getByRole('navigation');
       const dashboardButton = within(nav).getByRole('button', { name: 'Metrics Dashboard' });
       expect(dashboardButton).toBeInTheDocument();
-      expect(dashboardButton.querySelector('svg')).toBeInTheDocument();
+      expect(dashboardButton.querySelector('svg')).toHaveClass('chart-bar-square-icon');
     });
 
     it('marks the dashboard view with aria-current="page" when active', () => {
