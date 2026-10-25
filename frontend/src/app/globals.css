@@ -142,6 +142,15 @@
     container-name: view-header;
   }
 
+  .view-header-container button {
+    height: 1.875rem;
+    font-family: var(--font-sans);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1rem;
+    white-space: nowrap;
+  }
+
   .view-header-layout {
     display: flex;
     flex-direction: column;
@@ -161,7 +170,7 @@
   @container view-header (min-width: 60rem) {
     .view-header-layout {
       flex-direction: row;
-      align-items: flex-start;
+      align-items: flex-end;
       justify-content: space-between;
       gap: 1rem;
     }
@@ -567,4 +576,218 @@
 
 .ws-underline-in {
   background-size: 100% 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:is(:hover, :focus-visible) .edit-icon-pen {
+    animation: edit-icon-pen-draw 0.5s 0.3s both;
+  }
+
+  button:is(:hover, :focus-visible) .edit-icon-base {
+    animation: edit-icon-base-draw 0.3s both;
+  }
+
+  button:is(:hover, :focus-visible) .edit-icon-detail {
+    animation: edit-icon-detail-draw 0.2s 0.8s both;
+  }
+}
+
+@keyframes edit-icon-pen-draw {
+  from { stroke-dashoffset: 44; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes edit-icon-base-draw {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes edit-icon-detail-draw {
+  from { stroke-dashoffset: 8; }
+  to { stroke-dashoffset: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .bot-message-icon, .bot-message-icon:hover {
+    animation: bot-message-wiggle 1s ease-in-out;
+  }
+
+  :is(button:hover, .bot-message-icon:hover) .bot-message-frame {
+    transform-origin: center;
+    animation: bot-message-pulse 0.6s ease-in-out 2;
+  }
+
+  :is(button:hover, .bot-message-icon:hover) .bot-message-eye-left {
+    transform-origin: center;
+    animation: bot-message-blink 0.4s ease-in-out 0.1s;
+  }
+
+  :is(button:hover, .bot-message-icon:hover) .bot-message-eye-right {
+    transform-origin: center;
+    animation: bot-message-blink 0.4s ease-in-out 0.2s;
+  }
+
+  :is(button:hover, .bot-message-icon:hover) .bot-message-dot {
+    animation: bot-message-dot 1.2s ease-in-out infinite;
+  }
+
+  :is(button:hover, .bot-message-icon:hover) .bot-message-dot-2 { animation-delay: 0.3s; }
+  :is(button:hover, .bot-message-icon:hover) .bot-message-dot-3 { animation-delay: 0.6s; }
+}
+
+.bot-message-dot { opacity: 0; }
+
+@keyframes bot-message-wiggle {
+  0%, 100% { transform: translateY(0) rotate(0) scale(1); }
+  25% { transform: translateY(1.5px) rotate(-3deg) scale(1.03); }
+  50% { transform: translateY(-1.5px) rotate(3deg); }
+}
+
+@keyframes bot-message-pulse {
+  50% { transform: scale(1.04); }
+}
+
+@keyframes bot-message-blink {
+  50% { transform: scaleY(0.1); }
+}
+
+@keyframes bot-message-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .notification-icon, .notification-icon:hover {
+    transform-origin: 50% 12%;
+    animation: notification-swing 1.3s ease-in-out;
+  }
+
+  :is(button:hover, .notification-icon:hover) .notification-clapper {
+    animation: notification-clapper 1.3s 0.08s ease-in-out;
+  }
+}
+
+@keyframes notification-swing {
+  0%, 100% { transform: rotate(0); }
+  9% { transform: rotate(7deg); }
+  26% { transform: rotate(-18deg); }
+  45% { transform: rotate(14deg); }
+  62% { transform: rotate(-9deg); }
+  78% { transform: rotate(5deg); }
+  90% { transform: rotate(-2deg); }
+}
+
+@keyframes notification-clapper {
+  0%, 100% { transform: translateX(0); }
+  9% { transform: translateX(1.5px); }
+  26% { transform: translateX(-5px); }
+  45% { transform: translateX(4px); }
+  62% { transform: translateX(-2.5px); }
+  78% { transform: translateX(1.5px); }
+  90% { transform: translateX(-1px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .clipboard-list-dot, .clipboard-list-icon:hover .clipboard-list-dot {
+    animation: clipboard-list-appear 0.1s ease-in-out both;
+  }
+
+  button:hover .clipboard-list-line, .clipboard-list-icon:hover .clipboard-list-line {
+    stroke-dasharray: 3.75;
+    animation: clipboard-list-draw 0.3s ease-in-out both;
+  }
+
+  button:hover .clipboard-list-dot-2, .clipboard-list-icon:hover .clipboard-list-dot-2 { animation-delay: 0.4s; }
+  button:hover .clipboard-list-dot-3, .clipboard-list-icon:hover .clipboard-list-dot-3 { animation-delay: 0.8s; }
+  button:hover .clipboard-list-line-1, .clipboard-list-icon:hover .clipboard-list-line-1 { animation-delay: 0.1s; }
+  button:hover .clipboard-list-line-2, .clipboard-list-icon:hover .clipboard-list-line-2 { animation-delay: 0.5s; }
+  button:hover .clipboard-list-line-3, .clipboard-list-icon:hover .clipboard-list-line-3 { animation-delay: 0.9s; }
+}
+
+@keyframes clipboard-list-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes clipboard-list-draw {
+  from { opacity: 0; stroke-dashoffset: 3.75; }
+  to { opacity: 1; stroke-dashoffset: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .chart-bar-square-bar, .chart-bar-square-icon:hover .chart-bar-square-bar {
+    stroke-dasharray: 1;
+    animation: chart-bar-square-draw 0.4s ease-out both;
+  }
+
+  button:hover .chart-bar-square-bar-2, .chart-bar-square-icon:hover .chart-bar-square-bar-2 { animation-delay: 0.15s; }
+  button:hover .chart-bar-square-bar-3, .chart-bar-square-icon:hover .chart-bar-square-bar-3 { animation-delay: 0.3s; }
+  button:hover .chart-bar-square-bar-4, .chart-bar-square-icon:hover .chart-bar-square-bar-4 { animation-delay: 0.45s; }
+}
+
+@keyframes chart-bar-square-draw {
+  from { opacity: 0; stroke-dashoffset: 1; }
+  to { opacity: 1; stroke-dashoffset: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .building-office-window, .workspace-switcher:hover .building-office-window, .building-office-icon:hover .building-office-window {
+    animation: building-office-window 0.3s linear both;
+  }
+
+  button:hover .building-office-window-1, .workspace-switcher:hover .building-office-window-1, .building-office-icon:hover .building-office-window-1 { animation-delay: 0.1s; }
+  button:hover .building-office-window-2, .workspace-switcher:hover .building-office-window-2, .building-office-icon:hover .building-office-window-2 { animation-delay: 0.25s; }
+  button:hover .building-office-window-3, .workspace-switcher:hover .building-office-window-3, .building-office-icon:hover .building-office-window-3 { animation-delay: 0.4s; }
+}
+
+@keyframes building-office-window {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .circle-stack-icon, .circle-stack-icon:hover {
+    transform-origin: center;
+    animation: circle-stack-bounce 0.4s ease-in-out;
+  }
+}
+
+@keyframes circle-stack-bounce {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.08); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .arrow-up-tray-arrow, .arrow-up-tray-icon:hover .arrow-up-tray-arrow {
+    animation: arrow-up-tray-rise 0.5s ease-in-out;
+  }
+}
+
+@keyframes arrow-up-tray-rise {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .arrow-path-square-icon {
+    transform-origin: center;
+    transition: transform 0.55s cubic-bezier(0.2, 1.4, 0.4, 1);
+  }
+
+  button:hover .arrow-path-square-icon, .arrow-path-square-icon:hover {
+    transform: rotate(180deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:is(:hover, :focus-visible) .theme-toggle-icon {
+    transform-origin: center;
+    animation: theme-toggle-hover 0.65s ease-in-out;
+  }
+}
+
+@keyframes theme-toggle-hover {
+  0%, 100% { transform: rotate(0) scale(1); }
+  40% { transform: rotate(-24deg) scale(1.12); }
+  70% { transform: rotate(12deg) scale(1.05); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .data-source-plus-icon {
+    transform-origin: center;
+    transition: transform 0.6s cubic-bezier(0.25, 1.25, 0.45, 1);
+  }
+
+  button:is(:hover, :focus-visible) .data-source-plus-icon {
+    transform: rotate(180deg);
+  }
 }

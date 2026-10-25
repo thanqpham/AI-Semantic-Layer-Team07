@@ -1,9 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 
 import * as apiModule from '@/lib/api';
 import WorkspacePage from './page';
+
+beforeEach(() => {
+  window.localStorage.clear();
+  window.history.replaceState({}, '', '/workspace');
+  vi.mocked(apiModule.listChatSessionsApi).mockResolvedValue([]);
+});
 
 const state = vi.hoisted(() => ({
   permissions: { can_manage_schema: false } as Record<string, boolean>,
@@ -70,12 +76,22 @@ vi.mock('@/components/modals/ConnectDbModal', () => ({
 }));
 vi.mock('@/components/workspace/WorkspaceApp', () => ({
   WorkspaceApp: (props: {
+    view?: string;
+    activeDbId?: string | null;
     onConnectDatabase?: () => void;
     onRemoveDatabase?: (id: string) => void;
     onSelectView?: (view: string) => void;
+    onSelectDatabase?: (id: string) => void;
+    onSelectChatSession?: (id: string) => void;
+    activeChatSessionId?: string | null;
     children: React.ReactNode;
   }) => (
     <div>
+      <div data-testid="active-view">{props.view}</div>
+      <div data-testid="active-database">{props.activeDbId}</div>
+      <div data-testid="active-session">{props.activeChatSessionId}</div>
+      <button onClick={() => props.onSelectDatabase?.('2')}>page-select-database-2</button>
+      <button onClick={() => props.onSelectChatSession?.('older-chat')}>page-select-older-chat</button>
       {props.onConnectDatabase && <button onClick={props.onConnectDatabase}>page-connect</button>}
       {props.onRemoveDatabase && <button onClick={() => props.onRemoveDatabase?.('1')}>page-delete</button>}
       {props.onSelectView && (
@@ -91,6 +107,58 @@ vi.mock('@/components/workspace/WorkspaceApp', () => ({
     </div>
   ),
 }));
+
+describe('WorkspacePage tab persistence', () => {
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+    state.permissions = { can_manage_schema: false };
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([]);
+  });
+
+  it('opens Studio on a fresh visit and restores the last tab after reload', async () => {
+    state.permissions = { can_use_chat: true, can_use_data_assistant: true };
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([{
+      id: 1, display_name: 'Test DB', dialect: 'postgresql', updated_at: '', created_at: '',
+      semantic_db_id: 1, table_count: 1,
+    }]);
+
+    const first = render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByTestId('active-view')).toHaveTextContent('ai-studio'));
+    fireEvent.click(screen.getByText('page-nav-dashboard'));
+    await waitFor(() => expect(window.localStorage.getItem('workspace_tab_1')).toBe('dashboard'));
+    first.unmount();
+
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByTestId('active-view')).toHaveTextContent('dashboard'));
+  });
+
+  it('restores an older conversation in the selected database after reload', async () => {
+    state.permissions = { can_use_chat: true, can_use_data_assistant: true };
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([1, 2].map((id) => ({
+      id, display_name: `DB ${id}`, dialect: 'postgresql', updated_at: '', created_at: '',
+      semantic_db_id: id, table_count: 1,
+    })));
+    vi.mocked(apiModule.listChatSessionsApi).mockImplementation(async (dbId) =>
+      dbId === '2' ? [
+        { id: 'newer-chat', title: 'Newest', created_at: '', updated_at: '' },
+        { id: 'older-chat', title: 'Older', created_at: '', updated_at: '' },
+      ] as apiModule.ChatSessionItem[] : [],
+    );
+
+    const first = render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByTestId('active-database')).toHaveTextContent('1'));
+    fireEvent.click(screen.getByText('page-select-database-2'));
+    await waitFor(() => expect(apiModule.listChatSessionsApi).toHaveBeenCalledWith('2'));
+    fireEvent.click(screen.getByText('page-select-older-chat'));
+    expect(window.location.search).toBe('?chat=older-chat');
+    first.unmount();
+
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByTestId('active-database')).toHaveTextContent('2'));
+    await waitFor(() => expect(screen.getByTestId('active-session')).toHaveTextContent('older-chat'));
+  });
+});
 vi.mock('@/lib/api', () => ({
   approveMetricsApi: vi.fn(),
   approveSingleMetricApi: vi.fn(),
@@ -232,6 +300,7 @@ describe('WorkspacePage dashboard navigation', () => {
     render(<WorkspacePage />);
 
     const dashboardNav = await screen.findByText('page-nav-dashboard');
+    await waitFor(() => expect(window.localStorage.getItem('workspace_tab_1')).not.toBeNull());
     fireEvent.click(dashboardNav);
 
     const dashboardView = await screen.findByTestId('metrics-dashboard-view');
@@ -263,6 +332,7 @@ describe('WorkspacePage export guard', () => {
     render(<WorkspacePage />);
 
     const exportNav = await screen.findByText('page-nav-export');
+    await waitFor(() => expect(window.localStorage.getItem('workspace_tab_1')).not.toBeNull());
     fireEvent.click(exportNav);
 
     const exportView = await screen.findByTestId('export-playground-view');

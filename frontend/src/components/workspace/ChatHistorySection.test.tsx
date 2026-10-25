@@ -55,6 +55,20 @@ describe('ChatHistorySection', () => {
     expect(screen.getByLabelText('Tạo cuộc trò chuyện mới')).toBeInTheDocument();
   });
 
+  it('collapses and reopens chat history while keeping new chat available', () => {
+    render(<ChatHistorySection sessions={mockSessions} onNewChat={vi.fn()} />);
+
+    const toggle = screen.getByRole('button', { name: /Lịch sử trò chuyện/i });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Doanh thu tháng 1')).not.toBeVisible();
+    expect(screen.getByRole('button', { name: 'Tạo cuộc trò chuyện mới' })).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Doanh thu tháng 1')).toBeInTheDocument();
+  });
+
   it('renders all session items with message counts', () => {
     render(
       <ChatHistorySection

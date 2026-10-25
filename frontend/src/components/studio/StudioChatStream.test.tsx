@@ -9,6 +9,21 @@ describe('StudioChatStream', () => {
     cleanup();
   });
 
+  it('opens loaded conversation history at the newest message without scrolling from the top', () => {
+    const props = { onSendMessage: vi.fn(), isLoading: false, tableNames: [] };
+    const { container, rerender } = render(<StudioChatStream {...props} conversationKey="session-1" messages={[]} />);
+    const pane = container.querySelector('.overscroll-contain') as HTMLDivElement;
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 600 });
+    pane.scrollTop = 0;
+
+    rerender(<StudioChatStream {...props} conversationKey="session-1" messages={[
+      { id: 'old', sender: 'user', text: 'Câu hỏi cũ', timestamp: '10:00' },
+      { id: 'latest', sender: 'assistant', text: 'Câu trả lời mới nhất', timestamp: '10:01' },
+    ]} />);
+
+    expect(pane.scrollTop).toBe(600);
+  });
+
   it('shows used column names and keeps the proposal text inside its definition card', () => {
     render(
       <StudioChatStream
@@ -367,16 +382,18 @@ describe('StudioChatStream', () => {
     const strip = screen.getByTestId('prompt-suggestion-strip');
     expect(strip).toHaveClass('overflow-x-auto');
     expect(strip).toHaveClass('whitespace-nowrap');
-    const suggestionChip = screen.getByText('Doanh thu thuần đơn hàng thành công');
+    const suggestionChip = screen.getByText('Tạo metric doanh thu thuần');
     expect(suggestionChip).toBeInTheDocument();
-    expect(screen.queryByText('Số khách hàng active')).not.toBeInTheDocument();
+    expect(strip.querySelectorAll('button')).toHaveLength(7);
+    expect(strip.closest('.shrink-0')).not.toHaveClass('border-t');
+    expect(strip.closest('.shrink-0')?.nextElementSibling).not.toHaveClass('border-t');
 
     fireEvent.click(suggestionChip);
 
     const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
     expect(onSendMessage).not.toHaveBeenCalled();
     expect(textarea.value).toBe(
-      'Tính tổng doanh thu thuần của các đơn hàng có trạng thái hoàn thành (Net Revenue)',
+      'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
     );
   });
 
@@ -394,10 +411,10 @@ describe('StudioChatStream', () => {
     fireEvent.pointerDown(strip, { pointerId: 1, clientX: 100, isPrimary: true });
     fireEvent.pointerMove(strip, { pointerId: 1, clientX: 106, isPrimary: true });
     fireEvent.pointerUp(strip, { pointerId: 1, clientX: 106, isPrimary: true });
-    fireEvent.click(screen.getByText('Doanh thu thuần đơn hàng thành công'));
+    fireEvent.click(screen.getByText('Tạo metric doanh thu thuần'));
 
     const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
-    expect(textarea.value).toContain('Tính tổng doanh thu thuần của các đơn hàng');
+    expect(textarea.value).toContain('Đề xuất metric doanh thu thuần');
   });
 
   it('allows selecting a prompt after dragging the suggestion strip', async () => {
@@ -419,11 +436,11 @@ describe('StudioChatStream', () => {
 
     expect(strip.scrollLeft).toBe(120);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
-    fireEvent.click(screen.getByText('Doanh thu thuần đơn hàng thành công'));
+    fireEvent.click(screen.getByText('Tạo metric doanh thu thuần'));
 
     const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
     expect(textarea.value).toBe(
-      'Tính tổng doanh thu thuần của các đơn hàng có trạng thái hoàn thành (Net Revenue)',
+      'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
     );
   });
 

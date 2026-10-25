@@ -2,7 +2,6 @@
 
 import {
   ArrowUp,
-  Bot,
   Check,
   Code2,
   Copy,
@@ -13,11 +12,12 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import React, { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/components/ui/button';
+import { BotMessageSquareIcon } from '@/components/ui/BotMessageSquareIcon';
 import { MetricSuggestion, MetricCandidateReport } from '@/lib/api';
 import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { cn } from '@/lib/utils';
@@ -95,19 +95,33 @@ interface PromptSuggestionItem {
 const DEFAULT_SUGGESTIONS: PromptSuggestionItem[] = [
   {
     icon: '💰',
-    title: 'Doanh thu thuần đơn hàng thành công',
-    prompt:
-      'Tính tổng doanh thu thuần của các đơn hàng có trạng thái hoàn thành (Net Revenue)',
+    title: 'Tạo metric doanh thu thuần',
+    prompt: 'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
   },
   {
     icon: '📦',
-    title: 'Tổng số lượng đơn đặt hàng',
-    prompt: 'Tính tổng số lượng đơn đặt hàng phát sinh trong toàn hệ thống',
+    title: 'Số đơn hoàn tất',
+    prompt: 'Đề xuất metric số đơn hoàn tất: đếm mã đơn duy nhất, xác định trạng thái hợp lệ và mốc thời gian ghi nhận. Kiểm tra nguy cơ đếm trùng khi nối bảng chi tiết.',
   },
   {
     icon: '🎫',
-    title: 'Giá trị trung bình mỗi đơn (AOV)',
-    prompt: 'Tính giá trị trung bình trên mỗi đơn hàng (Average Order Value - AOV)',
+    title: 'Giá trị đơn hàng trung bình (AOV)',
+    prompt: 'Đề xuất metric AOV = doanh thu thuần / số đơn hoàn tất trong cùng kỳ. Làm rõ cách xử lý đơn hủy, hoàn tiền và mẫu số bằng 0.',
+  },
+  {
+    icon: '👥',
+    title: 'Khách hàng mua hàng',
+    prompt: 'Đề xuất metric số khách hàng mua hàng: đếm mã khách hàng duy nhất có giao dịch hợp lệ trong kỳ. Nêu cách xử lý đơn khách vãng lai và giao dịch bị hủy.',
+  },
+  {
+    icon: '🔁',
+    title: 'Tỷ lệ khách hàng quay lại',
+    prompt: 'Đề xuất metric tỷ lệ khách hàng quay lại: xác định khách hàng có ít nhất hai đơn hợp lệ, mẫu số là khách hàng mua hàng trong kỳ. Làm rõ thời điểm xét đơn trước kỳ và công thức phần trăm.',
+  },
+  {
+    icon: '📈',
+    title: 'Tăng trưởng doanh thu MoM',
+    prompt: 'Đề xuất metric tăng trưởng doanh thu thuần theo tháng = (doanh thu tháng này - tháng trước) / doanh thu tháng trước. Nêu cách xử lý tháng trước bằng 0 và múi giờ của ngày giao dịch.',
   },
 ];
 
@@ -173,7 +187,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.isDragging || !stripRef.current) return;
     const dx = e.clientX - dragRef.current.startX;
-    if (Math.abs(dx) > 5) {
+    if (Math.abs(dx) > 8) {
       dragRef.current.moved = true;
     }
     stripRef.current.scrollLeft = dragRef.current.scrollLeft - dx;
@@ -181,6 +195,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
 
   const handlePointerUp = () => {
     dragRef.current.isDragging = false;
+    window.setTimeout(() => { dragRef.current.moved = false; }, 0);
   };
 
   const allSavedNames = useMemo(() => {
@@ -200,9 +215,9 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     }
   }, [props.activePromptText]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const pane = messagesRef.current;
-    pane?.scrollTo?.({ top: pane.scrollHeight, behavior: 'smooth' });
+    if (pane) pane.scrollTop = pane.scrollHeight;
   }, [props.messages, props.isLoading]);
 
   const send = async () => {
@@ -243,14 +258,14 @@ export function StudioChatStream(props: StudioChatStreamProps) {
       list.unshift({
         icon: '📈',
         title: 'Tỷ lệ hủy đơn hàng',
-        prompt: 'Định nghĩa chỉ số tỷ lệ đơn hàng bị hủy so với tổng đơn',
+        prompt: 'Đề xuất metric tỷ lệ hủy đơn = số đơn hủy / tổng số đơn được tạo trong cùng kỳ. Đếm mã đơn duy nhất, xác định trạng thái hủy và ngày tạo đơn.',
       });
     }
     if (canGenerateMetrics && (tableStr.includes('product') || tableStr.includes('san_pham'))) {
       list.push({
         icon: '🏷️',
-        title: 'Top sản phẩm bán chạy',
-        prompt: 'Tính tổng doanh số và số lượng bán theo từng danh mục sản phẩm',
+        title: 'Số lượng sản phẩm bán',
+        prompt: 'Đề xuất metric số lượng sản phẩm bán từ chi tiết đơn hợp lệ: cộng số lượng sau hoàn trả, nêu đơn vị tính và cách nối sản phẩm mà không nhân bản dòng.',
       });
     }
     return list;
@@ -261,7 +276,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       {/* 💬 Messages Stream */}
       <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-3 sm:px-6">
           {!canGenerateMetrics && (
             <div role="status" className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
               <Translated text={"Bạn không có quyền tạo, sửa hoặc lưu metric trực tiếp. Bạn có thể tra cứu dữ liệu qua các metric đã duyệt (chỉ áp dụng cho kết nối Live DB) hoặc yêu cầu AI tạo Business Metric mới. Metric sau khi tạo sẽ được lưu vào Semantic Layer ở trạng thái chờ Data Lead phê duyệt."} />
@@ -295,7 +310,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
           {props.isLoading && !props.messages.some((message) => message.executionTrace?.status === 'running') && (
             <div className="flex gap-4">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-primary text-primary-foreground">
-                <Bot className="h-4 w-4" />
+                <BotMessageSquareIcon className="h-4 w-4" />
               </div>
               <div className="flex flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3.5 shadow-xs">
                 <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
@@ -317,15 +332,14 @@ export function StudioChatStream(props: StudioChatStreamProps) {
         </div>
       </div>
 
-      {/* 💡 Suggested Prompts Bar & Composer */}
-      <div className="border-t border-border bg-card/40 px-6 py-4">
-        <div className="mx-auto max-w-4xl space-y-3">
-          {/* Suggested Questions Chips */}
-          <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+      {/* 💡 Suggested Prompts Bar */}
+      <div className="shrink-0 px-4 pb-1 sm:px-6">
+        <div className="mx-auto max-w-4xl">
+          <div className="space-y-1 rounded-lg border border-border bg-card px-2.5 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-                <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   <Translated text={canGenerateMetrics ? 'GỢI Ý CÂU HỎI TẠO METRIC' : 'GỢI Ý CÂU HỎI VỀ DỮ LIỆU'} />
                 </span>
                 {showSuggestions && (
@@ -334,7 +348,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                 )}
               </div>
 
-              <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none">
+              <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showSuggestions}
@@ -352,14 +366,18 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
-                className="flex overflow-x-auto whitespace-nowrap gap-1.5 pt-1"
+                onPointerCancel={handlePointerUp}
+                onClickCapture={(e) => {
+                  if (dragRef.current.moved) e.stopPropagation();
+                }}
+                className="flex gap-1.5 overflow-x-auto whitespace-nowrap touch-pan-x cursor-grab active:cursor-grabbing"
               >
                 {contextualSuggestions.map((item, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => handleSelectSuggestion(translate(item.prompt))}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-secondary hover:text-foreground cursor-pointer shrink-0"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary/60 px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-secondary hover:text-foreground cursor-pointer"
                   >
                     <span>{item.icon}</span>
                     <span><Translated text={item.title} /></span>
@@ -368,24 +386,28 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               </div>
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Composer Input Box */}
-          <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2 shadow-xs focus-within:border-foreground/30 focus-within:ring-1 focus-within:ring-ring/20">
+      {/* Composer Input Box */}
+      <div className="shrink-0 bg-card/40 px-4 py-2 sm:px-6">
+        <div className="mx-auto max-w-4xl space-y-1.5">
+          <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-1.5 shadow-xs focus-within:border-foreground/30 focus-within:ring-1 focus-within:ring-ring/20">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              rows={2}
+              rows={1}
               placeholder={translate(
                 canGenerateMetrics
                   ? 'Mô tả chỉ số bạn muốn tạo hoặc đặt câu hỏi về schema...'
                   : 'Hỏi về schema, metric đã duyệt hoặc cách chọn dữ liệu...'
               )}
-              className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <Button
               size="icon"
-              className="h-9 w-9 shrink-0 rounded-lg cursor-pointer"
+              className="h-8 w-8 shrink-0 rounded-lg cursor-pointer"
               onClick={() => void send()}
               disabled={!input.trim() || props.isLoading}
               aria-label={translate("Send message")}
@@ -444,20 +466,20 @@ function MessageBubble({
   const isUser = message.sender === 'user';
 
   return (
-    <div className={cn('flex gap-4', isUser && 'flex-row-reverse')}>
+    <div className={cn('flex gap-2.5', isUser && 'flex-row-reverse')}>
       <div
         className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border',
+          'flex h-6 w-6 shrink-0 items-center justify-center rounded-md border',
           isUser
             ? 'border-border bg-secondary text-secondary-foreground'
             : 'border-border bg-primary text-primary-foreground',
         )}
       >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+        {isUser ? <User className="h-3 w-3" /> : <BotMessageSquareIcon className="h-3 w-3" />}
       </div>
 
-      <div className={cn('min-w-0 flex-1 space-y-3', isUser && 'flex flex-col items-end')}>
-        <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+      <div className={cn('min-w-0 flex-1 space-y-1.5', isUser && 'flex flex-col items-end')}>
+        <div className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
           <span className="font-semibold text-foreground">
             <Translated text={isUser ? 'Bạn' : 'AI Semantic Agent'} />
           </span>
@@ -471,10 +493,10 @@ function MessageBubble({
         {message.text && !message.suggestions?.length ? (
           <div
             className={cn(
-              'inline-block rounded-xl px-4 py-3 text-sm leading-relaxed shadow-2xs',
+              'inline-block break-words rounded-xl px-2.5 py-1.5 text-[13px] leading-5 shadow-2xs',
               isUser
-                ? 'max-w-full bg-secondary text-secondary-foreground'
-                : 'max-w-4xl border border-border bg-card text-card-foreground',
+                ? 'max-w-[80%] bg-secondary text-secondary-foreground'
+                : 'max-w-2xl border border-border bg-card text-card-foreground',
               message.isError && 'border-destructive/30 bg-destructive/10 text-destructive',
             )}
           >
@@ -600,14 +622,14 @@ function renderFormattedContent(node: React.ReactNode): React.ReactNode {
 
 function AssistantMarkdown({ content }: { content: string }) {
   return (
-    <div className="prose prose-sm max-w-none text-card-foreground prose-headings:font-display prose-headings:text-foreground prose-p:my-2 prose-p:leading-7 prose-strong:text-foreground prose-li:my-1 prose-li:leading-6 prose-a:text-primary prose-a:underline prose-blockquote:border-primary/40 prose-blockquote:text-muted-foreground">
+    <div className="prose prose-sm max-w-none text-[13px] text-card-foreground prose-headings:font-display prose-headings:text-foreground prose-p:my-1 prose-p:leading-5 prose-strong:text-foreground prose-li:my-1 prose-li:leading-5 prose-a:text-primary prose-a:underline prose-blockquote:border-primary/40 prose-blockquote:text-muted-foreground">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => <h3 className="mb-2 mt-4 text-base font-semibold first:mt-0">{renderFormattedContent(children)}</h3>,
           h2: ({ children }) => <h3 className="mb-2 mt-4 text-base font-semibold first:mt-0">{renderFormattedContent(children)}</h3>,
           h3: ({ children }) => <h4 className="mb-2 mt-3 text-sm font-semibold">{renderFormattedContent(children)}</h4>,
-          p: ({ children }) => <p className="my-2 leading-7 first:mt-0 last:mb-0">{renderFormattedContent(children)}</p>,
+          p: ({ children }) => <p className="my-1 leading-5 first:mt-0 last:mb-0">{renderFormattedContent(children)}</p>,
           strong: ({ children }) => <strong className="font-semibold text-foreground">{renderFormattedContent(children)}</strong>,
           em: ({ children }) => <em className="text-muted-foreground">{renderFormattedContent(children)}</em>,
           ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5">{renderFormattedContent(children)}</ul>,

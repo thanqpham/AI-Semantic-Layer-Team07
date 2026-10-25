@@ -1,16 +1,17 @@
 'use client';
 
-import { Bell, CheckCircle2, ChevronRight, Inbox, XCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, ChevronRight, Inbox, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState, type ComponentType, type SVGProps } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { NotificationIcon } from '@/components/ui/NotificationIcon';
 import { AppNotification } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 
 interface EventStyle {
-  Icon: typeof Bell;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
   chip: string;
 }
 
@@ -23,7 +24,7 @@ const EVENT_STYLES: Record<string, EventStyle> = {
   metric_request_rejected: { Icon: XCircle, chip: 'bg-destructive/10 text-destructive' },
 };
 
-const NEUTRAL_STYLE: EventStyle = { Icon: Bell, chip: 'bg-secondary text-muted-foreground' };
+const NEUTRAL_STYLE: EventStyle = { Icon: NotificationIcon, chip: 'bg-secondary text-muted-foreground' };
 
 function eventStyle(type: string): EventStyle {
   return EVENT_STYLES[type] ?? NEUTRAL_STYLE;
@@ -149,7 +150,7 @@ export function NotificationCenter({
         onClick={() => setOpen((current) => !current)}
         aria-label={translate("Thông báo")}
       >
-        <Bell className="h-4 w-4" />
+        <NotificationIcon className="h-4 w-4" />
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
             {unreadCount}
@@ -181,7 +182,7 @@ export function NotificationCenter({
             ) : (
               <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
-                  <Bell className="h-4 w-4 text-muted-foreground" />
+                  <NotificationIcon className="h-4 w-4 text-muted-foreground" />
                 </span>
                 <p className="text-xs font-medium text-foreground"><Translated text={"Chưa có thông báo"} /></p>
                 <p className="text-[11px] text-muted-foreground">
