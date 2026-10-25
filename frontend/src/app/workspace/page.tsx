@@ -201,6 +201,8 @@ export default function WorkspacePage() {
   const [layers, setLayers] = useState<SemanticLayerData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>('studio');
+  const [readyWorkspaceId, setReadyWorkspaceId] = useState<number | null>(null);
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState<number | null>(null);
   const [catalog, setCatalog] = useState<SemanticCatalog | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -431,8 +433,21 @@ export default function WorkspacePage() {
   }, []);
 
   useEffect(() => {
-    if (!canChat && tab === 'studio') setTab('metrics');
-  }, [canChat, tab]);
+    if (!currentWorkspace) return;
+    const saved = window.localStorage.getItem(`workspace_tab_${currentWorkspace.id}`);
+    setTab(saved === 'schema' || saved === 'metrics' || saved === 'explorer' || saved === 'dashboard' || saved === 'export' ? saved : 'studio');
+    setReadyWorkspaceId(currentWorkspace.id);
+  }, [currentWorkspace?.id]);
+
+  useEffect(() => {
+    if (currentWorkspace?.id === readyWorkspaceId) {
+      window.localStorage.setItem(`workspace_tab_${readyWorkspaceId}`, tab);
+    }
+  }, [currentWorkspace?.id, readyWorkspaceId, tab]);
+
+  useEffect(() => {
+    if (loadedWorkspaceId === currentWorkspace?.id && !canChat && tab === 'studio') setTab('metrics');
+  }, [loadedWorkspaceId, currentWorkspace?.id, canChat, tab]);
 
   useEffect(() => {
     if (!isLoading && !token) {
@@ -444,13 +459,16 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!token || !currentWorkspace) return;
     setLayers([]);
+    setLoadedWorkspaceId(null);
     setSelectedId(null);
     setCatalog(null);
     void loadConnectionSummaries(token)
       .then((items) => {
         setLayers(items);
+        setLoadedWorkspaceId(currentWorkspace.id);
         if (items.length > 0) {
-          setSelectedId(items[0].id);
+          const savedId = window.localStorage.getItem(`workspace_database_${currentWorkspace.id}`);
+          setSelectedId(items.find((item) => item.id === savedId)?.id ?? items[0].id);
         }
       })
       .catch((error) =>
@@ -824,6 +842,7 @@ export default function WorkspacePage() {
       onSelectDatabase={(id) => {
         setExplorerInitialSelection(null);
         setSelectedId(id);
+        if (currentWorkspace) window.localStorage.setItem(`workspace_database_${currentWorkspace.id}`, id);
         const nextLayer = layers.find((item) => item.id === id);
         const nextCanChat = Boolean(
           permissions.can_use_chat &&
