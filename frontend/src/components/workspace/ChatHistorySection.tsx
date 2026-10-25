@@ -3,10 +3,10 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   Check,
+  ChevronDown,
   History,
   MessageSquarePlus,
   Pencil,
-  Plus,
   Search,
   Trash2,
   X,
@@ -16,6 +16,7 @@ import type { ChatSessionItem } from '@/lib/api';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { SectionLabel } from './shared';
 import { Translated } from '@/components/ui/translated';
+import { EditIcon } from '@/components/ui/EditIcon';
 import { useLanguage } from '@/context/LanguageContext';
 
 export interface ChatHistorySectionProps {
@@ -41,6 +42,7 @@ export function ChatHistorySection({
 }: ChatHistorySectionProps) {
   const { translate } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
+  const [historyExpanded, setHistoryExpanded] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -116,17 +118,18 @@ export function ChatHistorySection({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-3 pt-3">
+    <div className={cn('flex min-h-0 flex-col px-3 pt-3', historyExpanded ? 'flex-1' : 'shrink-0')}>
       {/* Header */}
       <div className="mb-1.5 flex items-center justify-between px-1">
-        <div className="flex items-center gap-1.5">
+        <button type="button" aria-expanded={historyExpanded} aria-controls="chat-history-content" onClick={() => setHistoryExpanded((open) => !open)} className="flex items-center gap-1.5 rounded px-1 py-1 text-left hover:bg-sidebar-accent cursor-pointer">
+          <ChevronDown className={cn('h-3 w-3 text-sidebar-foreground/60 transition-transform', !historyExpanded && '-rotate-90')} />
           <SectionLabel><Translated text={"Lịch sử trò chuyện"} /></SectionLabel>
           {sessions.length > 0 && (
             <span className="rounded-full bg-sidebar-accent px-1.5 py-0.5 font-mono text-[10px] text-sidebar-foreground/70">
               {sessions.length}
             </span>
           )}
-        </div>
+        </button>
         {onNewChat && (
           <button
             type="button"
@@ -136,11 +139,12 @@ export function ChatHistorySection({
             aria-label={translate("Tạo cuộc trò chuyện mới")}
             title={translate("Tạo cuộc trò chuyện mới")}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <EditIcon size={14} />
           </button>
         )}
       </div>
 
+      <div id="chat-history-content" hidden={!historyExpanded} className={historyExpanded ? 'flex min-h-0 flex-1 flex-col' : undefined}>
       {/* Search Input (visible when sessions >= 3) */}
       {sessions.length >= 3 && (
         <div className="relative mb-2 px-1">
@@ -186,7 +190,7 @@ export function ChatHistorySection({
                 disabled={isStartingNewChat}
                 className="mt-2 inline-flex items-center gap-1 rounded bg-sidebar-primary px-2.5 py-1 font-sans text-[11px] font-medium text-sidebar-primary-foreground transition-opacity hover:opacity-90 cursor-pointer"
               >
-                <Plus className="h-3 w-3" />
+                <EditIcon size={12} />
                 <span><Translated text={"Bắt đầu chat"} /></span>
               </button>
             )}
@@ -332,6 +336,7 @@ export function ChatHistorySection({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

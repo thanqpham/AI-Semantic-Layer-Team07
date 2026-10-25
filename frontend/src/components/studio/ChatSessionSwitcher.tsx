@@ -7,7 +7,6 @@ import {
   MessageSquare,
   MessageSquarePlus,
   Pencil,
-  Plus,
   Search,
   Sparkles,
   Trash2,
@@ -17,6 +16,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatSessionItem } from '@/lib/api';
 import { Translated } from '@/components/ui/translated';
+import { EditIcon } from '@/components/ui/EditIcon';
 import { useLanguage } from '@/context/LanguageContext';
 
 interface ChatSessionSwitcherProps {
@@ -192,7 +192,7 @@ export function ChatSessionSwitcher({
         className="group flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-indigo-500/20 hover:shadow-md hover:shadow-indigo-500/30 hover:brightness-105 active:scale-95 transition-all cursor-pointer shrink-0"
         title={translate("Tạo cuộc trò chuyện mới")}
       >
-        <Plus className="h-3.5 w-3.5 transition-transform group-hover:rotate-90" />
+        <EditIcon size={14} />
         <span className="hidden sm:inline"><Translated text={"Cuộc trò chuyện mới"} /></span>
       </button>
 

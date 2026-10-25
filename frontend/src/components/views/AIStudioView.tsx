@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import { MessageSquare, Plus, Sparkles } from 'lucide-react';
+import { MessageSquare, Sparkles } from 'lucide-react';
+import { EditIcon } from '@/components/ui/EditIcon';
 
 import {
   ChatMessageItem,
@@ -450,7 +451,7 @@ export function AIStudioView({
                     className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
                     title={translate("Tạo cuộc trò chuyện mới")}
                   >
-                    <Plus className="h-3 w-3" />
+                    <EditIcon size={12} />
                     <span><Translated text={"Đoạn chat mới"} /></span>
                   </button>
                 )}
@@ -462,7 +463,7 @@ export function AIStudioView({
                 className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 font-sans text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
                 title={translate("Tạo cuộc trò chuyện mới")}
               >
-                <Plus className="h-3 w-3" />
+                <EditIcon size={12} />
                 <span><Translated text={"Đoạn chat mới"} /></span>
               </button>
             ) : undefined}

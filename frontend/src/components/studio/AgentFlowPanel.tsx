@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
-import { Bot, Cog, X } from 'lucide-react';
+import { Cog, X } from 'lucide-react';
+import { BotMessageSquareIcon } from '@/components/ui/BotMessageSquareIcon';
 import { ExecutionTrace, traceSteps } from '@/lib/chatTrace';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
@@ -200,7 +201,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
             <button type="button" aria-label={`${name} · ${label}`} aria-pressed={selectedNode === node.id}
               onClick={() => setSelected(node.id)}
               className={cn('flex h-10 w-10 items-center justify-center rounded-full border-2 bg-card shadow-xs focus-visible:outline-2 focus-visible:outline-ring', statusClass, selectedClass)}>
-              <Bot aria-hidden className="h-4 w-4" />
+              <BotMessageSquareIcon className="h-4 w-4" />
             </button>
             <span className="mt-1 line-clamp-3 font-medium">{name}</span>
             <span>{status === 'completed' ? '✓' : status === 'error' ? '!' : '◌'} {status === 'running' ? t('Running', 'Đang chạy') : label}</span>
