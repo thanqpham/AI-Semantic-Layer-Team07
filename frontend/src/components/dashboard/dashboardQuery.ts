@@ -27,6 +27,7 @@ import {
 } from './dashboardFormatters';
 
 export const WIDGET_ROW_LIMIT = 100;
+const FETCH_ROW_LIMIT = WIDGET_ROW_LIMIT + 1;
 export const MAX_CONCURRENT_WIDGET_QUERIES = 6;
 export const KPI_TREND_DEFAULT_GRAIN: TimeGrain = 'month';
 
@@ -147,7 +148,8 @@ function buildKpiRequests(
       metric_ids: [widget.metric_id],
       dimensions: [{ column_id: dateColumnId, time_grain: grain }],
       filters,
-      limit: WIDGET_ROW_LIMIT,
+      limit: FETCH_ROW_LIMIT,
+      order_by: 'dimension_desc',
     },
   ];
 }
@@ -163,7 +165,8 @@ function buildSingleRequest(
       metric_ids: [widget.metric_id],
       dimensions: [{ column_id: dimensionId }],
       filters,
-      limit: WIDGET_ROW_LIMIT,
+      limit: FETCH_ROW_LIMIT,
+      order_by: 'metric_desc',
     };
   }
   return {
@@ -172,7 +175,8 @@ function buildSingleRequest(
       { column_id: dimensionId, time_grain: resolveEffectiveGrain(widget.time_grain, globalGrain) },
     ],
     filters,
-    limit: WIDGET_ROW_LIMIT,
+    limit: FETCH_ROW_LIMIT,
+    order_by: 'dimension_desc',
   };
 }
 
@@ -225,7 +229,7 @@ function toPoint(
   return {
     label: formatDimensionValue(rawLabel),
     rawLabel: rawLabel === null || rawLabel === undefined ? '' : String(rawLabel),
-    value: parseFiniteNumber(rawValue) ?? 0,
+    value: parseFiniteNumber(rawValue),
     rawValue: rawValue ?? null,
   };
 }

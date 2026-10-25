@@ -69,7 +69,7 @@ vi.mock('@/components/views/MetricsCatalogView', () => ({
   ),
 }));
 vi.mock('@/components/views/MetricsDashboardView', () => ({
-  MetricsDashboardView: () => <div data-testid="metrics-dashboard-view" />,
+  MetricsDashboardView: ({ canEdit }: { canEdit: boolean }) => <div data-testid="metrics-dashboard-view" data-can-edit={canEdit} />,
 }));
 vi.mock('@/components/modals/ConnectDbModal', () => ({
   ConnectDbModal: () => <div data-testid="dynamic-modal" />,
@@ -285,6 +285,7 @@ describe('WorkspacePage dashboard navigation', () => {
   });
 
   it('lazy-renders the Metrics Dashboard view when the dashboard tab is selected', async () => {
+    state.permissions = { can_query: true };
     vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([
       {
         id: 1,
@@ -305,6 +306,7 @@ describe('WorkspacePage dashboard navigation', () => {
 
     const dashboardView = await screen.findByTestId('metrics-dashboard-view');
     expect(dashboardView).toBeInTheDocument();
+    expect(dashboardView).toHaveAttribute('data-can-edit', 'true');
   });
 });
 

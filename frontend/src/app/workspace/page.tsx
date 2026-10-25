@@ -197,7 +197,7 @@ export default function WorkspacePage() {
   const router = useRouter();
   const { user, token, isLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { currentWorkspace, permissions, role } = useWorkspace();
+  const { currentWorkspace, permissions } = useWorkspace();
   const [layers, setLayers] = useState<SemanticLayerData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>('studio');
@@ -249,7 +249,7 @@ export default function WorkspacePage() {
   const canSubmitMetric = Boolean(permissions.can_submit_metric);
   const canApproveMetrics = Boolean(permissions.can_approve_metrics);
   const canExport = Boolean(permissions.can_export);
-  const canEditDashboard = Boolean(permissions.can_manage_metrics || role === 'data_lead' || role === 'admin');
+  const canEditDashboard = Boolean(permissions.can_query);
   const canChat = Boolean(
     permissions.can_use_chat &&
     (canUseDataAssistant || canUseMetricStudio) &&

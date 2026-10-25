@@ -28,7 +28,6 @@ import {
   DashboardChartType,
   DashboardWidgetConfig,
 } from '@/lib/dashboard';
-import { cn } from '@/lib/utils';
 
 import {
   DashboardPoint,
@@ -48,6 +47,7 @@ export interface DashboardChartProps {
   metricName: string;
   dimensionLabel: string | null;
   data: DashboardWidgetData;
+  dateFilterIgnored?: boolean;
 }
 
 const SERIES_COLORS = [1, 2, 3, 4, 5].map((n) => `var(--color-chart-${n})`);
@@ -58,7 +58,7 @@ function axisTickFormatter(value: unknown): string {
 }
 
 /** Render one dashboard widget visualization body including states and fallbacks. */
-export function DashboardChart({ widget, title, metricName, dimensionLabel, data }: DashboardChartProps) {
+export function DashboardChart({ widget, title, metricName, dimensionLabel, data, dateFilterIgnored }: DashboardChartProps) {
   return (
     <div className="flex h-full w-full min-h-0 min-w-0 flex-1 flex-col">
       <WidgetBody
@@ -67,6 +67,7 @@ export function DashboardChart({ widget, title, metricName, dimensionLabel, data
         metricName={metricName}
         dimensionLabel={dimensionLabel}
         data={data}
+        dateFilterIgnored={dateFilterIgnored}
       />
     </div>
   );
@@ -85,7 +86,12 @@ function WidgetBody(props: DashboardChartProps) {
       />
     );
   }
-  if (isMissingData(widget.chart_type, data)) return <EmptyState />;
+  if (isMissingData(widget.chart_type, data)) {
+    return <>
+      <EmptyState />
+      {props.dateFilterIgnored && <p className="text-[11px] text-muted-foreground">Bộ lọc ngày không áp dụng · Số liệu toàn thời gian</p>}
+    </>;
+  }
   return (
     <SuccessBody
       widget={widget}
@@ -93,27 +99,43 @@ function WidgetBody(props: DashboardChartProps) {
       metricName={metricName}
       dimensionLabel={dimensionLabel}
       data={data}
+      dateFilterIgnored={props.dateFilterIgnored}
     />
   );
 }
 
 function isMissingData(chartType: DashboardChartType, data: DashboardWidgetData): boolean {
-  if (chartType === 'kpi') return data.totalValue === null && data.trendPoints.length === 0;
-  return data.points.length === 0;
+  if (chartType === 'kpi') return data.totalValue === null && !data.trendPoints.some((point) => point.value !== null);
+  if (chartType === 'table') return data.points.length === 0;
+  if (chartType === 'pie') return !data.points.some((point) => point.value !== null && point.value > 0);
+  return !data.points.some((point) => point.value !== null);
 }
 
-function SuccessBody({ widget, title, metricName, dimensionLabel, data }: DashboardChartProps) {
+function SuccessBody({ widget, title, metricName, dimensionLabel, data, dateFilterIgnored }: DashboardChartProps) {
+  const notice = dateFilterIgnored ? 'Bộ lọc ngày không áp dụng · Số liệu toàn thời gian' : null;
+  const limitNotice = data.hasMore
+    ? widget.chart_type === 'kpi' || widget.chart_type === 'line' || widget.chart_type === 'area'
+      ? 'Chỉ hiển thị 100 kỳ gần nhất'
+      : `Chỉ hiển thị Top ${data.points.length} nhóm`
+    : null;
+  const barNotice = widget.chart_type === 'bar' && data.points.length > 12
+    ? `Biểu đồ hiển thị Top 12 trong ${data.hasMore ? 'ít nhất ' : ''}${data.points.length} nhóm`
+    : null;
   if (widget.chart_type === 'kpi') {
     return (
       <>
         <KpiPanel metricName={metricName} data={data} />
+        {(notice || limitNotice) && <p className="text-[11px] text-muted-foreground">{[notice, limitNotice].filter(Boolean).join(' · ')}</p>}
         <SummaryTable title={title} metricName={metricName} points={data.trendPoints} />
       </>
     );
   }
   if (widget.chart_type === 'table') {
     return (
-      <RankingTable title={title} metricName={metricName} dimensionLabel={dimensionLabel} data={data} />
+      <>
+        <RankingTable title={title} metricName={metricName} dimensionLabel={dimensionLabel} data={data} />
+        {(notice || limitNotice) && <p className="text-[11px] text-muted-foreground">{[notice, limitNotice].filter(Boolean).join(' · ')}</p>}
+      </>
     );
   }
   return (
@@ -123,6 +145,7 @@ function SuccessBody({ widget, title, metricName, dimensionLabel, data }: Dashbo
       ) : (
         <CartesianPanel chartType={widget.chart_type} metricName={metricName} points={data.points} />
       )}
+      {(notice || limitNotice || barNotice) && <p className="text-[11px] text-muted-foreground">{[notice, limitNotice, barNotice].filter(Boolean).join(' · ')}</p>}
       <SummaryTable title={title} metricName={metricName} points={data.points} />
     </>
   );
@@ -186,13 +209,13 @@ function UnavailableState() {
 function KpiPanel({ metricName, data }: { metricName: string; data: DashboardWidgetData }) {
   const total = data.totalValue;
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-between gap-2">
+    <div className="flex min-h-0 flex-1 flex-col justify-between gap-2 rounded-lg bg-gradient-to-br from-primary/10 via-transparent to-transparent p-2">
       <div>
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <Translated text={"Tổng trong kỳ"} />
         </p>
         <p
-          className="mt-1 text-2xl font-bold tabular-nums text-foreground"
+          className="mt-1 text-3xl font-semibold tracking-tight tabular-nums text-foreground"
           title={total === null ? undefined : formatNumberVi(total)}
         >
           {total === null ? '—' : formatNumberVi(total)}
@@ -207,7 +230,7 @@ function KpiPanel({ metricName, data }: { metricName: string; data: DashboardWid
               stroke="var(--color-chart-1)"
               strokeWidth={2}
               fill="var(--color-chart-1)"
-              fillOpacity={0.15}
+              fillOpacity={0.24}
               isAnimationActive={false}
             />
           </AreaChart>
@@ -262,8 +285,9 @@ function ChartAxes() {
         dataKey="label"
         tickLine={false}
         axisLine={false}
-        interval={0}
-        angle={-20}
+        interval="preserveStartEnd"
+        minTickGap={16}
+        angle={-15}
         textAnchor="end"
         height={48}
         tick={{ fontSize: 10 }}
@@ -313,18 +337,19 @@ function CartesianPanel({
   points: DashboardPoint[];
 }) {
   const ordered = chartType === 'bar' ? points : sortPointsByTimeKey(points);
+  const displayed = chartType === 'bar' ? ordered.slice(0, 12) : ordered;
   return (
-    <div className="min-h-0 flex-1">
+    <div className="min-h-0 flex-1 rounded-lg bg-gradient-to-b from-primary/[0.04] to-transparent">
       <ResponsiveContainer width="100%" height="100%">
         {chartType === 'bar' ? (
-          <BarChart data={ordered} margin={CHART_MARGIN}>
+          <BarChart data={displayed} margin={CHART_MARGIN}>
             <ChartAxes />
             <Tooltip content={<TooltipCard metricName={metricName} />} />
             <Bar
               dataKey="value"
               fill="var(--color-chart-1)"
               radius={[4, 4, 0, 0]}
-              maxBarSize={40}
+              maxBarSize={32}
               isAnimationActive={false}
             />
           </BarChart>
@@ -344,6 +369,12 @@ function CartesianPanel({
           </LineChart>
         ) : (
           <AreaChart data={ordered} margin={CHART_MARGIN}>
+            <defs>
+              <linearGradient id="dashboard-area-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.32} />
+                <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
             <ChartAxes />
             <Tooltip content={<TooltipCard metricName={metricName} />} />
             <Area
@@ -351,8 +382,7 @@ function CartesianPanel({
               dataKey="value"
               stroke="var(--color-chart-1)"
               strokeWidth={2}
-              fill="var(--color-chart-1)"
-              fillOpacity={0.18}
+              fill="url(#dashboard-area-fill)"
               isAnimationActive={false}
             />
           </AreaChart>
