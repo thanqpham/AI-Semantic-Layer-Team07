@@ -384,7 +384,8 @@ describe('WidgetConfigModal', () => {
       metric_ids: [5],
       dimensions: [{ column_id: 31 }],
       filters: [],
-      limit: 100,
+      limit: 101,
+      order_by: 'metric_desc',
     });
     expect(apiMocks.executeSemanticQueryApi).toHaveBeenCalledWith('9', request);
 

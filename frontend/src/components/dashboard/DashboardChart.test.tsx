@@ -187,6 +187,30 @@ describe('DashboardChart rendering', () => {
     expect(recharts.ResponsiveContainer).toHaveBeenCalled();
   });
 
+  it('labels a truncated series and an ignored date filter', () => {
+    render(
+      <DashboardChart
+        widget={makeWidget({ chart_type: 'bar', dimension_col_id: 3 })}
+        title="Top groups"
+        metricName="Value"
+        dimensionLabel="Group"
+        data={makeData({ points: POINTS, hasMore: true })}
+        dateFilterIgnored
+      />,
+    );
+    expect(screen.getByText(/Top 3 nhóm/)).toBeInTheDocument();
+    expect(screen.getByText(/Bộ lọc ngày không áp dụng/)).toBeInTheDocument();
+  });
+
+  it('shows an empty state when every chart value is missing', () => {
+    renderChart(
+      makeWidget({ chart_type: 'line', dimension_col_id: 9, time_grain: 'month' }),
+      makeData({ points: [{ label: 'January', rawLabel: '2025-01', value: null, rawValue: null }] }),
+    );
+    expect(screen.getByText(/Chưa có dữ liệu/)).toBeInTheDocument();
+    expect(recharts.LineChart).not.toHaveBeenCalled();
+  });
+
   it('truncates pie slices to the bounded budget with a remainder slice', () => {
     const many = Array.from({ length: 10 }, (_, index) => ({
       label: `p${index}`,

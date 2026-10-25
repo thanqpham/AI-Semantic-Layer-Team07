@@ -274,6 +274,7 @@ export interface SemanticQueryRequest {
   dimension_ids?: number[];
   filters: SemanticQueryFilter[];
   limit: number;
+  order_by?: 'metric_desc' | 'dimension_desc';
 }
 
 export type TimeGrain = 'day' | 'week' | 'month' | 'quarter' | 'year';

@@ -529,6 +529,7 @@ class SemanticQueryFilter(BaseModel):
 
 
 TimeGrain = Literal["day", "week", "month", "quarter", "year"]
+QueryOrder = Literal["metric_desc", "dimension_desc"]
 
 
 class DimensionSelection(BaseModel):
@@ -541,6 +542,7 @@ class SemanticQuerySpec(BaseModel):
     dimensions: list[DimensionSelection] = Field(default_factory=list)
     filters: list[SemanticQueryFilter] = Field(default_factory=list)
     limit: int = Field(default=100, ge=1, le=1000)
+    order_by: QueryOrder | None = None
 
 
 class SemanticQueryRequest(BaseModel):
@@ -551,6 +553,7 @@ class SemanticQueryRequest(BaseModel):
     dimension_ids: list[int] = Field(default_factory=list, description="Deprecated raw dimension IDs")
     filters: list[SemanticQueryFilter] = Field(default_factory=list)
     limit: int = Field(default=100, ge=1, le=1000, description="Max rows to return (default 100, max 1000)")
+    order_by: QueryOrder | None = None
 
     @model_validator(mode="after")
     def reject_mixed_dimension_contracts(self) -> SemanticQueryRequest:
@@ -567,6 +570,7 @@ class SemanticQueryRequest(BaseModel):
             dimensions=dimensions,
             filters=self.filters,
             limit=self.limit,
+            order_by=self.order_by,
         )
 
 

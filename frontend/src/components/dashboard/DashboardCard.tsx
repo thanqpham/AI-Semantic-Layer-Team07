@@ -139,6 +139,7 @@ export function DashboardCard(props: DashboardCardProps) {
           metricName={props.metricName}
           dimensionLabel={props.dimensionLabel}
           data={data}
+          dateFilterIgnored={props.datePreset !== null && props.widget.date_filter_column_id === null}
         />
       </div>
 

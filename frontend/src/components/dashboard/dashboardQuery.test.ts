@@ -62,7 +62,8 @@ describe('buildWidgetQueryRequests', () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].metric_ids).toEqual([5]);
     expect(requests[0].dimensions).toEqual([{ column_id: 12, time_grain: 'month' }]);
-    expect(requests[0].limit).toBe(100);
+    expect(requests[0].limit).toBe(WIDGET_ROW_LIMIT + 1);
+    expect(requests[0].order_by).toBe('dimension_desc');
     expect(requests[0].filters).toEqual(
       buildDateRangeFilters(12, resolveDatePresetBounds('last_30_days', NOW)),
     );
@@ -106,7 +107,8 @@ describe('buildWidgetQueryRequests', () => {
     expect(requests[0].filters.length).toBe(2);
     expect(requests[1].metric_ids).toEqual([5]);
     expect(requests[1].dimensions).toEqual([{ column_id: 9, time_grain: 'week' }]);
-    expect(requests[1].limit).toBe(WIDGET_ROW_LIMIT);
+    expect(requests[1].limit).toBe(WIDGET_ROW_LIMIT + 1);
+    expect(requests[1].order_by).toBe('dimension_desc');
   });
 
   it('falls back to the default grain for KPI trends without a global grain', () => {
@@ -166,7 +168,7 @@ describe('buildWidgetQueryRequests', () => {
       });
       for (const request of requests) {
         expect(request.limit).toBeGreaterThanOrEqual(1);
-        expect(request.limit).toBeLessThanOrEqual(100);
+        expect(request.limit).toBeLessThanOrEqual(WIDGET_ROW_LIMIT + 1);
       }
     }
   });
@@ -214,7 +216,7 @@ describe('result to points mapping', () => {
 
     expect(points).toEqual([
       { label: 'pending', rawLabel: 'pending', value: 3, rawValue: 3 },
-      { label: '(Trống)', rawLabel: '', value: 0, rawValue: null },
+      { label: '(Trống)', rawLabel: '', value: null, rawValue: null },
       { label: 'done', rawLabel: 'done', value: 7, rawValue: '7' },
     ]);
   });

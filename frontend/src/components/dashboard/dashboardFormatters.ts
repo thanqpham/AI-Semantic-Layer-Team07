@@ -8,8 +8,8 @@ export interface DashboardPoint {
   label: string;
   /** Raw string form of the dimension value, used for time sorting. */
   rawLabel: string;
-  /** Numeric value used by charts (missing values normalized to 0). */
-  value: number;
+  /** Numeric value used by charts; missing values stay null. */
+  value: number | null;
   /** Original cell value preserved for accessible/table rendering. */
   rawValue: unknown;
 }
@@ -186,7 +186,7 @@ export function sortPointsByTimeKey(points: DashboardPoint[]): DashboardPoint[] 
 export function sortPointsByValueDesc(points: DashboardPoint[]): DashboardPoint[] {
   return points
     .map((point, index) => ({ point, index }))
-    .sort((left, right) => right.point.value - left.point.value || left.index - right.index)
+    .sort((left, right) => (right.point.value ?? -Infinity) - (left.point.value ?? -Infinity) || left.index - right.index)
     .map((entry) => entry.point);
 }
 
@@ -199,7 +199,7 @@ export function truncatePieSlices(
   if (ordered.length <= maxSlices) return ordered;
   const kept = ordered.slice(0, Math.max(1, maxSlices - 1));
   const remainder = ordered.slice(kept.length);
-  const remainderValue = remainder.reduce((sum, item) => sum + item.value, 0);
+  const remainderValue = remainder.reduce((sum, item) => sum + (item.value ?? 0), 0);
   return [
     ...kept,
     { label: REMAINDER_LABEL, rawLabel: '', value: remainderValue, rawValue: remainderValue },

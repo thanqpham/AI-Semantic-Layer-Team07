@@ -124,7 +124,16 @@ class SemanticQueryCompiler:
         runtime_filters = await self._load_runtime_filters(connection_id, spec.filters)
         joins = await self._resolve_joins(connection_id, base, dimensions + runtime_filters, table_by_id)
         return self._build_query(
-            dialect, metrics, definitions, base, base_columns, dimensions, joins, runtime_filters, spec.limit
+            dialect,
+            metrics,
+            definitions,
+            base,
+            base_columns,
+            dimensions,
+            joins,
+            runtime_filters,
+            spec.limit,
+            spec.order_by,
         )
 
     async def _compile_plan(
@@ -402,6 +411,7 @@ class SemanticQueryCompiler:
         joins: list[dict[str, Any]],
         runtime_filters: list[dict[str, Any]],
         limit: int,
+        order_by: str | None,
     ) -> CompiledQuery:
         parameters: dict[str, Any] = {}
         names = {cid: name for cid, (name, _) in base_columns.items()}
@@ -412,7 +422,16 @@ class SemanticQueryCompiler:
         fixed = _fixed_predicates(shared, names, types, base.table_name, dialect, parameters)
         metrics_sql = _metric_expressions(metrics, definitions, base, names, types, dialect, parameters, residuals)
         sql = _assemble_sql(
-            dimensions_sql + metrics_sql, base, joins, runtime_filters, group_sql, dialect, parameters, limit, fixed
+            dimensions_sql + metrics_sql,
+            base,
+            joins,
+            runtime_filters,
+            group_sql,
+            dialect,
+            parameters,
+            limit,
+            fixed,
+            order_by,
         )
         validate_read_only(sql)
         metadata = _compiled_metadata(base, metrics, dimensions, joins)

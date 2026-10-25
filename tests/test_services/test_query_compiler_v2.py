@@ -13,9 +13,15 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
-from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQuerySpec
+from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQueryRequest, SemanticQuerySpec
 from src.services.query_compiler import SemanticQueryCompiler
 from src.services.semantic_compile_error import SemanticCompileError
+
+
+def test_query_request_passes_optional_order_to_compiler_spec() -> None:
+    request = SemanticQueryRequest(metric_ids=[5], dimensions=[DimensionSelection(column_id=3)], order_by="metric_desc")
+    assert request.to_spec().order_by == "metric_desc"
+    assert SemanticQueryRequest(metric_ids=[5]).to_spec().order_by is None
 
 
 async def _seed_filtered_metrics(db: AsyncSession) -> tuple[int, list[int]]:
@@ -294,6 +300,31 @@ async def test_time_dimension_compiles_with_requested_sqlite_grain(async_session
 
     assert """strftime('%Y-%m', "orders"."created_at")""" in compiled.sql
     assert f'"dimension_{created_at.id}"' in compiled.sql
+
+
+@pytest.mark.asyncio
+async def test_optional_dashboard_order_does_not_change_default_queries(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    orders = await _table(async_session, db_id, "orders")
+    column = SemanticColumnModel(table_id=orders.id, column_name="category", data_type="TEXT", business_name="Category")
+    async_session.add(column)
+    await async_session.commit()
+    compiler = SemanticQueryCompiler(async_session)
+    base = dict(metric_ids=[metric_ids[0]], dimensions=[DimensionSelection(column_id=column.id)], limit=101)
+
+    default = await compiler.compile(db_id, SemanticQuerySpec(**base))
+    ranked = await compiler.compile(db_id, SemanticQuerySpec(**base, order_by="metric_desc"))
+    recent = await compiler.compile(db_id, SemanticQuerySpec(**base, order_by="dimension_desc"))
+
+    assert "ORDER BY" not in default.sql
+    assert " IS NULL, 2 DESC, 1 ASC\nLIMIT 101" in ranked.sql
+    assert " IS NULL, 1 DESC\nLIMIT 101" in recent.sql
+    await async_session.execute(text('CREATE TABLE "orders" ("id" INTEGER, "amount" NUMERIC, "status" TEXT, "category" TEXT)'))
+    await async_session.execute(text("INSERT INTO orders VALUES (1, 5, 'completed', 'A'), (2, 10, 'completed', 'B'), (3, 3, 'completed', 'C')"))
+    ranked_rows = (await async_session.execute(text(ranked.sql), ranked.parameters)).all()
+    recent_rows = (await async_session.execute(text(recent.sql), recent.parameters)).all()
+    assert [row[0] for row in ranked_rows] == ["B", "A", "C"]
+    assert [row[0] for row in recent_rows] == ["C", "B", "A"]
 
 
 @pytest.mark.asyncio
