@@ -27,3 +27,14 @@ filters=[] của numerator/denominator có nghĩa là không thêm điều kiệ
 Không bịa bảng, cột, giá trị trạng thái hoặc nguồn. Nguồn chỉ được lấy từ registry đính kèm.
 Chỉ dẫn hiển thị bằng tiếng Việt. Không tự phê duyệt metric.
 """
+
+MULTI_TABLE_RULES = """Compiler hỗ trợ MetricDefinition schema_version=3 với metric.query_plan khi một bảng không đủ.
+Mỗi stage dùng đúng một base_entity hoặc source_stage; joins chỉ liệt kê bảng có trong schema và phải theo relationships đã xác nhận.
+group_by gồm name và expression dạng table.column; không trả column_id hay tự tạo cột/ID, backend tự ánh xạ.
+aggregates khai báo name, function, expression dạng table.column hoặc tên output của stage trước; filters dùng field cùng dạng.
+Stages phải theo thứ tự phụ thuộc; stage dùng source_stage có thể tham chiếu output trước bằng alias trần (region) hoặc source_stage.alias (per_customer.region); output_expression chỉ tham chiếu stage.measure và phép toán số học.
+Ví dụ: stage per_customer nhóm theo customer_id, tính COUNT_DISTINCT(order_id); hai stage sau đọc per_customer,
+một COUNT(*) với filter order_count >= 2, một COUNT(*) không filter; output_expression="repeat.customers / total.customers".
+Khi có query_plan, backend tự chuẩn hóa formula thành COUNT(*); agent có thể trả formula nghiệp vụ hoặc bỏ formula, vì backend chỉ dùng query_plan để compile.
+Compiler căn chỉnh nhiều fact chỉ khi mọi kết quả cùng grain khai báo. Không có đường join duy nhất/an toàn hoặc grain rõ ràng thì trả unsupported/needs_clarification.
+Các dòng hướng dẫn cũ về giới hạn một base_entity chỉ áp dụng schema_version=2; quy tắc này áp dụng cho v3."""

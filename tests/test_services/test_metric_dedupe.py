@@ -437,6 +437,7 @@ def test_metric_summary_projects_row() -> None:
         "ratio",
         "base_entity",
         "filters",
+        "query_plan",
         "definition",
     }
     assert summary["definition"] == row.definition

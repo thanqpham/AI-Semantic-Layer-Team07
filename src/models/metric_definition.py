@@ -251,6 +251,105 @@ class MetricRatio(BaseModel):
         return value
 
 
+class MetricPlanFilter(MetricFilter):
+    """Predicate on a qualified source field or a prior stage output."""
+
+    field: str = Field(..., min_length=1, max_length=401, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$|^[A-Za-z_][A-Za-z0-9_$]*$")
+
+
+class MetricPlanField(BaseModel):
+    """A named grouping key selected from a source or prior stage."""
+
+    name: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*$")
+    expression: str = Field(..., min_length=1, max_length=401)
+    column_id: int | None = None
+
+    @field_validator("expression")
+    @classmethod
+    def validate_group_expression(cls, value: str) -> str:
+        parsed = sqlglot.parse_one(value.strip())
+        if any(not isinstance(node, (exp.Column, exp.Identifier)) for node in parsed.walk()):
+            raise ValueError("Metric plan grouping expressions must reference columns")
+        return value.strip()
+
+
+class MetricPlanAggregate(BaseModel):
+    """Named aggregate in one stage of a multi-table metric plan."""
+
+    name: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*$")
+    function: MetricFunction
+    expression: str = Field(..., min_length=1, max_length=1000)
+    filters: list[MetricPlanFilter] = Field(default_factory=list)
+
+    @field_validator("function", mode="before")
+    @classmethod
+    def normalize_plan_function(cls, value: Any) -> Any:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator("expression")
+    @classmethod
+    def validate_plan_expression(cls, value: str) -> str:
+        if value.strip() == "*":
+            return "*"
+        parsed = sqlglot.parse_one(value.strip())
+        allowed = (exp.Column, exp.Identifier, exp.Literal, exp.Paren, exp.Add, exp.Sub, exp.Mul, exp.Div, exp.Neg)
+        if any(not isinstance(node, allowed) for node in parsed.walk()):
+            raise ValueError("Metric plan expressions allow only columns, literals, and arithmetic")
+        return value.strip()
+
+
+class MetricPlanStage(BaseModel):
+    """One grouped source or a later aggregation over an earlier stage."""
+
+    name: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*$")
+    base_entity: str | None = Field(default=None, min_length=1, max_length=200)
+    source_stage: str | None = Field(default=None, min_length=1, max_length=100)
+    joins: list[str] = Field(default_factory=list)
+    group_by: list[MetricPlanField] = Field(default_factory=list)
+    aggregates: list[MetricPlanAggregate] = Field(..., min_length=1)
+    filters: list[MetricPlanFilter] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_plan_source(self) -> MetricPlanStage:
+        if bool(self.base_entity) == bool(self.source_stage):
+            raise ValueError("A metric plan stage requires exactly one base_entity or source_stage")
+        if self.base_entity and self.joins and self.base_entity in self.joins:
+            raise ValueError("A metric plan stage cannot join its base entity to itself")
+        if len({field.name for field in self.group_by}) != len(self.group_by):
+            raise ValueError("Metric plan grouping names must be unique")
+        if len({item.name for item in self.aggregates}) != len(self.aggregates):
+            raise ValueError("Metric plan aggregate names must be unique")
+        return self
+
+
+class MetricQueryPlan(BaseModel):
+    """Finite, metadata-resolved stages for multi-table metric compilation."""
+
+    stages: list[MetricPlanStage] = Field(..., min_length=1)
+    output_expression: str = Field(..., min_length=1, max_length=1000)
+
+    @field_validator("output_expression")
+    @classmethod
+    def validate_output_expression(cls, value: str) -> str:
+        parsed = sqlglot.parse_one(value.strip())
+        allowed = (exp.Column, exp.Identifier, exp.Literal, exp.Paren, exp.Add, exp.Sub, exp.Mul, exp.Div, exp.Neg)
+        if any(not isinstance(node, allowed) for node in parsed.walk()):
+            raise ValueError("Metric plan output allows only stage references and arithmetic")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validate_stage_graph(self) -> MetricQueryPlan:
+        names = [stage.name for stage in self.stages]
+        if len(names) != len(set(names)):
+            raise ValueError("Metric plan stage names must be unique")
+        seen: set[str] = set()
+        for stage in self.stages:
+            if stage.source_stage and stage.source_stage not in seen:
+                raise ValueError("Metric plan stages must reference an earlier stage")
+            seen.add(stage.name)
+        return self
+
+
 MetricFormula.model_rebuild()
 
 
@@ -263,6 +362,7 @@ class MetricSpec(BaseModel):
     base_entity_id: int | None = None
     grain: MetricGrain = Field(default_factory=MetricGrain)
     filters: list[MetricFilter] = Field(default_factory=list)
+    query_plan: MetricQueryPlan | None = None
     status: MetricStatus = "pending_approval"
     confidence: MetricConfidence | None = None
     excluded_notes: str = Field(default="", max_length=2000)
@@ -270,7 +370,7 @@ class MetricSpec(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_ratio_location(cls, value: Any) -> Any:
-        """Preserve an unambiguous legacy ratio without changing its calculation."""
+        """Normalize legacy ratios and keep plan formulas as a compatibility field."""
         if isinstance(value, dict) and "ratio" in value:
             formula = value.get("formula")
             if not isinstance(formula, dict):
@@ -279,6 +379,8 @@ class MetricSpec(BaseModel):
                 raise ValueError("metric.ratio và formula.ratio mâu thuẫn; chỉ cung cấp một cách tính.")
             value = {**value, "formula": {**formula, "ratio": value["ratio"]}}
             value.pop("ratio")
+        if isinstance(value, dict) and value.get("query_plan") is not None:
+            value = {**value, "formula": {"function": "COUNT", "expression": "*"}}
         return value
 
     @field_validator("filters", mode="before")
@@ -325,7 +427,7 @@ class MetricSpec(BaseModel):
 class MetricDefinition(BaseModel):
     """Top-level wrapper used by JSON persistence and YAML preview."""
 
-    schema_version: Literal[1, 2] = 1
+    schema_version: Literal[1, 2, 3] = 1
     metric: MetricSpec
     diagnostics: list[MetricDiagnostic] = Field(default_factory=list)
 
@@ -345,6 +447,13 @@ class MetricDefinition(BaseModel):
             if "name" in data or "formula" in data or "base_entity" in data:
                 return {"metric": data}
         return data
+
+    @model_validator(mode="after")
+    def normalize_query_plan_version(self) -> MetricDefinition:
+        """Every structured query plan is persisted under its canonical version."""
+        if self.metric.query_plan is not None:
+            self.schema_version = 3
+        return self
 
     def to_yaml(self) -> str:
         """Render a stable, Unicode YAML preview."""

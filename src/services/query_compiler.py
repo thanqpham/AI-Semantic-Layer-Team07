@@ -6,8 +6,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
+import sqlglot
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlglot import exp
 
 from src.models.db import (
     CanonicalRelationshipModel,
@@ -16,13 +18,15 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
-from src.models.metric_definition import MetricDefinition, MetricExpressionNode, is_timestamp_diff_hours
+from src.models.metric_definition import MetricDefinition, MetricExpressionNode, MetricPlanFilter
 from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQuerySpec
 from src.observability import trace_action
 from src.services.metric_definition_resolver import expression_tree_for_columns
 from src.services.metric_definitions import is_numeric_data_type
+from src.services.query_compiler_plan import compile_plan_sql
 from src.services.query_compiler_sql import (
     _assemble_sql,
+    _coerce_literal,
     _column_info,
     _dimension_expressions,
     _fixed_predicates,
@@ -102,6 +106,10 @@ class SemanticQueryCompiler:
         dialect = await self._load_dialect(connection_id)
         metrics = await self._load_metrics(connection_id, spec.metric_ids)
         definitions = _canonical_definitions(metrics)
+        if any(item.metric.query_plan is not None for item in definitions):
+            if len(definitions) != 1 or definitions[0].metric.query_plan is None:
+                raise SemanticCompileError("INCOMPATIBLE_QUERY_PLAN", "Multi-table plans must be queried one metric at a time")
+            return await self._compile_plan(connection_id, spec, metrics[0], definitions[0])
         base_name = self._require_same_base(definitions)
         tables = await self._load_tables(connection_id)
         table_by_id = {table.id: table for table in tables}
@@ -118,6 +126,158 @@ class SemanticQueryCompiler:
         return self._build_query(
             dialect, metrics, definitions, base, base_columns, dimensions, joins, runtime_filters, spec.limit
         )
+
+    async def _compile_plan(
+        self,
+        connection_id: int,
+        spec: SemanticQuerySpec,
+        metric: SemanticMetricModel,
+        definition: MetricDefinition,
+    ) -> CompiledQuery:
+        plan = definition.metric.query_plan
+        dialect = await self._load_dialect(connection_id)
+        tables_list = await self._load_tables(connection_id)
+        tables = {table.table_name: table for table in tables_list}
+        tables_folded = {table.table_name.casefold(): table for table in tables_list}
+        result = await self._db.execute(select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([t.id for t in tables_list])))
+        all_columns = list(result.scalars().all())
+        columns: dict[str, dict[str, tuple[str, int, str]]] = {}
+        by_id: dict[int, tuple[str, str, int, str]] = {}
+        for column in all_columns:
+            table = next(item for item in tables_list if item.id == column.table_id)
+            columns.setdefault(table.table_name, {})[column.column_name] = (
+                column.column_name, column.id, column.data_type or ""
+            )
+            by_id[column.id] = (table.table_name, column.column_name, column.id, column.data_type or "")
+        relationships_result = await self._db.execute(
+            select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == connection_id)
+        )
+        relationships = [
+            item for item in relationships_result.scalars().all() if item.validation_status in {"valid", None}
+        ]
+        relationship_columns = await self._relationship_columns(relationships)
+        join_paths: dict[tuple[str, str], list[dict[str, str]]] = {}
+        stage_tables: dict[str, set[str]] = {}
+        for stage in plan.stages:
+            if stage.source_stage:
+                stage_tables[stage.name] = set(stage_tables[stage.source_stage])
+                parent = next(item for item in plan.stages if item.name == stage.source_stage)
+                for field in stage.group_by:
+                    if field.column_id is None:
+                        field_name = field.expression.split(".", 1)[-1]
+                        field.column_id = next(
+                            (item.column_id for item in parent.group_by if item.name == field_name), None
+                        )
+                continue
+            base = tables_folded.get(stage.base_entity.casefold())
+            if base is None:
+                raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan references an unknown source table")
+            stage.base_entity = base.table_name
+            stage_tables[stage.name] = {base.table_name}
+            resolved_joins = []
+            for requested in list(stage.joins):
+                target = tables_folded.get(requested.casefold())
+                if target is None:
+                    raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan references an unknown joined table")
+                if target.id == base.id:
+                    raise SemanticCompileError("UNSAFE_JOIN", "Metric plan cannot join its source table to itself")
+                path = _safe_join_path(relationships, base.id, target.id, {t.id: t for t in tables_list}, relationship_columns)
+                path_joins = []
+                for rel in path:
+                    rel_target = tables[ next(t.table_name for t in tables_list if t.id == rel.to_entity_id) ]
+                    path_joins.append({
+                        "relationship_id": rel.id,
+                        "table_name": rel_target.table_name,
+                        "physical_schema": rel_target.physical_schema,
+                        "condition": _relationship_condition(rel, relationship_columns),
+                    })
+                    stage_tables[stage.name].add(rel_target.table_name)
+                join_paths[(base.table_name, target.table_name)] = path_joins
+                resolved_joins.append(target.table_name)
+            stage.joins = list(dict.fromkeys(resolved_joins))
+            for field in stage.group_by:
+                if field.column_id is not None:
+                    resolved = by_id.get(field.column_id)
+                else:
+                    parsed = sqlglot.parse_one(field.expression)
+                    if not isinstance(parsed, exp.Column):
+                        raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan grouping key must be a column")
+                    source_name = parsed.table or stage.base_entity
+                    resolved = next(
+                        ((source_name, name, column_id, data_type)
+                         for name, (name, column_id, data_type) in columns.get(source_name, {}).items()
+                         if name.casefold() == parsed.name.casefold()),
+                        None,
+                    )
+                if not resolved or resolved[0] not in stage_tables[stage.name]:
+                    raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan grouping key does not match its source tables")
+                field.column_id = resolved[2]
+                field.expression = f"{resolved[0]}.{resolved[1]}"
+            for aggregate in stage.aggregates:
+                for filter_item in aggregate.filters:
+                    if filter_item.column_id is not None:
+                        resolved = by_id.get(filter_item.column_id)
+                        if not resolved or resolved[0] not in stage_tables[stage.name]:
+                            raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan filter does not match its source tables")
+                        filter_item.field = f"{resolved[0]}.{resolved[1]}"
+            for filter_item in stage.filters:
+                if filter_item.column_id is not None:
+                    resolved = by_id.get(filter_item.column_id)
+                    if not resolved or resolved[0] not in stage_tables[stage.name]:
+                        raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan filter does not match its source tables")
+                    filter_item.field = f"{resolved[0]}.{resolved[1]}"
+        dimensions = await self._load_dimensions(connection_id, [item.column_id for item in spec.dimensions])
+        _apply_time_grains(dimensions, spec.dimensions)
+        runtime_filters = await self._load_runtime_filters(connection_id, spec.filters)
+        physical_stages = [stage for stage in plan.stages if stage.base_entity]
+        scoped_filters = [
+            {"column_id": item.column_id, "operator": item.operator, "value": item.value}
+            for item in definition.metric.filters
+        ] + runtime_filters
+        for item in scoped_filters:
+            column_id = item["column_id"]
+            resolved = by_id.get(column_id)
+            if resolved is None or any(resolved[0] not in stage_tables[stage.name] for stage in physical_stages):
+                raise SemanticCompileError(
+                    "UNSUPPORTED_PLAN_FILTER", "Runtime filters must reference the same approved table in every source stage"
+                )
+            for stage in physical_stages:
+                value = item["value"]
+                value = (
+                    [_coerce_literal(member, resolved[3]) for member in value]
+                    if item["operator"] in {"in", "not_in"}
+                    else _coerce_literal(value, resolved[3])
+                )
+                stage.filters.append(
+                    MetricPlanFilter(
+                        field=f"{resolved[0]}.{resolved[1]}",
+                        operator=item["operator"],
+                        value=value,
+                        column_id=column_id,
+                    )
+                )
+        parameters: dict[str, Any] = {}
+        sql = compile_plan_sql(
+            plan,
+            metric.id,
+            dialect,
+            tables,
+            columns,
+            join_paths,
+            dimensions,
+            {item.column_id: item.time_grain for item in spec.dimensions if item.time_grain},
+            [],
+            spec.limit,
+            parameters,
+        )
+        validate_read_only(sql, dialect)
+        metadata = {
+            "metric_plan": True,
+            "metrics": {f"metric_{metric.id}": metric.name},
+            "dimensions": {f"dimension_{item['column_id']}": item["business_name"] for item in dimensions},
+            "relationship_ids": [item["relationship_id"] for joins in join_paths.values() for item in joins],
+        }
+        return CompiledQuery(sql=sql, parameters=parameters, metadata=metadata)
 
     async def _load_dialect(self, connection_id: int) -> str:
         record = await self._db.get(SemanticDatabaseModel, connection_id)
@@ -261,7 +421,13 @@ class SemanticQueryCompiler:
 
 def _canonical_definitions(metrics: list[SemanticMetricModel]) -> list[MetricDefinition]:
     definitions = [MetricDefinition.model_validate(item.definition) for item in metrics]
-    invalid = (item.schema_version != 2 or item.diagnostics or not item.metric.grain.column_ids for item in definitions)
+    invalid = (
+        item.schema_version not in {2, 3}
+        or item.diagnostics
+        or (item.schema_version == 2 and not item.metric.grain.column_ids)
+        or (item.schema_version == 3 and item.metric.query_plan is None)
+        for item in definitions
+    )
     if any(invalid):
         raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric definition is not canonical v2")
     return definitions

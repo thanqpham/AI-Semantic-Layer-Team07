@@ -51,7 +51,7 @@ export interface MetricRatio {
 }
 
 export interface MetricDefinition {
-  schema_version?: 1 | 2;
+  schema_version?: 1 | 2 | 3;
   metric: {
     name: string;
     formula: { function: MetricFunction; expression: string; ratio?: MetricRatio | null };
@@ -62,8 +62,22 @@ export interface MetricDefinition {
     status: MetricStatus;
     confidence?: MetricConfidence | null;
     excluded_notes: string;
+    query_plan?: MetricQueryPlan | null;
   };
   diagnostics?: Array<{ code: string; message: string }>;
+}
+
+export interface MetricQueryPlan {
+  stages: {
+    name: string;
+    base_entity?: string | null;
+    source_stage?: string | null;
+    joins: string[];
+    group_by: { name: string; expression: string; column_id?: number | null }[];
+    aggregates: { name: string; function: MetricFunction; expression: string; filters: MetricFilter[] }[];
+    filters: MetricFilter[];
+  }[];
+  output_expression: string;
 }
 
 export interface MetricRecord {

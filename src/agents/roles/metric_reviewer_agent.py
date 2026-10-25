@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
-from src.agents.roles.metric_prompt_rules import CONTEXT_RULES
+from src.agents.roles.metric_prompt_rules import CONTEXT_RULES, MULTI_TABLE_RULES
 from src.models.metric_review import MetricReviewBatch
 from src.observability import trace_action
 from src.services.metric_runtime import MetricCallError, invalid_output, invoke_metric_json
 
 _REVIEW_PROMPT = (
     CONTEXT_RULES
+    + "\n" + MULTI_TABLE_RULES
     + """
 Bạn là Metric Reviewer Agent. Thẩm định riêng từng definition đã qua kiểm tra kỹ thuật.
 Mọi summary, message, evidence, action và clarification hiển thị phải bằng tiếng Việt; giữ nguyên tên bảng/cột.

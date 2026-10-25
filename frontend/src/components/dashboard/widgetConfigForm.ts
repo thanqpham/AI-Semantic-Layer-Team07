@@ -90,13 +90,13 @@ const NEW_FORM: WidgetFormState = {
   title: '',
 };
 
-/** Only approved canonical-v2 metrics without diagnostics are executable. */
+/** Only approved canonical metrics without diagnostics are executable. */
 export function selectExecutableMetrics(metrics: MetricRecord[]): MetricRecord[] {
   return metrics.filter(
     (metric) =>
       metric.status === 'approved' &&
       metric.definition !== null &&
-      metric.definition.schema_version === 2 &&
+      [2, 3].includes(metric.definition.schema_version ?? 0) &&
       !(metric.definition.diagnostics && metric.definition.diagnostics.length > 0),
   );
 }

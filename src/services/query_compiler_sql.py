@@ -21,15 +21,15 @@ from src.observability import trace_value
 from src.services.semantic_compile_error import SemanticCompileError
 
 
-def validate_read_only(sql: str) -> bool:
+def validate_read_only(sql: str, dialect: str | None = None) -> bool:
     """Require exactly one SELECT without write-capable AST nodes."""
-    return trace_value("sql_guardrail", {"sql_length": len(sql)}, lambda: _validate_read_only(sql))
+    return trace_value("sql_guardrail", {"sql_length": len(sql)}, lambda: _validate_read_only(sql, dialect))
 
 
-def _validate_read_only(sql: str) -> bool:
+def _validate_read_only(sql: str, dialect: str | None = None) -> bool:
     """Validate the SQL AST without coupling parsing to tracing."""
     try:
-        statements = sqlglot.parse(sql, error_level=sqlglot.ErrorLevel.RAISE)
+        statements = sqlglot.parse(sql, read=dialect, error_level=sqlglot.ErrorLevel.RAISE)
     except sqlglot.errors.ParseError as exc:
         raise ValueError(f"Invalid SQL: {exc}") from exc
     if len(statements) != 1:

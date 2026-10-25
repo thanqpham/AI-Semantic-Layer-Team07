@@ -107,6 +107,9 @@ def _render_definition(metric: dict[str, Any]) -> str:
         f"- **Công thức:** `{_formula_text(definition)}`",
         f"- **Thực thể cơ sở:** `{spec.base_entity}`",
     ]
+    if spec.query_plan:
+        source_tables = sorted({stage.base_entity for stage in spec.query_plan.stages if stage.base_entity})
+        lines.append(f"- **Bảng nguồn:** {', '.join(f'`{name}`' for name in source_tables)}")
     if spec.filters:
         lines.append(f"- **Bộ lọc cố định:** {_filter_text(spec.filters)}")
     if spec.formula.ratio is not None:
@@ -122,6 +125,8 @@ def _render_definition(metric: dict[str, Any]) -> str:
 
 
 def _formula_text(definition: MetricDefinition) -> str:
+    if definition.metric.query_plan:
+        return definition.metric.query_plan.output_expression
     formula = definition.metric.formula
     ratio = formula.ratio
     if ratio is None:

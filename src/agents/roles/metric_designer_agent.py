@@ -6,7 +6,7 @@ import json
 from typing import Any, cast
 from uuid import uuid4
 
-from src.agents.roles.metric_prompt_rules import CONTEXT_RULES
+from src.agents.roles.metric_prompt_rules import CONTEXT_RULES, MULTI_TABLE_RULES
 from src.models.metric_review import MetricBuildBatch
 from src.observability import trace_action
 from src.services.metric_runtime import MetricCallError, execution_failure, invoke_metric_json
@@ -17,7 +17,7 @@ async def generate_metric_drafts(context: dict[str, Any], task_id: str | None = 
     """Generate candidates without discarding invalid definitions before review."""
     discovery = context["proposal_mode"] == "discovery"
     prompt = "Bạn là Metric Designer Agent. Schema và yêu cầu đầy đủ nằm trong context JSON đính kèm.\n" + _BASE_RULES
-    prompt += "\n" + CONTEXT_RULES + "\n" + _draft_instructions(discovery) + "\n" + _knowledge_instructions(context)
+    prompt += "\n" + CONTEXT_RULES + "\n" + _draft_instructions(discovery) + "\n" + MULTI_TABLE_RULES + "\n" + _knowledge_instructions(context)
     task_id = task_id or str(uuid4())
     payload = {"task_id": task_id, "context": context}
     batch = await trace_action(
@@ -85,7 +85,7 @@ async def repair_metric_drafts(
         + CONTEXT_RULES
         + "\nSửa các KPI được giao, giữ nguyên candidate_id và mục tiêu; không sinh lại KPI khác.\n"
     )
-    prompt += _repair_instructions() + "\n" + _knowledge_instructions(context)
+    prompt += _repair_instructions() + "\n" + MULTI_TABLE_RULES + "\n" + _knowledge_instructions(context)
     result = await trace_action(
         "metric_repair",
         {"attempt": 1},

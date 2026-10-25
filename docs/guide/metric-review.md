@@ -153,3 +153,11 @@ người duyệt theo cơ chế cũ.
 Test dùng mock LLM và SQLite. Cần đánh giá thêm với model và schema doanh nghiệp
 trước khi dùng thực tế: metadata không chứng minh được chất lượng dữ liệu,
 và Reviewer cùng model có thể lặp lại sai sót của Generator.
+
+### Metric nhiều bảng và nhiều grain
+
+Metric schema v3 dùng `metric.query_plan` gồm các stage theo thứ tự phụ thuộc. Stage nguồn khai báo `base_entity`, các bảng `joins` đã có relationship an toàn, `group_by`, `aggregates` và `filters`. Stage sau khai báo `source_stage` để tổng hợp tiếp trên output của stage trước. `output_expression` chỉ tham chiếu theo dạng `stage.measure` và phép toán số học; backend tự phân giải cột và khóa từ metadata. Khi có `query_plan`, agent có thể bỏ `formula` hoặc gửi formula aggregate thông thường; backend bỏ qua giá trị đó và chuẩn hóa về `COUNT(*)` để tương thích với metric v2.
+
+Ví dụ tỷ lệ khách có ít nhất hai đơn trên tổng khách mua trong kỳ: stage `per_customer` nhóm theo `customer_id` và đếm đơn; stage `repeat` đếm dòng có `order_count >= 2`; stage `total` đếm mọi khách; output là `repeat.customers / total.customers`. Kỳ phân tích và trạng thái đơn phải được nêu bằng filter đã xác nhận.
+
+Các fact chỉ được ghép sau khi tổng hợp về cùng grain. Compiler chặn đường JOIN mơ hồ, fanout, grain không khớp và runtime filter không có mặt trong mọi nhánh nguồn. Runtime time dimension được áp vào từng stage có cùng column ID. Truy vấn metric plan hiện yêu cầu chọn từng metric riêng; không ghép metric plan với metric khác trong một truy vấn.
