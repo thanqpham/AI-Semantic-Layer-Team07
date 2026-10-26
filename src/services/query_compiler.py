@@ -278,6 +278,7 @@ class SemanticQueryCompiler:
             [],
             spec.limit,
             parameters,
+            order_by=spec.order_by,
         )
         validate_read_only(sql, dialect)
         metadata = {

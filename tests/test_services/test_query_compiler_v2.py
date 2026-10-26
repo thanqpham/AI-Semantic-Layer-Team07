@@ -159,6 +159,30 @@ def _metric(
     )
 
 
+def _grouped_sales_plan(category_id: int) -> dict[str, Any]:
+    return {
+        "schema_version": 3,
+        "metric": {
+            "name": "Sales by category",
+            "base_entity": "orders",
+            "formula": {"function": "SUM", "expression": "orders.amount"},
+            "query_plan": {
+                "stages": [
+                    {
+                        "name": "sales",
+                        "base_entity": "orders",
+                        "group_by": [{"name": "category", "expression": "orders.category", "column_id": category_id}],
+                        "aggregates": [{"name": "total_amount", "function": "SUM", "expression": "orders.amount"}],
+                    }
+                ],
+                "output_expression": "sales.total_amount",
+            },
+            "filters": [],
+            "status": "approved",
+        },
+    }
+
+
 def _shared_metric(
     db_id: int,
     table_id: int,
@@ -325,6 +349,43 @@ async def test_optional_dashboard_order_does_not_change_default_queries(async_se
     recent_rows = (await async_session.execute(text(recent.sql), recent.parameters)).all()
     assert [row[0] for row in ranked_rows] == ["B", "A", "C"]
     assert [row[0] for row in recent_rows] == ["C", "B", "A"]
+
+
+@pytest.mark.asyncio
+async def test_multi_table_plan_orders_before_applying_limit(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    orders = await _table(async_session, db_id, "orders")
+    category = SemanticColumnModel(
+        table_id=orders.id, column_name="category", data_type="TEXT", business_name="Category"
+    )
+    async_session.add(category)
+    await async_session.flush()
+    metric = await async_session.get(SemanticMetricModel, metric_ids[0])
+    assert metric is not None
+    metric.definition = _grouped_sales_plan(category.id)
+    await async_session.commit()
+    await async_session.execute(
+        text('CREATE TABLE "orders" ("id" INTEGER, "amount" NUMERIC, "status" TEXT, "category" TEXT)')
+    )
+    await async_session.execute(
+        text(
+            "INSERT INTO orders VALUES "
+            "(1, 5, 'completed', 'A'), (2, 20, 'completed', 'B'), "
+            "(3, 10, 'completed', 'C'), (4, 30, 'completed', 'D')"
+        )
+    )
+    compiler = SemanticQueryCompiler(async_session)
+    for order_by, expected in (("metric_desc", ["D", "B"]), ("dimension_desc", ["D", "C"])):
+        query = SemanticQuerySpec(
+            metric_ids=[metric.id],
+            dimensions=[DimensionSelection(column_id=category.id)],
+            limit=2,
+            order_by=order_by,
+        )
+        compiled = await compiler.compile(db_id, query)
+        assert compiled.sql.index("ORDER BY") < compiled.sql.index("LIMIT")
+        rows = await async_session.execute(text(compiled.sql), compiled.parameters)
+        assert [row[0] for row in rows.all()] == expected
 
 
 @pytest.mark.asyncio
