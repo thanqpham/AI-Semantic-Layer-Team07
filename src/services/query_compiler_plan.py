@@ -24,6 +24,7 @@ def compile_plan_sql(
     runtime_filters: list[dict[str, Any]],
     limit: int,
     parameters: dict[str, Any],
+    order_by: str | None = None,
 ) -> str:
     """Render stage CTEs and a result aligned on their declared grouping names."""
     stage_map = {stage.name: stage for stage in plan.stages}
@@ -90,7 +91,32 @@ def compile_plan_sql(
     expression = _output_expression(plan.output_expression, terminals, dialect)
     metric = f"{expression} AS {_quoted('metric_' + str(metric_id), dialect)}"
     selections = ", ".join([*selected_dimensions, metric])
-    return "WITH " + ",\n".join(ctes) + f"\nSELECT {selections}\n{from_sql}\nLIMIT {limit}"
+    order_clause = _plan_order_clause(order_by, runtime_dimensions, metric_id, dialect)
+    result = f"SELECT {selections}\n{from_sql}"
+    if order_clause:
+        result_name = _quoted("__metric_result", dialect)
+        ctes.append(f"{result_name} AS ({result})")
+        return "WITH " + ",\n".join(ctes) + f"\nSELECT * FROM {result_name}\n{order_clause}\nLIMIT {limit}"
+    return "WITH " + ",\n".join(ctes) + f"\n{result}\nLIMIT {limit}"
+
+
+def _plan_order_clause(
+    order_by: str | None,
+    dimensions: list[dict[str, Any]],
+    metric_id: int,
+    dialect: str,
+) -> str | None:
+    if order_by is None:
+        return None
+    if len(dimensions) != 1:
+        raise ValueError("Ordered dashboard queries require one metric and one dimension")
+    dimension = _quoted("dimension_" + str(dimensions[0]["column_id"]), dialect)
+    if order_by == "metric_desc":
+        metric = _quoted("metric_" + str(metric_id), dialect)
+        return f"ORDER BY CASE WHEN {metric} IS NULL THEN 1 ELSE 0 END, {metric} DESC, {dimension} ASC"
+    if order_by == "dimension_desc":
+        return f"ORDER BY CASE WHEN {dimension} IS NULL THEN 1 ELSE 0 END, {dimension} DESC"
+    raise ValueError(f"Unsupported query ordering: {order_by}")
 
 
 def _stage_sql(
