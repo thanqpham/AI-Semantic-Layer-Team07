@@ -113,8 +113,10 @@ def _match_renamed_tables(
         best_match = None
         best_score = 0.0
         for r_tbl in raw_tables:
-            r_name = ((r_tbl.schema_name.raw_name or "").lower(), r_tbl.table_name.raw_name.lower())
-            if (r_tbl.schema_name.raw_name or "").lower() != (d_tbl.physical_schema or "").lower():
+            r_name = (r_tbl.schema_name.normalized_name, r_tbl.table_name.normalized_name)
+            if r_tbl.schema_name.normalized_name != (
+                d_tbl.physical_schema_key if d_tbl.physical_schema_key is not None else d_tbl.physical_schema or ""
+            ):
                 continue
             if r_name in matched_raw:
                 continue
@@ -127,7 +129,7 @@ def _match_renamed_tables(
                 best_match = r_tbl
         if best_match is not None:
             pairs.append((d_tbl, best_match))
-            matched_raw.add(((best_match.schema_name.raw_name or "").lower(), best_match.table_name.raw_name.lower()))
+            matched_raw.add((best_match.schema_name.normalized_name, best_match.table_name.normalized_name))
     return pairs
 
 
@@ -135,10 +137,13 @@ def detect_drift_details(existing_tables: list[SemanticTableModel], raw_schema: 
     """Compare database tables/columns against raw schema metadata to classify changes."""
 
     def raw_key(t: Any) -> tuple[str, str]:
-        return ((t.schema_name.raw_name or "").lower(), t.table_name.raw_name.lower())
+        return (t.schema_name.normalized_name, t.table_name.normalized_name)
 
     def stored_key(t: SemanticTableModel) -> tuple[str, str]:
-        return ((t.physical_schema or "").lower(), t.table_name.lower())
+        return (
+            t.physical_schema_key if t.physical_schema_key is not None else t.physical_schema or "",
+            t.table_name_key if t.table_name_key is not None else t.table_name,
+        )
 
     raw_tbl_map = {raw_key(t): t for t in raw_schema.tables}
     exist_tbl_map = {stored_key(t): t for t in existing_tables}
@@ -156,6 +161,7 @@ def detect_drift_details(existing_tables: list[SemanticTableModel], raw_schema: 
             "table_id": old_t.id,
             "old_name": old_t.table_name,
             "new_name": new_t.table_name.raw_name,
+            "new_name_key": new_t.table_name.normalized_name,
         }
         for old_t, new_t in renamed_tbl_pairs
     ]
@@ -407,9 +413,7 @@ async def _handle_added_items(
     added_table_keys: list[list[str]] | None = None,
 ) -> None:
     """Ingest newly added tables and columns with pending review status."""
-    tbl_by_name = {
-        ((t.schema_name.raw_name or "").lower(), t.table_name.raw_name.lower()): t for t in raw_schema.tables
-    }
+    tbl_by_name = {(t.schema_name.normalized_name, t.table_name.normalized_name): t for t in raw_schema.tables}
     targets = (
         [tbl_by_name[tuple(key)] for key in added_table_keys]
         if added_table_keys is not None
@@ -423,6 +427,8 @@ async def _handle_added_items(
             db_id=semantic_db_id,
             table_name=t_name,
             physical_schema=t_meta.schema_name.raw_name,
+            physical_schema_key=t_meta.schema_name.normalized_name,
+            table_name_key=t_meta.table_name.normalized_name,
             business_name=f"Bảng {t_name}",
             description=f"Bảng dữ liệu mới phát hiện: {t_name}",
             review_status=REVIEW_STATUS_PENDING,
@@ -528,6 +534,7 @@ async def _apply_renamed_tables(
         tbl = await db.get(SemanticTableModel, item["table_id"])
         if tbl:
             tbl.table_name = item["new_name"]
+            tbl.table_name_key = item.get("new_name_key", item["new_name"])
             tbl.business_name = f"Bảng {item['new_name']}"
 
         results.append(item)

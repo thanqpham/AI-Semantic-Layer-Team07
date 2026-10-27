@@ -191,33 +191,24 @@ async def enrich_and_save_canonical_schema(
     logger.info("[AI Semantic Agent] Enrichment ready for %d tables", len(enrichment_tables))
 
     enrichment_by_key = {
-        ((e.get("physical_schema") or e.get("schema_name") or "").lower(), e.get("table_name", "").lower()): e
+        ((e.get("physical_schema") or e.get("schema_name") or ""), e.get("table_name", "")): e
         for e in enrichment_tables
     }
     name_counts = {
-        t.table_name.raw_name.lower(): sum(
-            other.table_name.raw_name.lower() == t.table_name.raw_name.lower() for other in raw_schema.tables
-        )
+        t.table_name.raw_name: sum(other.table_name.raw_name == t.table_name.raw_name for other in raw_schema.tables)
         for t in raw_schema.tables
     }
 
     await lock_semantic_database(db, connection_id)
     table_id_map: dict[tuple[str, str], int] = {}
 
-    for idx, table_meta in enumerate(raw_schema.tables):
+    for table_meta in raw_schema.tables:
         table_name = table_meta.table_name.raw_name
-        identity = (table_meta.schema_name.raw_name.lower(), table_name.lower())
-        table_enrichment = enrichment_by_key.get(identity)
+        identity = (table_meta.schema_name.normalized_name, table_meta.table_name.normalized_name)
+        proposal_key = (table_meta.schema_name.raw_name, table_name)
+        table_enrichment = enrichment_by_key.get(proposal_key)
         if table_enrichment is None:
-            table_enrichment = (
-                enrichment_by_key.get(("", table_name.lower()), {})
-                if name_counts[table_name.lower()] == 1
-                else (
-                    enrichment_tables[idx]
-                    if idx < len(enrichment_tables) and enrichment_tables[idx].get("table_name") == table_name
-                    else {}
-                )
-            )
+            table_enrichment = enrichment_by_key.get(("", table_name), {}) if name_counts[table_name] == 1 else {}
         pk_cols = table_meta.primary_key.constrained_columns if table_meta.primary_key else ()
         pk_col_name = pk_cols[0].raw_name if pk_cols else None
 
@@ -227,6 +218,8 @@ async def enrich_and_save_canonical_schema(
             table_name=table_name,
             enrichment=table_enrichment,
             schema_name=table_meta.schema_name.raw_name,
+            schema_key=identity[0],
+            table_key=identity[1],
             pk_col=pk_col_name,
             user_id=user_id,
         )
@@ -268,7 +261,7 @@ async def enrich_and_save_canonical_schema(
             {
                 "table_name": t.table_name.raw_name,
                 "physical_schema": t.schema_name.raw_name,
-                "table_id": table_id_map[(t.schema_name.raw_name.lower(), t.table_name.raw_name.lower())],
+                "table_id": table_id_map[(t.schema_name.normalized_name, t.table_name.normalized_name)],
             }
             for t in raw_schema.tables
         ],
@@ -326,17 +319,24 @@ async def _upsert_semantic_table(
     schema_name: str,
     pk_col: str | None,
     user_id: int,
+    schema_key: str | None = None,
+    table_key: str | None = None,
 ) -> int:
     """Upsert a table by database and normalized physical schema/name."""
+    schema_key = schema_key if schema_key is not None else schema_name
+    table_key = table_key if table_key is not None else table_name
     stmt = select(SemanticTableModel).where(
         SemanticTableModel.db_id == connection_id,
-        func.lower(SemanticTableModel.table_name) == table_name.lower(),
-        func.lower(func.coalesce(SemanticTableModel.physical_schema, "")) == (schema_name or "").lower(),
+        func.coalesce(SemanticTableModel.table_name_key, SemanticTableModel.table_name) == table_key,
+        func.coalesce(SemanticTableModel.physical_schema_key, SemanticTableModel.physical_schema, "")
+        == (schema_key or ""),
     )
     existing = (await db.execute(stmt)).scalar_one_or_none()
 
     if existing:
         apply_ai_proposal(existing, enrichment.get("business_name", table_name), enrichment.get("description", ""))
+        existing.physical_schema_key = schema_key
+        existing.table_name_key = table_key
         existing.primary_key_column = pk_col
         return existing.id
 
@@ -349,6 +349,8 @@ async def _upsert_semantic_table(
         ai_description=enrichment.get("description", ""),
         review_status=REVIEW_STATUS_PENDING,
         physical_schema=schema_name,
+        physical_schema_key=schema_key,
+        table_name_key=table_key,
         primary_key_column=pk_col,
         created_by=user_id,
     )
@@ -431,8 +433,8 @@ async def _extract_and_save_relationships(
             "from_table": table.table_name.raw_name,
             "from_schema": table.schema_name.raw_name,
             "to_schema": fk.referred_schema.raw_name,
-            "from_table_id": table_id_map[(table.schema_name.raw_name.lower(), table.table_name.raw_name.lower())],
-            "to_table_id": table_id_map[(fk.referred_schema.raw_name.lower(), fk.referred_table.raw_name.lower())],
+            "from_table_id": table_id_map[(table.schema_name.normalized_name, table.table_name.normalized_name)],
+            "to_table_id": table_id_map[(fk.referred_schema.normalized_name, fk.referred_table.normalized_name)],
             "to_table": fk.referred_table.raw_name,
             "join_condition": " AND ".join(
                 f"{table.table_name.raw_name}.{a.raw_name} = {fk.referred_table.raw_name}.{b.raw_name}"

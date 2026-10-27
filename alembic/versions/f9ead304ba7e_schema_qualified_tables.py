@@ -21,23 +21,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Replace bare-name uniqueness without changing persisted identity or schema."""
-    collisions = (
-        op.get_bind()
-        .execute(
-            sa.text(
-                "SELECT db_id FROM semantic_tables GROUP BY db_id, lower(coalesce(physical_schema, '')), lower(table_name) HAVING COUNT(*) > 1"
-            )
-        )
-        .first()
-    )
-    if collisions:
-        raise RuntimeError("Cannot qualify table identity: normalized schema/table names collide")
     with op.batch_alter_table("semantic_tables") as batch:
+        batch.add_column(sa.Column("physical_schema_key", sa.String(200), nullable=True))
+        batch.add_column(sa.Column("table_name_key", sa.String(200), nullable=True))
         batch.drop_constraint("uq_semantic_tables_db_table", type_="unique")
     op.create_index(
         "uq_semantic_tables_db_schema_table",
         "semantic_tables",
-        ["db_id", sa.text("lower(coalesce(physical_schema, ''))"), sa.text("lower(table_name)")],
+        [
+            "db_id",
+            sa.text("coalesce(physical_schema_key, physical_schema, '')"),
+            sa.text("coalesce(table_name_key, table_name)"),
+        ],
         unique=True,
     )
 
@@ -55,4 +50,6 @@ def downgrade() -> None:
         raise RuntimeError("Cannot downgrade schema-qualified tables: duplicate table names must be resolved first")
     op.drop_index("uq_semantic_tables_db_schema_table", table_name="semantic_tables")
     with op.batch_alter_table("semantic_tables") as batch:
+        batch.drop_column("physical_schema_key")
+        batch.drop_column("table_name_key")
         batch.create_unique_constraint("uq_semantic_tables_db_table", ["db_id", "table_name"])

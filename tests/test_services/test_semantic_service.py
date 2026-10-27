@@ -1357,3 +1357,52 @@ async def test_repeated_import_preserves_qualified_table_ids(async_session):
         for pair in relationship.column_pairs:
             assert by_column_id[pair["from_column_id"]].table_id == relationship.from_entity_id
             assert by_column_id[pair["to_column_id"]].table_id == relationship.to_entity_id
+
+
+@pytest.mark.asyncio
+async def test_quoted_case_tables_keep_distinct_identity(async_session):
+    raw = _make_raw_schema()
+    source, target = raw.tables
+    quoted = source.model_copy(update={"table_name": Identifier.from_raw("Orders", raw.dialect, quoted=True)})
+    raw = raw.model_copy(update={"tables": (source, quoted, target)})
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Quoted", "postgresql")
+    proposals = {
+        "tables": [
+            {"table_name": "Orders", "physical_schema": "public", "business_name": "Quoted"},
+            {"table_name": "orders", "physical_schema": "public", "business_name": "Plain"},
+        ]
+    }
+    first = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", proposals)
+    again = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", proposals)
+    assert first["tables"] == again["tables"]
+    tables = {t.table_name: t for t in (await async_session.scalars(select(SemanticTableModel))).all()}
+    assert tables["orders"].id != tables["Orders"].id
+    assert tables["orders"].business_name == "Plain" and tables["Orders"].business_name == "Quoted"
+    assert tables["orders"].table_name_key == "orders" and tables["Orders"].table_name_key == "Orders"
+    columns = (await async_session.scalars(select(SemanticColumnModel))).all()
+    relationships = (await async_session.scalars(select(CanonicalRelationshipModel))).all()
+    assert len(relationships) == 2
+    assert {r.from_entity_id for r in relationships} == {tables["orders"].id, tables["Orders"].id}
+    by_id = {c.id: c for c in columns}
+    for relationship in relationships:
+        assert relationship.to_entity_id == tables[target.table_name.raw_name].id
+        assert all(
+            by_id[p["from_column_id"]].table_id == relationship.from_entity_id for p in relationship.column_pairs
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("partial", [True, False])
+async def test_schema_aware_enrichment_never_falls_back_by_position(async_session, partial):
+    raw = _make_raw_schema()
+    source = raw.tables[0].model_copy(update={"foreign_keys": ()})
+    archive = source.model_copy(update={"schema_name": Identifier.from_raw("archive", raw.dialect)})
+    raw = raw.model_copy(update={"tables": (source, archive)})
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Partial", "postgresql")
+    proposals = [{"table_name": "orders", "physical_schema": "archive", "business_name": "Archive"}]
+    if not partial:
+        proposals.append({"table_name": "orders", "physical_schema": "public", "business_name": "Public"})
+    await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", {"tables": proposals})
+    tables = {t.physical_schema: t for t in (await async_session.scalars(select(SemanticTableModel))).all()}
+    assert tables["archive"].business_name == "Archive"
+    assert tables["public"].business_name == ("orders" if partial else "Public")

@@ -18,17 +18,21 @@ async def _metadata(db: AsyncSession, db_id: int, raw: RawSchemaMetadata) -> tup
     columns = (
         await db.scalars(select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([t.id for t in tables])))
     ).all()
-    return {((t.physical_schema or "").lower(), t.table_name.lower()): t for t in tables}, {
-        (c.table_id, c.column_name): c.id for c in columns
-    }
+    return {
+        (
+            (t.physical_schema_key if t.physical_schema_key is not None else t.physical_schema or ""),
+            t.table_name_key if t.table_name_key is not None else t.table_name,
+        ): t
+        for t in tables
+    }, {(c.table_id, c.column_name): c.id for c in columns}
 
 
 def _detections(raw: RawSchemaMetadata, tables: dict, columns: dict) -> list[dict]:
     detections = []
     for table in raw.tables:
-        source = tables.get((table.schema_name.raw_name.lower(), table.table_name.raw_name.lower()))
+        source = tables.get((table.schema_name.normalized_name, table.table_name.normalized_name))
         for fk in table.foreign_keys:
-            target = tables.get((fk.referred_schema.raw_name.lower(), fk.referred_table.raw_name.lower()))
+            target = tables.get((fk.referred_schema.normalized_name, fk.referred_table.normalized_name))
             if source is None or target is None:
                 raise ValueError("FK endpoints must be persisted before reconciliation")
             detections.append(_detection(source, target, fk, columns))
