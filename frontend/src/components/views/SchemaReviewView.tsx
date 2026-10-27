@@ -28,6 +28,7 @@ interface SchemaReviewViewProps {
   canApproveSchema?: boolean;
   onNotify?: (message: string) => void;
   onReviewChanged?: () => void;
+  onRelationshipDirtyChange?: (dirty: boolean) => void;
 }
 
 /** Badge showing whether a metadata row is officially stored or still in review. */
@@ -172,6 +173,7 @@ export function SchemaReviewView({
   canApproveSchema = false,
   onNotify,
   onReviewChanged,
+  onRelationshipDirtyChange,
 }: SchemaReviewViewProps) {
   const { translate } = useLanguage();
   const [reviewTab, setReviewTab] = useState<'tables' | 'relationships'>('tables');
@@ -286,7 +288,7 @@ export function SchemaReviewView({
           <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}><Translated text="Liên kết" /> ({review?.pending_relationships??0})</Button>
         </div>
         <p className="text-xs text-muted-foreground">{review?.pending_relationships??0} <Translated text="liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết." /></p>
-        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
+        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
         <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {!canManageSchema && (
           <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">

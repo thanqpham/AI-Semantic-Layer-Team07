@@ -205,6 +205,8 @@ export default function WorkspacePage() {
   const [loadedWorkspaceId, setLoadedWorkspaceId] = useState<number | null>(null);
   const [visitedReview, setVisitedReview] = useState(false);
   const [visitedExplorer, setVisitedExplorer] = useState(false);
+  const relationshipDirty = useRef(false);
+  const onRelationshipDirtyChange = useCallback((dirty: boolean) => { relationshipDirty.current = dirty; }, []);
   useEffect(() => {
     if (tab === 'schema') setVisitedReview(true);
     if (tab === 'explorer') setVisitedExplorer(true);
@@ -847,6 +849,7 @@ export default function WorkspacePage() {
       onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       onToggleTheme={toggleTheme}
       onSelectDatabase={(id) => {
+        if (id !== selectedId && relationshipDirty.current && !window.confirm('Bỏ chỉnh sửa liên kết chưa lưu để chuyển database?')) return;
         setExplorerInitialSelection(null);
         setSelectedId(id);
         if (currentWorkspace) window.localStorage.setItem(`workspace_database_${currentWorkspace.id}`, id);
@@ -958,6 +961,7 @@ export default function WorkspacePage() {
               canManageSchema={canManageSchema}
               canApproveSchema={canApproveMetrics}
               onNotify={notify}
+              onRelationshipDirtyChange={onRelationshipDirtyChange}
               onReviewChanged={() => { void refreshSchemaReview(); void refreshSemanticData(); setCatalog(null); setCatalogRefreshKey(current => current + 1); }}
             />
           </div>}

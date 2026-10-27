@@ -58,7 +58,7 @@ export function RelationshipDetail(props: Props) {
         </select>
       </label>
       <label className="block text-sm">{t('Xác nhận cardinality khi thiếu bằng chứng khóa')}
-        <Input value={draft.cardinality_confirmation ?? ''} onChange={e=>onChange({...draft,cardinality_confirmation:e.target.value})} />
+        <Input value={draft.cardinality_confirmation ?? ''} onChange={e=>onChange({...draft,cardinality_confirmation:e.target.value || null})} />
       </label>
     </fieldset>
     <div className="rounded border border-border p-3"><span className="text-sm">ON</span><pre className="whitespace-pre-wrap break-all text-xs">{preview?.on_preview ?? item?.on_preview ?? '—'}</pre></div>

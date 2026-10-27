@@ -14,6 +14,27 @@ const changed=vi.fn();
 beforeEach(() => {vi.clearAllMocks();vi.mocked(api.listRelationships).mockResolvedValue(result);vi.mocked(api.previewRelationship).mockResolvedValue({on_preview:item.on_preview,errors:[],warnings:[]});vi.mocked(api.getRelationshipImpact).mockResolvedValue({token:'t',metric_ids:[9],relationship_ids:[1],join_paths:[[1,2]],published_metrics:[{id:9,name:'Revenue'}],warnings:[],before_on:'old',after_on:'new'});});
 afterEach(cleanup);
 const setup=(manage=true, approve=true) => render(<RelationshipsPanel dbId="7" canManageSchema={manage} canApproveSchema={approve} onReviewChanged={changed}/>);
+it('restores the selected preview after an invalid draft returns to baseline', async () => {
+ vi.mocked(api.previewRelationship).mockResolvedValue({on_preview:'invalid',errors:[{message:'Invalid draft'}],warnings:[]});
+ setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
+ const input=screen.getByLabelText('Xác nhận cardinality khi thiếu bằng chứng khóa');
+ fireEvent.change(input,{target:{value:'changed'}});
+ expect(await screen.findByRole('alert')).toHaveTextContent('Invalid draft');
+ fireEvent.change(input,{target:{value:''}});
+ await waitFor(()=>expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+ expect(screen.getByRole('button',{name:'Xác nhận'})).toBeEnabled();
+ expect(screen.getByText(item.on_preview)).toBeInTheDocument();
+});
+it('returns focus to the dirty-dialog invoker after Continue and Escape', async () => {
+ setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
+ fireEvent.click(screen.getByRole('button',{name:'Thêm cặp cột'}));
+ const back=screen.getByRole('button',{name:'Quay lại danh sách'});
+ back.focus();fireEvent.click(back);
+ fireEvent.click(screen.getByRole('button',{name:'Tiếp tục chỉnh sửa'}));
+ await waitFor(()=>expect(back).toHaveFocus());
+ fireEvent.click(back);fireEvent.keyDown(screen.getByRole('dialog'),{key:'Escape'});
+ await waitFor(()=>expect(back).toHaveFocus());
+});
 it('selects detail, preserves selection after suggestions and requires impact acknowledgment', async () => {
   vi.mocked(api.suggestRelationships).mockResolvedValue({items:[{...item,id:2}],counts:{pending_relationships:2}});
   vi.mocked(api.decideRelationship).mockResolvedValue({item:{...item,status:'approved'},counts:{pending_relationships:0}});
