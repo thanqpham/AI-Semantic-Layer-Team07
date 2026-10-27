@@ -24,16 +24,19 @@ import {
   layoutGraph,
   nodeStatus,
   STATUS_STYLE,
+  type LayoutMode,
   type RelEdge,
   type TableNode as TableNodeType,
 } from '@/lib/relationshipGraph';
 import type { RelationshipEntity, RelationshipItem } from '@/lib/relationshipReviewApi';
+import { DiagramControls } from './DiagramControls';
 import { DiagramLegend } from './DiagramLegend';
 import { DiagramActionsContext, RelationshipEdge } from './RelationshipEdge';
 import { TableNode } from './TableNode';
 
 const nodeTypes = { table: TableNode };
 const edgeTypes = { relationship: RelationshipEdge };
+const FIT_VIEW_OPTS = { padding: 0.2, minZoom: 0.65, maxZoom: 1.0 };
 
 interface Props {
   entities: RelationshipEntity[];
@@ -57,19 +60,31 @@ export function RelationshipDiagram(props: Props) {
   );
 }
 
-function useLayout(entities: RelationshipEntity[], items: RelationshipItem[]) {
+function useLayout(
+  entities: RelationshipEntity[],
+  items: RelationshipItem[],
+  mode: LayoutMode,
+  hideIsolated: boolean
+) {
+  const built = useMemo(() => buildGraph(entities, items), [entities, items]);
+  const connected = useMemo(() => new Set(built.edges.flatMap((e) => [e.source, e.target])), [built.edges]);
+  const isolatedCount = useMemo(() => built.nodes.filter((n) => !connected.has(n.id)).length, [built.nodes, connected]);
+
   const graph = useMemo(() => {
-    const built = buildGraph(entities, items);
-    return { nodes: layoutGraph(built.nodes, built.edges), edges: built.edges };
-  }, [entities, items]);
+    const list = hideIsolated ? built.nodes.filter((n) => connected.has(n.id)) : built.nodes;
+    return { nodes: layoutGraph(list, built.edges, mode), edges: built.edges };
+  }, [built, connected, hideIsolated, mode]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState<TableNodeType>(graph.nodes);
   const { fitView } = useReactFlow();
+
   useEffect(() => {
     setNodes(graph.nodes);
-    const frame = requestAnimationFrame(() => void fitView({ padding: 0.15, duration: 300 }));
+    const frame = requestAnimationFrame(() => void fitView({ ...FIT_VIEW_OPTS, duration: 300 }));
     return () => cancelAnimationFrame(frame);
   }, [graph, setNodes, fitView]);
-  return { nodes, edges: graph.edges, onNodesChange };
+
+  return { nodes, edges: graph.edges, onNodesChange, isolatedCount };
 }
 
 function minimapColor(edges: RelEdge[]) {
@@ -79,12 +94,46 @@ function minimapColor(edges: RelEdge[]) {
   };
 }
 
+interface PanelsProps {
+  mode: LayoutMode;
+  onModeChange: (mode: LayoutMode) => void;
+  hideIsolated: boolean;
+  onToggleIsolated: () => void;
+  isolatedCount: number;
+  tables: number;
+  links: number;
+  edges: RelEdge[];
+}
+
+function DiagramPanels({ mode, onModeChange, hideIsolated, onToggleIsolated, isolatedCount, tables, links, edges }: PanelsProps) {
+  return (
+    <>
+      <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} />
+      <Panel position="top-left"><DiagramLegend /></Panel>
+      <Panel position="top-right">
+        <DiagramControls
+          mode={mode}
+          onModeChange={onModeChange}
+          hideIsolated={hideIsolated}
+          onToggleIsolated={onToggleIsolated}
+          isolatedCount={isolatedCount}
+        />
+      </Panel>
+      <DiagramStats tables={tables} links={links} />
+      <Controls showInteractive={false} position="bottom-left" />
+      <MiniMap pannable zoomable position="bottom-right" nodeColor={minimapColor(edges)} nodeStrokeWidth={0} maskColor="color-mix(in oklch, var(--background) 70%, transparent)" />
+    </>
+  );
+}
+
 function DiagramCanvas({ entities, items, selectedKey, loading, emptyAction, onSelectEdge }: Props) {
-  const { nodes, edges, onNodesChange } = useLayout(entities, items);
+  const [mode, setMode] = useState<LayoutMode>('balanced');
+  const [hideIsolated, setHideIsolated] = useState(false);
+  const { nodes, edges, onNodesChange, isolatedCount } = useLayout(entities, items, mode, hideIsolated);
   const [hover, setHover] = useState<string | null>(null);
   const view = useMemo(() => applyFocus(nodes, edges, { node: hover, edge: selectedKey }), [nodes, edges, hover, selectedKey]);
   const onEdgeClick: EdgeMouseHandler<RelEdge> = (_, edge) => { if (edge.data) onSelectEdge(edge.data.item, null); };
-  const onEnter: NodeMouseHandler<TableNodeType> = (_, node) => setHover(node.id);
+
   return (
     <div className="relationship-diagram relative flex-1 h-[calc(100dvh-240px)] min-h-[360px] lg:h-full lg:min-h-0 w-full min-w-0 overflow-hidden rounded-xl border border-border bg-background">
       <ReactFlow
@@ -94,19 +143,25 @@ function DiagramCanvas({ entities, items, selectedKey, loading, emptyAction, onS
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgeClick={onEdgeClick}
-        onNodeMouseEnter={onEnter}
+        onNodeMouseEnter={(_, node) => setHover(node.id)}
         onNodeMouseLeave={() => setHover(null)}
         nodesConnectable={false}
         minZoom={0.15}
-        maxZoom={1.75}
+        maxZoom={2.0}
         fitView
-        attributionPosition="top-right"
+        fitViewOptions={FIT_VIEW_OPTS}
+        attributionPosition="bottom-left"
       >
-        <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} />
-        <Panel position="top-left"><DiagramLegend /></Panel>
-        <DiagramStats tables={nodes.length} links={edges.length} />
-        <Controls showInteractive={false} position="bottom-left" />
-        <MiniMap pannable zoomable position="bottom-right" nodeColor={minimapColor(edges)} nodeStrokeWidth={0} maskColor="color-mix(in oklch, var(--background) 70%, transparent)" />
+        <DiagramPanels
+          mode={mode}
+          onModeChange={setMode}
+          hideIsolated={hideIsolated}
+          onToggleIsolated={() => setHideIsolated((v) => !v)}
+          isolatedCount={isolatedCount}
+          tables={nodes.length}
+          links={edges.length}
+          edges={edges}
+        />
       </ReactFlow>
       {!loading && !items.length && <EmptyOverlay action={emptyAction} />}
     </div>
