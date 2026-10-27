@@ -370,6 +370,36 @@ async def test_approval_accepts_complete_composite_key(async_session: Any) -> No
 
 
 @pytest.mark.asyncio
+async def test_approval_accepts_complete_key_with_additional_mapped_column(async_session: Any) -> None:
+    metadata = await _seed_relationship_metadata(async_session)
+    pairs = await _composite_key_pairs(async_session, metadata)
+    from_extra = SemanticColumnModel(
+        table_id=metadata["from_table"].id,
+        column_name="region_id",
+        data_type="integer",
+        business_name="Region ID",
+    )
+    to_extra = SemanticColumnModel(
+        table_id=metadata["to_table"].id,
+        column_name="region_id",
+        data_type="integer",
+        business_name="Region ID",
+    )
+    async_session.add_all([from_extra, to_extra])
+    await async_session.flush()
+    pairs.append(ColumnPair(from_column_id=from_extra.id, to_column_id=to_extra.id))
+
+    result = await validate_relationship(
+        async_session,
+        1,
+        _draft(metadata, pairs=pairs),
+        approval=True,
+    )
+
+    assert result["warnings"] == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("relationship_type", ["one_to_many", "many_to_many"])
 async def test_fanout_relationships_return_warning(async_session: Any, relationship_type: str) -> None:
     metadata = await _seed_relationship_metadata(async_session)
