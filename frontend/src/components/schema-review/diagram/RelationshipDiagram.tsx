@@ -86,7 +86,7 @@ function DiagramCanvas({ entities, items, selectedKey, loading, emptyAction, onS
   const onEdgeClick: EdgeMouseHandler<RelEdge> = (_, edge) => { if (edge.data) onSelectEdge(edge.data.item, null); };
   const onEnter: NodeMouseHandler<TableNodeType> = (_, node) => setHover(node.id);
   return (
-    <div className="relationship-diagram relative h-[calc(100dvh-280px)] min-h-[480px] w-full min-w-0 overflow-hidden rounded-xl border border-border bg-background">
+    <div className="relationship-diagram relative flex-1 h-[calc(100dvh-240px)] min-h-[360px] lg:h-full lg:min-h-0 w-full min-w-0 overflow-hidden rounded-xl border border-border bg-background">
       <ReactFlow
         nodes={view.nodes}
         edges={view.edges}

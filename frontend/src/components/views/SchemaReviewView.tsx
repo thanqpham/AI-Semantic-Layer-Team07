@@ -295,7 +295,7 @@ export function SchemaReviewView({
           <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}><Translated text="Liên kết" /> ({review?.pending_relationships??0})</Button>
         </div>
         <p className="text-xs text-muted-foreground">{review?.pending_relationships??0} <Translated text="liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết." /></p>
-        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
+        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'} className={cn("min-h-0 flex-1 flex-col", reviewTab==='relationships' ? "flex" : "hidden")}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
         <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {error && (
           <p className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">

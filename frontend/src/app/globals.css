@@ -134,6 +134,19 @@
   html {
     scroll-behavior: smooth;
   }
+
+  /* ─── Desktop Density Scaling (Professional Compact Proportions) ─── */
+  @media (min-width: 1024px) {
+    html {
+      font-size: 13.5px;
+    }
+  }
+
+  @media (min-width: 1680px) {
+    html {
+      font-size: 14.5px;
+    }
+  }
 }
 
 /* ─── Optimus Utility Classes ─── */

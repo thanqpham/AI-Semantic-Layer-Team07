@@ -366,7 +366,7 @@ export function RelationshipsPanel({
   };
 
   return (
-    <div ref={panel} className="min-w-0 space-y-4">
+    <div ref={panel} className="flex min-h-0 flex-1 flex-col space-y-3">
       <RelationshipToolbar
         search={search}
         onSearch={setSearch}
