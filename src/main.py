@@ -14,6 +14,7 @@ from src.api.dashboard_routes import router as dashboard_router
 from src.api.llm_settings_routes import router as llm_settings_router
 from src.api.llm_settings_routes import use_account_llm
 from src.api.organization_routes import router as organization_router
+from src.api.relationship_review_routes import relationship_router
 from src.api.review_routes import review_router
 from src.api.routes import router
 from src.api.sync_routes import sync_router
@@ -80,6 +81,7 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(llm_settings_router, prefix="/api/v1")
 app.include_router(router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
 app.include_router(review_router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
+app.include_router(relationship_router, prefix="/api/v1")
 app.include_router(sync_router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
 
 

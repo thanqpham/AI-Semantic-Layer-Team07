@@ -1,5 +1,7 @@
 """Scoped relationship review endpoints with atomic decision boundaries."""
 
+from collections.abc import AsyncIterator
+from contextlib import aclosing
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -12,6 +14,7 @@ from src.api.routes import _require_resource_permission
 from src.models.db import UserModel
 from src.models.relationship_review import RelationshipDecision, RelationshipDraft
 from src.services.database import get_db_session
+from src.services.llm import account_llm_config
 from src.services.relationship_review_service import (
     decide_relationship,
     list_relationship_reviews,
@@ -142,7 +145,33 @@ async def disable(db_id: int, item_id: int, body: RelationshipDecision, context:
     return await decision(db_id, item_id, body, context, "active", "disable")
 
 
-@relationship_router.post("/suggest", dependencies=[Depends(use_account_llm)])
+async def use_suggestion_llm(
+    user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_db_session)
+) -> AsyncIterator[None]:
+    """Reuse account context while giving suggestions a structured config error."""
+    try:
+        async with aclosing(use_account_llm(user, db)) as context:
+            async for _ in context:
+                if account_llm_config.get() is None:
+                    raise HTTPException(503, "Account AI settings are required")
+                yield
+    except HTTPException as exc:
+        if exc.status_code != 503:
+            raise
+        raise HTTPException(
+            503,
+            {
+                "errors": [
+                    {
+                        "code": "ACCOUNT_LLM_NOT_CONFIGURED",
+                        "message": "Configure account AI settings before requesting suggestions",
+                    }
+                ]
+            },
+        ) from exc
+
+
+@relationship_router.post("/suggest", dependencies=[Depends(use_suggestion_llm)])
 async def suggest(db_id: int, context: tuple = Depends(access)) -> dict:
     """Suggest metadata-only pending relationships with account AI settings."""
     db, user, _ = context

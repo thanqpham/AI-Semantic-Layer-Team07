@@ -165,8 +165,10 @@ def apply_draft(row: Candidate, draft: RelationshipDraft, target_id: int | None,
     evidence = {
         key: value
         for key, value in (row.evidence or {}).items()
-        if key not in ("attested_by", "attested_at", "cardinality_confirmation", "cardinality_unknown")
+        if key not in ("attested_by", "attested_at", "cardinality_confirmation")
     }
+    if evidence.get("cardinality_unknown") and (draft.cardinality_confirmation or "").strip():
+        evidence.pop("cardinality_unknown")
     row.evidence = {**evidence, "cardinality_confirmation": (draft.cardinality_confirmation or "").strip()}
 
 

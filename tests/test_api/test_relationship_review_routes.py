@@ -267,7 +267,8 @@ async def test_approved_candidate_patch_preserves_approval_audit(client, async_s
 
 
 @pytest.mark.asyncio
-async def test_suggest_requires_account_settings(client, async_session, monkeypatch):
+@pytest.mark.parametrize("missing", ["absent", "invalid"])
+async def test_suggest_requires_account_settings(client, async_session, monkeypatch, missing):
     from unittest.mock import AsyncMock
 
     db_id, _, _, _ = await seed(async_session)
@@ -276,8 +277,35 @@ async def test_suggest_requires_account_settings(client, async_session, monkeypa
     headers = {"Authorization": f"Bearer {create_access_token(user)}"}
     monkeypatch.setattr(
         "src.api.llm_settings_routes.load_account_llm_config",
-        AsyncMock(side_effect=ValueError("Account AI settings are required")),
+        AsyncMock(side_effect=ValueError("Account AI settings are required"))
+        if missing == "invalid"
+        else AsyncMock(return_value=None),
     )
     response = await client.post(f"/api/v1/semantic/{db_id}/relationships/suggest", headers=headers)
     assert response.status_code == 503
-    assert "settings" in response.json()["detail"]
+    assert response.json()["detail"]["errors"][0]["code"] == "ACCOUNT_LLM_NOT_CONFIGURED"
+
+
+@pytest.mark.asyncio
+async def test_suggest_uses_account_context_and_returns_counts(client, async_session, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from src.services.llm import LLMConfig, account_llm_config
+
+    db_id, _, _, _ = await seed(async_session)
+    await async_session.commit()
+    user = await async_session.get(UserModel, 1)
+    headers = {"Authorization": f"Bearer {create_access_token(user)}"}
+    config = LLMConfig("openai", "openai", "fake", "https://example.invalid", "test", 0.0)
+    monkeypatch.setattr("src.api.llm_settings_routes.load_account_llm_config", AsyncMock(return_value=config))
+
+    async def proposals(*args):
+        assert account_llm_config.get() == config
+        return []
+
+    monkeypatch.setattr("src.api.relationship_review_routes.suggest_relationships", proposals)
+    response = await client.post(f"/api/v1/semantic/{db_id}/relationships/suggest", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["counts"]["pending_relationships"] == 0
+    assert account_llm_config.get() is None
