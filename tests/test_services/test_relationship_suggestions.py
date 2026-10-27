@@ -76,7 +76,7 @@ async def test_bad_batch_has_no_partial_insert(async_session, failure):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("existing", ["rejected", "fk", "unknown"])
+@pytest.mark.parametrize("existing", ["rejected", "fk", "inverse_fk", "unknown"])
 async def test_history_fk_and_unknown(async_session, existing):
     from src.services.relationship_review_service import decide_relationship, preview_relationship_change
 
@@ -89,7 +89,7 @@ async def test_history_fk_and_unknown(async_session, existing):
     }
     if existing == "unknown":
         item["relationship_type"] = "unknown"
-    if existing == "fk":
+    if existing in ("fk", "inverse_fk"):
         async_session.add(
             CanonicalRelationshipModel(
                 connection_id=db_id,
@@ -104,6 +104,13 @@ async def test_history_fk_and_unknown(async_session, existing):
             )
         )
         await async_session.flush()
+    if existing == "inverse_fk":
+        item["from_entity_id"], item["to_entity_id"] = item["to_entity_id"], item["from_entity_id"]
+        item["column_pairs"] = [
+            {"from_column_id": pair["to_column_id"], "to_column_id": pair["from_column_id"]}
+            for pair in item["column_pairs"]
+        ]
+        item["relationship_type"] = "one_to_many"
     with (
         patch("src.services.relationship_suggestions.get_llm"),
         patch(
@@ -111,7 +118,7 @@ async def test_history_fk_and_unknown(async_session, existing):
         ),
     ):
         rows = await suggest_relationships(async_session, db_id, 1)
-        assert len(rows) == (0 if existing == "fk" else 1)
+        assert len(rows) == (0 if existing in ("fk", "inverse_fk") else 1)
         if existing == "rejected":
             row = await async_session.get(RelationshipCandidateModel, rows[0].id)
             row.status = "rejected"
@@ -134,3 +141,34 @@ async def test_history_fk_and_unknown(async_session, existing):
                     acknowledge_impact=True,
                 )
             assert error.value.detail["errors"][0]["code"] == "UNKNOWN_CARDINALITY"
+
+
+@pytest.mark.asyncio
+async def test_unknown_cardinality_patch_requires_explicit_confirmation(async_session):
+    from src.services.relationship_review_service import save_relationship_candidate
+
+    db_id, _, _, draft = await seed(async_session)
+    item = {
+        **draft.model_dump(exclude={"expected_revision", "cardinality_confirmation"}),
+        "relationship_type": "unknown",
+        "reason": "metadata",
+        "confidence": 0.5,
+        "unresolved_questions": [],
+    }
+    with (
+        patch("src.services.relationship_suggestions.get_llm"),
+        patch("src.services.relationship_suggestions.ainvoke_json", AsyncMock(return_value={"suggestions": [item]})),
+    ):
+        rows = await suggest_relationships(async_session, db_id, 1)
+    draft.relationship_type = "many_to_many"
+    draft.expected_revision = rows[0].revision
+    unchanged = await save_relationship_candidate(async_session, db_id, 1, draft, candidate_id=rows[0].id)
+    assert unchanged.evidence["cardinality_unknown"] is True
+    draft.expected_revision = unchanged.revision
+    draft.relationship_type = "many_to_one"
+    changed = await save_relationship_candidate(async_session, db_id, 1, draft, candidate_id=rows[0].id)
+    assert changed.evidence["cardinality_unknown"] is True
+    draft.expected_revision = changed.revision
+    draft.cardinality_confirmation = "I confirm the selected cardinality for these exact columns"
+    confirmed = await save_relationship_candidate(async_session, db_id, 1, draft, candidate_id=rows[0].id)
+    assert confirmed.evidence.get("cardinality_unknown") is not True
