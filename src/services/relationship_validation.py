@@ -177,7 +177,7 @@ def _required_key_warning(
 ) -> dict[str, str] | None:
     if key_ids and pair_ids & key_ids and not key_ids <= pair_ids:
         _invalid("PARTIAL_COMPOSITE_KEY", "The complete composite key is required", pair_index=0)
-    if key_ids and key_ids == pair_ids:
+    if key_ids and key_ids <= pair_ids:
         return None
     if approval and not (confirmation or "").strip():
         _invalid(
