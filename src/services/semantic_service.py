@@ -14,7 +14,7 @@ import asyncio
 import logging
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import (
@@ -327,11 +327,24 @@ async def _upsert_semantic_table(
     table_key = table_key if table_key is not None else table_name
     stmt = select(SemanticTableModel).where(
         SemanticTableModel.db_id == connection_id,
-        func.coalesce(SemanticTableModel.table_name_key, SemanticTableModel.table_name) == table_key,
-        func.coalesce(SemanticTableModel.physical_schema_key, SemanticTableModel.physical_schema, "")
-        == (schema_key or ""),
+        or_(
+            and_(
+                func.coalesce(SemanticTableModel.table_name_key, SemanticTableModel.table_name) == table_key,
+                func.coalesce(SemanticTableModel.physical_schema_key, SemanticTableModel.physical_schema, "")
+                == (schema_key or ""),
+            ),
+            and_(
+                SemanticTableModel.table_name_key.is_(None),
+                SemanticTableModel.physical_schema_key.is_(None),
+                SemanticTableModel.table_name == table_name,
+                func.coalesce(SemanticTableModel.physical_schema, "") == (schema_name or ""),
+            ),
+        ),
     )
-    existing = (await db.execute(stmt)).scalar_one_or_none()
+    rows = (await db.execute(stmt)).scalars().all()
+    if len(rows) > 1:
+        raise ValueError(f"Ambiguous legacy table identity: {schema_name}.{table_name}")
+    existing = rows[0] if rows else None
 
     if existing:
         apply_ai_proposal(existing, enrichment.get("business_name", table_name), enrichment.get("description", ""))

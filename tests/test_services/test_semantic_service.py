@@ -1406,3 +1406,91 @@ async def test_schema_aware_enrichment_never_falls_back_by_position(async_sessio
     tables = {t.physical_schema: t for t in (await async_session.scalars(select(SemanticTableModel))).all()}
     assert tables["archive"].business_name == "Archive"
     assert tables["public"].business_name == ("orders" if partial else "Public")
+
+
+@pytest.mark.asyncio
+async def test_migrated_uppercase_unquoted_identity_preserves_ids(async_session):
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    source = _make_raw_schema().tables[0]
+    source = source.model_copy(
+        update={
+            "schema_name": Identifier.from_raw("PUBLIC", SchemaDialect.POSTGRESQL),
+            "table_name": Identifier.from_raw("ORDERS", SchemaDialect.POSTGRESQL),
+            "foreign_keys": (),
+        }
+    )
+    raw = _make_raw_schema(tables=(source,))
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Legacy", "postgresql")
+    table = SemanticTableModel(db_id=database_id, table_name="ORDERS", physical_schema="PUBLIC", business_name="Legacy")
+    async_session.add(table)
+    await async_session.flush()
+    column = SemanticColumnModel(
+        table_id=table.id,
+        column_name=source.columns[0].column_name.raw_name,
+        data_type=source.columns[0].data_type,
+        business_name="Retained",
+    )
+    metric = SemanticMetricModel(
+        db_id=database_id,
+        base_entity_id=table.id,
+        name="Retained",
+        description="",
+        formula="COUNT(*)",
+        sql_template="COUNT(*)",
+        aggregation_type="count",
+        source="manual",
+        status="draft",
+    )
+    async_session.add_all([column, metric])
+    await async_session.commit()
+    table_id, column_id, metric_id = table.id, column.id, metric.id
+    path = next((Path(__file__).parents[2] / "alembic/versions").glob("*_schema_qualified_tables.py"))
+    spec = importlib.util.spec_from_file_location("qualified_legacy_upgrade", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    def upgrade_existing(session):
+        with patch.object(migration, "op", Operations(MigrationContext.configure(session.connection()))):
+            migration.downgrade()
+            migration.upgrade()
+
+    await async_session.run_sync(upgrade_existing)
+    for _ in range(2):
+        result = await enrich_and_save_canonical_schema(
+            async_session, 1, database_id, raw, "postgresql", {"tables": []}
+        )
+        assert result["tables"][0]["table_id"] == table_id
+    assert (await async_session.get(SemanticColumnModel, column_id)).table_id == table_id
+    assert (await async_session.get(SemanticMetricModel, metric_id)).base_entity_id == table_id
+    assert table.table_name == "ORDERS" and table.physical_schema == "PUBLIC"
+    assert table.table_name_key == "orders" and table.physical_schema_key == "public"
+    assert len((await async_session.scalars(select(SemanticTableModel))).all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_legacy_key_population_rejects_ambiguous_identity(async_session):
+    from src.services.semantic_service import _upsert_semantic_table
+
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Ambiguous", "postgresql")
+    legacy = SemanticTableModel(
+        db_id=database_id, table_name="ORDERS", physical_schema="PUBLIC", business_name="Legacy"
+    )
+    canonical = SemanticTableModel(
+        db_id=database_id,
+        table_name="orders",
+        physical_schema="public",
+        table_name_key="orders",
+        physical_schema_key="public",
+        business_name="Canonical",
+    )
+    async_session.add_all([legacy, canonical])
+    await async_session.flush()
+    with pytest.raises(ValueError, match="Ambiguous legacy table identity"):
+        await _upsert_semantic_table(async_session, database_id, "ORDERS", {}, "PUBLIC", None, 1, "public", "orders")
+    assert legacy.table_name_key is None and legacy.physical_schema_key is None
+    assert legacy.business_name == "Legacy" and canonical.business_name == "Canonical"
