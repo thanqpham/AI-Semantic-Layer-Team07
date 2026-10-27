@@ -30,6 +30,7 @@ export function RelationshipDetail(props: Props) {
       {item.active_relationship_id && item.kind === 'candidate' && <p><Translated text="Bản sửa đang chờ; liên kết gốc vẫn hoạt động:" /> #{item.active_relationship_id}</p>}
       <p><Translated text="Người duyệt:" /> <span>{item.reviewer_name ?? item.reviewed_by ?? '—'}</span> · <time>{item.reviewed_at ?? '—'}</time></p>
       <p className="whitespace-pre-wrap break-words"><Translated text="Bằng chứng:" /> {JSON.stringify(item.evidence)}</p>
+      {item.errors.some(e => e.code === 'INVALID_PAIR') && <pre className="whitespace-pre-wrap break-all">{JSON.stringify(item.column_pairs)}</pre>}
       {item.confidence != null && <p><Translated text="Độ tin cậy:" /> {item.confidence}</p>}
       {item.unresolved_questions.map((q,i)=><p key={i}>{q}</p>)}
     </div>}

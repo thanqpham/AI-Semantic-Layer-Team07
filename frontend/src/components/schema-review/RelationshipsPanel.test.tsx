@@ -108,3 +108,14 @@ it('reloads a stale impact and requires a fresh acknowledgment', async () => {
  await waitFor(()=>expect(api.getRelationshipImpact).toHaveBeenCalledTimes(2));
  expect(screen.getByRole('checkbox')).not.toBeChecked();expect(screen.getByRole('button',{name:'Xác nhận tác động'})).toBeDisabled();
 });
+
+it('keeps malformed legacy pairs visible and allows a safe repair draft', async () => {
+ const broken={...item,kind:'active' as const,status:'needs_review',column_pairs:['malformed'],errors:[{code:'INVALID_PAIR',message:'Invalid pair'}]};
+ vi.mocked(api.listRelationships).mockResolvedValue({items:[broken],counts:{pending_relationships:0}});
+ setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
+ expect(screen.getByText('["malformed"]')).toBeInTheDocument();
+ fireEvent.change(screen.getByRole('combobox',{name:'Cột nguồn 1'}),{target:{value:'10'}});
+ fireEvent.change(screen.getByRole('combobox',{name:'Cột đích 1'}),{target:{value:'20'}});
+ await waitFor(()=>expect(api.previewRelationship).toHaveBeenCalledWith('7',expect.objectContaining({column_pairs:[{from_column_id:10,to_column_id:20}]})));
+ expect(screen.getByText('["malformed"]')).toBeInTheDocument();
+});

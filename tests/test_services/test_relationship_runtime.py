@@ -190,16 +190,17 @@ def test_composite_one_to_one_predicate_keeps_all_pairs(reverse):
     ]
     path = _safe_join_path([rel], 2 if reverse else 1, 1 if reverse else 2)
     columns = {
-        10: ("orders", "tenant_id"),
-        11: ("orders", "customer_id"),
-        20: ("customers", "tenant_id"),
-        21: ("customers", "id"),
+        10: (None, "orders", "tenant_id"),
+        11: (None, "orders", "customer_id"),
+        20: (None, "customers", "tenant_id"),
+        21: (None, "customers", "id"),
     }
     condition = _relationship_condition(path[0], columns)
     assert condition.count(" = ") == 2
     assert " AND " in condition
     assert all(
-        name in condition for name in ["orders.tenant_id", "orders.customer_id", "customers.tenant_id", "customers.id"]
+        name in condition
+        for name in ['"orders"."tenant_id"', '"orders"."customer_id"', '"customers"."tenant_id"', '"customers"."id"']
     )
     assert path[0].id == 7
 
