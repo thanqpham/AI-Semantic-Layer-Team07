@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from src.models.db import MetricVersionModel, SemanticMetricModel
 from src.models.metric_definition import MetricDefinition
+from src.services.database import lock_semantic_database
 from src.services.metric_definition_resolver import MetricDefinitionResolver
 from src.services.metric_definitions import validate_metric_definition, with_metric_status
 from src.services.metric_versioning import (
@@ -337,6 +338,8 @@ async def approve_metric(
 ) -> SemanticMetricModel:
     """Approve the version awaiting review and publish it as the live definition."""
     metric = await require_metric(db, metric_id)
+    await lock_semantic_database(db, metric.db_id)
+    await db.refresh(metric)
     draft = await _ensure_open_draft(db, metric, user_id)
     if draft is None:
         raise ValueError("Metric is not eligible for approval")

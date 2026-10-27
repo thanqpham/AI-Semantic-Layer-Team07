@@ -4,14 +4,16 @@ import hashlib
 import json
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import CanonicalRelationshipModel as Active
-from src.models.db import SemanticDatabaseModel, SemanticMetricModel, UserModel, utc_now
+from src.models.db import SemanticMetricModel, UserModel, utc_now
 from src.models.db_relationships import RelationshipCandidateModel as Candidate
 from src.models.relationship_review import ColumnPair, RelationshipDraft, RelationshipImpact, RelationshipReviewItem
-from src.services.relationship_validation import endpoints, fingerprint, validate_relationship
+from src.services.database import lock_semantic_database
+from src.services.relationship_validation import endpoints, fingerprint, invalid, validate_relationship
 
 
 async def scoped(db: AsyncSession, db_id: int, item_id: int, kind: str) -> Active | Candidate:
@@ -25,10 +27,11 @@ async def scoped(db: AsyncSession, db_id: int, item_id: int, kind: str) -> Activ
 
 def draft_for(row: Active | Candidate) -> RelationshipDraft:
     """Reconstruct editable metadata from a persisted review row."""
+    pairs = parsed_pairs(row.column_pairs)
     return RelationshipDraft.model_construct(
         from_entity_id=row.from_entity_id,
         to_entity_id=row.to_entity_id,
-        column_pairs=[ColumnPair(**p) for p in row.column_pairs],
+        column_pairs=pairs,
         relationship_type=row.relationship_type,
         cardinality_confirmation=row.evidence.get("cardinality_confirmation"),
     )
@@ -37,7 +40,8 @@ def draft_for(row: Active | Candidate) -> RelationshipDraft:
 async def review_item(db: AsyncSession, db_id: int, row: Active | Candidate, kind: str) -> RelationshipReviewItem:
     """Present the same qualified metadata for canonical and candidate rows."""
     errors, preview, warnings = [], "", []
-    sides = await endpoints(db, db_id, draft_for(row))
+    endpoint_draft = RelationshipDraft.model_construct(from_entity_id=row.from_entity_id, to_entity_id=row.to_entity_id)
+    sides = await endpoints(db, db_id, endpoint_draft)
     try:
         validated = await validate_relationship(db, db_id, draft_for(row))
         preview, warnings = validated["on_preview"], validated["warnings"]
@@ -120,7 +124,7 @@ async def save_relationship_candidate(
         target = await scoped(db, db_id, target_relationship_id, "active")
         if target.review_status != "approved" or target.revision != draft.expected_revision:
             raise HTTPException(409, "Active relationship is stale or not approved")
-    existing = await scoped(db, db_id, candidate_id, "candidate") if candidate_id else None
+    existing = await editable_candidate(db, db_id, candidate_id) if candidate_id else None
     target_relationship_id = target_relationship_id or (existing.target_relationship_id if existing else None)
     key = fingerprint(draft, target_relationship_id)
     await require_unique_candidate(db, db_id, key, candidate_id)
@@ -294,7 +298,7 @@ async def promote(db: AsyncSession, db_id: int, row: Candidate, actor_id: int, o
 
 async def lock_database(db: AsyncSession, db_id: int) -> None:
     """Serialize graph mutations, including insertion into a previously empty graph."""
-    await db.scalar(select(SemanticDatabaseModel).where(SemanticDatabaseModel.id == db_id).with_for_update())
+    await lock_semantic_database(db, db_id)
 
 
 def row_values(row: Active | Candidate | SemanticMetricModel, fields: str) -> dict:
@@ -327,3 +331,24 @@ def stamp_decision(row: Active | Candidate, kind: str, action: str, actor_id: in
     if kind == "candidate":
         row.status = "approved" if action == "approve" else "rejected"
     row.reviewed_by, row.reviewed_at = actor_id, utc_now()
+
+
+def parsed_pairs(payload: object) -> list[ColumnPair]:
+    """Convert stored legacy payloads into indexed review errors without rewriting them."""
+    if not isinstance(payload, list):
+        invalid("INVALID_PAIR", "Stored column pairs must be a list")
+    pairs = []
+    for index, raw in enumerate(payload):
+        try:
+            pairs.append(ColumnPair.model_validate(raw))
+        except ValidationError:
+            invalid("INVALID_PAIR", "Stored column pair requires valid column IDs", index)
+    return pairs
+
+
+async def editable_candidate(db: AsyncSession, db_id: int, candidate_id: int) -> Candidate:
+    """Keep approved proposals immutable so their published audit trail survives edits."""
+    row = await scoped(db, db_id, candidate_id, "candidate")
+    if row.status == "approved":
+        raise HTTPException(409, "Approved proposals are immutable; edit the active relationship instead")
+    return row
