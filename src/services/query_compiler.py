@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,6 +37,7 @@ from src.services.query_compiler_sql import (
     _shared_filters,
     validate_read_only,
 )
+from src.services.query_compiler_trace import CompileTraceBuilder
 from src.services.semantic_compile_error import SemanticCompileError
 
 __all__ = ["CompiledQuery", "SemanticQueryCompiler", "validate_read_only"]
@@ -77,6 +79,12 @@ def _reject_duplicate_selections(spec: SemanticQuerySpec) -> None:
         raise SemanticCompileError("DUPLICATE_SELECTION", "Semantic selections must be unique")
 
 
+def _attach_partial_trace(exc: SemanticCompileError, trace: CompileTraceBuilder) -> None:
+    """Attach a safe partial trace when at least one compile phase completed."""
+    if trace.completed_steps:
+        exc.context.setdefault("partial_trace", trace.snapshot())
+
+
 class SemanticQueryCompiler:
     """Compile approved definitions and selected dimensions through one interface."""
 
@@ -96,20 +104,31 @@ class SemanticQueryCompiler:
         """Compile semantic selections without accepting SQL from the caller."""
         spec = _query_spec(query, metric_ids, dimension_ids, filters, limit)
         _reject_duplicate_selections(spec)
-        return await trace_action(
-            "query_compile",
-            {"connection_id": connection_id, "metric_count": len(spec.metric_ids)},
-            self._compile_spec(connection_id, spec),
-        )
+        trace = CompileTraceBuilder()
+        try:
+            return await trace_action(
+                "query_compile",
+                {"connection_id": connection_id, "metric_count": len(spec.metric_ids)},
+                self._compile_spec(connection_id, spec, trace),
+            )
+        except SemanticCompileError as exc:
+            _attach_partial_trace(exc, trace)
+            raise
 
-    async def _compile_spec(self, connection_id: int, spec: SemanticQuerySpec) -> CompiledQuery:
+    async def _compile_spec(
+        self, connection_id: int, spec: SemanticQuerySpec, trace: CompileTraceBuilder
+    ) -> CompiledQuery:
         dialect = await self._load_dialect(connection_id)
         metrics = await self._load_metrics(connection_id, spec.metric_ids)
         definitions = _canonical_definitions(metrics)
+        _record_loaded_trace(trace, metrics, definitions, spec.limit)
         if any(item.metric.query_plan is not None for item in definitions):
             if len(definitions) != 1 or definitions[0].metric.query_plan is None:
-                raise SemanticCompileError("INCOMPATIBLE_QUERY_PLAN", "Multi-table plans must be queried one metric at a time")
-            return await self._compile_plan(connection_id, spec, metrics[0], definitions[0])
+                raise SemanticCompileError(
+                    "INCOMPATIBLE_QUERY_PLAN", "Multi-table plans must be queried one metric at a time"
+                )
+            return await self._compile_plan(connection_id, spec, metrics[0], definitions[0], trace)
+        trace.record(plan_type="single_table")
         base_name = self._require_same_base(definitions)
         tables = await self._load_tables(connection_id)
         table_by_id = {table.id: table for table in tables}
@@ -121,8 +140,10 @@ class SemanticQueryCompiler:
         base_columns = await self._load_base_columns(base.id)
         _validate_definition_asts(definitions, base_columns)
         _apply_time_grains(dimensions, spec.dimensions)
+        trace.record(base_entity={"table_name": base.table_name, "table_id": base.id})
+        trace.step("validate_references")
         runtime_filters = await self._load_runtime_filters(connection_id, spec.filters)
-        joins = await self._resolve_joins(connection_id, base, dimensions + runtime_filters, table_by_id)
+        joins = await self._resolve_joins(connection_id, base, dimensions + runtime_filters, table_by_id, trace)
         return self._build_query(
             dialect,
             metrics,
@@ -134,6 +155,7 @@ class SemanticQueryCompiler:
             runtime_filters,
             spec.limit,
             spec.order_by,
+            trace,
         )
 
     async def _compile_plan(
@@ -142,20 +164,26 @@ class SemanticQueryCompiler:
         spec: SemanticQuerySpec,
         metric: SemanticMetricModel,
         definition: MetricDefinition,
+        trace: CompileTraceBuilder,
     ) -> CompiledQuery:
         plan = definition.metric.query_plan
+        trace.record(plan_type="metric_plan")
         dialect = await self._load_dialect(connection_id)
         tables_list = await self._load_tables(connection_id)
         tables = {table.table_name: table for table in tables_list}
         tables_folded = {table.table_name.casefold(): table for table in tables_list}
-        result = await self._db.execute(select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([t.id for t in tables_list])))
+        result = await self._db.execute(
+            select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([t.id for t in tables_list]))
+        )
         all_columns = list(result.scalars().all())
         columns: dict[str, dict[str, tuple[str, int, str]]] = {}
         by_id: dict[int, tuple[str, str, int, str]] = {}
         for column in all_columns:
             table = next(item for item in tables_list if item.id == column.table_id)
             columns.setdefault(table.table_name, {})[column.column_name] = (
-                column.column_name, column.id, column.data_type or ""
+                column.column_name,
+                column.id,
+                column.data_type or "",
             )
             by_id[column.id] = (table.table_name, column.column_name, column.id, column.data_type or "")
         relationships_result = await self._db.execute(
@@ -190,16 +218,20 @@ class SemanticQueryCompiler:
                     raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan references an unknown joined table")
                 if target.id == base.id:
                     raise SemanticCompileError("UNSAFE_JOIN", "Metric plan cannot join its source table to itself")
-                path = _safe_join_path(relationships, base.id, target.id, {t.id: t for t in tables_list}, relationship_columns)
+                path = _safe_join_path(
+                    relationships, base.id, target.id, {t.id: t for t in tables_list}, relationship_columns
+                )
                 path_joins = []
                 for rel in path:
-                    rel_target = tables[ next(t.table_name for t in tables_list if t.id == rel.to_entity_id) ]
-                    path_joins.append({
-                        "relationship_id": rel.id,
-                        "table_name": rel_target.table_name,
-                        "physical_schema": rel_target.physical_schema,
-                        "condition": _relationship_condition(rel, relationship_columns),
-                    })
+                    rel_target = tables[next(t.table_name for t in tables_list if t.id == rel.to_entity_id)]
+                    path_joins.append(
+                        {
+                            "relationship_id": rel.id,
+                            "table_name": rel_target.table_name,
+                            "physical_schema": rel_target.physical_schema,
+                            "condition": _relationship_condition(rel, relationship_columns),
+                        }
+                    )
                     stage_tables[stage.name].add(rel_target.table_name)
                 join_paths[(base.table_name, target.table_name)] = path_joins
                 resolved_joins.append(target.table_name)
@@ -213,13 +245,17 @@ class SemanticQueryCompiler:
                         raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan grouping key must be a column")
                     source_name = parsed.table or stage.base_entity
                     resolved = next(
-                        ((source_name, name, column_id, data_type)
-                         for name, (name, column_id, data_type) in columns.get(source_name, {}).items()
-                         if name.casefold() == parsed.name.casefold()),
+                        (
+                            (source_name, name, column_id, data_type)
+                            for name, (name, column_id, data_type) in columns.get(source_name, {}).items()
+                            if name.casefold() == parsed.name.casefold()
+                        ),
                         None,
                     )
                 if not resolved or resolved[0] not in stage_tables[stage.name]:
-                    raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan grouping key does not match its source tables")
+                    raise SemanticCompileError(
+                        "UNKNOWN_REFERENCE", "Metric plan grouping key does not match its source tables"
+                    )
                 field.column_id = resolved[2]
                 field.expression = f"{resolved[0]}.{resolved[1]}"
             for aggregate in stage.aggregates:
@@ -227,18 +263,31 @@ class SemanticQueryCompiler:
                     if filter_item.column_id is not None:
                         resolved = by_id.get(filter_item.column_id)
                         if not resolved or resolved[0] not in stage_tables[stage.name]:
-                            raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan filter does not match its source tables")
+                            raise SemanticCompileError(
+                                "UNKNOWN_REFERENCE", "Metric plan filter does not match its source tables"
+                            )
                         filter_item.field = f"{resolved[0]}.{resolved[1]}"
             for filter_item in stage.filters:
                 if filter_item.column_id is not None:
                     resolved = by_id.get(filter_item.column_id)
                     if not resolved or resolved[0] not in stage_tables[stage.name]:
-                        raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan filter does not match its source tables")
+                        raise SemanticCompileError(
+                            "UNKNOWN_REFERENCE", "Metric plan filter does not match its source tables"
+                        )
                     filter_item.field = f"{resolved[0]}.{resolved[1]}"
         dimensions = await self._load_dimensions(connection_id, [item.column_id for item in spec.dimensions])
         _apply_time_grains(dimensions, spec.dimensions)
         runtime_filters = await self._load_runtime_filters(connection_id, spec.filters)
         physical_stages = [stage for stage in plan.stages if stage.base_entity]
+        trace.record(
+            base_entity={
+                "table_name": physical_stages[0].base_entity,
+                "table_id": tables[physical_stages[0].base_entity].id,
+            },
+            join_path=_plan_trace_join_path(join_paths),
+        )
+        trace.step("validate_references")
+        trace.step("resolve_joins")
         scoped_filters = [
             {"column_id": item.column_id, "operator": item.operator, "value": item.value}
             for item in definition.metric.filters
@@ -248,7 +297,8 @@ class SemanticQueryCompiler:
             resolved = by_id.get(column_id)
             if resolved is None or any(resolved[0] not in stage_tables[stage.name] for stage in physical_stages):
                 raise SemanticCompileError(
-                    "UNSUPPORTED_PLAN_FILTER", "Runtime filters must reference the same approved table in every source stage"
+                    "UNSUPPORTED_PLAN_FILTER",
+                    "Runtime filters must reference the same approved table in every source stage",
                 )
             for stage in physical_stages:
                 value = item["value"]
@@ -265,6 +315,10 @@ class SemanticQueryCompiler:
                         column_id=column_id,
                     )
                 )
+        trace.record(
+            dimensions=[{"column_id": item["column_id"], "time_grain": item.get("time_grain")} for item in dimensions],
+            filters=_trace_filters([definition], runtime_filters),
+        )
         parameters: dict[str, Any] = {}
         sql = compile_plan_sql(
             plan,
@@ -280,13 +334,16 @@ class SemanticQueryCompiler:
             parameters,
             order_by=spec.order_by,
         )
+        trace.step("render_sql")
         validate_read_only(sql, dialect)
+        trace.step("validate_guardrails")
         metadata = {
             "metric_plan": True,
             "metrics": {f"metric_{metric.id}": metric.name},
             "dimensions": {f"dimension_{item['column_id']}": item["business_name"] for item in dimensions},
             "relationship_ids": [item["relationship_id"] for joins in join_paths.values() for item in joins],
         }
+        metadata["trace"] = trace.snapshot()
         return CompiledQuery(sql=sql, parameters=parameters, metadata=metadata)
 
     async def _load_dialect(self, connection_id: int) -> str:
@@ -357,6 +414,7 @@ class SemanticQueryCompiler:
         base: SemanticTableModel,
         dimensions: list[dict[str, Any]],
         tables: dict[int, SemanticTableModel],
+        trace: CompileTraceBuilder,
     ) -> list[dict[str, Any]]:
         result = await self._db.execute(
             select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id)
@@ -378,6 +436,7 @@ class SemanticQueryCompiler:
                         }
                     )
                     joined.add(target_id)
+        _record_join_trace(trace, base.table_name, joins)
         return joins
 
     async def _relationship_columns(
@@ -413,7 +472,9 @@ class SemanticQueryCompiler:
         runtime_filters: list[dict[str, Any]],
         limit: int,
         order_by: str | None,
+        trace: CompileTraceBuilder,
     ) -> CompiledQuery:
+        _record_render_trace(trace, dimensions, definitions, runtime_filters)
         parameters: dict[str, Any] = {}
         names = {cid: name for cid, (name, _) in base_columns.items()}
         types = {cid: dt for cid, (_, dt) in base_columns.items()}
@@ -434,8 +495,11 @@ class SemanticQueryCompiler:
             fixed,
             order_by,
         )
+        trace.step("render_sql")
         validate_read_only(sql)
+        trace.step("validate_guardrails")
         metadata = _compiled_metadata(base, metrics, dimensions, joins)
+        metadata["trace"] = trace.snapshot()
         return CompiledQuery(sql=sql, parameters=parameters, metadata=metadata)
 
 
@@ -563,6 +627,84 @@ def _compiled_metadata(
         "dimensions": {f"dimension_{item['column_id']}": item["business_name"] for item in dimensions},
         "relationship_ids": [item["relationship_id"] for item in joins],
     }
+
+
+def _trace_metric(metric: SemanticMetricModel, definition: MetricDefinition) -> dict[str, Any]:
+    """Describe one approved metric for the trace without exposing filter values."""
+    return {
+        "id": metric.id,
+        "name": metric.name,
+        "version": metric.version,
+        "grain_column_ids": list(definition.metric.grain.column_ids),
+    }
+
+
+def _trace_join_path(base_name: str, joins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Describe resolved joins in render order; from_table is the query base."""
+    return [
+        {"relationship_id": join["relationship_id"], "from_table": base_name, "to_table": join["table_name"]}
+        for join in joins
+    ]
+
+
+def _trace_filters(
+    definitions: list[MetricDefinition],
+    runtime_filters: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Describe filter references only; values are never included."""
+    entries: list[dict[str, Any]] = []
+    for definition in definitions:
+        for item in definition.metric.filters:
+            if item.column_id is not None:
+                entries.append({"column_id": item.column_id, "operator": item.operator, "scope": "metric"})
+    for item in runtime_filters:
+        entries.append({"column_id": item["column_id"], "operator": item["operator"], "scope": "runtime"})
+    unique: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        unique.setdefault(json.dumps(entry, sort_keys=True), entry)
+    return list(unique.values())
+
+
+def _record_loaded_trace(
+    trace: CompileTraceBuilder,
+    metrics: list[SemanticMetricModel],
+    definitions: list[MetricDefinition],
+    limit: int,
+) -> None:
+    """Record loaded metric references and the effective limit for the trace."""
+    trace.record(
+        metrics=[_trace_metric(metric, definition) for metric, definition in zip(metrics, definitions, strict=True)],
+        effective_limit=limit,
+    )
+    trace.step("load_metadata")
+
+
+def _record_join_trace(trace: CompileTraceBuilder, base_name: str, joins: list[dict[str, Any]]) -> None:
+    """Record the resolved join path and mark the resolve_joins phase complete."""
+    trace.record(join_path=_trace_join_path(base_name, joins))
+    trace.step("resolve_joins")
+
+
+def _record_render_trace(
+    trace: CompileTraceBuilder,
+    dimensions: list[dict[str, Any]],
+    definitions: list[MetricDefinition],
+    runtime_filters: list[dict[str, Any]],
+) -> None:
+    """Record resolved dimension and filter references before SQL rendering."""
+    trace.record(
+        dimensions=[{"column_id": item["column_id"], "time_grain": item["time_grain"]} for item in dimensions],
+        filters=_trace_filters(definitions, runtime_filters),
+    )
+
+
+def _plan_trace_join_path(join_paths: dict[tuple[str, str], list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Flatten per-stage join paths in stage order for the trace."""
+    return [
+        {"relationship_id": hop["relationship_id"], "from_table": base_name, "to_table": hop["table_name"]}
+        for (base_name, _target), hops in join_paths.items()
+        for hop in hops
+    ]
 
 
 def _many_to_one_paths(
