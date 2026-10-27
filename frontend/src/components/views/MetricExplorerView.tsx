@@ -100,6 +100,7 @@ interface Props {
   theme: 'light' | 'dark';
   database?: WorkspaceDatabase | null;
   initialSelection?: ExplorerInitialSelection | null;
+  refreshKey?: number;
 }
 
 const TIME_GRAIN_OPTIONS: { label: string; value: TimeGrain; enLabel: string }[] = [
@@ -261,6 +262,7 @@ export function MetricExplorerView({
   theme,
   database,
   initialSelection,
+  refreshKey = 0,
 }: Props) {
   const { language, translate } = useLanguage();
   const [metricIds, setMetricIds] = useState<number[]>([]);
@@ -279,6 +281,23 @@ export function MetricExplorerView({
   const [filters, setFilters] = useState<SemanticQueryFilter[]>([]);
   const [dashboardFilterActive, setDashboardFilterActive] = useState(false);
   const appliedSelectionKey = useRef<number | null>(null);
+  const lastPreviewRequest = useRef<SemanticQueryRequest | null>(null);
+  const previousRefresh = useRef(refreshKey);
+
+  useEffect(() => {
+    if (previousRefresh.current === refreshKey) return;
+    previousRefresh.current = refreshKey;
+    setOutput(null);
+    if (!dbId || !lastPreviewRequest.current) {
+      setError(translate('Chọn metric và dimensions để xem SQL mới.'));
+      return;
+    }
+    let cancelled = false;
+    compileSemanticQueryApi(String(dbId), lastPreviewRequest.current)
+      .then(result => { if (!cancelled) { setOutput(result); setError(''); setViewTab('sql'); } })
+      .catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : 'Không thể compile query.'); });
+    return () => { cancelled = true; };
+  }, [dbId, refreshKey, translate]);
 
   const approved = useMemo(
     () => metrics.filter((item) => item.status === 'approved' && item.definition),
@@ -363,7 +382,7 @@ export function MetricExplorerView({
     return () => {
       isMounted = false;
     };
-  }, [dbId, metricIds]);
+  }, [dbId, metricIds, refreshKey]);
 
   const displayedDimensions = useMemo(() => {
     if (!catalog || metricIds.length === 0) return [];
@@ -621,7 +640,8 @@ export function MetricExplorerView({
     setLoading(true);
     setError('');
     try {
-      const res = await compileSemanticQueryApi(String(dbId), request());
+      lastPreviewRequest.current = request();
+      const res = await compileSemanticQueryApi(String(dbId), lastPreviewRequest.current);
       setOutput(res);
       setViewTab('sql');
     } catch (err) {

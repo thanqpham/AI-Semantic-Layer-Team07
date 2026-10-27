@@ -16,6 +16,7 @@ class ReviewColumnItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    column_id: int = Field(..., validation_alias="id")
     column_name: str
     business_name: str = ""
     description: str = ""

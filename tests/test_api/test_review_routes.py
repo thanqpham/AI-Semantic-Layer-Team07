@@ -87,6 +87,8 @@ async def test_schema_review_lists_pending_tables_and_columns(client: AsyncClien
     assert table["ai_business_name"] == "Đơn hàng"
     assert table["reviewed_by"] is None
     assert table["columns"][0]["column_name"] == "total_amount"
+    column = await async_session.scalar(select(SemanticColumnModel).where(SemanticColumnModel.table_id == table["table_id"]))
+    assert table["columns"][0]["column_id"] == column.id
 
 
 @pytest.mark.asyncio

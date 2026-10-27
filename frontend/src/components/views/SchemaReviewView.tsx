@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { SectionLabel, type WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { Translated } from '@/components/ui/translated';
+import { RelationshipsPanel } from '@/components/schema-review/RelationshipsPanel';
 import { useLanguage } from '@/context/LanguageContext';
 
 interface SchemaReviewViewProps {
@@ -173,6 +174,7 @@ export function SchemaReviewView({
   onReviewChanged,
 }: SchemaReviewViewProps) {
   const { translate } = useLanguage();
+  const [reviewTab, setReviewTab] = useState<'tables' | 'relationships'>('tables');
   const [review, setReview] = useState<SchemaReview | null>(null);
   const [drafts, setDrafts] = useState<DraftMap>({});
   const [baseline, setBaseline] = useState<DraftMap>({});
@@ -273,12 +275,19 @@ export function SchemaReviewView({
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
-            <Translated text={"Duyệt toàn bộ ("} />{pendingTotal})
+            <Translated text={"Duyệt bảng & cột ("} />{pendingTotal})
           </Button>
         }
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        <div role="tablist" onKeyDown={event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setReviewTab(current=>current==='tables'?'relationships':'tables');const tabs=event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');tabs[reviewTab==='tables'?1:0]?.focus();}}} aria-label={translate('Loại review')} className="flex flex-wrap gap-2">
+          <Button role="tab" id="tables-tab" tabIndex={reviewTab==='tables'?0:-1} aria-selected={reviewTab==='tables'} aria-controls="tables-review" onClick={()=>setReviewTab('tables')} variant={reviewTab==='tables'?'default':'outline'}><Translated text="Bảng & cột" /></Button>
+          <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}><Translated text="Liên kết" /> ({review?.pending_relationships??0})</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">{review?.pending_relationships??0} <Translated text="liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết." /></p>
+        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
+        <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {!canManageSchema && (
           <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">
             <Translated text={"Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt."} />
@@ -433,6 +442,7 @@ export function SchemaReviewView({
             </section>
           );
         })}
+        </div>
       </div>
     </div>
   );
