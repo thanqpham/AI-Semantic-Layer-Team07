@@ -1284,3 +1284,76 @@ async def test_reenrichment_preserves_disabled_relationship(async_session):
     await async_session.commit()
     await enrich_and_save_canonical_schema(async_session, 1, db_id, raw, "postgresql", enrichment=_hitl_enrichment())
     assert row.review_status == "disabled" and row.reviewed_by == 1 and row.human_modified
+
+
+@pytest.mark.asyncio
+async def test_repeated_import_preserves_qualified_table_ids(async_session):
+    raw = _make_raw_schema()
+    source = raw.tables[0]
+    archive = source.model_copy(update={"schema_name": Identifier.from_raw("archive", SchemaDialect.POSTGRESQL)})
+    target = raw.tables[1]
+    archive_target = target.model_copy(update={"schema_name": Identifier.from_raw("archive", SchemaDialect.POSTGRESQL)})
+    archive = archive.model_copy(
+        update={
+            "foreign_keys": tuple(
+                fk.model_copy(update={"referred_schema": Identifier.from_raw("archive", SchemaDialect.POSTGRESQL)})
+                for fk in source.foreign_keys
+            )
+        }
+    )
+    raw = raw.model_copy(update={"tables": (source, archive, target, archive_target)})
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Qualified", "postgresql")
+    enrichment = {
+        "tables": [
+            {"table_name": source.table_name.raw_name, "physical_schema": "archive", "business_name": "Archive"},
+            {
+                "table_name": source.table_name.raw_name,
+                "physical_schema": source.schema_name.raw_name,
+                "business_name": "Live",
+            },
+        ]
+    }
+    first = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", enrichment)
+    metric = SemanticMetricModel(
+        db_id=database_id,
+        base_entity_id=first["tables"][0]["table_id"],
+        name="Retained",
+        description="",
+        formula="COUNT(*)",
+        sql_template="COUNT(*)",
+        aggregation_type="count",
+        source="manual",
+        status="draft",
+    )
+    async_session.add(metric)
+    await async_session.commit()
+    metric_id = metric.id
+    second = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", enrichment)
+    assert first["tables"] == second["tables"]
+    rows = (
+        await async_session.scalars(select(SemanticTableModel).where(SemanticTableModel.db_id == database_id))
+    ).all()
+    assert len(rows) == 4 and len({t.id for t in rows}) == 4
+    assert {t.business_name for t in rows if t.table_name == source.table_name.raw_name} == {"Archive", "Live"}
+    columns = (
+        await async_session.scalars(
+            select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([t.id for t in rows]))
+        )
+    ).all()
+    assert {c.table_id for c in columns} == {t.id for t in rows}
+
+    assert (await async_session.get(SemanticMetricModel, metric_id)).base_entity_id == first["tables"][0]["table_id"]
+    relationships = (
+        await async_session.scalars(
+            select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == database_id)
+        )
+    ).all()
+    assert len(relationships) == 2
+    by_id = {t.id: t for t in rows}
+    by_column_id = {c.id: c for c in columns}
+    for relationship in relationships:
+        assert by_id[relationship.from_entity_id].physical_schema == by_id[relationship.to_entity_id].physical_schema
+        assert relationship.column_pairs
+        for pair in relationship.column_pairs:
+            assert by_column_id[pair["from_column_id"]].table_id == relationship.from_entity_id
+            assert by_column_id[pair["to_column_id"]].table_id == relationship.to_entity_id

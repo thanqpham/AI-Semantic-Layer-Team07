@@ -14,7 +14,7 @@ import asyncio
 import logging
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import (
@@ -190,21 +190,34 @@ async def enrich_and_save_canonical_schema(
         enrichment_tables = await _call_llm_enrichment(raw_schema, dialect)
     logger.info("[AI Semantic Agent] Enrichment ready for %d tables", len(enrichment_tables))
 
-    # Build lookup by table_name to be robust against ordering differences
-    enrichment_by_name: dict[str, dict[str, Any]] = {}
-    for e in enrichment_tables:
-        t_name = e.get("table_name")
-        if t_name:
-            enrichment_by_name[t_name] = e
+    enrichment_by_key = {
+        ((e.get("physical_schema") or e.get("schema_name") or "").lower(), e.get("table_name", "").lower()): e
+        for e in enrichment_tables
+    }
+    name_counts = {
+        t.table_name.raw_name.lower(): sum(
+            other.table_name.raw_name.lower() == t.table_name.raw_name.lower() for other in raw_schema.tables
+        )
+        for t in raw_schema.tables
+    }
 
     await lock_semantic_database(db, connection_id)
-    table_id_map: dict[str, int] = {}
+    table_id_map: dict[tuple[str, str], int] = {}
 
     for idx, table_meta in enumerate(raw_schema.tables):
         table_name = table_meta.table_name.raw_name
-        table_enrichment = enrichment_by_name.get(
-            table_name, enrichment_tables[idx] if idx < len(enrichment_tables) else {}
-        )
+        identity = (table_meta.schema_name.raw_name.lower(), table_name.lower())
+        table_enrichment = enrichment_by_key.get(identity)
+        if table_enrichment is None:
+            table_enrichment = (
+                enrichment_by_key.get(("", table_name.lower()), {})
+                if name_counts[table_name.lower()] == 1
+                else (
+                    enrichment_tables[idx]
+                    if idx < len(enrichment_tables) and enrichment_tables[idx].get("table_name") == table_name
+                    else {}
+                )
+            )
         pk_cols = table_meta.primary_key.constrained_columns if table_meta.primary_key else ()
         pk_col_name = pk_cols[0].raw_name if pk_cols else None
 
@@ -217,7 +230,7 @@ async def enrich_and_save_canonical_schema(
             pk_col=pk_col_name,
             user_id=user_id,
         )
-        table_id_map[table_name] = table_id
+        table_id_map[identity] = table_id
         bname = table_enrichment.get("business_name", table_name)
         logger.info(
             "[AI Semantic Agent] Processed table '%s' (ID=%d, business_name='%s', columns=%d)",
@@ -252,7 +265,11 @@ async def enrich_and_save_canonical_schema(
     review = await pending_review_counts(db, connection_id)
     return {
         "tables": [
-            {"table_name": t.table_name.raw_name, "table_id": table_id_map[t.table_name.raw_name]}
+            {
+                "table_name": t.table_name.raw_name,
+                "physical_schema": t.schema_name.raw_name,
+                "table_id": table_id_map[(t.schema_name.raw_name.lower(), t.table_name.raw_name.lower())],
+            }
             for t in raw_schema.tables
         ],
         "relationships": relationships,
@@ -280,11 +297,12 @@ async def _call_llm_enrichment(raw_schema: RawSchemaMetadata, dialect: str) -> l
         schema_name = t_meta.schema_name.raw_name if t_meta.schema_name else None
         t_key = f"{schema_name}.{t_meta.table_name.raw_name}" if schema_name else t_meta.table_name.raw_name
         if t_key in enriched_dict:
-            enriched_tables.append(enriched_dict[t_key])
+            enriched_tables.append({**enriched_dict[t_key], "physical_schema": schema_name})
         else:
             enriched_tables.append(
                 {
                     "table_name": t_meta.table_name.raw_name,
+                    "physical_schema": schema_name,
                     "business_name": t_meta.table_name.raw_name,
                     "description": "",
                     "columns": [
@@ -309,17 +327,16 @@ async def _upsert_semantic_table(
     pk_col: str | None,
     user_id: int,
 ) -> int:
-    """Upsert a semantic table: update if exists (by db_id + table_name), insert otherwise."""
+    """Upsert a table by database and normalized physical schema/name."""
     stmt = select(SemanticTableModel).where(
         SemanticTableModel.db_id == connection_id,
-        SemanticTableModel.table_name == table_name,
-        or_(SemanticTableModel.physical_schema == schema_name, SemanticTableModel.physical_schema.is_(None)),
+        func.lower(SemanticTableModel.table_name) == table_name.lower(),
+        func.lower(func.coalesce(SemanticTableModel.physical_schema, "")) == (schema_name or "").lower(),
     )
     existing = (await db.execute(stmt)).scalar_one_or_none()
 
     if existing:
         apply_ai_proposal(existing, enrichment.get("business_name", table_name), enrichment.get("description", ""))
-        existing.physical_schema = schema_name
         existing.primary_key_column = pk_col
         return existing.id
 
@@ -405,13 +422,17 @@ def _foreign_key_references(table_meta: Any) -> dict[str, tuple[str, str]]:
 
 
 async def _extract_and_save_relationships(
-    db: AsyncSession, connection_id: int, raw_schema: RawSchemaMetadata, table_id_map: dict[str, int]
-) -> list[dict[str, str]]:
+    db: AsyncSession, connection_id: int, raw_schema: RawSchemaMetadata, table_id_map: dict[tuple[str, str], int]
+) -> list[dict[str, Any]]:
     """Reconcile physical evidence and retain the acquisition response contract."""
     await reconcile_relationships(db, connection_id, raw_schema)
     return [
         {
             "from_table": table.table_name.raw_name,
+            "from_schema": table.schema_name.raw_name,
+            "to_schema": fk.referred_schema.raw_name,
+            "from_table_id": table_id_map[(table.schema_name.raw_name.lower(), table.table_name.raw_name.lower())],
+            "to_table_id": table_id_map[(fk.referred_schema.raw_name.lower(), fk.referred_table.raw_name.lower())],
             "to_table": fk.referred_table.raw_name,
             "join_condition": " AND ".join(
                 f"{table.table_name.raw_name}.{a.raw_name} = {fk.referred_table.raw_name}.{b.raw_name}"

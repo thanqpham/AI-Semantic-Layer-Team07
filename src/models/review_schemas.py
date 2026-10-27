@@ -62,6 +62,7 @@ class SchemaReviewResponse(BaseModel):
 class SchemaApproveRequest(BaseModel):
     """Approve the whole review queue, or only the named tables."""
 
+    table_ids: list[int] | None = None
     table_names: list[str] | None = Field(
         default=None,
         description="Chỉ duyệt các bảng này; bỏ trống để duyệt toàn bộ hàng đợi",

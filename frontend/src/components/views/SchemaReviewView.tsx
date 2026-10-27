@@ -142,11 +142,11 @@ type Draft = { business_name: string; description: string };
 type DraftMap = Record<string, Draft>;
 
 function tableKey(table: SchemaReviewTable): string {
-  return `t:${table.table_name}`;
+  return `t:${table.table_id}`;
 }
 
 function columnKey(table: SchemaReviewTable, column: SchemaReviewColumn): string {
-  return `c:${table.table_name}:${column.column_name}`;
+  return `c:${table.table_id}:${column.column_id}`;
 }
 
 function buildDrafts(review: SchemaReview): DraftMap {
@@ -233,12 +233,12 @@ export function SchemaReviewView({
     }
   };
 
-  const approve = async (tableNames?: string[]) => {
+  const approve = async (tableIds?: number[]) => {
     if (!dbId) return;
-    setApproving(tableNames?.[0] ?? '*');
+    setApproving(tableIds ? String(tableIds[0]) : '*');
     setError('');
     try {
-      const result = await approveSchemaReviewApi(String(dbId), tableNames);
+      const result = await approveSchemaReviewApi(String(dbId), undefined, tableIds);
       onNotify?.(
         `Đã duyệt ${result.approved_tables} bảng và ${result.approved_columns} cột vào Metadata Store`,
       );
@@ -323,18 +323,18 @@ export function SchemaReviewView({
 
         {review?.tables.map((table) => {
           const key = tableKey(table);
-          const open = expanded[table.table_name] ?? table.review_status === 'pending_review';
+          const open = expanded[key] ?? table.review_status === 'pending_review';
           const pendingColumns = table.columns.filter((c) => c.review_status === 'pending_review').length;
           return (
             <section
-              key={table.table_name}
+              key={table.table_id}
               className="shrink-0 rounded-xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() =>
-                    setExpanded((current) => ({ ...current, [table.table_name]: !open }))
+                    setExpanded((current) => ({ ...current, [key]: !open }))
                   }
                   className="flex min-w-0 items-center gap-2 text-left"
                   aria-expanded={open}
@@ -343,7 +343,7 @@ export function SchemaReviewView({
                     className={cn('h-4 w-4 shrink-0 transition-transform', open && 'rotate-90')}
                   />
                   <span className="truncate font-mono text-[13px] text-foreground">
-                    {table.table_name}
+                    {review.tables.filter(item => item.table_name === table.table_name).length > 1 && table.physical_schema ? `${table.physical_schema}.${table.table_name}` : table.table_name}
                   </span>
                 </button>
                 <ReviewBadge status={table.review_status} />
@@ -366,9 +366,9 @@ export function SchemaReviewView({
                       approving !== null ||
                       (table.review_status === 'approved' && pendingColumns === 0)
                     }
-                    onClick={() => approve([table.table_name])}
+                    onClick={() => approve([table.table_id])}
                   >
-                    {approving === table.table_name ? (
+                    {approving === String(table.table_id) ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <CheckCircle2 className="h-3 w-3" />
@@ -394,6 +394,7 @@ export function SchemaReviewView({
                         table.table_name,
                         draft.business_name,
                         draft.description,
+                        table.table_id,
                       ),
                     )
                   }
@@ -434,6 +435,7 @@ export function SchemaReviewView({
                                 column.column_name,
                                 draft.business_name,
                                 draft.description,
+                                table.table_id,
                               ),
                             )
                           }

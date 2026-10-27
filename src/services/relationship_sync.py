@@ -15,22 +15,20 @@ from src.services.relationship_validation import fingerprint
 
 async def _metadata(db: AsyncSession, db_id: int, raw: RawSchemaMetadata) -> tuple[dict, dict]:
     tables = (await db.scalars(select(SemanticTableModel).where(SemanticTableModel.db_id == db_id))).all()
-    for table in tables:
-        matches = [t for t in raw.tables if t.table_name.raw_name == table.table_name]
-        if table.physical_schema is None and len(matches) == 1:
-            table.physical_schema = matches[0].schema_name.raw_name
     columns = (
         await db.scalars(select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([t.id for t in tables])))
     ).all()
-    return {(t.physical_schema, t.table_name): t for t in tables}, {(c.table_id, c.column_name): c.id for c in columns}
+    return {((t.physical_schema or "").lower(), t.table_name.lower()): t for t in tables}, {
+        (c.table_id, c.column_name): c.id for c in columns
+    }
 
 
 def _detections(raw: RawSchemaMetadata, tables: dict, columns: dict) -> list[dict]:
     detections = []
     for table in raw.tables:
-        source = tables.get((table.schema_name.raw_name, table.table_name.raw_name))
+        source = tables.get((table.schema_name.raw_name.lower(), table.table_name.raw_name.lower()))
         for fk in table.foreign_keys:
-            target = tables.get((fk.referred_schema.raw_name, fk.referred_table.raw_name))
+            target = tables.get((fk.referred_schema.raw_name.lower(), fk.referred_table.raw_name.lower()))
             if source is None or target is None:
                 raise ValueError("FK endpoints must be persisted before reconciliation")
             detections.append(_detection(source, target, fk, columns))
