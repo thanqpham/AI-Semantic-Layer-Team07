@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import get_current_user
+from src.api.relationship_review_routes import relationship_router
 from src.api.routes import _require_resource_permission
 from src.models.db import SemanticMetricModel, UserModel
 from src.models.review_schemas import (
@@ -54,6 +55,7 @@ async def get_schema_review(
         status="pending_review" if pending else "approved",
         pending_tables=counts["pending_tables"],
         pending_columns=counts["pending_columns"],
+        pending_relationships=counts["pending_relationships"],
         tables=[ReviewTableItem.model_validate(table) for table in tables],
     )
 
@@ -81,6 +83,7 @@ async def approve_schema_review(
         approved_columns=result["approved_columns"],
         pending_tables=result["pending_tables"],
         pending_columns=result["pending_columns"],
+        pending_relationships=result["pending_relationships"],
         status="pending_review" if pending else "approved",
     )
 
@@ -131,3 +134,6 @@ async def reject_metric_version(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
     return MetricVersionResponse.model_validate(record, from_attributes=True)
+
+
+review_router.include_router(relationship_router)
