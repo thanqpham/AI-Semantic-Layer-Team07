@@ -87,7 +87,9 @@ async def test_schema_review_lists_pending_tables_and_columns(client: AsyncClien
     assert table["ai_business_name"] == "Đơn hàng"
     assert table["reviewed_by"] is None
     assert table["columns"][0]["column_name"] == "total_amount"
-    column = await async_session.scalar(select(SemanticColumnModel).where(SemanticColumnModel.table_id == table["table_id"]))
+    column = await async_session.scalar(
+        select(SemanticColumnModel).where(SemanticColumnModel.table_id == table["table_id"])
+    )
     assert table["columns"][0]["column_id"] == column.id
 
 
@@ -474,3 +476,28 @@ async def test_put_published_metric_returns_pending_version(client: AsyncClient,
     assert draft["version"] == 2
     assert draft["status"] in {"pending_approval", "needs_review"}
     assert draft["definition"]["metric"]["formula"]["expression"] == "net_amount"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_table_names_use_ids(client, async_session):
+    user = await async_session.get(UserModel, 1)
+    database = await _seed_pending_schema(async_session)
+    duplicate = SemanticTableModel(
+        db_id=database.id, table_name="orders", physical_schema="archive", business_name="Old"
+    )
+    async_session.add(duplicate)
+    await async_session.commit()
+    root = f"/api/v1/semantic/{database.id}"
+    headers = _headers(user)
+    listing = await client.get(f"{root}/schema/review", headers=headers)
+    assert {t["physical_schema"] for t in listing.json()["tables"]} == {None, "archive"}
+    payload = {"business_name": "Archive", "description": ""}
+    assert (await client.put(f"{root}/table/orders", headers=headers, json=payload)).status_code == 409
+    assert (
+        await client.post(f"{root}/schema/approve", headers=headers, json={"table_names": ["orders"]})
+    ).status_code == 409
+    assert (
+        await client.put(f"{root}/table/orders?table_id={duplicate.id}", headers=headers, json=payload)
+    ).status_code == 200
+    approval = await client.post(f"{root}/schema/approve", headers=headers, json={"table_ids": [duplicate.id]})
+    assert approval.status_code == 200 and approval.json()["approved_tables"] == 1

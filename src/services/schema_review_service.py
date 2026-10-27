@@ -27,6 +27,10 @@ class SchemaRowNotFoundError(LookupError):
     """Raised when a reviewed table or column does not exist for a database."""
 
 
+class SchemaTableAmbiguousError(LookupError):
+    """Raised when a bare table name identifies multiple physical tables."""
+
+
 def apply_ai_proposal(row: Any, business_name: str, description: str) -> None:
     """Record an AI proposal on *row* without overwriting approved human edits.
 
@@ -99,21 +103,30 @@ async def load_review_tables(db: AsyncSession, db_id: int) -> list[SemanticTable
     return list((await db.execute(stmt)).scalars().all())
 
 
-async def _require_table(db: AsyncSession, db_id: int, table_name: str) -> SemanticTableModel:
+async def _require_table(
+    db: AsyncSession, db_id: int, table_name: str, table_id: int | None = None
+) -> SemanticTableModel:
     """Load one table of *db_id* by physical name or raise SchemaRowNotFoundError."""
     stmt = select(SemanticTableModel).where(
         SemanticTableModel.db_id == db_id,
-        SemanticTableModel.table_name == table_name,
+        SemanticTableModel.id == table_id
+        if table_id is not None
+        else func.lower(SemanticTableModel.table_name) == table_name.lower(),
     )
-    table = (await db.execute(stmt)).scalar_one_or_none()
+    rows = (await db.execute(stmt)).scalars().all()
+    if len(rows) > 1:
+        raise SchemaTableAmbiguousError(f"Table {table_name} is ambiguous; specify table_id")
+    table = rows[0] if rows else None
     if table is None:
         raise SchemaRowNotFoundError(f"Table {table_name} not found in database {db_id}")
     return table
 
 
-async def _require_column(db: AsyncSession, db_id: int, table_name: str, column_name: str) -> SemanticColumnModel:
+async def _require_column(
+    db: AsyncSession, db_id: int, table_name: str, column_name: str, table_id: int | None = None
+) -> SemanticColumnModel:
     """Load one column of *db_id* by physical names or raise SchemaRowNotFoundError."""
-    table = await _require_table(db, db_id, table_name)
+    table = await _require_table(db, db_id, table_name, table_id)
     stmt = select(SemanticColumnModel).where(
         SemanticColumnModel.table_id == table.id,
         SemanticColumnModel.column_name == column_name,
@@ -141,9 +154,10 @@ async def update_table_review(
     business_name: str,
     description: str,
     actor_id: int,
+    table_id: int | None = None,
 ) -> SemanticTableModel:
     """Apply an inline edit to a table's business name and description."""
-    table = await _require_table(db, db_id, table_name)
+    table = await _require_table(db, db_id, table_name, table_id)
     _apply_inline_edit(table, business_name, description, actor_id)
     await db.flush()
     return table
@@ -157,9 +171,10 @@ async def update_column_review(
     business_name: str,
     description: str,
     actor_id: int,
+    table_id: int | None = None,
 ) -> SemanticColumnModel:
     """Apply an inline edit to a column's business name and description."""
-    column = await _require_column(db, db_id, table_name, column_name)
+    column = await _require_column(db, db_id, table_name, column_name, table_id)
     _apply_inline_edit(column, business_name, description, actor_id)
     await db.flush()
     return column
@@ -180,6 +195,7 @@ async def approve_schema(
     db_id: int,
     actor_id: int,
     table_names: list[str] | None = None,
+    table_ids: list[int] | None = None,
 ) -> dict[str, int]:
     """Approve pending tables and their columns into the official Metadata Store.
 
@@ -187,13 +203,13 @@ async def approve_schema(
     incrementally. Returns the number of rows promoted plus what remains pending.
     """
     tables = await load_review_tables(db, db_id)
-    if table_names is not None:
-        target_names = {t.lower() for t in table_names}
-        selected = [item for item in tables if item.table_name.lower() in target_names]
-        found_names = {item.table_name.lower() for item in selected}
-        missing = target_names - found_names
-        if missing:
-            raise SchemaRowNotFoundError(f"Tables not found in database {db_id}: {sorted(missing)}")
+    if table_ids is not None:
+        selected = [item for item in tables if item.id in table_ids]
+        if set(table_ids) - {item.id for item in selected}:
+            raise SchemaRowNotFoundError(f"Tables not found in database {db_id}")
+    elif table_names is not None:
+        selected_ids = {(await _require_table(db, db_id, name)).id for name in table_names}
+        selected = [item for item in tables if item.id in selected_ids]
     else:
         selected = tables
 

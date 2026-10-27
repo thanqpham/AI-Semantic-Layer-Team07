@@ -200,3 +200,23 @@ async def test_approve_schema_unknown_table_raises(async_session: AsyncSession):
 
     with pytest.raises(SchemaRowNotFoundError, match="ghost"):
         await approve_schema(async_session, db_id, actor_id=7, table_names=["orders", "ghost"])
+
+
+@pytest.mark.asyncio
+async def test_qualified_duplicates_require_id(async_session):
+    from src.services.schema_review_service import SchemaTableAmbiguousError
+
+    db_id, legacy, _ = await _seed(async_session)
+    await update_table_review(async_session, db_id, "orders", "Unique", "", 1)
+    other = SemanticTableModel(db_id=db_id, table_name="orders", physical_schema="archive", business_name="Other")
+    async_session.add(other)
+    await async_session.flush()
+    assert {t.id for t in await load_review_tables(async_session, db_id)} == {legacy.id, other.id}
+    with pytest.raises(SchemaTableAmbiguousError):
+        await update_table_review(async_session, db_id, "orders", "Bad", "", 1)
+    with pytest.raises(SchemaTableAmbiguousError):
+        await approve_schema(async_session, db_id, 1, ["orders"])
+    await update_table_review(async_session, db_id, "orders", "Archive", "", 1, other.id)
+    await approve_schema(async_session, db_id, 1, table_ids=[other.id])
+    assert other.business_name == "Archive" and other.review_status == "approved"
+    assert legacy.business_name == "Unique" and legacy.physical_schema is None

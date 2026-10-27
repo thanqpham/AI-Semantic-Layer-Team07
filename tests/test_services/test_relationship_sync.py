@@ -232,7 +232,7 @@ async def test_disconnected_publication_does_not_block_trusted_fk(async_session)
 
 
 @pytest.mark.asyncio
-async def test_legacy_null_namespace_fk_is_preserved(async_session):
+async def test_legacy_null_namespace_fk_does_not_guess_schema(async_session):
     from src.models.db import SemanticTableModel
 
     raw, row = await seed(async_session)
@@ -240,9 +240,10 @@ async def test_legacy_null_namespace_fk_is_preserved(async_session):
     for table in tables:
         table.physical_schema = None
     await async_session.flush()
-    assert (await reconcile_relationships(async_session, 90, raw))["unchanged"] == 1
+    with pytest.raises(ValueError, match="FK endpoints must be persisted"):
+        await reconcile_relationships(async_session, 90, raw)
     assert row.review_status == "approved" and row.validation_status == "valid"
-    assert all(t.physical_schema == "public" for t in tables)
+    assert all(t.physical_schema is None for t in tables)
 
 
 @pytest.mark.asyncio

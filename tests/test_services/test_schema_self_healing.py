@@ -13,6 +13,7 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
+from src.models.schema_metadata import Identifier, SchemaDialect
 from src.services.database import encrypt_conn_url
 from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 from src.services.schema_self_healing_service import (
@@ -77,6 +78,7 @@ async def test_execute_self_healing_flow(async_session, tmp_path):
         id=201,
         db_id=sem_db.id,
         table_name="orders",
+        physical_schema="__default__",
         business_name="Đơn hàng",
         description="Bảng thông tin đơn hàng",
         created_by=1,
@@ -163,7 +165,6 @@ async def test_relationship_sync_preserves_endpoint_history(async_session, chang
     from unittest.mock import patch
 
     from src.models.db import CanonicalRelationshipModel
-    from src.models.schema_metadata import Identifier, SchemaDialect
     from tests.test_services.test_relationship_sync import seed
 
     raw, relationship = await seed(async_session)
@@ -230,3 +231,32 @@ async def test_relationship_sync_preserves_endpoint_history(async_session, chang
             item = await review_item(async_session, 90, relationship, "active")
             assert item.errors[0]["code"] == "ABSENT_TABLE"
     assert live.schema_metadata == raw.model_dump(mode="json")
+
+
+@pytest.mark.asyncio
+async def test_drift_targets_qualified_table_only(async_session):
+    from src.services.schema_self_healing_service import _handle_dropped_items, detect_drift_details
+    from tests.test_services.test_semantic_service import _make_raw_schema
+
+    raw = _make_raw_schema()
+    physical = raw.tables[0]
+    database = SemanticDatabaseModel(created_by=1, display_name="Qualified", db_type="postgresql", conn_url_enc="enc")
+    async_session.add(database)
+    await async_session.flush()
+    live = SemanticTableModel(
+        db_id=database.id,
+        table_name=physical.table_name.raw_name,
+        physical_schema=physical.schema_name.raw_name,
+        business_name="Live",
+    )
+    old = SemanticTableModel(
+        db_id=database.id, table_name=physical.table_name.raw_name, physical_schema="archive", business_name="Old"
+    )
+    async_session.add_all([live, old])
+    await async_session.flush()
+    await async_session.refresh(live, ["columns"])
+    await async_session.refresh(old, ["columns"])
+    drift = detect_drift_details([live, old], raw.model_copy(update={"tables": (physical,)}))
+    assert drift["dropped_table_ids"] == [old.id]
+    await _handle_dropped_items(async_session, database.id, [], drift["dropped_tables"], drift["dropped_table_ids"])
+    assert old.business_name.startswith("[Deprecated]") and live.business_name == "Live"

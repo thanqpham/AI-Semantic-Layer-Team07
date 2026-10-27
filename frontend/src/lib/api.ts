@@ -1261,8 +1261,9 @@ export async function updateTableReviewApi(
   tableName: string,
   businessName: string,
   description: string,
+  tableId?: number,
 ): Promise<{ message: string; review_status: string }> {
-  return semanticRequest(`/api/v1/semantic/${dbId}/table/${encodeURIComponent(tableName)}`, {
+  return semanticRequest(`/api/v1/semantic/${dbId}/table/${encodeURIComponent(tableName)}${tableId === undefined ? "" : `?table_id=${tableId}`}`, {
     method: 'PUT',
     body: JSON.stringify({ business_name: businessName, description }),
   });
@@ -1275,8 +1276,9 @@ export async function updateColumnReviewApi(
   columnName: string,
   businessName: string,
   description: string,
+  tableId?: number,
 ): Promise<{ message: string; review_status: string }> {
-  const path = `/api/v1/semantic/${dbId}/column/${encodeURIComponent(tableName)}/${encodeURIComponent(columnName)}`;
+  const path = `/api/v1/semantic/${dbId}/column/${encodeURIComponent(tableName)}/${encodeURIComponent(columnName)}${tableId === undefined ? "" : `?table_id=${tableId}`}`;
   return semanticRequest(path, {
     method: 'PUT',
     body: JSON.stringify({ business_name: businessName, description }),
@@ -1287,10 +1289,11 @@ export async function updateColumnReviewApi(
 export async function approveSchemaReviewApi(
   dbId: string,
   tableNames?: string[],
+  tableIds?: number[],
 ): Promise<SchemaApproveResult> {
   return semanticRequest<SchemaApproveResult>(`/api/v1/semantic/${dbId}/schema/approve`, {
     method: 'POST',
-    body: JSON.stringify({ table_names: tableNames ?? null }),
+    body: JSON.stringify({ table_names: tableNames ?? null, table_ids: tableIds ?? null }),
   });
 }
 

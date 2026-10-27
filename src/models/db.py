@@ -34,6 +34,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     false,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -378,7 +379,6 @@ class SemanticTableModel(ReviewStateMixin, Base):
 
     __tablename__ = "semantic_tables"
     __table_args__ = (
-        UniqueConstraint("db_id", "table_name", name="uq_semantic_tables_db_table"),
         CheckConstraint(REVIEW_STATUS_CHECK, name="ck_semantic_tables_review_status"),
         Index("idx_semantic_tables_db_review", "db_id", "review_status"),
     )
@@ -653,3 +653,12 @@ class NotificationModel(Base):
 
     recipient: Mapped["UserModel"] = relationship("UserModel", back_populates="notifications")
     metric_request: Mapped["MetricRequestModel | None"] = relationship("MetricRequestModel")
+
+
+Index(
+    "uq_semantic_tables_db_schema_table",
+    SemanticTableModel.db_id,
+    func.lower(func.coalesce(SemanticTableModel.physical_schema, "")),
+    func.lower(SemanticTableModel.table_name),
+    unique=True,
+)

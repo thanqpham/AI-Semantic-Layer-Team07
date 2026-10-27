@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { approveSchemaReviewApi, getSchemaReviewApi } from '@/lib/api';
+import { approveSchemaReviewApi, getSchemaReviewApi, updateTableReviewApi } from '@/lib/api';
 import { SchemaReviewView } from './SchemaReviewView';
 
 vi.mock('@/components/schema-review/RelationshipsPanel', () => ({RelationshipsPanel:()=> <div>Relationship queue</div>}));
@@ -32,7 +32,7 @@ it('shows pending relationship tab and bulk approves only tables and columns', a
  const tab=await screen.findByRole('tab',{name:'Liên kết (3)'});fireEvent.click(tab);expect(tab).toHaveAttribute('aria-selected','true');
  expect(screen.getByText('Relationship queue')).toBeVisible();expect(screen.getByRole('tab',{name:'Bảng & cột'})).toBeInTheDocument();
  fireEvent.click(screen.getByRole('button',{name:'Duyệt bảng & cột (3)'}));
- await waitFor(()=>expect(approveSchemaReviewApi).toHaveBeenCalledWith('7',undefined));
+ await waitFor(()=>expect(approveSchemaReviewApi).toHaveBeenCalledWith('7',undefined,undefined));
  expect(screen.getByText(/liên kết chờ xác nhận riêng/)).toHaveTextContent('3');
 });
 
@@ -44,3 +44,18 @@ it('does not advertise or load a read-only review queue without schema permissio
  expect(screen.queryByText('Relationship queue')).not.toBeInTheDocument();
  expect(getSchemaReviewApi).not.toHaveBeenCalled();
 });
+
+ it('approves duplicate names by stable table ID with qualified labels', async () => {
+ vi.mocked(approveSchemaReviewApi).mockClear();
+ vi.mocked(getSchemaReviewApi).mockResolvedValue({db_id:7,status:'pending_review',pending_tables:2,pending_columns:0,pending_relationships:0,tables:[
+ {table_id:11,table_name:'orders',physical_schema:'public',business_name:'Live',description:'',review_status:'pending_review',columns:[]},
+ {table_id:12,table_name:'orders',physical_schema:'archive',business_name:'Old',description:'',review_status:'pending_review',columns:[]},
+ ]});
+ render(<SchemaReviewView dbId={7} canManageSchema canApproveSchema/>);
+ await screen.findByText('public.orders'); expect(screen.getByText('archive.orders')).toBeVisible();
+ fireEvent.change(screen.getAllByRole('textbox')[2],{target:{value:'Edited archive'}});
+ fireEvent.click(screen.getAllByRole('button').find(button=>button.textContent === 'L\u01b0u' && !button.hasAttribute('disabled'))!);
+ await waitFor(()=>expect(updateTableReviewApi).toHaveBeenCalledWith('7','orders','Edited archive','',12));
+ const buttons=screen.getAllByRole('button',{name:'Duy\u1ec7t b\u1ea3ng n\u00e0y'}); fireEvent.click(buttons[1]);
+ await waitFor(()=>expect(approveSchemaReviewApi).toHaveBeenCalledWith('7',undefined,[12]));
+ });
