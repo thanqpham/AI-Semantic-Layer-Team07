@@ -24,7 +24,7 @@ from src.models.schemas import DimensionSelection, SemanticQueryFilter, Semantic
 from src.observability import trace_action
 from src.services.metric_definition_resolver import expression_tree_for_columns
 from src.services.metric_definitions import is_numeric_data_type
-from src.services.query_compiler_plan import compile_plan_sql
+from src.services.query_compiler_plan import compile_plan_sql, resolve_scoped_filter_stages
 from src.services.query_compiler_sql import (
     _assemble_sql,
     _coerce_literal,
@@ -293,26 +293,20 @@ class SemanticQueryCompiler:
             for item in definition.metric.filters
         ] + runtime_filters
         for item in scoped_filters:
-            column_id = item["column_id"]
-            resolved = by_id.get(column_id)
-            if resolved is None or any(resolved[0] not in stage_tables[stage.name] for stage in physical_stages):
-                raise SemanticCompileError(
-                    "UNSUPPORTED_PLAN_FILTER",
-                    "Runtime filters must reference the same approved table in every source stage",
-                )
-            for stage in physical_stages:
-                value = item["value"]
-                value = (
-                    [_coerce_literal(member, resolved[3]) for member in value]
-                    if item["operator"] in {"in", "not_in"}
-                    else _coerce_literal(value, resolved[3])
-                )
+            targets, resolved = resolve_scoped_filter_stages(item["column_id"], plan.stages, stage_tables, by_id)
+            value = item["value"]
+            value = (
+                [_coerce_literal(member, resolved[3]) for member in value]
+                if item["operator"] in {"in", "not_in"}
+                else _coerce_literal(value, resolved[3])
+            )
+            for stage in targets:
                 stage.filters.append(
                     MetricPlanFilter(
                         field=f"{resolved[0]}.{resolved[1]}",
                         operator=item["operator"],
                         value=value,
-                        column_id=column_id,
+                        column_id=item["column_id"],
                     )
                 )
         trace.record(
