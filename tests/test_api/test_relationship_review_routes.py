@@ -185,3 +185,82 @@ async def test_foreign_candidate_is_hidden(client, async_session):
     assert (
         await client.get(url + f"/{item.id}/impact?kind=candidate&action=approve", headers=headers)
     ).status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pairs",
+    [[{"from_column": "customer_id", "to_column": "id"}], [{"from_column_id": 1}], ["malformed"], {"not": "a list"}],
+)
+async def test_legacy_pair_payload_is_readable_and_can_be_disabled(client, async_session, pairs):
+    from src.models.db import CanonicalRelationshipModel
+
+    db_id, tables, _, _ = await seed(async_session)
+    active = CanonicalRelationshipModel(
+        connection_id=db_id,
+        from_entity_id=tables[0].id,
+        to_entity_id=tables[1].id,
+        relationship_type="many_to_one",
+        join_condition="legacy",
+        column_pairs=pairs,
+        validation_status="needs_review",
+        review_status="approved",
+    )
+    async_session.add(active)
+    await async_session.commit()
+    active_id = active.id
+    user = await async_session.get(UserModel, 1)
+    headers = {"Authorization": f"Bearer {create_access_token(user)}"}
+    url = f"/api/v1/semantic/{db_id}/relationships"
+    listed = await client.get(url, headers=headers)
+    assert listed.status_code == 200
+    item = listed.json()["items"][0]
+    assert item["column_pairs"] == pairs and item["errors"][0]["code"] == "INVALID_PAIR"
+    impact = (await client.get(url + f"/{active_id}/impact?kind=active&action=disable", headers=headers)).json()
+    response = await client.post(
+        url + f"/{active_id}/disable",
+        headers=headers,
+        json={"expected_revision": 1, "impact_token": impact["token"], "acknowledge_impact": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["item"]["column_pairs"] == pairs
+    assert (await async_session.get(CanonicalRelationshipModel, active_id)).column_pairs == pairs
+
+
+@pytest.mark.asyncio
+async def test_approved_candidate_patch_preserves_approval_audit(client, async_session):
+    from src.models.db_relationships import RelationshipCandidateModel
+    from src.services.relationship_review_service import (
+        decide_relationship,
+        preview_relationship_change,
+        save_relationship_candidate,
+    )
+
+    db_id, _, _, draft = await seed(async_session)
+    item = await save_relationship_candidate(async_session, db_id, 1, draft)
+    impact = await preview_relationship_change(async_session, db_id, item.id, kind="candidate", action="approve")
+    approved = await decide_relationship(
+        async_session,
+        db_id,
+        1,
+        item.id,
+        kind="candidate",
+        action="approve",
+        expected_revision=1,
+        impact_token=impact.token,
+        acknowledge_impact=True,
+    )
+    await async_session.commit()
+    candidate_id, reviewed_at = approved.id, approved.reviewed_at
+    user = await async_session.get(UserModel, 1)
+    headers = {"Authorization": f"Bearer {create_access_token(user)}"}
+    response = await client.patch(
+        f"/api/v1/semantic/{db_id}/relationships/candidates/{candidate_id}",
+        headers=headers,
+        json={**draft.model_dump(), "expected_revision": approved.revision, "relationship_type": "one_to_one"},
+    )
+    assert response.status_code == 409
+    row = await async_session.get(RelationshipCandidateModel, candidate_id)
+    assert row.status == "approved" and row.reviewed_by == 1
+    assert row.reviewed_at.replace(tzinfo=None) == reviewed_at.replace(tzinfo=None)
+    assert row.revision == approved.revision and row.relationship_type == "many_to_one"

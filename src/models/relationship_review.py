@@ -36,7 +36,7 @@ class RelationshipReviewItem(BaseModel):
     revision: int
     from_entity: dict[str, Any]
     to_entity: dict[str, Any]
-    column_pairs: list[dict[str, int]]
+    column_pairs: Any
     relationship_type: str
     source: str
     status: str
