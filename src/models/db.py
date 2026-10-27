@@ -33,12 +33,14 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.db_base import Base, utc_now
 from src.models.db_chat import ChatMessageModel, ChatSessionModel
 from src.models.db_metric_proposals import MetricProposalModel
+from src.models.db_relationships import RelationshipCandidateModel
 from src.models.llm_settings import UserLLMSettingsModel
 from src.models.review_mixin import REVIEW_STATUS_CHECK, ReviewStateMixin
 
@@ -58,6 +60,7 @@ __all__ = [
     "OrganizationInvitationModel",
     "OrganizationMemberModel",
     "OrganizationModel",
+    "RelationshipCandidateModel",
     "SchemaSyncLogModel",
     "SemanticColumnModel",
     "SemanticDatabaseModel",
@@ -495,7 +498,16 @@ class CanonicalRelationshipModel(Base):
     """Represents a canonical relationship between two semantic tables."""
 
     __tablename__ = "canonical_relationships"
-    __table_args__ = (UniqueConstraint("connection_id", "relationship_key", name="uq_canonical_rel_key"),)
+    __table_args__ = (
+        UniqueConstraint("connection_id", "relationship_key", name="uq_canonical_rel_key"),
+        CheckConstraint("source IN ('fk', 'ai', 'manual')", name="ck_canonical_relationships_source"),
+        CheckConstraint(
+            "review_status IN ('approved', 'disabled', 'needs_review')",
+            name="ck_canonical_relationships_review_status",
+        ),
+        CheckConstraint("revision >= 1", name="ck_canonical_relationships_revision"),
+        Index("idx_canonical_relationships_connection_review", "connection_id", "review_status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     connection_id: Mapped[int] = mapped_column(
@@ -513,6 +525,15 @@ class CanonicalRelationshipModel(Base):
     constraint_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     column_pairs: Mapped[list[dict[str, int]]] = mapped_column(JSON, nullable=False, default=list)
     validation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="valid")
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="fk", server_default="fk")
+    review_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="approved", server_default="approved"
+    )
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    human_modified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     database: Mapped["SemanticDatabaseModel"] = relationship("SemanticDatabaseModel", back_populates="relationships")
