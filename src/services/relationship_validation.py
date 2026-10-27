@@ -28,8 +28,6 @@ def invalid(code: str, message: str, pair_index: int | None = None) -> None:
 
 async def endpoints(db: AsyncSession, db_id: int, draft: RelationshipDraft) -> tuple:
     """Resolve endpoint IDs strictly inside the requested database."""
-    if draft.from_entity_id == draft.to_entity_id:
-        invalid("REPEATED_TABLE", "Relationship endpoints must be different tables")
     tables = []
     for entity_id in (draft.from_entity_id, draft.to_entity_id):
         table = await db.get(SemanticTableModel, entity_id)
@@ -72,6 +70,8 @@ async def validate_relationship(
     db: AsyncSession, db_id: int, draft: RelationshipDraft, *, approval: bool = False
 ) -> dict:
     """Validate ordered pairs and cardinality without querying customer data."""
+    if draft.from_entity_id == draft.to_entity_id:
+        invalid("REPEATED_TABLE", "Relationship endpoints must be different tables")
     if not draft.column_pairs:
         invalid("EMPTY_PAIRS", "At least one column pair is required")
     sides = await endpoints(db, db_id, draft)

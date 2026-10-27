@@ -129,3 +129,42 @@ it('reloads a stale impact and requires a fresh acknowledgment', async () => {
    expect(await screen.findByRole('button', { name: /sales.orders.*sales.customers/ })).toBeInTheDocument();
  });
 
+ it('displays friendly message when account AI is not configured', async () => {
+   vi.mocked(api.suggestRelationships).mockRejectedValueOnce(
+     new SemanticApiError(503, 'Account AI settings are required', {
+       errors: [{ code: 'ACCOUNT_LLM_NOT_CONFIGURED', message: 'Configure account AI settings' }],
+     }),
+   );
+   setup();
+   fireEvent.click(screen.getByRole('button', { name: 'AI đề xuất' }));
+   expect(
+     await screen.findByText('Hệ thống hoặc tài khoản chưa cấu hình API Key AI. Vui lòng cấu hình trong Cài đặt AI để tiếp tục.'),
+   ).toBeInTheDocument();
+ });
+
+ it('displays friendly timeout message and retries suggestion when clicking Thử lại đề xuất', async () => {
+   vi.mocked(api.suggestRelationships)
+     .mockRejectedValueOnce(
+       new SemanticApiError(422, 'Suggestion failed', {
+         errors: [{ code: 'SUGGESTION_FAILED', message: 'Timeout' }],
+       }),
+     )
+     .mockResolvedValueOnce({ items: [], counts: { pending_relationships: 0 } });
+   setup();
+   fireEvent.click(screen.getByRole('button', { name: 'AI đề xuất' }));
+   expect(
+     await screen.findByText('Quá trình AI đề xuất liên kết bị quá thời gian hoặc không thể phân tích schema. Vui lòng thử lại.'),
+   ).toBeInTheDocument();
+   const retryBtn = screen.getByRole('button', { name: 'Thử lại đề xuất' });
+   fireEvent.click(retryBtn);
+   await waitFor(() => expect(api.suggestRelationships).toHaveBeenCalledTimes(2));
+ });
+
+ it('notifies when no new relationships were found', async () => {
+   const notify = vi.fn();
+   vi.mocked(api.suggestRelationships).mockResolvedValueOnce({ items: [], counts: { pending_relationships: 0 } });
+   render(<RelationshipsPanel dbId="7" canManageSchema canApproveSchema onReviewChanged={changed} onNotify={notify} initialView="list" />);
+   fireEvent.click(screen.getByRole('button', { name: 'AI đề xuất' }));
+   await waitFor(() => expect(notify).toHaveBeenCalledWith('Không tìm thấy liên kết mới nào từ schema'));
+ });
+

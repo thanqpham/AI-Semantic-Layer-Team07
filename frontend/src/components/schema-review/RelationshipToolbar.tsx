@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutList, Network, Plus, Search, Sparkles } from 'lucide-react';
+import { LayoutList, Loader2, Network, Plus, Search, Sparkles } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,7 +83,16 @@ export function RelationshipToolbar(props: Props) {
           <Input aria-label={t('Tìm liên kết')} placeholder={t('Tìm bảng hoặc cột đầy đủ')} className="h-8 pl-8 text-xs" value={search} onChange={(event) => onSearch(event.target.value)} />
         </div>
         <ViewToggle view={props.view} onView={props.onView} />
-        {canManage && <Button size="sm" disabled={busy} onClick={onSuggest} className="h-8 gap-1.5 text-xs"><Sparkles className="size-3.5" aria-hidden="true" /><Translated text="AI đề xuất" /></Button>}
+        {canManage && (
+          <Button size="sm" disabled={busy} onClick={onSuggest} className="h-8 gap-1.5 text-xs">
+            {busy ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Sparkles className="size-3.5" aria-hidden="true" />
+            )}
+            <Translated text={busy ? 'Đang phân tích…' : 'AI đề xuất'} />
+          </Button>
+        )}
         {canManage && <Button size="sm" variant="outline" disabled={busy} onClick={onAdd} className="h-8 gap-1.5 text-xs"><Plus className="size-3.5" aria-hidden="true" /><Translated text="Thêm liên kết" /></Button>}
       </div>
       <div className="flex flex-wrap items-center gap-3">

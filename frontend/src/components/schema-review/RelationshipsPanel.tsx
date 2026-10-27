@@ -64,7 +64,26 @@ const toDraft = (item: RelationshipItem): RelationshipDraft => ({
       : null,
 });
 
-const message = (error: unknown) => (error instanceof Error ? error.message : 'Không thể tải liên kết');
+const message = (error: unknown, translate?: (text: string) => string): string => {
+  const t = translate || ((s: string) => s);
+  if (error instanceof SemanticApiError) {
+    const detailStr = typeof error.detail === 'object' ? JSON.stringify(error.detail) : String(error.detail || '');
+    if (error.status === 503 || detailStr.includes('ACCOUNT_LLM_NOT_CONFIGURED')) {
+      return t('Hệ thống hoặc tài khoản chưa cấu hình API Key AI. Vui lòng cấu hình trong Cài đặt AI để tiếp tục.');
+    }
+    if (detailStr.includes('SUGGESTION_FAILED') || error.status === 504) {
+      return t('Quá trình AI đề xuất liên kết bị quá thời gian hoặc không thể phân tích schema. Vui lòng thử lại.');
+    }
+    if (error.detail && typeof error.detail === 'object' && 'errors' in (error.detail as Record<string, unknown>)) {
+      const errs = (error.detail as { errors: Array<{ message?: string }> }).errors;
+      if (Array.isArray(errs) && errs.length && errs[0].message) {
+        return errs.map((item) => item.message).join('; ');
+      }
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : t('Không thể tải liên kết');
+};
 const key = (item: RelationshipItem) => `${item.kind}:${item.id}`;
 
 /** Scoped relationship queue with ERD diagram, card list toggle, and slide-over detail. */
@@ -91,6 +110,7 @@ export function RelationshipsPanel({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [errorAction, setErrorAction] = useState<'load' | 'suggest'>('load');
   const [impact, setImpact] = useState<RelationshipImpact | null>(null);
   const [action, setAction] = useState<'approve' | 'disable'>('approve');
   const [ack, setAck] = useState(false);
@@ -121,7 +141,10 @@ export function RelationshipsPanel({
       const result = await listRelationships(dbId, status, search);
       if (request === requestId.current && dbId === currentDb.current) setData(result);
     } catch (e) {
-      if (request === requestId.current && dbId === currentDb.current) setError(message(e));
+      if (request === requestId.current && dbId === currentDb.current) {
+        setError(message(e, t));
+        setErrorAction('load');
+      }
     } finally {
       if (request === requestId.current && dbId === currentDb.current) setLoading(false);
     }
@@ -260,7 +283,10 @@ export function RelationshipsPanel({
       await changed();
       onNotify?.(t('Đã lưu đề xuất, chờ xác nhận'));
     } catch (e) {
-      if (dbId === currentDb.current) setError(message(e));
+      if (dbId === currentDb.current) {
+        setError(message(e, t));
+        setErrorAction('load');
+      }
     } finally {
       if (dbId === currentDb.current) setBusy(false);
     }
@@ -270,12 +296,19 @@ export function RelationshipsPanel({
     setBusy(true);
     setError('');
     try {
-      await suggestRelationships(dbId);
+      const result = await suggestRelationships(dbId);
       if (dbId !== currentDb.current) return;
       await changed();
-      onNotify?.(t('Đề xuất AI đang chờ review'));
+      if (result.items.length > 0) {
+        onNotify?.(t(`AI đã đề xuất ${result.items.length} liên kết mới đang chờ review`));
+      } else {
+        onNotify?.(t('Không tìm thấy liên kết mới nào từ schema'));
+      }
     } catch (e) {
-      if (dbId === currentDb.current) setError(message(e));
+      if (dbId === currentDb.current) {
+        setError(message(e, t));
+        setErrorAction('suggest');
+      }
     } finally {
       if (dbId === currentDb.current) setBusy(false);
     }
@@ -300,7 +333,10 @@ export function RelationshipsPanel({
         setAck(false);
       }
     } catch (e) {
-      if (dbId === currentDb.current) setError(message(e));
+      if (dbId === currentDb.current) {
+        setError(message(e, t));
+        setErrorAction('load');
+      }
     } finally {
       if (dbId === currentDb.current) setBusy(false);
     }
@@ -323,7 +359,8 @@ export function RelationshipsPanel({
       onNotify?.(t('Đã cập nhật liên kết. Chọn metric và dimensions để xem SQL mới.'));
     } catch (e) {
       if (dbId !== currentDb.current) return;
-      setError(message(e));
+      setError(message(e, t));
+      setErrorAction('load');
       if (e instanceof SemanticApiError && e.status === 409) {
         setAck(false);
         try {
@@ -338,7 +375,8 @@ export function RelationshipsPanel({
           } else setImpact(null);
         } catch (reload) {
           setImpact(null);
-          setError(message(reload));
+          setError(message(reload, t));
+          setErrorAction('load');
         }
       }
     } finally {
@@ -382,8 +420,16 @@ export function RelationshipsPanel({
       />
 
       {error && (
-        <div role="alert" className="break-words rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {error} <Button variant="outline" size="sm" onClick={() => void load()}><Translated text="Thử lại" /></Button>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 break-words rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <span>{error}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => (errorAction === 'suggest' ? void suggest() : void load())}
+            disabled={busy}
+          >
+            <Translated text={errorAction === 'suggest' ? 'Thử lại đề xuất' : 'Thử lại'} />
+          </Button>
         </div>
       )}
 

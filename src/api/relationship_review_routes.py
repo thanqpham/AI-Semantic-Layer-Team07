@@ -14,7 +14,7 @@ from src.api.routes import _require_resource_permission
 from src.models.db import UserModel
 from src.models.relationship_review import RelationshipDecision, RelationshipDraft
 from src.services.database import get_db_session
-from src.services.llm import account_llm_config
+from src.services.llm import has_configured_llm
 from src.services.relationship_review_service import (
     decide_relationship,
     list_relationship_reviews,
@@ -152,7 +152,7 @@ async def use_suggestion_llm(
     try:
         async with aclosing(use_account_llm(user, db)) as context:
             async for _ in context:
-                if account_llm_config.get() is None:
+                if not has_configured_llm():
                     raise HTTPException(503, "Account AI settings are required")
                 yield
     except HTTPException as exc:

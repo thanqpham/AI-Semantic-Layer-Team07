@@ -281,9 +281,25 @@ async def test_suggest_requires_account_settings(client, async_session, monkeypa
         if missing == "invalid"
         else AsyncMock(return_value=None),
     )
+    monkeypatch.setattr("src.api.relationship_review_routes.has_configured_llm", lambda: False)
     response = await client.post(f"/api/v1/semantic/{db_id}/relationships/suggest", headers=headers)
     assert response.status_code == 503
     assert response.json()["detail"]["errors"][0]["code"] == "ACCOUNT_LLM_NOT_CONFIGURED"
+
+
+@pytest.mark.asyncio
+async def test_suggest_falls_back_to_server_llm_when_account_settings_absent(client, async_session, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    db_id, _, _, _ = await seed(async_session)
+    await async_session.commit()
+    user = await async_session.get(UserModel, 1)
+    headers = {"Authorization": f"Bearer {create_access_token(user)}"}
+    monkeypatch.setattr("src.api.llm_settings_routes.load_account_llm_config", AsyncMock(return_value=None))
+    monkeypatch.setattr("src.api.relationship_review_routes.has_configured_llm", lambda: True)
+    monkeypatch.setattr("src.api.relationship_review_routes.suggest_relationships", AsyncMock(return_value=[]))
+    response = await client.post(f"/api/v1/semantic/{db_id}/relationships/suggest", headers=headers)
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
