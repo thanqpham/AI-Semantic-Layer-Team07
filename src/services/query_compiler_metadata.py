@@ -310,6 +310,13 @@ class QueryCompilerMetadata:
         if not isinstance(parsed, exp.Column):
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan grouping key must be a column")
         source_name = f"{parsed.db}.{parsed.table}" if parsed.db else (parsed.table or stage.base_entity)
+        if parsed.db:
+            table = metadata.tables_folded.get(source_name.casefold())
+            if table is not None:
+                source_name = next(
+                    (key for key, item in metadata.tables.items() if item.id == table.id),
+                    source_name,
+                )
         matches = [
             key
             for key in metadata.stage_tables[stage.name]

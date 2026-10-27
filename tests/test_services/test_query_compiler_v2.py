@@ -1062,6 +1062,7 @@ async def _column(db: AsyncSession, table_id: int, name: str) -> SemanticColumnM
     )
     return result.scalar_one()
 
+
 @pytest.mark.asyncio
 async def test_plan_uses_stored_base_id_and_qualified_cross_schema_join(async_session: AsyncSession) -> None:
     db_id, metric_ids = await _seed_filtered_metrics(async_session)
@@ -1120,12 +1121,12 @@ async def test_plan_uses_stored_base_id_and_qualified_cross_schema_join(async_se
     compiler = SemanticQueryCompiler(async_session)
     await async_session.execute(text("ATTACH DATABASE ':memory:' AS archive"))
     await async_session.execute(text("ATTACH DATABASE ':memory:' AS public"))
-    await async_session.execute(text('CREATE TABLE archive.orders (customer_id INTEGER)'))
-    await async_session.execute(text('CREATE TABLE public.orders (customer_id INTEGER)'))
-    await async_session.execute(text('CREATE TABLE public.customers (id INTEGER)'))
-    await async_session.execute(text('INSERT INTO archive.orders VALUES (1), (1)'))
-    await async_session.execute(text('INSERT INTO public.orders VALUES (1), (1), (1)'))
-    await async_session.execute(text('INSERT INTO public.customers VALUES (1)'))
+    await async_session.execute(text("CREATE TABLE archive.orders (customer_id INTEGER)"))
+    await async_session.execute(text("CREATE TABLE public.orders (customer_id INTEGER)"))
+    await async_session.execute(text("CREATE TABLE public.customers (id INTEGER)"))
+    await async_session.execute(text("INSERT INTO archive.orders VALUES (1), (1)"))
+    await async_session.execute(text("INSERT INTO public.orders VALUES (1), (1), (1)"))
+    await async_session.execute(text("INSERT INTO public.customers VALUES (1)"))
     result = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
     assert 'FROM "archive"."orders"' in result.sql
     assert (await async_session.execute(text(result.sql), result.parameters)).scalar_one() == 2
@@ -1151,8 +1152,40 @@ async def test_plan_uses_stored_base_id_and_qualified_cross_schema_join(async_se
     assert 'JOIN "public"."customers"' in result.sql
     assert '"archive"."orders"."customer_id" = "public"."customers"."id"' in result.sql
     assert (await async_session.execute(text(result.sql), result.parameters)).scalar_one() == 2
-    filtered = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id], filters=[SemanticQueryFilter(column_id=fk.id, operator="eq", value=1)]))
+    metric.definition["metric"]["query_plan"]["stages"][0]["aggregates"] = [
+        {"name": "n", "function": "COUNT", "expression": "public.customers.id"}
+    ]
+    await async_session.flush()
+    result = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert 'COUNT("public"."customers"."id")' in result.sql
+    assert (await async_session.execute(text(result.sql), result.parameters)).scalar_one() == 2
+    filtered = await compiler.compile(
+        db_id,
+        SemanticQuerySpec(
+            metric_ids=[metric.id], filters=[SemanticQueryFilter(column_id=fk.id, operator="eq", value=1)]
+        ),
+    )
     assert (await async_session.execute(text(filtered.sql), filtered.parameters)).scalar_one() == 2
+    metric.definition["metric"]["query_plan"]["stages"][0]["filters"] = [
+        {"field": "public.customers.id", "operator": "eq", "value": 1}
+    ]
+    await async_session.flush()
+    filtered = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert '"public"."customers"."id" = :' in filtered.sql
+    assert (await async_session.execute(text(filtered.sql), filtered.parameters)).scalar_one() == 2
+    metric.definition["metric"]["query_plan"]["stages"][0]["group_by"] = [
+        {"name": "customer_id", "expression": "public.customers.id"}
+    ]
+    metric.definition["metric"]["query_plan"]["stages"][0]["aggregates"] = [
+        {"name": "n", "function": "COUNT", "expression": "*"}
+    ]
+    await async_session.flush()
+    result = await compiler.compile(
+        db_id,
+        SemanticQuerySpec(metric_ids=[metric.id], dimensions=[DimensionSelection(column_id=pk.id)]),
+    )
+    assert 'GROUP BY "public"."customers"."id"' in result.sql
+    assert tuple((await async_session.execute(text(result.sql), result.parameters)).one()) == (1, 2)
     metric.base_entity_id = None
     metric.definition = {**metric.definition, "metric": {**metric.definition["metric"], "base_entity_id": None}}
     await async_session.flush()
