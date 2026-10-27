@@ -187,7 +187,7 @@ export function SchemaReviewView({
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (!dbId) return;
+    if (!dbId || !canManageSchema) return;
     setLoading(true);
     setError('');
     try {
@@ -201,7 +201,7 @@ export function SchemaReviewView({
     } finally {
       setLoading(false);
     }
-  }, [dbId]);
+  }, [dbId, canManageSchema]);
 
   useEffect(() => {
     void load();
@@ -258,6 +258,13 @@ export function SchemaReviewView({
     [drafts, baseline],
   );
 
+  if (dbId && !canManageSchema) {
+    return <div className="flex h-full w-full flex-col overflow-hidden">
+      <ViewHeader eyebrow="Flow 1 HITL Review" title="Schema Review" description="Review access is restricted to schema managers." />
+      <p role="status" className="p-6 text-sm text-muted-foreground"><Translated text="Schema Review requires schema management permission. Contact your Data Lead." /></p>
+    </div>;
+  }
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
       <ViewHeader
@@ -290,11 +297,6 @@ export function SchemaReviewView({
         <p className="text-xs text-muted-foreground">{review?.pending_relationships??0} <Translated text="liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết." /></p>
         {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
         <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
-        {!canManageSchema && (
-          <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">
-            <Translated text={"Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt."} />
-          </p>
-        )}
         {error && (
           <p className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />

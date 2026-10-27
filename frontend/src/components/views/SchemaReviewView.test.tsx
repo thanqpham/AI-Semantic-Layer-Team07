@@ -35,3 +35,12 @@ it('shows pending relationship tab and bulk approves only tables and columns', a
  await waitFor(()=>expect(approveSchemaReviewApi).toHaveBeenCalledWith('7',undefined));
  expect(screen.getByText(/liên kết chờ xác nhận riêng/)).toHaveTextContent('3');
 });
+
+
+it('does not advertise or load a read-only review queue without schema permission', () => {
+ vi.mocked(getSchemaReviewApi).mockClear();
+ render(<SchemaReviewView dbId={7} />);
+ expect(screen.getByRole('status')).toHaveTextContent('Schema Review requires schema management permission');
+ expect(screen.queryByText('Relationship queue')).not.toBeInTheDocument();
+ expect(getSchemaReviewApi).not.toHaveBeenCalled();
+});
