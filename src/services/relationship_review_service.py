@@ -165,7 +165,7 @@ def apply_draft(row: Candidate, draft: RelationshipDraft, target_id: int | None,
     evidence = {
         key: value
         for key, value in (row.evidence or {}).items()
-        if key not in ("attested_by", "attested_at", "cardinality_confirmation")
+        if key not in ("attested_by", "attested_at", "cardinality_confirmation", "cardinality_unknown")
     }
     row.evidence = {**evidence, "cardinality_confirmation": (draft.cardinality_confirmation or "").strip()}
 
@@ -281,6 +281,8 @@ async def decide_relationship(
         if not acknowledge_impact or impact_token != state["token"]:
             raise HTTPException(409, "Matching impact token and acknowledgment are required")
         validated = await validate_relationship(db, db_id, draft_for(row), approval=True) if action == "approve" else {}
+    if action == "approve" and row.evidence.get("cardinality_unknown"):
+        invalid("UNKNOWN_CARDINALITY", "Select and confirm cardinality before approval")
     await claim_revision(db, row, expected_revision)
     if action == "approve":
         await promote(db, db_id, row, actor_id, validated["on_preview"])
