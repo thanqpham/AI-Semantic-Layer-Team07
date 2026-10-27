@@ -11,6 +11,8 @@ from src.models.metric_definition import MetricPlanStage
 from src.services.query_compiler_sql import _normalize_value, _quoted, _table_name, _validated_join_condition
 from src.services.semantic_compile_error import SemanticCompileError
 
+_RUNTIME_FILTERS_MSG = "Runtime filters must be resolved to stage-level filters by the caller before compilation"
+
 
 def compile_plan_sql(
     plan: Any,
@@ -27,6 +29,8 @@ def compile_plan_sql(
     order_by: str | None = None,
 ) -> str:
     """Render stage CTEs and a result aligned on their declared grouping names."""
+    if runtime_filters:
+        raise _plan_filter_error("unresolved_lineage", None, _RUNTIME_FILTERS_MSG)
     stage_map = {stage.name: stage for stage in plan.stages}
     output_refs = _refs(plan.output_expression, stage_map)
     terminals = sorted({stage for stage, _ in output_refs})
@@ -37,13 +41,12 @@ def compile_plan_sql(
         raise SemanticCompileError("INCOMPATIBLE_GRAIN", "Metric plan result stages must share the same grouping grain")
     selected_group_names = set()
     for dimension in runtime_dimensions:
-        match = [
-            field
-            for field in stage_map[terminals[0]].group_by
-            if field.column_id == dimension["column_id"]
-        ]
+        match = [field for field in stage_map[terminals[0]].group_by if field.column_id == dimension["column_id"]]
         if not match or any(
-            not any(field.name == match[0].name and field.column_id == dimension["column_id"] for field in stage_map[name].group_by)
+            not any(
+                field.name == match[0].name and field.column_id == dimension["column_id"]
+                for field in stage_map[name].group_by
+            )
             for name in terminals
         ):
             raise SemanticCompileError("INCOMPATIBLE_GRAIN", "Selected dimension is not present in every result stage")
@@ -52,11 +55,8 @@ def compile_plan_sql(
         # Grouped plans need an explicit output dimension to avoid returning hidden grain rows.
         raise SemanticCompileError("DIMENSION_REQUIRED", "Select a dimension declared by the metric plan")
     if set(group_names) != selected_group_names:
-        raise SemanticCompileError("INCOMPATIBLE_GRAIN", "Selected dimensions must match the metric plan's complete result grain")
-    if runtime_filters:
         raise SemanticCompileError(
-            "UNSUPPORTED_PLAN_FILTER",
-            "Runtime filters are not yet mapped to every source stage; define the filter on the metric plan.",
+            "INCOMPATIBLE_GRAIN", "Selected dimensions must match the metric plan's complete result grain"
         )
 
     ctes: list[str] = []
@@ -98,6 +98,51 @@ def compile_plan_sql(
         ctes.append(f"{result_name} AS ({result})")
         return "WITH " + ",\n".join(ctes) + f"\nSELECT * FROM {result_name}\n{order_clause}\nLIMIT {limit}"
     return "WITH " + ",\n".join(ctes) + f"\n{result}\nLIMIT {limit}"
+
+
+def resolve_scoped_filter_stages(
+    column_id: int | None,
+    stages: list[MetricPlanStage],
+    stage_tables: dict[str, set[str]],
+    by_id: dict[int, tuple[str, str, int, str]],
+) -> tuple[list[MetricPlanStage], tuple[str, str, int, str]]:
+    """Return the physical stages a scoped plan filter applies to and its column record.
+
+    Raises SemanticCompileError("UNSUPPORTED_PLAN_FILTER") with context
+    {"column_id": ..., "reason": ...} when placement is not exactly one or all stages.
+    """
+    if column_id is None:
+        raise _plan_filter_error(
+            "unresolved_lineage", column_id, "Plan filter must reference an approved column to resolve its source stage"
+        )
+    resolved = by_id.get(column_id)
+    if resolved is None:
+        raise _plan_filter_error("unknown_column", column_id, "Plan filter column is not part of the semantic model")
+    physical = [stage for stage in stages if stage.base_entity]
+    members = [stage for stage in physical if resolved[0] in stage_tables[stage.name]]
+    if not members:
+        raise _plan_filter_error("not_in_plan", column_id, "Plan filter column is not part of the metric plan")
+    if len(members) not in (1, len(physical)):
+        raise _plan_filter_error(
+            "partial_stage_coverage",
+            column_id,
+            "Plan filter column is present in only some source stages",
+            [stage.name for stage in members],
+        )
+    return members, resolved
+
+
+def _plan_filter_error(
+    reason: str,
+    column_id: int | None,
+    message: str,
+    stage_names: list[str] | None = None,
+) -> SemanticCompileError:
+    """Build the shared UNSUPPORTED_PLAN_FILTER error carrying only safe context keys."""
+    context: dict[str, Any] = {"column_id": column_id, "reason": reason} | (
+        {"stage_names": stage_names} if stage_names else {}
+    )
+    return SemanticCompileError("UNSUPPORTED_PLAN_FILTER", message, context)
 
 
 def _plan_order_clause(
@@ -171,8 +216,10 @@ def _stage_sql(
         for item in stage.filters
     ]
     for aggregate in stage.aggregates:
-        argument = "1" if aggregate.expression == "*" else _plan_expression(
-            aggregate.expression, stage, source_table, columns, available, dialect
+        argument = (
+            "1"
+            if aggregate.expression == "*"
+            else _plan_expression(aggregate.expression, stage, source_table, columns, available, dialect)
         )
         predicates = [
             _plan_filter(item, stage, source_table, columns, available, dialect, parameters, aggregate.name)
@@ -180,7 +227,11 @@ def _stage_sql(
         ]
         if predicates:
             argument = f"CASE WHEN {' AND '.join(predicates)} THEN {argument} END"
-        expression = f"COUNT(DISTINCT {argument})" if aggregate.function == "COUNT_DISTINCT" else f"{aggregate.function}({argument})"
+        expression = (
+            f"COUNT(DISTINCT {argument})"
+            if aggregate.function == "COUNT_DISTINCT"
+            else f"{aggregate.function}({argument})"
+        )
         selected.append(f"{expression} AS {_quoted(aggregate.name, dialect)}")
     if not selected:
         raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric plan stage has no outputs")
@@ -206,7 +257,9 @@ def _plan_expression(
         table, name = column.table, column.name
         if source_table is None:
             if (table and table.casefold() != (stage.source_stage or "").casefold()) or name not in available:
-                raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage expression references an unknown previous output")
+                raise SemanticCompileError(
+                    "UNKNOWN_REFERENCE", "Stage expression references an unknown previous output"
+                )
             replacement = exp.column(name, quoted=True)
             if column is parsed:
                 parsed = replacement
@@ -272,7 +325,9 @@ def _refs(expression: str, stages: dict[str, MetricPlanStage]) -> list[tuple[str
     refs = []
     for column in parsed.find_all(exp.Column):
         stage = stages.get(column.table)
-        outputs = {field.name for field in stage.group_by} | {item.name for item in stage.aggregates} if stage else set()
+        outputs = (
+            {field.name for field in stage.group_by} | {item.name for item in stage.aggregates} if stage else set()
+        )
         if column.table not in stages or not column.name or column.name not in outputs:
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Output references must use stage.measure names")
         refs.append((column.table, column.name))
