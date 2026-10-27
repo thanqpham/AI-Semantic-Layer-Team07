@@ -13,7 +13,7 @@ const result = {items:[item],counts:{pending_relationships:1}};
 const changed=vi.fn();
 beforeEach(() => {vi.clearAllMocks();vi.mocked(api.listRelationships).mockResolvedValue(result);vi.mocked(api.previewRelationship).mockResolvedValue({on_preview:item.on_preview,errors:[],warnings:[]});vi.mocked(api.getRelationshipImpact).mockResolvedValue({token:'t',metric_ids:[9],relationship_ids:[1],join_paths:[[1,2]],published_metrics:[{id:9,name:'Revenue'}],warnings:[],before_on:'old',after_on:'new'});});
 afterEach(cleanup);
-const setup=(manage=true, approve=true) => render(<RelationshipsPanel dbId="7" canManageSchema={manage} canApproveSchema={approve} onReviewChanged={changed}/>);
+const setup=(manage=true, approve=true) => render(<RelationshipsPanel dbId="7" canManageSchema={manage} canApproveSchema={approve} onReviewChanged={changed} initialView="list"/>);
 it('restores the selected preview after an invalid draft returns to baseline', async () => {
  vi.mocked(api.previewRelationship).mockResolvedValue({on_preview:'invalid',errors:[{message:'Invalid draft'}],warnings:[]});
  setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
@@ -109,13 +109,23 @@ it('reloads a stale impact and requires a fresh acknowledgment', async () => {
  expect(screen.getByRole('checkbox')).not.toBeChecked();expect(screen.getByRole('button',{name:'Xác nhận tác động'})).toBeDisabled();
 });
 
-it('keeps malformed legacy pairs visible and allows a safe repair draft', async () => {
- const broken={...item,kind:'active' as const,status:'needs_review',column_pairs:['malformed'],errors:[{code:'INVALID_PAIR',message:'Invalid pair'}]};
- vi.mocked(api.listRelationships).mockResolvedValue({items:[broken],counts:{pending_relationships:0}});
- setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
- expect(screen.getByText('["malformed"]')).toBeInTheDocument();
- fireEvent.change(screen.getByRole('combobox',{name:'Cột nguồn 1'}),{target:{value:'10'}});
- fireEvent.change(screen.getByRole('combobox',{name:'Cột đích 1'}),{target:{value:'20'}});
- await waitFor(()=>expect(api.previewRelationship).toHaveBeenCalledWith('7',expect.objectContaining({column_pairs:[{from_column_id:10,to_column_id:20}]})));
- expect(screen.getByText('["malformed"]')).toBeInTheDocument();
-});
+ it('keeps malformed legacy pairs visible and allows a safe repair draft', async () => {
+  const broken={...item,kind:'active' as const,status:'needs_review',column_pairs:['malformed'],errors:[{code:'INVALID_PAIR',message:'Invalid pair'}]};
+  vi.mocked(api.listRelationships).mockResolvedValue({items:[broken],counts:{pending_relationships:0}});
+  setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
+  expect(screen.getByText('["malformed"]')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox',{name:'Cột nguồn 1'}),{target:{value:'10'}});
+  fireEvent.change(screen.getByRole('combobox',{name:'Cột đích 1'}),{target:{value:'20'}});
+  await waitFor(()=>expect(api.previewRelationship).toHaveBeenCalledWith('7',expect.objectContaining({column_pairs:[{from_column_id:10,to_column_id:20}]})));
+  expect(screen.getByText('["malformed"]')).toBeInTheDocument();
+ });
+
+ it('toggles between diagram and card list views', async () => {
+   render(<RelationshipsPanel dbId="7" canManageSchema canApproveSchema onReviewChanged={changed} initialView="diagram" />);
+   expect(screen.getByRole('button', { name: 'Sơ đồ' })).toHaveAttribute('aria-pressed', 'true');
+   expect(screen.getByRole('button', { name: 'Danh sách' })).toHaveAttribute('aria-pressed', 'false');
+   fireEvent.click(screen.getByRole('button', { name: 'Danh sách' }));
+   expect(screen.getByRole('button', { name: 'Danh sách' })).toHaveAttribute('aria-pressed', 'true');
+   expect(await screen.findByRole('button', { name: /sales.orders.*sales.customers/ })).toBeInTheDocument();
+ });
+
