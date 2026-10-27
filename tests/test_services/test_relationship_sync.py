@@ -346,3 +346,95 @@ async def test_retained_dropped_column_cannot_be_approved(async_session):
         await validate_relationship(async_session, 90, draft_for(row), approval=True)
     assert error.value.detail["errors"][0]["code"] == "ABSENT_COLUMN"
     assert (await review_item(async_session, 90, row, "active")).errors[0]["code"] == "ABSENT_COLUMN"
+
+
+@pytest.mark.asyncio
+async def test_repeat_uppercase_fk_keeps_approved_metric(async_session):
+    from src.models.db import SemanticDatabaseModel, SemanticMetricModel
+    from src.models.schema_metadata import Identifier
+
+    raw = _make_raw_schema()
+    def ident(s):
+        return Identifier.from_raw(s.upper(), raw.dialect)
+    raw = raw.model_copy(
+        update={
+            "tables": tuple(
+                t.model_copy(
+                    update={
+                        "schema_name": ident(t.schema_name.raw_name),
+                        "table_name": ident(t.table_name.raw_name),
+                        "foreign_keys": tuple(
+                            f.model_copy(
+                                update={
+                                    "referred_schema": ident(f.referred_schema.raw_name),
+                                    "referred_table": ident(f.referred_table.raw_name),
+                                }
+                            )
+                            for f in t.foreign_keys
+                        ),
+                    }
+                )
+                for t in raw.tables
+            )
+        }
+    )
+    async_session.add(
+        SemanticDatabaseModel(id=90, created_by=1, display_name="Sync", db_type="postgresql", conn_url_enc="sync")
+    )
+    await async_session.flush()
+    await enrich_and_save_canonical_schema(async_session, 1, 90, raw, "postgresql", enrichment={"tables": []})
+    row = await async_session.scalar(select(CanonicalRelationshipModel))
+    metric = SemanticMetricModel(
+        db_id=90,
+        base_entity_id=row.from_entity_id,
+        name="Published",
+        description="",
+        sql_template="COUNT(*)",
+        formula="COUNT(*)",
+        status="approved",
+        definition={},
+    )
+    async_session.add(metric)
+    await async_session.flush()
+    await reconcile_relationships(async_session, 90, raw)
+    assert row.validation_status == "valid" and row.review_status == "approved"
+    assert metric.status == "approved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", ["unparsed legacy payload", ["malformed"], [{"from_column_id": 1}]])
+async def test_sync_preserves_malformed_legacy_payload(async_session, payload):
+    raw, row = await seed(async_session)
+    row.column_pairs, row.validation_status, row.join_condition = payload, "needs_review", "legacy"
+    await async_session.flush()
+    await reconcile_relationships(async_session, 90, raw)
+    assert row.column_pairs == payload and row.join_condition == "legacy"
+
+
+@pytest.mark.asyncio
+async def test_migrated_legacy_payload_survives_sync(async_session):
+    from unittest.mock import patch
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    from tests.test_migrations.test_relationship_review import _legacy_schema, _migration, _seed
+
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        old = _legacy_schema(connection)
+        _seed(connection, old)
+        migration = _migration()
+        with patch.object(migration, "op", Operations(MigrationContext.configure(connection))):
+            migration.upgrade()
+        migrated = sa.Table("canonical_relationships", sa.MetaData(), autoload_with=connection)
+        payload, status = connection.execute(
+            sa.select(migrated.c.column_pairs, migrated.c.validation_status).where(migrated.c.id == 9)
+        ).one()
+    engine.dispose()
+    raw, row = await seed(async_session)
+    row.column_pairs, row.validation_status, row.join_condition = payload, status, "legacy"
+    await async_session.flush()
+    await reconcile_relationships(async_session, 90, raw)
+    assert row.column_pairs == "unparsed legacy payload" and row.join_condition == "legacy"

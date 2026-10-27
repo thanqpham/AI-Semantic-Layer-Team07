@@ -27,6 +27,21 @@ class RelationshipStep:
     column_pairs: list[dict[str, int]]
 
 
+def valid_pairs(payload: object) -> bool:
+    """Recognize canonical pairs without coercing or modifying historical payloads."""
+    return (
+        isinstance(payload, list)
+        and bool(payload)
+        and all(
+            isinstance(pair, dict)
+            and set(pair) == {"from_column_id", "to_column_id"}
+            and all(type(value) is int and value > 0 for value in pair.values())
+            for pair in payload
+        )
+        and all(len({pair[key] for pair in payload}) == len(payload) for key in ("from_column_id", "to_column_id"))
+    )
+
+
 def _step(rel: CanonicalRelationshipModel, reverse: bool = False) -> RelationshipStep:
     pairs = rel.column_pairs or []
     if reverse:
@@ -42,6 +57,8 @@ def _step(rel: CanonicalRelationshipModel, reverse: bool = False) -> Relationshi
 def _graph(relationships: list[CanonicalRelationshipModel], allow_fanout: bool) -> dict[int, list[RelationshipStep]]:
     graph: dict[int, list[RelationshipStep]] = {}
     for rel in relationships:
+        if not valid_pairs(rel.column_pairs) and not (allow_fanout and rel.column_pairs == []):
+            continue
         kind = rel.relationship_type.replace("-", "_").lower()
         if allow_fanout or kind in {"many_to_one", "n:1", "one_to_one", "1:1"}:
             graph.setdefault(rel.from_entity_id, []).append(_step(rel))

@@ -189,12 +189,12 @@ def _stage_sql(
         joined = {stage.base_entity}
         for target in stage.joins:
             for join in join_paths.get((stage.base_entity, target), []):
-                if join["table_name"] not in joined:
+                if join.get("table_key", join["table_name"]) not in joined:
                     joins.append(join)
-                    joined.add(join["table_name"])
+                    joined.add(join.get("table_key", join["table_name"]))
         if not set(stage.joins).issubset(joined):
             raise SemanticCompileError("UNSAFE_JOIN", "Metric plan join path is incomplete or fanout-prone")
-        from_sql = _table_name(tables[stage.base_entity].physical_schema, stage.base_entity, dialect)
+        from_sql = _table_name(tables[stage.base_entity].physical_schema, tables[stage.base_entity].table_name, dialect)
         for join in joins:
             condition = _validated_join_condition(join["condition"], dialect)
             target = _table_name(join["physical_schema"], join["table_name"], dialect)
@@ -254,7 +254,7 @@ def _plan_expression(
 ) -> str:
     parsed = sqlglot.parse_one(value)
     for column in list(parsed.find_all(exp.Column)):
-        table, name = column.table, column.name
+        table, name = (f"{column.db}.{column.table}" if column.db else column.table), column.name
         if source_table is None:
             if (table and table.casefold() != (stage.source_stage or "").casefold()) or name not in available:
                 raise SemanticCompileError(
@@ -267,10 +267,18 @@ def _plan_expression(
                 column.replace(replacement)
             continue
         table = table or source_table
+        matches = [
+            key
+            for key in {source_table, *stage.joins}
+            if key.casefold() == table.casefold()
+            or (not column.db and key.rsplit(".", 1)[-1].casefold() == table.casefold())
+        ]
+        table = matches[0] if len(matches) == 1 else table
         record = columns.get(table, {}).get(name)
         if table not in {source_table, *stage.joins} or record is None:
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage expression references an unknown table or column")
-        replacement = exp.column(record[0], table=table, quoted=True)
+        parts = table.rsplit(".", 1)
+        replacement = exp.column(record[0], table=parts[-1], db=parts[0] if len(parts) == 2 else None, quoted=True)
         if column is parsed:
             parsed = replacement
         else:
@@ -298,11 +306,20 @@ def _plan_filter(
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage filter references an unknown previous output")
         column = f"{_quoted(name, dialect)}"
     else:
-        table, name = field.split(".", 1) if "." in field else (source_table, field)
+        table, name = field.rsplit(".", 1) if "." in field else (source_table, field)
+        matches = [
+            key
+            for key in {source_table, *stage.joins}
+            if key.casefold() == table.casefold() or key.rsplit(".", 1)[-1].casefold() == table.casefold()
+        ]
+        table = matches[0] if len(matches) == 1 else table
         record = columns.get(table, {}).get(name)
         if table not in {source_table, *stage.joins} or record is None:
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage filter references an unknown table or column")
-        column = f"{_quoted(table, dialect)}.{_quoted(record[0], dialect)}"
+        parts = table.rsplit(".", 1)
+        column = exp.column(record[0], table=parts[-1], db=parts[0] if len(parts) == 2 else None, quoted=True).sql(
+            dialect=dialect
+        )
     if item.operator == "is_null":
         return column + " IS NULL"
     if item.operator == "is_not_null":

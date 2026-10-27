@@ -98,7 +98,7 @@ class QueryCompileOrchestrator:
         trace: CompileTraceBuilder,
     ) -> SimpleMetricCompileContext:
         base_name = self._metadata.require_same_base(definitions)
-        base, table_by_id = await self._load_base_tables(connection_id, base_name)
+        base, table_by_id = await self._load_base_tables(connection_id, base_name, metrics, definitions)
         dimensions = await self._metadata.load_dimensions(connection_id, [item.column_id for item in spec.dimensions])
         base_columns = await self._metadata.load_base_columns(base.id)
         validate_definition_asts(definitions, base_columns)
@@ -128,14 +128,30 @@ class QueryCompileOrchestrator:
         )
 
     async def _load_base_tables(
-        self, connection_id: int, base_name: str
+        self,
+        connection_id: int,
+        base_name: str,
+        metrics: list[SemanticMetricModel],
+        definitions: list[MetricDefinition],
     ) -> tuple[SemanticTableModel, dict[int, SemanticTableModel]]:
         tables = await self._metadata.load_tables(connection_id)
         table_by_id = {table.id: table for table in tables}
-        base = next((table for table in tables if table.table_name == base_name), None)
-        if base is None:
-            raise ValueError(f"Unknown base entity: {base_name}")
-        return base, table_by_id
+        bases = []
+        for metric, definition in zip(metrics, definitions, strict=True):
+            ids = {value for value in (metric.base_entity_id, definition.metric.base_entity_id) if value is not None}
+            matches = [
+                table
+                for table in tables
+                if base_name.casefold()
+                in {table.table_name.casefold(), f"{table.physical_schema}.{table.table_name}".casefold()}
+                and (not ids or table.id in ids)
+            ]
+            if len(ids) > 1 or len(matches) != 1:
+                raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric base entity is ambiguous or inconsistent")
+            bases.append(matches[0])
+        if len({base.id for base in bases}) != 1:
+            raise SemanticCompileError("INCOMPATIBLE_BASE_ENTITY", "All selected metrics must use the same base entity")
+        return bases[0], table_by_id
 
     async def _prepare_simple_metric_selections(
         self,
@@ -192,7 +208,7 @@ class QueryCompileOrchestrator:
         if plan is None:
             raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Metric plan is not canonical")
         metadata = await self._metadata.load_metric_plan_metadata(connection_id)
-        self._metadata.resolve_plan_stages(plan, metadata)
+        self._metadata.resolve_plan_stages(plan, metadata, metric, definition)
         dimensions = await self._metadata.load_dimensions(connection_id, [item.column_id for item in spec.dimensions])
         apply_time_grains(dimensions, spec.dimensions)
         runtime_filters = await self._metadata.load_runtime_filters(connection_id, spec.filters)

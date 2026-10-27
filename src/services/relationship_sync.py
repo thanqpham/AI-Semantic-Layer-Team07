@@ -10,6 +10,7 @@ from src.models.db_relationships import RelationshipCandidateModel as Candidate
 from src.models.relationship_review import RelationshipDraft
 from src.models.schema_metadata import ForeignKeyMetadata, RawSchemaMetadata
 from src.services.relationship_review_service import claim_revision, impact_state, lock_database, published_metrics
+from src.services.relationship_runtime import valid_pairs
 from src.services.relationship_validation import fingerprint
 
 
@@ -204,12 +205,14 @@ async def _invalidate_missing_columns(
     db: AsyncSession, db_id: int, rows: list[Active], raw: RawSchemaMetadata, tables: dict, columns: dict
 ) -> None:
     present = {
-        columns[(tables[(t.schema_name.raw_name, t.table_name.raw_name)].id, c.column_name.raw_name)]
+        columns[(tables[(t.schema_name.normalized_name, t.table_name.normalized_name)].id, c.column_name.raw_name)]
         for t in raw.tables
         for c in t.columns
-        if (t.schema_name.raw_name, t.table_name.raw_name) in tables
+        if (t.schema_name.normalized_name, t.table_name.normalized_name) in tables
     }
     for row in rows:
+        if not valid_pairs(row.column_pairs):
+            continue
         used = {value for pair in row.column_pairs for value in pair.values()}
         if row.validation_status == "valid" and not used.issubset(present):
             await _invalidate(db, db_id, row, "Relationship endpoint table or column disappeared")
@@ -237,6 +240,8 @@ async def invalidate_relationship_columns(db: AsyncSession, db_id: int, column_i
         return
     await lock_database(db, db_id)
     for row in await _locked_rows(db, db_id):
+        if not valid_pairs(row.column_pairs):
+            continue
         used = {value for pair in row.column_pairs for value in pair.values()}
         if row.validation_status == "valid" and used.intersection(column_ids):
             await _invalidate(db, db_id, row, "Relationship key data type changed")
@@ -254,7 +259,9 @@ def _refresh_join_conditions(rows: list[Active], tables: dict, columns: dict, di
     names = {column_id: name for (_, name), column_id in columns.items()}
     dialect = "postgres" if dialect == "postgresql" else dialect
     for row in rows:
-        if not row.column_pairs or any(value not in names for pair in row.column_pairs for value in pair.values()):
+        if not valid_pairs(row.column_pairs) or any(
+            value not in names for pair in row.column_pairs for value in pair.values()
+        ):
             continue
         clauses = []
         for pair in row.column_pairs:

@@ -7,7 +7,7 @@ export interface RelationshipReference { kind: 'active' | 'candidate'; id: numbe
 export interface RelationshipDiagnostic { code?: string; message: string; pair_index?: number; field?: string }
 export interface RelationshipItem extends RelationshipReference {
   active_relationship_id?: number | null; revision: number; from_entity: RelationshipEntity; to_entity: RelationshipEntity;
-  column_pairs: ColumnPair[]; relationship_type: RelationshipType; source: string; status: string;
+  column_pairs: unknown; relationship_type: RelationshipType; source: string; status: string;
   evidence: Record<string, unknown>; confidence?: number | null; unresolved_questions: string[];
   reviewed_by?: number | null; reviewer_name?: string | null; reviewed_at?: string | null;
   on_preview: string; errors: RelationshipDiagnostic[]; warnings: RelationshipDiagnostic[];

@@ -26,8 +26,8 @@ from src.models.metric_definition import (
 )
 from src.models.schemas import SemanticQueryFilter
 from src.services.query_compiler_plan import resolve_scoped_filter_stages
-from src.services.query_compiler_sql import _coerce_literal, _column_info, _raw_qualified
-from src.services.relationship_runtime import RelationshipStep, active_relationship_filters
+from src.services.query_compiler_sql import _coerce_literal, _column_info
+from src.services.relationship_runtime import RelationshipStep, active_relationship_filters, valid_pairs
 from src.services.relationship_runtime import safe_join_path as _safe_join_path
 from src.services.semantic_compile_error import SemanticCompileError
 
@@ -120,6 +120,9 @@ class QueryCompilerMetadata:
             for relationship in _safe_join_path(relationships, base.id, table_id):
                 target_id = relationship.to_entity_id
                 if target_id not in joined:
+                    target = tables[target_id]
+                    if any(tables[item].table_name.casefold() == target.table_name.casefold() for item in joined):
+                        raise SemanticCompileError("UNSAFE_JOIN", "Join endpoints have ambiguous table names")
                     joins.append(
                         {
                             "relationship_id": relationship.id,
@@ -133,10 +136,11 @@ class QueryCompilerMetadata:
 
     async def _relationship_columns(
         self, relationships: list[CanonicalRelationshipModel]
-    ) -> dict[int, tuple[str, str]]:
+    ) -> dict[int, tuple[str | None, str, str]]:
         ids = {
             value
             for relationship in relationships
+            if valid_pairs(relationship.column_pairs)
             for pair in relationship.column_pairs or []
             for value in (pair["from_column_id"], pair["to_column_id"])
         }
@@ -148,14 +152,23 @@ class QueryCompilerMetadata:
             .where(SemanticColumnModel.id.in_(ids))
         )
         rows = (await self._db.execute(stmt)).all()
-        return {column.id: (table.table_name, column.column_name) for column, table in rows}
+        return {column.id: (table.physical_schema, table.table_name, column.column_name) for column, table in rows}
 
     async def load_metric_plan_metadata(self, connection_id: int) -> MetricPlanMetadata:
         tables_list = await self.load_tables(connection_id)
-        tables = {table.table_name: table for table in tables_list}
-        tables_folded = {table.table_name.casefold(): table for table in tables_list}
+        counts = {
+            table.table_name.casefold(): sum(
+                t.table_name.casefold() == table.table_name.casefold() for t in tables_list
+            )
+            for table in tables_list
+        }
+        tables = {self._table_key(table, counts): table for table in tables_list}
+        tables_folded = {key.casefold(): table for key, table in tables.items()}
+        for table in tables_list:
+            if table.physical_schema:
+                tables_folded[f"{table.physical_schema}.{table.table_name}".casefold()] = table
         tables_by_id = {table.id: table for table in tables_list}
-        columns, columns_by_id = await self._load_plan_columns(tables_list, tables_by_id)
+        columns, columns_by_id = await self._load_plan_columns(tables_list, tables_by_id, counts)
         result = await self._db.execute(
             select(CanonicalRelationshipModel).where(
                 CanonicalRelationshipModel.connection_id == connection_id, *active_relationship_filters()
@@ -171,6 +184,7 @@ class QueryCompilerMetadata:
         self,
         tables: list[SemanticTableModel],
         tables_by_id: dict[int, SemanticTableModel],
+        counts: dict[str, int],
     ) -> tuple[dict[str, dict[str, tuple[str, int, str]]], dict[int, tuple[str, str, int, str]]]:
         result = await self._db.execute(
             select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([table.id for table in tables]))
@@ -180,16 +194,31 @@ class QueryCompilerMetadata:
         for column in result.scalars().all():
             table = tables_by_id[column.table_id]
             data_type = column.data_type or ""
-            columns.setdefault(table.table_name, {})[column.column_name] = (column.column_name, column.id, data_type)
-            columns_by_id[column.id] = (table.table_name, column.column_name, column.id, data_type)
+            key = self._table_key(table, counts)
+            columns.setdefault(key, {})[column.column_name] = (column.column_name, column.id, data_type)
+            columns_by_id[column.id] = (key, column.column_name, column.id, data_type)
         return columns, columns_by_id
 
-    def resolve_plan_stages(self, plan: MetricQueryPlan, metadata: MetricPlanMetadata) -> None:
+    @staticmethod
+    def _table_key(table: SemanticTableModel, counts: dict[str, int]) -> str:
+        return (
+            f"{table.physical_schema}.{table.table_name}"
+            if counts[table.table_name.casefold()] > 1
+            else table.table_name
+        )
+
+    def resolve_plan_stages(
+        self,
+        plan: MetricQueryPlan,
+        metadata: MetricPlanMetadata,
+        metric: SemanticMetricModel,
+        definition: MetricDefinition,
+    ) -> None:
         for stage in plan.stages:
             if stage.source_stage:
                 self._inherit_plan_stage(stage, plan, metadata)
             else:
-                self._resolve_source_plan_stage(stage, metadata)
+                self._resolve_source_plan_stage(stage, metadata, metric, definition)
 
     def _inherit_plan_stage(self, stage: MetricPlanStage, plan: MetricQueryPlan, metadata: MetricPlanMetadata) -> None:
         metadata.stage_tables[stage.name] = set(metadata.stage_tables[stage.source_stage])
@@ -199,12 +228,29 @@ class QueryCompilerMetadata:
                 field_name = field.expression.split(".", 1)[-1]
                 field.column_id = next((item.column_id for item in parent.group_by if item.name == field_name), None)
 
-    def _resolve_source_plan_stage(self, stage: MetricPlanStage, metadata: MetricPlanMetadata) -> None:
+    def _resolve_source_plan_stage(
+        self,
+        stage: MetricPlanStage,
+        metadata: MetricPlanMetadata,
+        metric: SemanticMetricModel,
+        definition: MetricDefinition,
+    ) -> None:
         base = metadata.tables_folded.get(stage.base_entity.casefold())
+        ids = {value for value in (metric.base_entity_id, definition.metric.base_entity_id) if value is not None}
+        if len(ids) > 1:
+            raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric base IDs disagree")
+        if stage.base_entity.casefold() == definition.metric.base_entity.casefold() and ids:
+            selected = metadata.tables_by_id.get(next(iter(ids)))
+            if selected is None or stage.base_entity.casefold() not in {
+                selected.table_name.casefold(),
+                f"{selected.physical_schema}.{selected.table_name}".casefold(),
+            }:
+                raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric base ID does not match its source")
+            base = selected
         if base is None:
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan references an unknown source table")
-        stage.base_entity = base.table_name
-        metadata.stage_tables[stage.name] = {base.table_name}
+        stage.base_entity = next(key for key, table in metadata.tables.items() if table.id == base.id)
+        metadata.stage_tables[stage.name] = {stage.base_entity}
         stage.joins = self._resolve_plan_joins(stage, base, metadata)
         self._resolve_plan_group_fields(stage, metadata)
         self._resolve_plan_stage_filters(stage, metadata)
@@ -220,8 +266,9 @@ class QueryCompilerMetadata:
             if target.id == base.id:
                 raise SemanticCompileError("UNSAFE_JOIN", "Metric plan cannot join its source table to itself")
             path = _safe_join_path(metadata.relationships, base.id, target.id)
-            metadata.join_paths[(base.table_name, target.table_name)] = self._plan_join_records(stage, path, metadata)
-            resolved_joins.append(target.table_name)
+            target_key = next(key for key, table in metadata.tables.items() if table.id == target.id)
+            metadata.join_paths[(stage.base_entity, target_key)] = self._plan_join_records(stage, path, metadata)
+            resolved_joins.append(target_key)
         return list(dict.fromkeys(resolved_joins))
 
     def _plan_join_records(
@@ -236,9 +283,12 @@ class QueryCompilerMetadata:
                     "table_name": target.table_name,
                     "physical_schema": target.physical_schema,
                     "condition": _relationship_condition(relationship, metadata.relationship_columns),
+                    "table_key": next(key for key, table in metadata.tables.items() if table.id == target.id),
                 }
             )
-            metadata.stage_tables[stage.name].add(target.table_name)
+            metadata.stage_tables[stage.name].add(
+                next(key for key, table in metadata.tables.items() if table.id == target.id)
+            )
         return joins
 
     def _resolve_plan_group_fields(self, stage: MetricPlanStage, metadata: MetricPlanMetadata) -> None:
@@ -259,7 +309,14 @@ class QueryCompilerMetadata:
         parsed = sqlglot.parse_one(field.expression)
         if not isinstance(parsed, exp.Column):
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan grouping key must be a column")
-        source_name = parsed.table or stage.base_entity
+        source_name = f"{parsed.db}.{parsed.table}" if parsed.db else (parsed.table or stage.base_entity)
+        matches = [
+            key
+            for key in metadata.stage_tables[stage.name]
+            if key.casefold() == source_name.casefold()
+            or (not parsed.db and key.rsplit(".", 1)[-1].casefold() == source_name.casefold())
+        ]
+        source_name = matches[0] if len(matches) == 1 else source_name
         return next(
             (
                 (source_name, name, column_id, data_type)
@@ -332,18 +389,18 @@ class MetricPlanMetadata:
     columns: dict[str, dict[str, tuple[str, int, str]]]
     columns_by_id: dict[int, tuple[str, str, int, str]]
     relationships: list[CanonicalRelationshipModel]
-    relationship_columns: dict[int, tuple[str, str]]
+    relationship_columns: dict[int, tuple[str | None, str, str]]
     join_paths: dict[tuple[str, str], list[dict[str, str]]]
     stage_tables: dict[str, set[str]]
 
 
 def _relationship_condition(
     relationship: CanonicalRelationshipModel | RelationshipStep,
-    columns: dict[int, tuple[str, str]],
+    columns: dict[int, tuple[str | None, str, str]],
 ) -> str:
     if relationship.column_pairs:
         predicates = [
-            f"{_raw_qualified(columns[pair['from_column_id']])} = {_raw_qualified(columns[pair['to_column_id']])}"
+            f"{_relationship_column(columns[pair['from_column_id']])} = {_relationship_column(columns[pair['to_column_id']])}"
             for pair in relationship.column_pairs
         ]
         return " AND ".join(predicates)
@@ -352,3 +409,7 @@ def _relationship_condition(
         "Relationship does not contain canonical column pairs",
         {"relationship_id": relationship.id},
     )
+
+
+def _relationship_column(column: tuple[str | None, str, str]) -> str:
+    return exp.column(column[2], table=column[1], db=column[0], quoted=True).sql()

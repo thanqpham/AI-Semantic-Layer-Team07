@@ -9,7 +9,7 @@ import { decideRelationship, getRelationshipImpact, listRelationships, previewRe
 
 interface Props { dbId: string; canManageSchema: boolean; canApproveSchema: boolean; onReviewChanged: () => void; onNotify?: (message: string) => void; onDirtyChange?: (dirty: boolean) => void }
 const emptyDraft: RelationshipDraft = {from_entity_id:0,to_entity_id:0,column_pairs:[{from_column_id:0,to_column_id:0}],relationship_type:'many_to_one'};
-const toDraft = (item: RelationshipItem): RelationshipDraft => ({ from_entity_id:item.from_entity.id,to_entity_id:item.to_entity.id,column_pairs:item.column_pairs,relationship_type:item.relationship_type,expected_revision:item.revision,cardinality_confirmation:typeof item.evidence.cardinality_confirmation === 'string' ? item.evidence.cardinality_confirmation : null });
+const toDraft = (item: RelationshipItem): RelationshipDraft => ({ from_entity_id:item.from_entity.id,to_entity_id:item.to_entity.id,column_pairs:Array.isArray(item.column_pairs) && item.column_pairs.length && item.column_pairs.every(p => p && typeof p === 'object' && Number.isInteger(p.from_column_id) && Number.isInteger(p.to_column_id) && Object.keys(p).length === 2) ? item.column_pairs : [{from_column_id:0,to_column_id:0}],relationship_type:item.relationship_type,expected_revision:item.revision,cardinality_confirmation:typeof item.evidence.cardinality_confirmation === 'string' ? item.evidence.cardinality_confirmation : null });
 const message = (error: unknown) => error instanceof Error ? error.message : 'Không thể tải liên kết';
 const key = (item: RelationshipItem) => `${item.kind}:${item.id}`;
 
