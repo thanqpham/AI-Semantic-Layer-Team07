@@ -1,19 +1,9 @@
-"""Persistence model for relationship review candidates."""
+"""Proposed relationships kept separate from the serving canonical graph."""
 
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import (
-    JSON,
-    CheckConstraint,
-    DateTime,
-    Float,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    UniqueConstraint,
-)
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.db_base import Base, utc_now
@@ -45,22 +35,18 @@ class RelationshipCandidateModel(Base):
     )
     from_entity_id: Mapped[int] = mapped_column(ForeignKey("semantic_tables.id", ondelete="CASCADE"))
     to_entity_id: Mapped[int] = mapped_column(ForeignKey("semantic_tables.id", ondelete="CASCADE"))
-    column_pairs: Mapped[list[dict[str, int]]] = mapped_column(JSON, nullable=False, default=list)
-    relationship_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    source: Mapped[str] = mapped_column(String(20), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending_review", server_default="pending_review"
-    )
-    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
-    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    column_pairs: Mapped[list[dict[str, int]]] = mapped_column(JSON, default=list)
+    relationship_type: Mapped[str] = mapped_column(String(50))
+    source: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), default="pending_review", server_default="pending_review")
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     confidence: Mapped[float | None] = mapped_column(Float)
-    unresolved_questions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    unresolved_questions: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")

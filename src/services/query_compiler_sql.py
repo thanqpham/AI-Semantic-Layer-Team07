@@ -189,9 +189,7 @@ def _compile_metric(
 ) -> str:
     formula = definition.metric.formula
     if formula.ratio is not None:
-        return _compile_ratio(
-            formula.ratio, residual, table, columns, column_types, dialect, parameters, alias
-        )
+        return _compile_ratio(formula.ratio, residual, table, columns, column_types, dialect, parameters, alias)
     if _tree_contains_division(formula.expression_ast):
         raise SemanticCompileError(
             "METRIC_NEEDS_REVIEW",
@@ -236,8 +234,7 @@ def _compile_ratio(
     )
     cast_type = "REAL" if dialect == "sqlite" else "NUMERIC"
     aggregate = (
-        f"({ratio.offset} + {ratio.scale} * CAST(({numerator_sql}) AS {cast_type}) "
-        f"/ NULLIF(({denominator_sql}), 0))"
+        f"({ratio.offset} + {ratio.scale} * CAST(({numerator_sql}) AS {cast_type}) / NULLIF(({denominator_sql}), 0))"
     )
     return f"{aggregate} AS {_quoted(alias, dialect)}"
 
@@ -335,8 +332,8 @@ def _compile_timestamp_difference(
 
 
 def _validated_join_condition(condition: str, dialect: str) -> str:
-    parsed = sqlglot.parse_one(condition, read=dialect)
-    allowed = (exp.EQ, exp.Column, exp.Identifier)
+    parsed = sqlglot.parse_one(condition)
+    allowed = (exp.And, exp.EQ, exp.Column, exp.Identifier)
     if any(not isinstance(node, allowed) for node in parsed.walk()):
         raise ValueError("Unsafe join condition in semantic metadata")
     for column in parsed.find_all(exp.Column):

@@ -189,12 +189,12 @@ def _stage_sql(
         joined = {stage.base_entity}
         for target in stage.joins:
             for join in join_paths.get((stage.base_entity, target), []):
-                if join["table_name"] not in joined:
+                if join.get("table_key", join["table_name"]) not in joined:
                     joins.append(join)
-                    joined.add(join["table_name"])
+                    joined.add(join.get("table_key", join["table_name"]))
         if not set(stage.joins).issubset(joined):
             raise SemanticCompileError("UNSAFE_JOIN", "Metric plan join path is incomplete or fanout-prone")
-        from_sql = _table_name(tables[stage.base_entity].physical_schema, stage.base_entity, dialect)
+        from_sql = _table_name(tables[stage.base_entity].physical_schema, tables[stage.base_entity].table_name, dialect)
         for join in joins:
             condition = _validated_join_condition(join["condition"], dialect)
             target = _table_name(join["physical_schema"], join["table_name"], dialect)
@@ -203,7 +203,7 @@ def _stage_sql(
 
     group_expressions = []
     for item in stage.group_by:
-        expression = _plan_expression(item.expression, stage, source_table, columns, available, dialect)
+        expression = _plan_expression(item.expression, stage, source_table, tables, columns, available, dialect)
         if item.column_id in dimension_grains:
             expression = _time_bucket(expression, dimension_grains[item.column_id], dialect)
         group_expressions.append(expression)
@@ -212,17 +212,17 @@ def _stage_sql(
         for item, expression in zip(stage.group_by, group_expressions, strict=True)
     ]
     where = [
-        _plan_filter(item, stage, source_table, columns, available, dialect, parameters, "plan")
+        _plan_filter(item, stage, source_table, tables, columns, available, dialect, parameters, "plan")
         for item in stage.filters
     ]
     for aggregate in stage.aggregates:
         argument = (
             "1"
             if aggregate.expression == "*"
-            else _plan_expression(aggregate.expression, stage, source_table, columns, available, dialect)
+            else _plan_expression(aggregate.expression, stage, source_table, tables, columns, available, dialect)
         )
         predicates = [
-            _plan_filter(item, stage, source_table, columns, available, dialect, parameters, aggregate.name)
+            _plan_filter(item, stage, source_table, tables, columns, available, dialect, parameters, aggregate.name)
             for item in aggregate.filters
         ]
         if predicates:
@@ -248,13 +248,14 @@ def _plan_expression(
     value: str,
     stage: MetricPlanStage,
     source_table: str | None,
+    tables: dict[str, Any],
     columns: dict[str, dict[str, tuple[str, int, str]]],
     available: set[str],
     dialect: str,
 ) -> str:
     parsed = sqlglot.parse_one(value)
     for column in list(parsed.find_all(exp.Column)):
-        table, name = column.table, column.name
+        table, name = (f"{column.db}.{column.table}" if column.db else column.table), column.name
         if source_table is None:
             if (table and table.casefold() != (stage.source_stage or "").casefold()) or name not in available:
                 raise SemanticCompileError(
@@ -267,10 +268,12 @@ def _plan_expression(
                 column.replace(replacement)
             continue
         table = table or source_table
-        record = columns.get(table, {}).get(name)
-        if table not in {source_table, *stage.joins} or record is None:
+        table_key = _resolve_plan_table_key(table, {source_table, *stage.joins}, tables)
+        record = columns.get(table_key or "", {}).get(name)
+        if table_key is None or record is None:
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage expression references an unknown table or column")
-        replacement = exp.column(record[0], table=table, quoted=True)
+        table_model = tables[table_key]
+        replacement = exp.column(record[0], table=table_model.table_name, db=table_model.physical_schema, quoted=True)
         if column is parsed:
             parsed = replacement
         else:
@@ -285,6 +288,7 @@ def _plan_filter(
     item: Any,
     stage: MetricPlanStage,
     source_table: str | None,
+    tables: dict[str, Any],
     columns: dict[str, dict[str, tuple[str, int, str]]],
     available: set[str],
     dialect: str,
@@ -298,11 +302,15 @@ def _plan_filter(
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage filter references an unknown previous output")
         column = f"{_quoted(name, dialect)}"
     else:
-        table, name = field.split(".", 1) if "." in field else (source_table, field)
-        record = columns.get(table, {}).get(name)
-        if table not in {source_table, *stage.joins} or record is None:
+        table, name = field.rsplit(".", 1) if "." in field else (source_table, field)
+        table_key = _resolve_plan_table_key(table, {source_table, *stage.joins}, tables)
+        record = columns.get(table_key or "", {}).get(name)
+        if table_key is None or record is None:
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage filter references an unknown table or column")
-        column = f"{_quoted(table, dialect)}.{_quoted(record[0], dialect)}"
+        table_model = tables[table_key]
+        column = exp.column(record[0], table=table_model.table_name, db=table_model.physical_schema, quoted=True).sql(
+            dialect=dialect
+        )
     if item.operator == "is_null":
         return column + " IS NULL"
     if item.operator == "is_not_null":
@@ -318,6 +326,20 @@ def _plan_filter(
     parameters[key] = _normalize_value(item.value)
     symbol = {"eq": "=", "neq": "<>", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[item.operator]
     return f"{column} {symbol} :{key}"
+
+
+def _resolve_plan_table_key(name: str, candidates: set[str], tables: dict[str, Any]) -> str | None:
+    matches = [
+        key
+        for key in candidates
+        if key.casefold() == name.casefold()
+        or (
+            tables[key].physical_schema
+            and f"{tables[key].physical_schema}.{tables[key].table_name}".casefold() == name.casefold()
+        )
+        or ("." not in name and key.rsplit(".", 1)[-1].casefold() == name.casefold())
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _refs(expression: str, stages: dict[str, MetricPlanStage]) -> list[tuple[str, str]]:

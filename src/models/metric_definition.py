@@ -254,7 +254,7 @@ class MetricRatio(BaseModel):
 class MetricPlanFilter(MetricFilter):
     """Predicate on a qualified source field or a prior stage output."""
 
-    field: str = Field(..., min_length=1, max_length=401, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$|^[A-Za-z_][A-Za-z0-9_$]*$")
+    field: str = Field(..., min_length=1, max_length=401, pattern=r"^[A-Za-z_][A-Za-z0-9_$]*(?:\.[A-Za-z_][A-Za-z0-9_$]*){0,2}$")
 
 
 class MetricPlanField(BaseModel):

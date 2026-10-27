@@ -1,39 +1,62 @@
-"""Typed contracts for reviewing semantic relationship proposals."""
+"""Typed relationship review API contracts; SQL input is deliberately forbidden."""
 
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-RelationshipType = Literal["many_to_one", "one_to_one", "one_to_many", "many_to_many"]
 
-
-class RelationshipReviewContract(BaseModel):
-    """Reject undeclared fields in relationship review requests."""
-
+class ColumnPair(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    from_column_id: int
+    to_column_id: int
 
 
-class ColumnPair(RelationshipReviewContract):
-    """An ordered equality mapping between endpoint columns."""
-
-    from_column_id: int = Field(gt=0)
-    to_column_id: int = Field(gt=0)
-
-
-class RelationshipDraft(RelationshipReviewContract):
-    """A proposed relationship between two semantic tables."""
-
-    from_entity_id: int = Field(gt=0)
-    to_entity_id: int = Field(gt=0)
+class RelationshipDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_entity_id: int
+    to_entity_id: int
     column_pairs: list[ColumnPair]
-    relationship_type: RelationshipType
+    relationship_type: Literal["many_to_one", "one_to_one", "one_to_many", "many_to_many"]
     cardinality_confirmation: str | None = None
-    expected_revision: int | None = Field(default=None, gt=0)
+    expected_revision: int | None = None
 
 
-class RelationshipDecision(RelationshipReviewContract):
-    """A reviewer decision against an expected relationship revision."""
-
-    expected_revision: int = Field(gt=0)
+class RelationshipDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=1)
     impact_token: str | None = None
     acknowledge_impact: bool = False
+
+
+class RelationshipReviewItem(BaseModel):
+    kind: Literal["active", "candidate"]
+    id: int
+    active_relationship_id: int | None = None
+    revision: int
+    from_entity: dict[str, Any]
+    to_entity: dict[str, Any]
+    column_pairs: Any
+    relationship_type: str
+    source: str
+    status: str
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    confidence: float | None = None
+    unresolved_questions: list[str] = Field(default_factory=list)
+    reviewed_by: int | None = None
+    reviewer_name: str | None = None
+    reviewed_at: datetime | None = None
+    on_preview: str = ""
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RelationshipImpact(BaseModel):
+    token: str
+    relationship_ids: list[int]
+    metric_ids: list[int]
+    join_paths: list[list[int]]
+    published_metrics: list[dict[str, Any]]
+    warnings: list[dict[str, str]] = Field(default_factory=list)
+    before_on: str = ""
+    after_on: str = ""

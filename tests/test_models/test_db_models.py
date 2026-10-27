@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 
@@ -15,6 +16,7 @@ from src.models.db import (
     CanonicalRelationshipModel,
     DashboardLayoutModel,
     MetricVersionModel,
+    RelationshipCandidateModel,
     SemanticColumnModel,
     SemanticDatabaseModel,
     SemanticMetricModel,
@@ -468,6 +470,9 @@ async def test_canonical_relationship_creation(seed_user_and_db):
     fetched = result.scalar_one()
     assert fetched.relationship_type == "one_to_many"
     assert fetched.join_condition == "orders.customer_id = customers.id"
+    assert (fetched.source, fetched.review_status, fetched.revision) == ("fk", "approved", 1)
+    assert fetched.reviewed_by is None and fetched.reviewed_at is None
+    assert fetched.human_modified is False
 
 
 @pytest.mark.asyncio
@@ -755,6 +760,85 @@ async def test_canonical_relationship_review_defaults(seed_user_and_db):
 
 
 # --- Tests for new MetricVersionModel ---
+
+
+@pytest_asyncio.fixture
+async def seeded_relationship_candidate(seed_user_and_db):
+    """Seed a candidate with real endpoint metadata."""
+    session, user, database = seed_user_and_db
+    source = SemanticTableModel(db_id=database.id, table_name="source", business_name="Source")
+    target = SemanticTableModel(db_id=database.id, table_name="target", business_name="Target")
+    session.add_all([source, target])
+    await session.flush()
+    candidate = RelationshipCandidateModel(
+        connection_id=database.id,
+        from_entity_id=source.id,
+        to_entity_id=target.id,
+        column_pairs=[{"from_column_id": 1, "to_column_id": 2}],
+        relationship_type="many_to_one",
+        source="ai",
+        fingerprint="f" * 64,
+        confidence=0.8,
+        created_by=user.id,
+    )
+    session.add(candidate)
+    await session.flush()
+    return session, database, candidate
+
+
+@pytest.mark.asyncio
+async def test_relationship_candidate_storage(seeded_relationship_candidate):
+    """Candidates stay separate and retain rejected fingerprints for deduplication."""
+    session, database, candidate = seeded_relationship_candidate
+    assert candidate.status == "pending_review" and candidate.revision == 1
+    assert candidate.unresolved_questions == [] and candidate.evidence == {}
+    assert candidate.reviewed_by is None and candidate.reviewed_at is None
+    assert list((await session.scalars(select(CanonicalRelationshipModel))).all()) == []
+    candidate.status = "rejected"
+    await session.commit()
+    session.add(
+        RelationshipCandidateModel(
+            connection_id=database.id,
+            from_entity_id=candidate.from_entity_id,
+            to_entity_id=candidate.to_entity_id,
+            column_pairs=[],
+            relationship_type="many_to_one",
+            source="manual",
+            fingerprint="f" * 64,
+        )
+    )
+    with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
+        await session.flush()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("status", "disabled"),
+        ("source", "other"),
+        ("confidence", -0.1),
+        ("confidence", 1.1),
+        ("revision", 0),
+        ("relationship_type", "unknown"),
+    ],
+)
+async def test_relationship_candidate_constraints(seed_user_and_db, field, value):
+    """Reject values outside the candidate storage contract."""
+    session, _, database = seed_user_and_db
+    fields = dict(
+        connection_id=database.id,
+        from_entity_id=1,
+        to_entity_id=2,
+        column_pairs=[],
+        relationship_type="many_to_one",
+        source="manual",
+        fingerprint="f" * 64,
+    )
+    fields[field] = value
+    session.add(RelationshipCandidateModel(**fields))
+    with pytest.raises(IntegrityError, match="CHECK constraint failed"):
+        await session.flush()
 
 
 @pytest.mark.asyncio

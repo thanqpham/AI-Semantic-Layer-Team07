@@ -164,7 +164,18 @@ async def test_get_dimensions_for_metric_tiers(async_session: AsyncSession):
         is_primary_key=False,
         is_foreign_key=False,
     )
-    async_session.add_all([c1, c2, c_note, c3, c4, c5])
+    c_order_id = SemanticColumnModel(table_id=t_orders.id, column_name="id", data_type="INTEGER", business_name="ID", is_primary_key=True)
+    c_customer_id = SemanticColumnModel(table_id=t_orders.id, column_name="customer_id", data_type="INTEGER", business_name="Customer ID", is_foreign_key=True)
+    c_customer_pk = SemanticColumnModel(table_id=t_customers.id, column_name="id", data_type="INTEGER", business_name="ID", is_primary_key=True)
+    c_region_id = SemanticColumnModel(table_id=t_customers.id, column_name="region_id", data_type="INTEGER", business_name="Region ID", is_foreign_key=True)
+    c_region_pk = SemanticColumnModel(table_id=t_regions.id, column_name="id", data_type="INTEGER", business_name="ID", is_primary_key=True)
+    c_item_order_id = SemanticColumnModel(table_id=t_items.id, column_name="order_id", data_type="INTEGER", business_name="Order ID", is_foreign_key=True)
+    c_item_product_id = SemanticColumnModel(table_id=t_items.id, column_name="product_id", data_type="INTEGER", business_name="Product ID", is_foreign_key=True)
+    c_product_id = SemanticColumnModel(table_id=t_products.id, column_name="id", data_type="INTEGER", business_name="ID", is_primary_key=True)
+    async_session.add_all([
+        c1, c2, c_note, c3, c4, c5, c_order_id, c_customer_id, c_customer_pk, c_region_id,
+        c_region_pk, c_item_order_id, c_item_product_id, c_product_id,
+    ])
     await async_session.flush()
 
     # Relationships:
@@ -176,6 +187,7 @@ async def test_get_dimensions_for_metric_tiers(async_session: AsyncSession):
         relationship_type="many_to_one",
         join_condition="orders.customer_id = customers.id",
         relationship_key="orders:customers",
+        column_pairs=[{"from_column_id": c_customer_id.id, "to_column_id": c_customer_pk.id}],
     )
     # customers -> regions (many_to_one)
     r2 = CanonicalRelationshipModel(
@@ -185,6 +197,7 @@ async def test_get_dimensions_for_metric_tiers(async_session: AsyncSession):
         relationship_type="many_to_one",
         join_condition="customers.region_id = regions.id",
         relationship_key="customers:regions",
+        column_pairs=[{"from_column_id": c_region_id.id, "to_column_id": c_region_pk.id}],
     )
     # orders -> order_items (one_to_many)
     r3 = CanonicalRelationshipModel(
@@ -194,6 +207,7 @@ async def test_get_dimensions_for_metric_tiers(async_session: AsyncSession):
         relationship_type="one_to_many",
         join_condition="orders.id = order_items.order_id",
         relationship_key="orders:items",
+        column_pairs=[{"from_column_id": c_order_id.id, "to_column_id": c_item_order_id.id}],
     )
     # order_items -> products (many_to_one)
     r4 = CanonicalRelationshipModel(
@@ -203,6 +217,7 @@ async def test_get_dimensions_for_metric_tiers(async_session: AsyncSession):
         relationship_type="many_to_one",
         join_condition="order_items.product_id = products.id",
         relationship_key="items:products",
+        column_pairs=[{"from_column_id": c_item_product_id.id, "to_column_id": c_product_id.id}],
     )
     async_session.add_all([r1, r2, r3, r4])
     await async_session.flush()

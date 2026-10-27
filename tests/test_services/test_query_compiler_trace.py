@@ -333,7 +333,7 @@ async def _seed_three_table_plan(db: AsyncSession) -> tuple[int, int, dict[str, 
         sql_template="",
         source="ai",
         status="approved",
-        base_entity_id=orders.id,
+        base_entity_id=items.id,
         formula="",
         aggregation_type="SUM",
         definition={

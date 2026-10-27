@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MetricExplorerView } from '@/components/views/MetricExplorerView';
@@ -970,4 +970,37 @@ describe('MetricExplorerView', () => {
     expect(screen.getByText(/Biểu đồ trực quan/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cột/i })).toBeInTheDocument();
   });
+});
+
+it('recompiles an existing preview on relationship refresh without executing live SQL', async () => {
+ const metric:MetricRecord={metric_id:1,name:'Revenue',source:'manual',status:'approved',created_at:'2026-01-01',definition:{metric:{name:'Revenue',base_entity:'orders',formula:{function:'COUNT',expression:'*'},filters:[],status:'approved',excluded_notes:''}}};
+ const catalog:SemanticCatalog={db_id:7,source_type:'live',query_supported:true,tables:[],relationships:[]};
+ const compile=vi.spyOn(apiModule,'compileSemanticQueryApi').mockResolvedValue({sql:'SELECT COUNT(*) FROM orders',dialect:'postgresql',limit:100} as apiModule.SemanticQueryPreview);
+ const execute=vi.spyOn(apiModule,'executeSemanticQueryApi');
+ const dimensions=vi.spyOn(apiModule,'getMetricRecommendedDimensionsApi').mockResolvedValue({metric_id:1,metric_name:'Revenue',base_table:'orders',dimensions:[]});
+ const {rerender}=render(<MetricExplorerView dbId={7} metrics={[metric]} catalog={catalog} theme="light" refreshKey={0}/>);
+ fireEvent.click(screen.getByText('Revenue'));fireEvent.click(screen.getByRole('button',{name:/Xem trước SQL/}));
+ await waitFor(()=>expect(compile).toHaveBeenCalledTimes(1));
+ rerender(<MetricExplorerView dbId={7} metrics={[metric]} catalog={catalog} theme="light" refreshKey={1}/>);
+ await waitFor(()=>expect(compile).toHaveBeenCalledTimes(2));expect(dimensions).toHaveBeenCalledTimes(2);expect(execute).not.toHaveBeenCalled();
+ cleanup();vi.restoreAllMocks();
+});
+
+it.each(['success','failure'])('ignores an old manual preview %s after the relationship refresh preview', async outcome => {
+ const metric:MetricRecord={metric_id:1,name:'Revenue',source:'manual',status:'approved',created_at:'2026-01-01',definition:{metric:{name:'Revenue',base_entity:'orders',formula:{function:'COUNT',expression:'*'},filters:[],status:'approved',excluded_notes:''}}};
+ const catalog:SemanticCatalog={db_id:7,source_type:'live',query_supported:true,tables:[],relationships:[]};
+ let finishOld!: (value:apiModule.SemanticQueryPreview)=>void;
+ let rejectOld!: (error:Error)=>void;
+ const compile=vi.spyOn(apiModule,'compileSemanticQueryApi').mockImplementationOnce(()=>new Promise((resolve,reject)=>{finishOld=resolve;rejectOld=reject;})).mockResolvedValue({sql:'SELECT fresh',dialect:'postgresql',limit:100} as apiModule.SemanticQueryPreview);
+ vi.spyOn(apiModule,'getMetricRecommendedDimensionsApi').mockResolvedValue({metric_id:1,metric_name:'Revenue',base_table:'orders',dimensions:[]});
+ const {rerender}=render(<MetricExplorerView dbId={7} metrics={[metric]} catalog={catalog} theme="light" refreshKey={0}/>);
+ fireEvent.click(screen.getByText('Revenue'));fireEvent.click(screen.getByRole('button',{name:/Xem trước SQL/}));
+ await waitFor(()=>expect(compile).toHaveBeenCalledTimes(1));
+ rerender(<MetricExplorerView dbId={7} metrics={[metric]} catalog={catalog} theme="light" refreshKey={1}/>);
+ await screen.findByText('SELECT fresh');
+ await act(async()=>{if(outcome==='success')finishOld({sql:'SELECT stale',dialect:'postgresql',limit:100} as apiModule.SemanticQueryPreview);else rejectOld(new Error('stale failure'));});
+ expect(screen.queryByText('SELECT stale')).not.toBeInTheDocument();
+ expect(screen.queryByText('stale failure')).not.toBeInTheDocument();
+ expect(screen.getByText('SELECT fresh')).toBeInTheDocument();
+ cleanup();vi.restoreAllMocks();
 });

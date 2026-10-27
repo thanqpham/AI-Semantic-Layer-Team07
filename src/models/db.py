@@ -34,6 +34,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     false,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -378,7 +379,6 @@ class SemanticTableModel(ReviewStateMixin, Base):
 
     __tablename__ = "semantic_tables"
     __table_args__ = (
-        UniqueConstraint("db_id", "table_name", name="uq_semantic_tables_db_table"),
         CheckConstraint(REVIEW_STATUS_CHECK, name="ck_semantic_tables_review_status"),
         Index("idx_semantic_tables_db_review", "db_id", "review_status"),
     )
@@ -390,6 +390,8 @@ class SemanticTableModel(ReviewStateMixin, Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     row_count_approx: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     physical_schema: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    physical_schema_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    table_name_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     primary_key_column: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
@@ -502,8 +504,7 @@ class CanonicalRelationshipModel(Base):
         UniqueConstraint("connection_id", "relationship_key", name="uq_canonical_rel_key"),
         CheckConstraint("source IN ('fk', 'ai', 'manual')", name="ck_canonical_relationships_source"),
         CheckConstraint(
-            "review_status IN ('approved', 'disabled', 'needs_review')",
-            name="ck_canonical_relationships_review_status",
+            "review_status IN ('approved', 'disabled', 'needs_review')", name="ck_canonical_relationships_review_status"
         ),
         CheckConstraint("revision >= 1", name="ck_canonical_relationships_revision"),
         Index("idx_canonical_relationships_connection_review", "connection_id", "review_status"),
@@ -529,8 +530,8 @@ class CanonicalRelationshipModel(Base):
     review_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="approved", server_default="approved"
     )
-    reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     human_modified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
@@ -656,3 +657,12 @@ class NotificationModel(Base):
 
     recipient: Mapped["UserModel"] = relationship("UserModel", back_populates="notifications")
     metric_request: Mapped["MetricRequestModel | None"] = relationship("MetricRequestModel")
+
+
+Index(
+    "uq_semantic_tables_db_schema_table",
+    SemanticTableModel.db_id,
+    func.coalesce(SemanticTableModel.physical_schema_key, SemanticTableModel.physical_schema, ""),
+    func.coalesce(SemanticTableModel.table_name_key, SemanticTableModel.table_name),
+    unique=True,
+)

@@ -203,6 +203,14 @@ export default function WorkspacePage() {
   const [tab, setTab] = useState<WorkspaceTab>('studio');
   const [readyWorkspaceId, setReadyWorkspaceId] = useState<number | null>(null);
   const [loadedWorkspaceId, setLoadedWorkspaceId] = useState<number | null>(null);
+  const [visitedReview, setVisitedReview] = useState(false);
+  const [visitedExplorer, setVisitedExplorer] = useState(false);
+  const relationshipDirty = useRef(false);
+  const onRelationshipDirtyChange = useCallback((dirty: boolean) => { relationshipDirty.current = dirty; }, []);
+  useEffect(() => {
+    if (tab === 'schema') setVisitedReview(true);
+    if (tab === 'explorer') setVisitedExplorer(true);
+  }, [tab]);
   const [catalog, setCatalog] = useState<SemanticCatalog | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -218,9 +226,10 @@ export default function WorkspacePage() {
   const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
   // Latest-ref so the SSE subscription stays stable across tab/layer changes.
   const refreshSemanticDataRef = useRef<() => Promise<void>>(async () => { });
-  const [pendingSchema, setPendingSchema] = useState<{ tables: number; columns: number }>({
+  const [pendingSchema, setPendingSchema] = useState<{ tables: number; columns: number; relationships: number }>({
     tables: 0,
     columns: 0,
+    relationships: 0,
   });
   const [explorerInitialSelection, setExplorerInitialSelection] =
     useState<ExplorerInitialSelection | null>(null);
@@ -280,7 +289,7 @@ export default function WorkspacePage() {
           const [updatedStatus, metrics, review] = await Promise.all([
             getSyncStatusApi(semanticDbId),
             listMetricsApi(dbId, true),
-            getSchemaReviewApi(dbId).catch(() => ({ pending_tables: 0, pending_columns: 0 })),
+            getSchemaReviewApi(dbId).catch(() => ({ pending_tables: 0, pending_columns: 0, pending_relationships: 0 })),
           ]);
 
           setSyncStatus(updatedStatus);
@@ -294,7 +303,7 @@ export default function WorkspacePage() {
                 : item,
             ),
           );
-          setPendingSchema({ tables: review.pending_tables, columns: review.pending_columns });
+          setPendingSchema({ tables: review.pending_tables, columns: review.pending_columns, relationships: review.pending_relationships ?? 0 });
 
           const summary = syncResult.log.changes_summary;
           const parts: string[] = [];
@@ -350,7 +359,7 @@ export default function WorkspacePage() {
             );
           }
           if (review) {
-            setPendingSchema({ tables: review.pending_tables, columns: review.pending_columns });
+            setPendingSchema({ tables: review.pending_tables, columns: review.pending_columns, relationships: review.pending_relationships ?? 0 });
           }
 
           const summary = res.latest_log.changes_summary;
@@ -633,14 +642,14 @@ export default function WorkspacePage() {
 
   const refreshSchemaReview = useCallback(async () => {
     if (!semanticDbId || !canManageSchema) {
-      setPendingSchema({ tables: 0, columns: 0 });
+      setPendingSchema({ tables: 0, columns: 0, relationships: 0 });
       return;
     }
     try {
       const review = await getSchemaReviewApi(String(semanticDbId));
-      setPendingSchema({ tables: review.pending_tables, columns: review.pending_columns });
+      setPendingSchema({ tables: review.pending_tables, columns: review.pending_columns, relationships: review.pending_relationships ?? 0 });
     } catch {
-      setPendingSchema({ tables: 0, columns: 0 });
+      setPendingSchema({ tables: 0, columns: 0, relationships: 0 });
     }
   }, [canManageSchema, semanticDbId]);
 
@@ -780,7 +789,7 @@ export default function WorkspacePage() {
   const pendingCount = activeLayer
     ? activeLayer.metrics.filter((m) => !m.is_deleted && m.status !== 'approved').length
     : 0;
-  const pendingSchemaCount = pendingSchema.tables + pendingSchema.columns;
+  const pendingSchemaCount = pendingSchema.tables + pendingSchema.columns + pendingSchema.relationships;
 
   const isLatestLogUnread =
     syncStatus?.latest_log?.id != null && syncStatus.latest_log.id !== lastReadLogId;
@@ -840,6 +849,7 @@ export default function WorkspacePage() {
       onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       onToggleTheme={toggleTheme}
       onSelectDatabase={(id) => {
+        if (id !== selectedId && relationshipDirty.current && !window.confirm('Bỏ chỉnh sửa liên kết chưa lưu để chuyển database?')) return;
         setExplorerInitialSelection(null);
         setSelectedId(id);
         if (currentWorkspace) window.localStorage.setItem(`workspace_database_${currentWorkspace.id}`, id);
@@ -943,16 +953,18 @@ export default function WorkspacePage() {
               refreshKey={catalogRefreshKey}
             />
           )}
-          {tab === 'schema' && (
+          {(tab === 'schema' || visitedReview) && <div hidden={tab !== 'schema'} className="h-full min-h-0">
             <SchemaReviewView
+              key={activeLayer.semantic_db_id}
               dbId={activeLayer.semantic_db_id}
               database={layerToDatabase(activeLayer)}
               canManageSchema={canManageSchema}
               canApproveSchema={canApproveMetrics}
               onNotify={notify}
-              onReviewChanged={refreshSchemaReview}
+              onRelationshipDirtyChange={onRelationshipDirtyChange}
+              onReviewChanged={() => { void refreshSchemaReview(); void refreshSemanticData(); setCatalog(null); setCatalogRefreshKey(current => current + 1); }}
             />
-          )}
+          </div>}
           {tab === 'metrics' && (
             <MetricsCatalogView
               dbId={activeLayer.semantic_db_id}
@@ -977,16 +989,18 @@ export default function WorkspacePage() {
               hasHealedLogs={hasHealedLogs}
             />
           )}
-          {tab === 'explorer' && (
+          {(tab === 'explorer' || visitedExplorer) && <div hidden={tab !== 'explorer'} className="h-full min-h-0">
             <MetricExplorerView
+              key={activeLayer.semantic_db_id}
               dbId={activeLayer.semantic_db_id}
               metrics={activeLayer.metrics}
               catalog={catalog}
               theme={theme}
               database={layerToDatabase(activeLayer)}
               initialSelection={explorerInitialSelection}
+              refreshKey={catalogRefreshKey}
             />
-          )}
+          </div>}
           {tab === 'dashboard' && activeLayer.semantic_db_id != null && (
             <MetricsDashboardView
               dbId={activeLayer.semantic_db_id}

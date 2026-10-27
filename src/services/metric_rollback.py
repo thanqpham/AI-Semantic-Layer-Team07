@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import MetricVersionModel, SemanticMetricModel
 from src.models.metric_definition import MetricDefinition
+from src.services.database import lock_semantic_database
 from src.services.metric_definition_resolver import MetricDefinitionResolver
 from src.services.metric_definitions import validate_metric_definition, with_metric_status
 from src.services.metric_versioning import (
@@ -44,6 +45,8 @@ async def rollback_metric(
     ownership is required but absent, or resolution/validation/compilation fails.
     """
     metric = await _load_metric_for_rollback(db, metric_id)
+    await lock_semantic_database(db, metric.db_id)
+    await db.refresh(metric)
     target = await _load_target_snapshot(db, metric_id, target_version)
     _assert_rollback_access(metric, actor_id, require_ownership)
     _validate_rollback_target(metric, target, target_version)

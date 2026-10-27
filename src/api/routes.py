@@ -165,10 +165,12 @@ from src.services.organization_service import (
 )
 from src.services.query_compiler import SemanticQueryCompiler
 from src.services.query_execution import execute_compiled_query
+from src.services.relationship_runtime import active_relationship_filters
 from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 from src.services.schema_ingestion import parse_sql_dump_preview
 from src.services.schema_review_service import (
     SchemaRowNotFoundError,
+    SchemaTableAmbiguousError,
     update_column_review,
     update_table_review,
 )
@@ -693,6 +695,7 @@ async def update_table(
     db_id: str,
     table_name: str,
     body: SemanticTableUpdate,
+    table_id: int | None = Query(default=None),
     org_id: int | None = Header(default=None, alias="X-Organization-ID"),
     user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -705,7 +708,9 @@ async def update_table(
         return {"message": "Table updated successfully"}
 
     try:
-        table = await update_table_review(db, int_id, table_name, body.business_name, body.description, user.id)
+        table = await update_table_review(db, int_id, table_name, body.business_name, body.description, user.id, table_id)
+    except SchemaTableAmbiguousError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found") from exc
     await db.commit()
@@ -718,6 +723,7 @@ async def update_column(
     table_name: str,
     column_name: str,
     body: SemanticColumnUpdate,
+    table_id: int | None = Query(default=None),
     org_id: int | None = Header(default=None, alias="X-Organization-ID"),
     user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -731,8 +737,10 @@ async def update_column(
 
     try:
         column = await update_column_review(
-            db, int_id, table_name, column_name, body.business_name, body.description, user.id
+            db, int_id, table_name, column_name, body.business_name, body.description, user.id, table_id
         )
+    except SchemaTableAmbiguousError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:
         detail = "Table not found" if "Table" in str(exc) else "Column not found"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
@@ -1290,7 +1298,7 @@ async def _catalog_relationships(db: AsyncSession, db_id: int) -> list[Canonical
     """Load canonical relationships for a semantic database."""
     stmt = (
         select(CanonicalRelationshipModel)
-        .where(CanonicalRelationshipModel.connection_id == db_id)
+        .where(CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters())
         .order_by(CanonicalRelationshipModel.id)
     )
     records = (await db.execute(stmt)).scalars().all()
