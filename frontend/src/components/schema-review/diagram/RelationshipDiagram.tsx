@@ -106,6 +106,7 @@ interface PanelsProps {
 }
 
 function DiagramPanels({ mode, onModeChange, hideIsolated, onToggleIsolated, isolatedCount, tables, links, edges }: PanelsProps) {
+  const { fitView } = useReactFlow();
   return (
     <>
       <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} />
@@ -120,7 +121,12 @@ function DiagramPanels({ mode, onModeChange, hideIsolated, onToggleIsolated, iso
         />
       </Panel>
       <DiagramStats tables={tables} links={links} />
-      <Controls showInteractive={false} position="bottom-left" />
+      <Controls
+        showInteractive={false}
+        position="bottom-left"
+        fitViewOptions={{ padding: 0.1, duration: 300 }}
+        onFitView={() => void fitView({ padding: 0.1, duration: 300 })}
+      />
       <MiniMap pannable zoomable position="bottom-right" nodeColor={minimapColor(edges)} nodeStrokeWidth={0} maskColor="color-mix(in oklch, var(--background) 70%, transparent)" />
     </>
   );
