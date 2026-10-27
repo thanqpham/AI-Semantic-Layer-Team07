@@ -28,3 +28,22 @@ Status: implemented and verified.
 - Rename recognition retains the existing heuristic drift detector; no new physical rename provenance is available from Inspector.
 - No real customer database or PostgreSQL concurrency process test was run. SQLite regression tests plus existing publication-lock tests cover transaction/revision behavior.
 - No migration needed, no dependencies added, and `.ai-log` untouched.
+
+
+## Review follow-up: physical identity, absent endpoints, and rename SQL
+
+Addressed all three Task 4 review findings:
+
+1. Persist a separate physical-FK fingerprint in detection evidence and compare it before serving pairs. Copy-on-write promotion carries the original physical evidence forward, while FK candidates replace it with their new evidence. An unchanged physical FK therefore preserves different human-approved pairs, reviewer/time, status, and validation.
+2. Relationship validation checks endpoint tables and selected columns against the refreshed connected source snapshot. Retained tombstone metadata remains readable in review history, but absent tables/columns return structured `ABSENT_TABLE`/`ABSENT_COLUMN` errors and cannot be approved or proposed as live links. Legacy databases without a connected source snapshot retain the existing metadata validation behavior.
+3. Sync regenerates stored ON expressions from the current serving endpoint IDs and ordered column IDs using SQL AST quoting. Both column and table renames update exported/stored SQL, including manually edited pairs, without changing human decisions.
+
+Verification:
+
+- Added focused regressions first: different human pairs, both rename expressions, and dropped-table approval all reproduced the reported failures (**4 failed, 15 passed**).
+- After fixes, focused sync/healing/review suite: **34 passed**.
+- Added end-to-end copy-on-write human-promotion identity preservation and retained dropped-column rejection/history tests.
+- Expanded sync/semantic/self-healing/export/live-db/API/canonical-flow/relationship-review/publication-lock suite: **182 passed**.
+- Ruff check and format check clean for all five modified Python files; `git diff --check` clean.
+
+No migration or dependency added. No real customer database or real PostgreSQL concurrency process tested; `.ai-log` untouched.

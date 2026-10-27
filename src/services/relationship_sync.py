@@ -2,6 +2,7 @@
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlglot import exp
 
 from src.models.db import CanonicalRelationshipModel as Active
 from src.models.db import ImportedSchemaModel, LiveTargetDbModel, SemanticColumnModel, SemanticTableModel, utc_now
@@ -62,6 +63,12 @@ def _detection(source: SemanticTableModel, target: SemanticTableModel, fk: Forei
 
 
 def _same(row: Active, detection: dict) -> bool:
+    physical_key = (row.evidence or {}).get("physical_fk_key")
+    if physical_key is not None:
+        return physical_key == detection["key"]
+    snapshot = (row.evidence or {}).get("physical_fk")
+    if snapshot is not None and (row.human_modified or snapshot == detection["snapshot"]):
+        return snapshot == detection["snapshot"]
     draft = detection["draft"]
     return (
         row.from_entity_id == draft.from_entity_id
@@ -94,7 +101,11 @@ async def _candidate(db: AsyncSession, db_id: int, detection: dict, target: Acti
             relationship_type="many_to_one",
             source="fk",
             fingerprint=key,
-            evidence={"physical_fk": detection["snapshot"], "constraint_name": detection["constraint_name"]},
+            evidence={
+                "physical_fk": detection["snapshot"],
+                "physical_fk_key": detection["key"],
+                "constraint_name": detection["constraint_name"],
+            },
         )
     )
 
@@ -120,6 +131,7 @@ async def _detect_one(
         same.evidence = {
             **(same.evidence or {}),
             "physical_fk": detection["snapshot"],
+            "physical_fk_key": detection["key"],
             "detected_at": utc_now().isoformat(),
         }
         return "unchanged", same.id
@@ -157,7 +169,7 @@ def _active_detection(db_id: int, detection: dict) -> Active:
         constraint_name=detection["constraint_name"],
         join_condition=detection["join"],
         source="fk",
-        evidence={"physical_fk": detection["snapshot"]},
+        evidence={"physical_fk": detection["snapshot"], "physical_fk_key": detection["key"]},
     )
 
 
@@ -180,6 +192,7 @@ async def reconcile_relationships(db: AsyncSession, db_id: int, raw_schema: RawS
             seen.add(row_id)
     counts["missing"] = await _missing(db, db_id, rows, seen)
     await _invalidate_missing_columns(db, db_id, rows, raw_schema, tables, columns)
+    _refresh_join_conditions(rows, tables, columns, raw_schema.dialect.value)
     await _refresh_sources(db, db_id, raw_schema)
     await db.flush()
     return counts
@@ -232,3 +245,23 @@ async def _refresh_sources(db: AsyncSession, db_id: int, raw: RawSchemaMetadata)
         await db.execute(
             update(model).where(model.semantic_db_id == db_id).values(schema_metadata=raw.model_dump(mode="json"))
         )
+
+
+def _refresh_join_conditions(rows: list[Active], tables: dict, columns: dict, dialect: str) -> None:
+    by_id = {table.id: table for table in tables.values()}
+    names = {column_id: name for (_, name), column_id in columns.items()}
+    dialect = "postgres" if dialect == "postgresql" else dialect
+    for row in rows:
+        if not row.column_pairs or any(value not in names for pair in row.column_pairs for value in pair.values()):
+            continue
+        clauses = []
+        for pair in row.column_pairs:
+            left, right = by_id[row.from_entity_id], by_id[row.to_entity_id]
+            source = exp.column(
+                names[pair["from_column_id"]], table=left.table_name, db=left.physical_schema, quoted=True
+            )
+            target = exp.column(
+                names[pair["to_column_id"]], table=right.table_name, db=right.physical_schema, quoted=True
+            )
+            clauses.append(source.eq(target).sql(dialect=dialect))
+        row.join_condition = " AND ".join(clauses)
