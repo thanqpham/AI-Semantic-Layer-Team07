@@ -26,7 +26,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -283,21 +283,38 @@ export function MetricExplorerView({
   const appliedSelectionKey = useRef<number | null>(null);
   const lastPreviewRequest = useRef<SemanticQueryRequest | null>(null);
   const previousRefresh = useRef(refreshKey);
+  const outputGeneration = useRef(0);
+  const compilePreview = useCallback(async (payload: SemanticQueryRequest) => {
+    const generation = ++outputGeneration.current;
+    setLoading(true);
+    setError('');
+    try {
+      const result = await compileSemanticQueryApi(String(dbId), payload);
+      if (generation !== outputGeneration.current) return;
+      setOutput(result); setError(''); setViewTab('sql');
+    } catch (error) {
+      if (generation === outputGeneration.current) setError(error instanceof Error ? error.message : 'Không thể compile query.');
+    } finally {
+      if (generation === outputGeneration.current) setLoading(false);
+    }
+  }, [dbId]);
+
+  useLayoutEffect(() => {
+    outputGeneration.current++;
+    return () => { outputGeneration.current++; };
+  }, [dbId, refreshKey]);
 
   useEffect(() => {
     if (previousRefresh.current === refreshKey) return;
     previousRefresh.current = refreshKey;
     setOutput(null);
+    setLoading(false);
     if (!dbId || !lastPreviewRequest.current) {
       setError(translate('Chọn metric và dimensions để xem SQL mới.'));
       return;
     }
-    let cancelled = false;
-    compileSemanticQueryApi(String(dbId), lastPreviewRequest.current)
-      .then(result => { if (!cancelled) { setOutput(result); setError(''); setViewTab('sql'); } })
-      .catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : 'Không thể compile query.'); });
-    return () => { cancelled = true; };
-  }, [dbId, refreshKey, translate]);
+    void compilePreview(lastPreviewRequest.current);
+  }, [dbId, refreshKey, translate, compilePreview]);
 
   const approved = useMemo(
     () => metrics.filter((item) => item.status === 'approved' && item.definition),
@@ -637,32 +654,24 @@ export function MetricExplorerView({
 
   const runCompile = async () => {
     if (!metricIds.length || !dbId) return;
-    setLoading(true);
-    setError('');
-    try {
-      lastPreviewRequest.current = request();
-      const res = await compileSemanticQueryApi(String(dbId), lastPreviewRequest.current);
-      setOutput(res);
-      setViewTab('sql');
-    } catch (err) {
-      setError(err instanceof SemanticApiError ? err.message : 'Không thể compile query.');
-    } finally {
-      setLoading(false);
-    }
+    lastPreviewRequest.current = request();
+    await compilePreview(lastPreviewRequest.current);
   };
 
   const runExecute = async () => {
     if (!metricIds.length || !dbId) return;
+    const generation = ++outputGeneration.current;
     setLoading(true);
     setError('');
     try {
       const res = await executeSemanticQueryApi(String(dbId), request());
+      if (generation !== outputGeneration.current) return;
       setOutput(res);
       setViewTab('table');
     } catch (err) {
-      setError(err instanceof SemanticApiError ? err.message : 'Lỗi thực thi Live DB.');
+      if (generation === outputGeneration.current) setError(err instanceof SemanticApiError ? err.message : 'Lỗi thực thi Live DB.');
     } finally {
-      setLoading(false);
+      if (generation === outputGeneration.current) setLoading(false);
     }
   };
 

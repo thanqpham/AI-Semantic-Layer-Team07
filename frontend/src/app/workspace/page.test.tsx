@@ -48,6 +48,13 @@ vi.mock('@/context/WorkspaceContext', () => ({
   }),
 }));
 vi.mock('@/components/views/AIStudioView', () => ({ AIStudioView: () => null }));
+vi.mock('@/components/views/SchemaReviewView', () => ({
+  SchemaReviewView: ({onRelationshipDirtyChange}: {onRelationshipDirtyChange?: (dirty: boolean)=>void}) => {
+    const [dirty,setDirty]=React.useState(false);
+    React.useEffect(()=>()=>onRelationshipDirtyChange?.(false),[onRelationshipDirtyChange]);
+    return <button onClick={()=>{setDirty(true);onRelationshipDirtyChange?.(true);}}>{dirty?'relationship-draft-retained':'edit-relationship'}</button>;
+  },
+}));
 vi.mock('@/components/views/ExportPlaygroundView', () => ({
   ExportPlaygroundView: () => <div data-testid="export-playground-view" />,
 }));
@@ -131,6 +138,24 @@ describe('WorkspacePage tab persistence', () => {
 
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByTestId('active-view')).toHaveTextContent('dashboard'));
+  });
+
+  it('cancels database remount with a dirty relationship and switches only after explicit discard', async () => {
+    state.permissions={can_manage_schema:true};
+    window.localStorage.setItem('workspace_tab_1','schema');
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([1,2].map(id=>({id,display_name:`DB ${id}`,dialect:'postgresql',updated_at:'',created_at:'',semantic_db_id:id,table_count:1})));
+    const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+    render(<WorkspacePage/>);
+    fireEvent.click(await screen.findByText('edit-relationship'));
+    fireEvent.click(screen.getByText('page-select-database-2'));
+    expect(confirm).toHaveBeenCalledWith('Bỏ chỉnh sửa liên kết chưa lưu để chuyển database?');
+    expect(screen.getByTestId('active-database')).toHaveTextContent('1');
+    expect(screen.getByText('relationship-draft-retained')).toBeInTheDocument();
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByText('page-select-database-2'));
+    await waitFor(()=>expect(screen.getByTestId('active-database')).toHaveTextContent('2'));
+    expect(screen.queryByText('relationship-draft-retained')).not.toBeInTheDocument();
+    confirm.mockRestore();
   });
 
   it('restores an older conversation in the selected database after reload', async () => {
