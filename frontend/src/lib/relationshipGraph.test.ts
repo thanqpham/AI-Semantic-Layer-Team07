@@ -105,6 +105,18 @@ describe('relationshipGraph', () => {
     expect(customers.position.x).toBeGreaterThan(orders.position.x);
   });
 
+  it('supports hierarchical and grid layout modes', () => {
+    const { nodes, edges } = buildGraph(entities, [item]);
+    const hierarchical = layoutGraph(nodes, edges, 'hierarchical');
+    expect(hierarchical).toHaveLength(3);
+    expect(hierarchical[1].position.x).toBeGreaterThan(hierarchical[0].position.x);
+
+    const grid = layoutGraph(nodes, edges, 'grid');
+    expect(grid).toHaveLength(3);
+    // Grid mode places nodes in uniform horizontal row (x coordinates increase by COL_WIDTH)
+    expect(grid[1].position.x).toBeGreaterThan(grid[0].position.x);
+  });
+
   it('computes focus set and applies dimming to unrelated elements', () => {
     const { nodes, edges } = buildGraph(entities, [item]);
     const focused = focusSet(edges, { node: 't-1' });

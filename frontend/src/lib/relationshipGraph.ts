@@ -172,13 +172,23 @@ export function buildGraph(entities: RelationshipEntity[], items: RelationshipIt
   return { nodes, edges: items.map((item) => toEdge(item, known)) };
 }
 
-function dagreLayout(nodes: TableNode[], edges: RelEdge[]): Map<string, { x: number; y: number }> {
+export type LayoutMode = 'balanced' | 'hierarchical' | 'grid';
+const MAX_PER_COL = 4;
+const COL_WIDTH = NODE_WIDTH + 64;
+const GAP_Y = 28;
+
+function initDagreGraph(nodes: TableNode[], edges: RelEdge[]) {
   const graph = new dagre.graphlib.Graph();
   graph.setGraph({ rankdir: 'LR', nodesep: 48, ranksep: 140, marginx: 24, marginy: 24 });
   graph.setDefaultEdgeLabel(() => ({}));
   nodes.forEach((node) => graph.setNode(node.id, { width: NODE_WIDTH, height: nodeHeight(node.data) }));
   edges.forEach((edge) => { if (edge.source !== edge.target) graph.setEdge(edge.source, edge.target); });
   dagre.layout(graph);
+  return graph;
+}
+
+function dagreLayout(nodes: TableNode[], edges: RelEdge[]): Map<string, { x: number; y: number }> {
+  const graph = initDagreGraph(nodes, edges);
   const positions = new Map<string, { x: number; y: number }>();
   for (const node of nodes) {
     const point = graph.node(node.id);
@@ -187,29 +197,71 @@ function dagreLayout(nodes: TableNode[], edges: RelEdge[]): Map<string, { x: num
   return positions;
 }
 
-function gridLayout(nodes: TableNode[], top: number): Map<string, { x: number; y: number }> {
+function groupDagreRanks(nodes: TableNode[], graph: dagre.graphlib.Graph): TableNode[][] {
+  const buckets = new Map<number, TableNode[]>();
+  for (const node of nodes) {
+    const rx = Math.round(graph.node(node.id).x / 50) * 50;
+    if (!buckets.has(rx)) buckets.set(rx, []);
+    buckets.get(rx)!.push(node);
+  }
+  return [...buckets.keys()].sort((a, b) => a - b).map((rx) => {
+    const list = buckets.get(rx)!;
+    return list.sort((a, b) => graph.node(a.id).y - graph.node(b.id).y);
+  });
+}
+
+function layoutRankColumns(nodes: TableNode[], startX: number, positions: Map<string, { x: number; y: number }>): number {
+  const cols = Math.ceil(nodes.length / MAX_PER_COL);
+  for (let c = 0; c < cols; c++) {
+    const colNodes = nodes.slice(c * MAX_PER_COL, (c + 1) * MAX_PER_COL);
+    let y = 32;
+    for (const node of colNodes) {
+      positions.set(node.id, { x: startX + c * COL_WIDTH, y });
+      y += nodeHeight(node.data) + GAP_Y;
+    }
+  }
+  return startX + cols * COL_WIDTH + 80;
+}
+
+function balancedLayout(nodes: TableNode[], edges: RelEdge[]): Map<string, { x: number; y: number }> {
+  const graph = initDagreGraph(nodes, edges);
+  const ranks = groupDagreRanks(nodes, graph);
   const positions = new Map<string, { x: number; y: number }>();
-  const perRow = 4;
-  let y = top;
-  for (let start = 0; start < nodes.length; start += perRow) {
-    const row = nodes.slice(start, start + perRow);
-    row.forEach((node, index) => positions.set(node.id, { x: 24 + index * (NODE_WIDTH + 48), y }));
-    y += Math.max(...row.map((node) => nodeHeight(node.data))) + 48;
+  let x = 32;
+  for (const rankNodes of ranks) {
+    x = layoutRankColumns(rankNodes, x, positions);
   }
   return positions;
 }
 
-/** Lay out connected tables left-to-right with dagre and park isolated tables in a grid below. */
-export function layoutGraph(nodes: TableNode[], edges: RelEdge[]): TableNode[] {
+function gridLayout(nodes: TableNode[], top = 24, perRow = 5): Map<string, { x: number; y: number }> {
+  const positions = new Map<string, { x: number; y: number }>();
+  let y = top;
+  for (let start = 0; start < nodes.length; start += perRow) {
+    const row = nodes.slice(start, start + perRow);
+    row.forEach((node, index) => positions.set(node.id, { x: 24 + index * COL_WIDTH, y }));
+    y += Math.max(...row.map((node) => nodeHeight(node.data))) + GAP_Y;
+  }
+  return positions;
+}
+
+/** Lay out tables according to mode (balanced multi-column, hierarchical LR, or uniform grid). */
+export function layoutGraph(nodes: TableNode[], edges: RelEdge[], mode: LayoutMode = 'balanced'): TableNode[] {
+  if (mode === 'grid') {
+    const positions = gridLayout(nodes);
+    return nodes.map((n) => ({ ...n, position: positions.get(n.id) ?? n.position }));
+  }
   const connectedIds = new Set(edges.flatMap((edge) => [edge.source, edge.target]));
   const connected = nodes.filter((node) => connectedIds.has(node.id));
   const isolated = nodes.filter((node) => !connectedIds.has(node.id));
-  const positions = connected.length ? dagreLayout(connected, edges) : new Map<string, { x: number; y: number }>();
+  const positions = connected.length
+    ? (mode === 'hierarchical' ? dagreLayout(connected, edges) : balancedLayout(connected, edges))
+    : new Map<string, { x: number; y: number }>();
   const bottom = connected.reduce((max, node) => {
     const point = positions.get(node.id);
     return point ? Math.max(max, point.y + nodeHeight(node.data)) : max;
   }, 0);
-  gridLayout(isolated, connected.length ? bottom + 96 : 24).forEach((point, id) => positions.set(id, point));
+  gridLayout(isolated, connected.length ? bottom + 80 : 24, 5).forEach((point, id) => positions.set(id, point));
   return nodes.map((node) => ({ ...node, position: positions.get(node.id) ?? node.position }));
 }
 
