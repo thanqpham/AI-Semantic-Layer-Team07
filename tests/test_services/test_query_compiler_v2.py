@@ -968,6 +968,7 @@ async def test_three_table_plan_normalizes_agent_formula_and_compiles(async_sess
     metric = await async_session.get(SemanticMetricModel, metric_ids[0])
     assert metric is not None
     metric.name = "Item revenue by customer region"
+    metric.base_entity_id = items.id
     metric.definition = {
         "schema_version": 2,
         "metric": {
@@ -1060,3 +1061,152 @@ async def _column(db: AsyncSession, table_id: int, name: str) -> SemanticColumnM
         )
     )
     return result.scalar_one()
+
+
+@pytest.mark.asyncio
+async def test_plan_uses_stored_base_id_and_qualified_cross_schema_join(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    public = await _table(async_session, db_id, "orders")
+    public.physical_schema = "public"
+    archive = SemanticTableModel(
+        db_id=db_id, table_name="orders", physical_schema="archive", business_name="Archived orders", description=""
+    )
+    customers = SemanticTableModel(
+        db_id=db_id, table_name="customers", physical_schema="public", business_name="Customers", description=""
+    )
+    async_session.add_all([archive, customers])
+    await async_session.flush()
+    fk = SemanticColumnModel(
+        table_id=archive.id, column_name="customer_id", data_type="INTEGER", business_name="Customer"
+    )
+    pk = SemanticColumnModel(table_id=customers.id, column_name="id", data_type="INTEGER", business_name="ID")
+    async_session.add_all([fk, pk])
+    await async_session.flush()
+    async_session.add(
+        CanonicalRelationshipModel(
+            connection_id=db_id,
+            from_entity_id=archive.id,
+            to_entity_id=customers.id,
+            relationship_type="many_to_one",
+            join_condition="old",
+            relationship_key="cross_schema",
+            column_pairs=[{"from_column_id": fk.id, "to_column_id": pk.id}],
+            validation_status="valid",
+        )
+    )
+    metric = await async_session.get(SemanticMetricModel, metric_ids[0])
+    metric.base_entity_id = archive.id
+    metric.definition = {
+        "schema_version": 3,
+        "metric": {
+            "name": "Archived",
+            "base_entity": "orders",
+            "base_entity_id": archive.id,
+            "formula": {"function": "COUNT", "expression": "*"},
+            "query_plan": {
+                "stages": [
+                    {
+                        "name": "counts",
+                        "base_entity": "orders",
+                        "aggregates": [{"name": "n", "function": "COUNT", "expression": "*"}],
+                    }
+                ],
+                "output_expression": "counts.n",
+            },
+            "filters": [],
+            "status": "approved",
+        },
+    }
+    await async_session.flush()
+    compiler = SemanticQueryCompiler(async_session)
+    await async_session.execute(text("ATTACH DATABASE ':memory:' AS archive"))
+    await async_session.execute(text("ATTACH DATABASE ':memory:' AS public"))
+    await async_session.execute(text("CREATE TABLE archive.orders (customer_id INTEGER)"))
+    await async_session.execute(text("CREATE TABLE public.orders (customer_id INTEGER)"))
+    await async_session.execute(text("CREATE TABLE public.customers (id INTEGER)"))
+    await async_session.execute(text("INSERT INTO archive.orders VALUES (1), (1)"))
+    await async_session.execute(text("INSERT INTO public.orders VALUES (1), (1), (1)"))
+    await async_session.execute(text("INSERT INTO public.customers VALUES (1)"))
+    result = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert 'FROM "archive"."orders"' in result.sql
+    assert (await async_session.execute(text(result.sql), result.parameters)).scalar_one() == 2
+    metric.definition = {
+        **metric.definition,
+        "metric": {
+            **metric.definition["metric"],
+            "query_plan": {
+                "stages": [
+                    {
+                        "name": "counts",
+                        "base_entity": "orders",
+                        "joins": ["public.customers"],
+                        "aggregates": [{"name": "n", "function": "COUNT", "expression": "*"}],
+                    }
+                ],
+                "output_expression": "counts.n",
+            },
+        },
+    }
+    await async_session.flush()
+    result = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert 'JOIN "public"."customers"' in result.sql
+    assert '"archive"."orders"."customer_id" = "public"."customers"."id"' in result.sql
+    assert (await async_session.execute(text(result.sql), result.parameters)).scalar_one() == 2
+    metric.definition["metric"]["query_plan"]["stages"][0]["aggregates"] = [
+        {"name": "n", "function": "COUNT", "expression": "public.customers.id"}
+    ]
+    await async_session.flush()
+    result = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert 'COUNT("public"."customers"."id")' in result.sql
+    assert (await async_session.execute(text(result.sql), result.parameters)).scalar_one() == 2
+    filtered = await compiler.compile(
+        db_id,
+        SemanticQuerySpec(
+            metric_ids=[metric.id], filters=[SemanticQueryFilter(column_id=fk.id, operator="eq", value=1)]
+        ),
+    )
+    assert (await async_session.execute(text(filtered.sql), filtered.parameters)).scalar_one() == 2
+    metric.definition["metric"]["query_plan"]["stages"][0]["filters"] = [
+        {"field": "public.customers.id", "operator": "eq", "value": 1}
+    ]
+    await async_session.flush()
+    filtered = await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+    assert '"public"."customers"."id" = :' in filtered.sql
+    assert (await async_session.execute(text(filtered.sql), filtered.parameters)).scalar_one() == 2
+    metric.definition["metric"]["query_plan"]["stages"][0]["group_by"] = [
+        {"name": "customer_id", "expression": "public.customers.id"}
+    ]
+    metric.definition["metric"]["query_plan"]["stages"][0]["aggregates"] = [
+        {"name": "n", "function": "COUNT", "expression": "*"}
+    ]
+    await async_session.flush()
+    result = await compiler.compile(
+        db_id,
+        SemanticQuerySpec(metric_ids=[metric.id], dimensions=[DimensionSelection(column_id=pk.id)]),
+    )
+    assert 'GROUP BY "public"."customers"."id"' in result.sql
+    assert tuple((await async_session.execute(text(result.sql), result.parameters)).one()) == (1, 2)
+    metric.base_entity_id = None
+    metric.definition = {**metric.definition, "metric": {**metric.definition["metric"], "base_entity_id": None}}
+    await async_session.flush()
+    with pytest.raises(SemanticCompileError):
+        await compiler.compile(db_id, SemanticQuerySpec(metric_ids=[metric.id]))
+
+@pytest.mark.asyncio
+async def test_simple_metric_rejects_join_with_same_bare_table_name(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    public = await _table(async_session, db_id, "orders")
+    public.physical_schema = "public"
+    archive = SemanticTableModel(db_id=db_id, table_name="orders", physical_schema="archive", business_name="Archive", description="")
+    async_session.add(archive)
+    await async_session.flush()
+    left = await _column(async_session, public.id, "id")
+    right = SemanticColumnModel(table_id=archive.id, column_name="id", data_type="INTEGER", business_name="ID")
+    async_session.add(right)
+    await async_session.flush()
+    async_session.add(CanonicalRelationshipModel(connection_id=db_id, from_entity_id=public.id, to_entity_id=archive.id, relationship_type="many_to_one", join_condition="old", relationship_key="duplicate_names", column_pairs=[{"from_column_id": left.id, "to_column_id": right.id}], validation_status="valid"))
+    await async_session.flush()
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(db_id, SemanticQuerySpec(metric_ids=[metric_ids[0]], dimensions=[DimensionSelection(column_id=right.id)]))
+    assert error.value.code == "UNSAFE_JOIN"
+    assert "ambiguous table names" in str(error.value)

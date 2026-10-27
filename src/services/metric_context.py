@@ -17,6 +17,7 @@ from src.models.schemas import ChatClarificationOption, ChatClarificationPayload
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 from src.services.metric_runtime import MetricCallError, invoke_metric_json
+from src.services.relationship_runtime import active_relationship_filters
 
 _CLARIFICATION_OPTIONS_PROMPT = """
 Khi needs_clarification=true và có các cách hiểu cụ thể để người dùng chọn,
@@ -175,9 +176,7 @@ async def _load_metadata(
         .options(
             selectinload(CanonicalRelationshipModel.from_entity), selectinload(CanonicalRelationshipModel.to_entity)
         )
-        .where(
-            CanonicalRelationshipModel.connection_id == db_id, CanonicalRelationshipModel.validation_status == "valid"
-        )
+        .where(CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters())
     )
     tables = list((await db.execute(table_stmt)).scalars().all())
     relationships = list((await db.execute(relationship_stmt)).scalars().all())

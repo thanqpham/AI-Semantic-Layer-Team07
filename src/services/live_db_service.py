@@ -152,8 +152,9 @@ def introspect_live_database(conn_url: str, dialect: str | SchemaDialect) -> Raw
             tables = []
             for table_name in table_names:
                 table_meta = _introspect_table(inspector, table_name, default_schema, resolved_dialect, conn)
-                if table_meta:
-                    tables.append(table_meta)
+                if table_meta is None:
+                    raise ValueError(f"Incomplete introspection for table {table_name}")
+                tables.append(table_meta)
             schema_meta = SchemaMetadata(schema_name=default_schema)
             return RawSchemaMetadata(
                 dialect=resolved_dialect,

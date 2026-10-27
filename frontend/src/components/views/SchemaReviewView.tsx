@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { SectionLabel, type WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { Translated } from '@/components/ui/translated';
+import { RelationshipsPanel } from '@/components/schema-review/RelationshipsPanel';
 import { useLanguage } from '@/context/LanguageContext';
 
 interface SchemaReviewViewProps {
@@ -27,6 +28,7 @@ interface SchemaReviewViewProps {
   canApproveSchema?: boolean;
   onNotify?: (message: string) => void;
   onReviewChanged?: () => void;
+  onRelationshipDirtyChange?: (dirty: boolean) => void;
 }
 
 /** Badge showing whether a metadata row is officially stored or still in review. */
@@ -140,11 +142,11 @@ type Draft = { business_name: string; description: string };
 type DraftMap = Record<string, Draft>;
 
 function tableKey(table: SchemaReviewTable): string {
-  return `t:${table.table_name}`;
+  return `t:${table.table_id}`;
 }
 
 function columnKey(table: SchemaReviewTable, column: SchemaReviewColumn): string {
-  return `c:${table.table_name}:${column.column_name}`;
+  return `c:${table.table_id}:${column.column_id}`;
 }
 
 function buildDrafts(review: SchemaReview): DraftMap {
@@ -171,8 +173,10 @@ export function SchemaReviewView({
   canApproveSchema = false,
   onNotify,
   onReviewChanged,
+  onRelationshipDirtyChange,
 }: SchemaReviewViewProps) {
   const { translate } = useLanguage();
+  const [reviewTab, setReviewTab] = useState<'tables' | 'relationships'>('tables');
   const [review, setReview] = useState<SchemaReview | null>(null);
   const [drafts, setDrafts] = useState<DraftMap>({});
   const [baseline, setBaseline] = useState<DraftMap>({});
@@ -183,7 +187,7 @@ export function SchemaReviewView({
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (!dbId) return;
+    if (!dbId || !canManageSchema) return;
     setLoading(true);
     setError('');
     try {
@@ -197,7 +201,7 @@ export function SchemaReviewView({
     } finally {
       setLoading(false);
     }
-  }, [dbId]);
+  }, [dbId, canManageSchema]);
 
   useEffect(() => {
     void load();
@@ -229,12 +233,12 @@ export function SchemaReviewView({
     }
   };
 
-  const approve = async (tableNames?: string[]) => {
+  const approve = async (tableIds?: number[]) => {
     if (!dbId) return;
-    setApproving(tableNames?.[0] ?? '*');
+    setApproving(tableIds ? String(tableIds[0]) : '*');
     setError('');
     try {
-      const result = await approveSchemaReviewApi(String(dbId), tableNames);
+      const result = await approveSchemaReviewApi(String(dbId), undefined, tableIds);
       onNotify?.(
         `Đã duyệt ${result.approved_tables} bảng và ${result.approved_columns} cột vào Metadata Store`,
       );
@@ -253,6 +257,13 @@ export function SchemaReviewView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [drafts, baseline],
   );
+
+  if (dbId && !canManageSchema) {
+    return <div className="flex h-full w-full flex-col overflow-hidden">
+      <ViewHeader eyebrow="Flow 1 HITL Review" title="Schema Review" description="Review access is restricted to schema managers." />
+      <p role="status" className="p-6 text-sm text-muted-foreground"><Translated text="Schema Review requires schema management permission. Contact your Data Lead." /></p>
+    </div>;
+  }
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
@@ -273,17 +284,19 @@ export function SchemaReviewView({
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
-            <Translated text={"Duyệt toàn bộ ("} />{pendingTotal})
+            <Translated text={"Duyệt bảng & cột ("} />{pendingTotal})
           </Button>
         }
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        {!canManageSchema && (
-          <p className="rounded-lg border border-border bg-secondary p-3 text-xs text-muted-foreground">
-            <Translated text={"Bạn chỉ có quyền xem hàng đợi review. Liên hệ Data Lead để chỉnh sửa hoặc phê duyệt."} />
-          </p>
-        )}
+        <div role="tablist" onKeyDown={event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setReviewTab(current=>current==='tables'?'relationships':'tables');const tabs=event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');tabs[reviewTab==='tables'?1:0]?.focus();}}} aria-label={translate('Loại review')} className="flex flex-wrap gap-2">
+          <Button role="tab" id="tables-tab" tabIndex={reviewTab==='tables'?0:-1} aria-selected={reviewTab==='tables'} aria-controls="tables-review" onClick={()=>setReviewTab('tables')} variant={reviewTab==='tables'?'default':'outline'}><Translated text="Bảng & cột" /></Button>
+          <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}><Translated text="Liên kết" /> ({review?.pending_relationships??0})</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">{review?.pending_relationships??0} <Translated text="liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết." /></p>
+        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
+        <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {error && (
           <p className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
@@ -310,18 +323,18 @@ export function SchemaReviewView({
 
         {review?.tables.map((table) => {
           const key = tableKey(table);
-          const open = expanded[table.table_name] ?? table.review_status === 'pending_review';
+          const open = expanded[key] ?? table.review_status === 'pending_review';
           const pendingColumns = table.columns.filter((c) => c.review_status === 'pending_review').length;
           return (
             <section
-              key={table.table_name}
+              key={table.table_id}
               className="shrink-0 rounded-xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() =>
-                    setExpanded((current) => ({ ...current, [table.table_name]: !open }))
+                    setExpanded((current) => ({ ...current, [key]: !open }))
                   }
                   className="flex min-w-0 items-center gap-2 text-left"
                   aria-expanded={open}
@@ -330,7 +343,7 @@ export function SchemaReviewView({
                     className={cn('h-4 w-4 shrink-0 transition-transform', open && 'rotate-90')}
                   />
                   <span className="truncate font-mono text-[13px] text-foreground">
-                    {table.table_name}
+                    {review.tables.filter(item => item.table_name === table.table_name).length > 1 && table.physical_schema ? `${table.physical_schema}.${table.table_name}` : table.table_name}
                   </span>
                 </button>
                 <ReviewBadge status={table.review_status} />
@@ -353,9 +366,9 @@ export function SchemaReviewView({
                       approving !== null ||
                       (table.review_status === 'approved' && pendingColumns === 0)
                     }
-                    onClick={() => approve([table.table_name])}
+                    onClick={() => approve([table.table_id])}
                   >
-                    {approving === table.table_name ? (
+                    {approving === String(table.table_id) ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <CheckCircle2 className="h-3 w-3" />
@@ -381,6 +394,7 @@ export function SchemaReviewView({
                         table.table_name,
                         draft.business_name,
                         draft.description,
+                        table.table_id,
                       ),
                     )
                   }
@@ -421,6 +435,7 @@ export function SchemaReviewView({
                                 column.column_name,
                                 draft.business_name,
                                 draft.description,
+                                table.table_id,
                               ),
                             )
                           }
@@ -433,6 +448,7 @@ export function SchemaReviewView({
             </section>
           );
         })}
+        </div>
       </div>
     </div>
   );

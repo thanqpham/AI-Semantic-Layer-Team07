@@ -14,11 +14,10 @@ import asyncio
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import (
-    CanonicalRelationshipModel,
     ImportedSchemaModel,
     LiveTargetDbModel,
     SemanticColumnModel,
@@ -28,6 +27,7 @@ from src.models.db import (
 from src.models.review_mixin import REVIEW_STATUS_PENDING
 from src.models.schema_metadata import RawSchemaMetadata
 from src.services.clustering import cluster_tables
+from src.services.database import lock_semantic_database
 from src.services.enrichment_config import DEFAULT_CONFIG
 from src.services.metric_service import (
     DuplicateMetricError,
@@ -43,6 +43,7 @@ from src.services.metric_service import (
 )
 from src.services.pass1_global_glossary import execute_pass1
 from src.services.pass2_cluster_enrichment import enrich_clusters_parallel
+from src.services.relationship_sync import invalidate_relationship_columns, reconcile_relationships
 from src.services.schema_review_service import apply_ai_proposal, pending_review_counts
 
 logger = logging.getLogger(__name__)
@@ -189,20 +190,25 @@ async def enrich_and_save_canonical_schema(
         enrichment_tables = await _call_llm_enrichment(raw_schema, dialect)
     logger.info("[AI Semantic Agent] Enrichment ready for %d tables", len(enrichment_tables))
 
-    # Build lookup by table_name to be robust against ordering differences
-    enrichment_by_name: dict[str, dict[str, Any]] = {}
-    for e in enrichment_tables:
-        t_name = e.get("table_name")
-        if t_name:
-            enrichment_by_name[t_name] = e
+    enrichment_by_key = {
+        ((e.get("physical_schema") or e.get("schema_name") or ""), e.get("table_name", "")): e
+        for e in enrichment_tables
+    }
+    name_counts = {
+        t.table_name.raw_name: sum(other.table_name.raw_name == t.table_name.raw_name for other in raw_schema.tables)
+        for t in raw_schema.tables
+    }
 
-    table_id_map: dict[str, int] = {}
+    await lock_semantic_database(db, connection_id)
+    table_id_map: dict[tuple[str, str], int] = {}
 
-    for idx, table_meta in enumerate(raw_schema.tables):
+    for table_meta in raw_schema.tables:
         table_name = table_meta.table_name.raw_name
-        table_enrichment = enrichment_by_name.get(
-            table_name, enrichment_tables[idx] if idx < len(enrichment_tables) else {}
-        )
+        identity = (table_meta.schema_name.normalized_name, table_meta.table_name.normalized_name)
+        proposal_key = (table_meta.schema_name.raw_name, table_name)
+        table_enrichment = enrichment_by_key.get(proposal_key)
+        if table_enrichment is None:
+            table_enrichment = enrichment_by_key.get(("", table_name), {}) if name_counts[table_name] == 1 else {}
         pk_cols = table_meta.primary_key.constrained_columns if table_meta.primary_key else ()
         pk_col_name = pk_cols[0].raw_name if pk_cols else None
 
@@ -212,10 +218,12 @@ async def enrich_and_save_canonical_schema(
             table_name=table_name,
             enrichment=table_enrichment,
             schema_name=table_meta.schema_name.raw_name,
+            schema_key=identity[0],
+            table_key=identity[1],
             pk_col=pk_col_name,
             user_id=user_id,
         )
-        table_id_map[table_name] = table_id
+        table_id_map[identity] = table_id
         bname = table_enrichment.get("business_name", table_name)
         logger.info(
             "[AI Semantic Agent] Processed table '%s' (ID=%d, business_name='%s', columns=%d)",
@@ -250,7 +258,11 @@ async def enrich_and_save_canonical_schema(
     review = await pending_review_counts(db, connection_id)
     return {
         "tables": [
-            {"table_name": t.table_name.raw_name, "table_id": table_id_map[t.table_name.raw_name]}
+            {
+                "table_name": t.table_name.raw_name,
+                "physical_schema": t.schema_name.raw_name,
+                "table_id": table_id_map[(t.schema_name.normalized_name, t.table_name.normalized_name)],
+            }
             for t in raw_schema.tables
         ],
         "relationships": relationships,
@@ -278,11 +290,12 @@ async def _call_llm_enrichment(raw_schema: RawSchemaMetadata, dialect: str) -> l
         schema_name = t_meta.schema_name.raw_name if t_meta.schema_name else None
         t_key = f"{schema_name}.{t_meta.table_name.raw_name}" if schema_name else t_meta.table_name.raw_name
         if t_key in enriched_dict:
-            enriched_tables.append(enriched_dict[t_key])
+            enriched_tables.append({**enriched_dict[t_key], "physical_schema": schema_name})
         else:
             enriched_tables.append(
                 {
                     "table_name": t_meta.table_name.raw_name,
+                    "physical_schema": schema_name,
                     "business_name": t_meta.table_name.raw_name,
                     "description": "",
                     "columns": [
@@ -306,17 +319,37 @@ async def _upsert_semantic_table(
     schema_name: str,
     pk_col: str | None,
     user_id: int,
+    schema_key: str | None = None,
+    table_key: str | None = None,
 ) -> int:
-    """Upsert a semantic table: update if exists (by db_id + table_name), insert otherwise."""
+    """Upsert a table by database and normalized physical schema/name."""
+    schema_key = schema_key if schema_key is not None else schema_name
+    table_key = table_key if table_key is not None else table_name
     stmt = select(SemanticTableModel).where(
         SemanticTableModel.db_id == connection_id,
-        SemanticTableModel.table_name == table_name,
+        or_(
+            and_(
+                func.coalesce(SemanticTableModel.table_name_key, SemanticTableModel.table_name) == table_key,
+                func.coalesce(SemanticTableModel.physical_schema_key, SemanticTableModel.physical_schema, "")
+                == (schema_key or ""),
+            ),
+            and_(
+                SemanticTableModel.table_name_key.is_(None),
+                SemanticTableModel.physical_schema_key.is_(None),
+                SemanticTableModel.table_name == table_name,
+                func.coalesce(SemanticTableModel.physical_schema, "") == (schema_name or ""),
+            ),
+        ),
     )
-    existing = (await db.execute(stmt)).scalar_one_or_none()
+    rows = (await db.execute(stmt)).scalars().all()
+    if len(rows) > 1:
+        raise ValueError(f"Ambiguous legacy table identity: {schema_name}.{table_name}")
+    existing = rows[0] if rows else None
 
     if existing:
         apply_ai_proposal(existing, enrichment.get("business_name", table_name), enrichment.get("description", ""))
-        existing.physical_schema = schema_name
+        existing.physical_schema_key = schema_key
+        existing.table_name_key = table_key
         existing.primary_key_column = pk_col
         return existing.id
 
@@ -329,6 +362,8 @@ async def _upsert_semantic_table(
         ai_description=enrichment.get("description", ""),
         review_status=REVIEW_STATUS_PENDING,
         physical_schema=schema_name,
+        physical_schema_key=schema_key,
+        table_name_key=table_key,
         primary_key_column=pk_col,
         created_by=user_id,
     )
@@ -356,6 +391,9 @@ async def _upsert_semantic_column(
     existing = (await db.execute(stmt)).scalar_one_or_none()
 
     if existing:
+        if existing.data_type.lower() != data_type.lower():
+            db_id = await db.scalar(select(SemanticTableModel.db_id).where(SemanticTableModel.id == table_id))
+            await invalidate_relationship_columns(db, db_id, {existing.id})
         apply_ai_proposal(existing, enrichment.get("business_name", col_name), enrichment.get("description", ""))
         existing.is_time_dimension = is_time
         existing.data_type = data_type
@@ -399,118 +437,27 @@ def _foreign_key_references(table_meta: Any) -> dict[str, tuple[str, str]]:
 
 
 async def _extract_and_save_relationships(
-    db: AsyncSession,
-    connection_id: int,
-    raw_schema: RawSchemaMetadata,
-    table_id_map: dict[str, int],
-) -> list[dict[str, str]]:
-    """Extract FK relationships from raw_schema and upsert into canonical_relationships."""
-    relationships: list[dict[str, str]] = []
-
-    for table_meta in raw_schema.tables:
-        from_table_name = table_meta.table_name.raw_name
-        from_entity_id = table_id_map.get(from_table_name)
-        if from_entity_id is None:
-            continue
-
-        for fk in table_meta.foreign_keys:
-            to_table_name = fk.referred_table.raw_name
-            to_entity_id = table_id_map.get(to_table_name)
-            if to_entity_id is None:
-                continue
-
-            column_pairs = await _relationship_column_pairs(db, from_entity_id, to_entity_id, fk)
-            conditions = [
-                f"{from_table_name}.{source.raw_name} = {to_table_name}.{target.raw_name}"
-                for source, target in zip(fk.constrained_columns, fk.referred_columns, strict=True)
-            ]
-            join_cond = " AND ".join(conditions)
-            constraint_name = fk.constraint_name.raw_name if fk.constraint_name else None
-            relationship_key = constraint_name or f"{from_table_name}:{join_cond}:{to_table_name}"
-            await _upsert_relationship(
-                db,
-                connection_id,
-                from_entity_id,
-                to_entity_id,
-                join_cond,
-                relationship_key,
-                constraint_name,
-                column_pairs,
-            )
-
-            relationships.append(
-                {
-                    "from_table": from_table_name,
-                    "to_table": to_table_name,
-                    "join_condition": join_cond,
-                    "relationship_type": "many_to_one",
-                }
-            )
-
-    return relationships
-
-
-async def _upsert_relationship(
-    db: AsyncSession,
-    connection_id: int,
-    from_entity_id: int,
-    to_entity_id: int,
-    join_condition: str,
-    relationship_key: str,
-    constraint_name: str | None,
-    column_pairs: list[dict[str, int]],
-) -> None:
-    """Upsert a canonical relationship record."""
-    stmt = select(CanonicalRelationshipModel).where(
-        CanonicalRelationshipModel.connection_id == connection_id,
-        CanonicalRelationshipModel.relationship_key == relationship_key,
-    )
-    existing = (await db.execute(stmt)).scalar_one_or_none()
-
-    if existing:
-        existing.join_condition = join_condition
-        existing.column_pairs = column_pairs
-        existing.validation_status = "valid"
-        return
-
-    record = CanonicalRelationshipModel(
-        connection_id=connection_id,
-        from_entity_id=from_entity_id,
-        to_entity_id=to_entity_id,
-        relationship_type="many_to_one",
-        join_condition=join_condition,
-        relationship_key=relationship_key,
-        constraint_name=constraint_name,
-        column_pairs=column_pairs,
-        validation_status="valid",
-    )
-    db.add(record)
-
-
-async def _relationship_column_pairs(
-    db: AsyncSession,
-    from_table_id: int,
-    to_table_id: int,
-    foreign_key: Any,
-) -> list[dict[str, int]]:
-    from_columns = await _column_ids_by_name(db, from_table_id)
-    to_columns = await _column_ids_by_name(db, to_table_id)
+    db: AsyncSession, connection_id: int, raw_schema: RawSchemaMetadata, table_id_map: dict[tuple[str, str], int]
+) -> list[dict[str, Any]]:
+    """Reconcile physical evidence and retain the acquisition response contract."""
+    await reconcile_relationships(db, connection_id, raw_schema)
     return [
         {
-            "from_column_id": from_columns[source.raw_name],
-            "to_column_id": to_columns[target.raw_name],
+            "from_table": table.table_name.raw_name,
+            "from_schema": table.schema_name.raw_name,
+            "to_schema": fk.referred_schema.raw_name,
+            "from_table_id": table_id_map[(table.schema_name.normalized_name, table.table_name.normalized_name)],
+            "to_table_id": table_id_map[(fk.referred_schema.normalized_name, fk.referred_table.normalized_name)],
+            "to_table": fk.referred_table.raw_name,
+            "join_condition": " AND ".join(
+                f"{table.table_name.raw_name}.{a.raw_name} = {fk.referred_table.raw_name}.{b.raw_name}"
+                for a, b in zip(fk.constrained_columns, fk.referred_columns, strict=True)
+            ),
+            "relationship_type": "many_to_one",
         }
-        for source, target in zip(
-            foreign_key.constrained_columns,
-            foreign_key.referred_columns,
-            strict=True,
-        )
+        for table in raw_schema.tables
+        for fk in table.foreign_keys
     ]
-
-
-async def _column_ids_by_name(db: AsyncSession, table_id: int) -> dict[str, int]:
-    stmt = select(SemanticColumnModel).where(SemanticColumnModel.table_id == table_id)
-    return {column.column_name: column.id for column in (await db.execute(stmt)).scalars().all()}
 
 
 async def delete_semantic_database(

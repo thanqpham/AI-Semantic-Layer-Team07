@@ -16,6 +16,7 @@ class ReviewColumnItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    column_id: int = Field(..., validation_alias="id")
     column_name: str
     business_name: str = ""
     description: str = ""
@@ -54,12 +55,14 @@ class SchemaReviewResponse(BaseModel):
     status: str = Field(..., description="'pending_review' khi còn hàng đợi, ngược lại 'approved'")
     pending_tables: int = 0
     pending_columns: int = 0
+    pending_relationships: int = 0
     tables: list[ReviewTableItem] = Field(default_factory=list)
 
 
 class SchemaApproveRequest(BaseModel):
     """Approve the whole review queue, or only the named tables."""
 
+    table_ids: list[int] | None = None
     table_names: list[str] | None = Field(
         default=None,
         description="Chỉ duyệt các bảng này; bỏ trống để duyệt toàn bộ hàng đợi",
@@ -74,6 +77,7 @@ class SchemaApproveResponse(BaseModel):
     approved_columns: int = 0
     pending_tables: int = 0
     pending_columns: int = 0
+    pending_relationships: int = 0
     status: str = "approved"
 
 
