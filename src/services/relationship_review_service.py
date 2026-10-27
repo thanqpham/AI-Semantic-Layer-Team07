@@ -307,7 +307,10 @@ async def promote(db: AsyncSession, db_id: int, row: Candidate, actor_id: int, o
     active.relationship_key = row.fingerprint
     active.join_condition, active.validation_status, active.review_status = on_sql, "valid", "approved"
     active.human_modified, active.reviewed_by, active.reviewed_at = True, actor_id, utc_now()
-    active.evidence = {**row.evidence, "attested_by": actor_id, "attested_at": utc_now().isoformat()}
+    physical = {
+        key: value for key, value in (active.evidence or {}).items() if key in {"physical_fk", "physical_fk_key"}
+    }
+    active.evidence = {**physical, **row.evidence, "attested_by": actor_id, "attested_at": utc_now().isoformat()}
     await db.flush()
     row.target_relationship_id = active.id
 

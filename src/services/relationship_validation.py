@@ -9,7 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlglot import exp
 
-from src.models.db import SemanticColumnModel, SemanticDatabaseModel, SemanticTableModel
+from src.models.db import (
+    ImportedSchemaModel,
+    LiveTargetDbModel,
+    SemanticColumnModel,
+    SemanticDatabaseModel,
+    SemanticTableModel,
+)
 from src.models.relationship_review import RelationshipDraft
 
 
@@ -67,6 +73,7 @@ async def validate_relationship(
     if not draft.column_pairs:
         invalid("EMPTY_PAIRS", "At least one column pair is required")
     sides = await endpoints(db, db_id, draft)
+    present = await _physical_column_ids(db, db_id, sides)
     database = await db.get(SemanticDatabaseModel, db_id)
     dialect = {"postgresql": "postgres", "sqlserver": "tsql", "mssql": "tsql"}.get(database.db_type, database.db_type)
     seen = [set(), set()]
@@ -77,6 +84,8 @@ async def validate_relationship(
             column = next((c for c in sides[side][1] if c.id == column_id), None)
             if column is None or column_id in seen[side]:
                 invalid("INVALID_PAIR", "Column is missing, foreign, or reused", index)
+            if present is not None and column_id not in present:
+                invalid("ABSENT_COLUMN", "Column is absent from the current physical schema", index)
             seen[side].add(column_id)
             columns.append(column)
         if not family(columns[0].data_type) or family(columns[0].data_type) != family(columns[1].data_type):
@@ -113,3 +122,31 @@ def fingerprint(draft: RelationshipDraft, target_id: int | None = None) -> str:
     """Hash identity from scoped endpoint and ordered column IDs."""
     data = draft.model_dump(exclude={"expected_revision", "cardinality_confirmation"})
     return hashlib.sha256(json.dumps([data, target_id], sort_keys=True).encode()).hexdigest()
+
+
+async def _physical_column_ids(db: AsyncSession, db_id: int, sides: tuple) -> set[int] | None:
+    """Keep historical metadata readable while requiring current physical endpoints."""
+    snapshot = await _source_snapshot(db, db_id)
+    if snapshot is None:
+        return None
+    present = set()
+    for table, columns in sides:
+        matches = [
+            t
+            for t in snapshot
+            if t["table_name"]["raw_name"] == table.table_name
+            and (table.physical_schema is None or t["schema_name"]["raw_name"] == table.physical_schema)
+        ]
+        if len(matches) != 1:
+            invalid("ABSENT_TABLE", "Table is absent from the current physical schema")
+        names = {column["column_name"]["raw_name"] for column in matches[0]["columns"]}
+        present.update(column.id for column in columns if column.column_name in names)
+    return present
+
+
+async def _source_snapshot(db: AsyncSession, db_id: int) -> list[dict] | None:
+    for model in (LiveTargetDbModel, ImportedSchemaModel):
+        snapshot = await db.scalar(select(model.schema_metadata).where(model.semantic_db_id == db_id))
+        if snapshot and "tables" in snapshot:
+            return snapshot["tables"]
+    return None

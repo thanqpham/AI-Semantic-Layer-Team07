@@ -213,7 +213,20 @@ async def test_relationship_sync_preserves_endpoint_history(async_session, chang
     assert await async_session.get(CanonicalRelationshipModel, old_id) is not None
     if change in {"rename", "table_rename"}:
         assert relationship.validation_status == "valid"
+        assert ("buyer_id" if change == "rename" else "purchases") in relationship.join_condition
+        assert ("orders" if change == "table_rename" else "user_id =") not in relationship.join_condition
     else:
         assert relationship.review_status == "needs_review" and relationship.validation_status == "invalid"
         assert log.changes_summary["relationship_impacts"]
+        if change == "drop":
+            from fastapi import HTTPException
+
+            from src.services.relationship_review_service import draft_for, review_item
+            from src.services.relationship_validation import validate_relationship
+
+            with pytest.raises(HTTPException) as error:
+                await validate_relationship(async_session, 90, draft_for(relationship), approval=True)
+            assert error.value.detail["errors"][0]["code"] == "ABSENT_TABLE"
+            item = await review_item(async_session, 90, relationship, "active")
+            assert item.errors[0]["code"] == "ABSENT_TABLE"
     assert live.schema_metadata == raw.model_dump(mode="json")

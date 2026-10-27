@@ -260,3 +260,86 @@ async def test_reenrichment_type_change_requires_relationship_review(async_sessi
     )
     await enrich_and_save_canonical_schema(async_session, 1, 90, raw, "postgresql", enrichment={"tables": []})
     assert row.validation_status == "invalid" and row.review_status == "needs_review"
+
+
+@pytest.mark.asyncio
+async def test_unchanged_physical_fk_preserves_different_human_pairs(async_session):
+    from src.models.db import SemanticColumnModel, utc_now
+    from src.models.db_relationships import RelationshipCandidateModel
+
+    raw, row = await seed(async_session)
+    alternate = await async_session.scalar(
+        select(SemanticColumnModel).where(
+            SemanticColumnModel.table_id == row.from_entity_id, SemanticColumnModel.column_name == "id"
+        )
+    )
+    row.column_pairs = [{"from_column_id": alternate.id, "to_column_id": row.column_pairs[0]["to_column_id"]}]
+    row.human_modified, row.reviewed_by, row.reviewed_at = True, 1, utc_now()
+    human_pairs, reviewed_at = list(row.column_pairs), row.reviewed_at
+    await async_session.flush()
+    result = await reconcile_relationships(async_session, 90, raw)
+    assert result["unchanged"] == 1 and result["changed"] == result["missing"] == 0
+    assert row.column_pairs == human_pairs and row.review_status == "approved" and row.validation_status == "valid"
+    assert row.reviewed_by == 1 and row.reviewed_at.replace(tzinfo=None) == reviewed_at.replace(tzinfo=None)
+    assert await async_session.scalar(select(RelationshipCandidateModel)) is None
+
+
+@pytest.mark.asyncio
+async def test_human_promotion_retains_original_physical_identity(async_session):
+    from src.models.db import SemanticColumnModel
+    from src.models.relationship_review import RelationshipDraft
+    from src.services.relationship_review_service import save_relationship_candidate
+    from tests.test_services.test_relationship_review import approve
+
+    raw, row = await seed(async_session)
+    alternate = await async_session.scalar(
+        select(SemanticColumnModel).where(
+            SemanticColumnModel.table_id == row.from_entity_id, SemanticColumnModel.column_name == "id"
+        )
+    )
+    draft = RelationshipDraft(
+        from_entity_id=row.from_entity_id,
+        to_entity_id=row.to_entity_id,
+        expected_revision=row.revision,
+        column_pairs=[{"from_column_id": alternate.id, "to_column_id": row.column_pairs[0]["to_column_id"]}],
+        relationship_type="many_to_one",
+    )
+    physical_key = row.evidence["physical_fk_key"]
+    candidate = await save_relationship_candidate(async_session, 90, 1, draft, target_relationship_id=row.id)
+    await approve(async_session, 90, candidate)
+    assert row.evidence["physical_fk_key"] == physical_key
+    assert (await reconcile_relationships(async_session, 90, raw))["unchanged"] == 1
+    assert row.column_pairs == [p.model_dump() for p in draft.column_pairs]
+    assert row.validation_status == "valid" and row.review_status == "approved"
+    assert '"orders"."id"' in row.join_condition
+
+
+@pytest.mark.asyncio
+async def test_retained_dropped_column_cannot_be_approved(async_session):
+    from fastapi import HTTPException
+
+    from src.models.db import ImportedSchemaModel
+    from src.services.relationship_review_service import draft_for, review_item
+    from src.services.relationship_validation import validate_relationship
+
+    raw, row = await seed(async_session)
+    async_session.add(
+        ImportedSchemaModel(
+            created_by=1,
+            semantic_db_id=90,
+            display_name="Imported",
+            dialect="postgresql",
+            schema_metadata=raw.model_dump(mode="json"),
+        )
+    )
+    await async_session.flush()
+    source = next(t for t in raw.tables if t.foreign_keys)
+    dropped = source.model_copy(
+        update={"columns": tuple(c for c in source.columns if c.column_name.raw_name != "user_id"), "foreign_keys": ()}
+    )
+    raw = raw.model_copy(update={"tables": tuple(dropped if t == source else t for t in raw.tables)})
+    await reconcile_relationships(async_session, 90, raw)
+    with pytest.raises(HTTPException) as error:
+        await validate_relationship(async_session, 90, draft_for(row), approval=True)
+    assert error.value.detail["errors"][0]["code"] == "ABSENT_COLUMN"
+    assert (await review_item(async_session, 90, row, "active")).errors[0]["code"] == "ABSENT_COLUMN"
