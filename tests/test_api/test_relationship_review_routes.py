@@ -264,3 +264,20 @@ async def test_approved_candidate_patch_preserves_approval_audit(client, async_s
     assert row.status == "approved" and row.reviewed_by == 1
     assert row.reviewed_at.replace(tzinfo=None) == reviewed_at.replace(tzinfo=None)
     assert row.revision == approved.revision and row.relationship_type == "many_to_one"
+
+
+@pytest.mark.asyncio
+async def test_suggest_requires_account_settings(client, async_session, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    db_id, _, _, _ = await seed(async_session)
+    await async_session.commit()
+    user = await async_session.get(UserModel, 1)
+    headers = {"Authorization": f"Bearer {create_access_token(user)}"}
+    monkeypatch.setattr(
+        "src.api.llm_settings_routes.load_account_llm_config",
+        AsyncMock(side_effect=ValueError("Account AI settings are required")),
+    )
+    response = await client.post(f"/api/v1/semantic/{db_id}/relationships/suggest", headers=headers)
+    assert response.status_code == 503
+    assert "settings" in response.json()["detail"]

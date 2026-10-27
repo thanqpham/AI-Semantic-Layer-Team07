@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import get_current_user
+from src.api.llm_settings_routes import use_account_llm
 from src.api.routes import _require_resource_permission
 from src.models.db import UserModel
 from src.models.relationship_review import RelationshipDecision, RelationshipDraft
@@ -17,6 +18,7 @@ from src.services.relationship_review_service import (
     preview_relationship_change,
     save_relationship_candidate,
 )
+from src.services.relationship_suggestions import suggest_relationships
 from src.services.relationship_validation import validate_relationship
 
 relationship_router = APIRouter(prefix="/semantic/{db_id}/relationships", tags=["Relationship Review"])
@@ -138,3 +140,20 @@ async def reject(db_id: int, item_id: int, body: RelationshipDecision, context: 
 async def disable(db_id: int, item_id: int, body: RelationshipDecision, context: tuple = Depends(access)) -> dict:
     """Disable a serving link and mark dependent publications for review."""
     return await decision(db_id, item_id, body, context, "active", "disable")
+
+
+@relationship_router.post("/suggest", dependencies=[Depends(use_account_llm)])
+async def suggest(db_id: int, context: tuple = Depends(access)) -> dict:
+    """Suggest metadata-only pending relationships with account AI settings."""
+    db, user, _ = context
+    try:
+        items = await suggest_relationships(db, db_id, user.id)
+        result = {"items": items, "counts": counts(await list_relationship_reviews(db, db_id))}
+        await db.commit()
+        return result
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(409, "Relationship changed or duplicate proposal") from exc
+    except Exception:
+        await db.rollback()
+        raise
