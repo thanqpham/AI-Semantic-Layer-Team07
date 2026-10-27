@@ -1,5 +1,5 @@
 import { semanticRequest } from './api';
-export interface RelationshipEntity { id: number; schema?: string | null; name: string; columns: { id: number; name: string; type: string }[] }
+export interface RelationshipEntity { id: number; schema?: string | null; name: string; columns: { id: number; name: string; type: string; is_primary_key?: boolean }[] }
 export interface ColumnPair { from_column_id: number; to_column_id: number }
 export type RelationshipType = 'many_to_one' | 'one_to_one' | 'one_to_many' | 'many_to_many';
 export interface RelationshipDraft { from_entity_id: number; to_entity_id: number; column_pairs: ColumnPair[]; relationship_type: RelationshipType; cardinality_confirmation?: string | null; expected_revision?: number }

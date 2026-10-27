@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -791,3 +792,30 @@
     transform: rotate(180deg);
   }
 }
+
+/* ─── Relationship Diagram & Detail Drawer ─── */
+@keyframes rel-edge-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.rel-edge-flow {
+  animation: rel-edge-dash 0.8s linear infinite;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
