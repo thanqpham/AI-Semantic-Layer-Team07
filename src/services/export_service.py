@@ -22,6 +22,7 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
+from src.services.relationship_runtime import active_relationship_filters
 
 
 async def _load_database(db: AsyncSession, db_id: int) -> SemanticDatabaseModel | None:
@@ -56,7 +57,9 @@ async def _load_metrics(db: AsyncSession, db_id: int) -> list[SemanticMetricMode
 async def _load_relationships(db: AsyncSession, db_id: int) -> list[CanonicalRelationshipModel]:
     """Fetch all canonical relationships for a given database."""
     result = await db.execute(
-        select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id)
+        select(CanonicalRelationshipModel).where(
+            CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters()
+        )
     )
     return list(result.scalars().all())
 
