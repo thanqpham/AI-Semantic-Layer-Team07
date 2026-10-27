@@ -1270,3 +1270,17 @@ async def test_rollback_metric_compile_failure_leaves_state_unchanged(async_sess
     assert refreshed.approved_by is None
     remaining = await _fetch_versions(async_session, metric_id)
     assert [v.version for v in remaining] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_reenrichment_preserves_disabled_relationship(async_session):
+    raw = _make_raw_schema()
+    db_id = await ensure_semantic_database(async_session, "live_target", 99, 1, "Sync", "postgresql")
+    await enrich_and_save_canonical_schema(async_session, 1, db_id, raw, "postgresql", enrichment=_hitl_enrichment())
+    row = await async_session.scalar(
+        select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id)
+    )
+    row.review_status, row.reviewed_by, row.human_modified = "disabled", 1, True
+    await async_session.commit()
+    await enrich_and_save_canonical_schema(async_session, 1, db_id, raw, "postgresql", enrichment=_hitl_enrichment())
+    assert row.review_status == "disabled" and row.reviewed_by == 1 and row.human_modified
