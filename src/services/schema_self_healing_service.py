@@ -28,8 +28,9 @@ from src.models.db import (
 )
 from src.models.review_mixin import REVIEW_STATUS_PENDING
 from src.models.schema_metadata import RawSchemaMetadata, SchemaDialect
-from src.services.database import decrypt_conn_url
+from src.services.database import decrypt_conn_url, lock_semantic_database
 from src.services.live_db_service import introspect_live_database, resolve_and_validate_dialect
+from src.services.relationship_sync import invalidate_relationship_columns, reconcile_relationships
 from src.services.schema_fingerprint import compute_schema_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -198,6 +199,7 @@ def detect_drift_details(existing_tables: list[SemanticTableModel], raw_schema: 
                     "old_name": old_c.column_name,
                     "new_name": new_c.column_name.raw_name,
                     "new_type": new_c.data_type,
+                    "old_type": old_c.data_type,
                 }
             )
         for c in unmatched_exist:
@@ -284,17 +286,6 @@ async def _heal_metric_for_rename(
     }
 
 
-async def _heal_relationships_for_rename(
-    db: AsyncSession, semantic_db_id: int, old_col: str, new_col: str, dialect: str
-) -> None:
-    """Rewrite join conditions in canonical relationships for renamed columns."""
-    stmt = select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == semantic_db_id)
-    rels = (await db.execute(stmt)).scalars().all()
-    for rel in rels:
-        if old_col.lower() in rel.join_condition.lower():
-            rel.join_condition = heal_sql_formula_ast(rel.join_condition, old_col, new_col, dialect)
-
-
 async def _apply_renamed_columns(
     db: AsyncSession,
     semantic_db_id: int,
@@ -325,7 +316,6 @@ async def _apply_renamed_columns(
             if healed:
                 healed_metrics.append(healed)
 
-        await _heal_relationships_for_rename(db, semantic_db_id, item["old_name"], item["new_name"], dialect)
     return healed_metrics
 
 
@@ -374,10 +364,10 @@ async def _handle_dropped_items(
                         )
                     )
 
-            col_stmt = select(SemanticColumnModel).where(SemanticColumnModel.table_id == tbl.id)
-            for col in (await db.execute(col_stmt)).scalars().all():
-                await db.delete(col)
-            await db.delete(tbl)
+            # Keep endpoint IDs and audit history after physical removal.
+            if not tbl.business_name.startswith("[Deprecated]"):
+                tbl.business_name = f"[Deprecated] {tbl.business_name}"
+            tbl.review_status = REVIEW_STATUS_PENDING
 
 
 async def _handle_added_items(
@@ -396,6 +386,7 @@ async def _handle_added_items(
         new_tbl = SemanticTableModel(
             db_id=semantic_db_id,
             table_name=t_name,
+            physical_schema=t_meta.schema_name.raw_name,
             business_name=f"Bảng {t_name}",
             description=f"Bảng dữ liệu mới phát hiện: {t_name}",
             review_status=REVIEW_STATUS_PENDING,
@@ -413,15 +404,6 @@ async def _handle_added_items(
                 target_table = fk.referred_table.raw_name
                 for l_col, r_col in zip(fk.constrained_columns, fk.referred_columns, strict=False):
                     fk_map[l_col.raw_name] = (target_table, r_col.raw_name)
-                    db.add(
-                        CanonicalRelationshipModel(
-                            connection_id=semantic_db_id,
-                            from_entity=t_name,
-                            to_entity=target_table,
-                            join_condition=f"{t_name}.{l_col.raw_name} = {target_table}.{r_col.raw_name}",
-                            relationship_type="many_to_one",
-                        )
-                    )
 
         for c in t_meta.columns:
             c_name = c.column_name.raw_name
@@ -512,18 +494,6 @@ async def _apply_renamed_tables(
             tbl.table_name = item["new_name"]
             tbl.business_name = f"Bảng {item['new_name']}"
 
-        old_t = item["old_name"]
-        new_t = item["new_name"]
-        rel_stmt = select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == semantic_db_id)
-        rels = (await db.execute(rel_stmt)).scalars().all()
-        for rel in rels:
-            if rel.from_entity.lower() == old_t.lower():
-                rel.from_entity = new_t
-            if rel.to_entity.lower() == old_t.lower():
-                rel.to_entity = new_t
-            if old_t.lower() in rel.join_condition.lower():
-                rel.join_condition = rel.join_condition.replace(old_t, new_t)
-
         results.append(item)
     return results
 
@@ -592,6 +562,22 @@ async def _apply_type_changes(
     return type_changes
 
 
+async def _relationship_impacts(db: AsyncSession, db_id: int) -> list[dict[str, Any]]:
+    """Expose persisted relationship and metric invalidation reasons in sync logs."""
+    rows = (
+        await db.scalars(select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id))
+    ).all()
+    return [
+        {
+            "relationship_id": r.id,
+            "reason": r.evidence.get("sync_reason"),
+            "metric_ids": r.evidence.get("affected_metric_ids", []),
+        }
+        for r in rows
+        if r.evidence.get("sync_reason")
+    ]
+
+
 async def execute_self_healing(
     db: AsyncSession,
     semantic_db_id: int,
@@ -618,21 +604,30 @@ async def execute_self_healing(
     conn_url = decrypt_conn_url(live_db.conn_url_enc)
     resolved_dialect = resolve_and_validate_dialect(conn_url, live_db.dialect)
     raw_schema = introspect_live_database(conn_url, resolved_dialect)
+    await lock_semantic_database(db, semantic_db_id)
     new_fp = compute_schema_fingerprint(raw_schema)
     old_fp = sem_db.schema_fingerprint
 
+    if not raw_schema.tables:
+        raise ValueError("Empty introspection cannot authorize destructive schema sync")
+
     if old_fp == new_fp:
+        relationship_changes = await reconcile_relationships(db, semantic_db_id, raw_schema)
+        live_db.schema_metadata = raw_schema.model_dump(mode="json")
         sem_db.last_synced_at = utc_now()
         sem_db.sync_status = "synced"
         log = SchemaSyncLogModel(
             semantic_db_id=semantic_db_id,
             live_db_id=live_db.id,
             trigger_type=trigger_type,
-            status="no_change",
+            status="success" if any(relationship_changes[k] for k in ("added", "changed", "missing")) else "no_change",
             old_fingerprint=old_fp,
             new_fingerprint=new_fp,
-            changes_summary={},
-            details="Schema is up to date. No changes detected.",
+            changes_summary={
+                "relationship_changes": relationship_changes,
+                "relationship_impacts": await _relationship_impacts(db, semantic_db_id),
+            },
+            details=f"Schema columns unchanged; relationship reconciliation: {relationship_changes}",
         )
         db.add(log)
         await db.commit()
@@ -643,6 +638,10 @@ async def execute_self_healing(
     for t in existing_tables:
         await db.refresh(t, ["columns"])
 
+    for table in existing_tables:
+        matches = [t for t in raw_schema.tables if t.table_name.raw_name == table.table_name]
+        if table.physical_schema is None and len(matches) == 1:
+            table.physical_schema = matches[0].schema_name.raw_name
     drift = detect_drift_details(existing_tables, raw_schema)
     dialect_str = (
         "postgres"
@@ -650,6 +649,13 @@ async def execute_self_healing(
         else ("mysql" if resolved_dialect == SchemaDialect.MYSQL else "sqlite")
     )
 
+    changed_key_ids = {item["col_id"] for item in drift["type_changes"]}
+    changed_key_ids.update(
+        item["col_id"]
+        for item in drift["renamed_columns"]
+        if str(item["old_type"]).lower() != str(item["new_type"]).lower()
+    )
+    await invalidate_relationship_columns(db, semantic_db_id, changed_key_ids)
     healed_metrics = await _apply_renamed_columns(db, semantic_db_id, drift["renamed_columns"], dialect_str)
     renamed_tables_applied = await _apply_renamed_tables(
         db, semantic_db_id, drift.get("renamed_tables", []), dialect_str
@@ -660,14 +666,7 @@ async def execute_self_healing(
     await _handle_dropped_items(db, semantic_db_id, drift["dropped_columns"], drift["dropped_tables"])
     await _handle_added_items(db, semantic_db_id, raw_schema, drift["added_tables"], drift["added_columns"])
 
-    # Clean up any leftover deprecated tables not present in live database
-    live_table_names = {t.table_name.raw_name.lower() for t in raw_schema.tables}
-    for t in existing_tables:
-        if t.table_name.lower() not in live_table_names or t.business_name.startswith("[Deprecated]"):
-            col_stmt = select(SemanticColumnModel).where(SemanticColumnModel.table_id == t.id)
-            for col in (await db.execute(col_stmt)).scalars().all():
-                await db.delete(col)
-            await db.delete(t)
+    relationship_changes = await reconcile_relationships(db, semantic_db_id, raw_schema)
 
     live_db.schema_metadata = raw_schema.model_dump(mode="json")
     sem_db.schema_fingerprint = new_fp
@@ -676,6 +675,8 @@ async def execute_self_healing(
 
     changes_summary = {
         **drift,
+        "relationship_changes": relationship_changes,
+        "relationship_impacts": await _relationship_impacts(db, semantic_db_id),
         "healed_metrics": healed_metrics,
         "renamed_tables": renamed_tables_applied,
         "broken_metrics": broken_metrics,

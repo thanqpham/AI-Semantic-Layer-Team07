@@ -155,3 +155,65 @@ async def test_execute_self_healing_flow(async_session, tmp_path):
     assert len(versions) == 1
     assert "total_price" in versions[0].change_reason
     assert "amount" in versions[0].change_reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["rename", "table_rename", "drop", "type"])
+async def test_relationship_sync_preserves_endpoint_history(async_session, change):
+    from unittest.mock import patch
+
+    from src.models.db import CanonicalRelationshipModel
+    from src.models.schema_metadata import Identifier, SchemaDialect
+    from tests.test_services.test_relationship_sync import seed
+
+    raw, relationship = await seed(async_session)
+    old_pairs, old_id = list(relationship.column_pairs), relationship.id
+    source = next(t for t in raw.tables if t.foreign_keys)
+    if change == "drop":
+        raw = raw.model_copy(update={"tables": tuple(t for t in raw.tables if t != source)})
+    elif change == "table_rename":
+        renamed = source.model_copy(update={"table_name": Identifier.from_raw("purchases", raw.dialect)})
+        raw = raw.model_copy(update={"tables": tuple(renamed if t == source else t for t in raw.tables)})
+    else:
+        ident = Identifier.from_raw("buyer_id", raw.dialect)
+        columns = tuple(
+            c.model_copy(update={"column_name": ident}) if c.column_name.raw_name == "user_id" else c
+            for c in source.columns
+        )
+        fks = tuple(fk.model_copy(update={"constrained_columns": (ident,)}) for fk in source.foreign_keys)
+        if change == "type":
+            columns = tuple(
+                c.model_copy(update={"data_type": "TEXT", "raw_data_type": "TEXT"})
+                if c.column_name.raw_name == "user_id"
+                else c
+                for c in source.columns
+            )
+            fks = source.foreign_keys
+        renamed = source.model_copy(update={"columns": columns, "foreign_keys": fks})
+        raw = raw.model_copy(update={"tables": tuple(renamed if t == source else t for t in raw.tables)})
+    live = LiveTargetDbModel(
+        created_by=1,
+        semantic_db_id=90,
+        display_name="Sync",
+        dialect="postgresql",
+        conn_url_enc=encrypt_conn_url("postgresql://local/test"),
+        schema_metadata={},
+    )
+    async_session.add(live)
+    await async_session.commit()
+    with (
+        patch("src.services.schema_self_healing_service.introspect_live_database", return_value=raw),
+        patch(
+            "src.services.schema_self_healing_service.resolve_and_validate_dialect",
+            return_value=SchemaDialect.POSTGRESQL,
+        ),
+    ):
+        log = await execute_self_healing(async_session, 90)
+    assert relationship.id == old_id and relationship.column_pairs == old_pairs
+    assert await async_session.get(CanonicalRelationshipModel, old_id) is not None
+    if change in {"rename", "table_rename"}:
+        assert relationship.validation_status == "valid"
+    else:
+        assert relationship.review_status == "needs_review" and relationship.validation_status == "invalid"
+        assert log.changes_summary["relationship_impacts"]
+    assert live.schema_metadata == raw.model_dump(mode="json")
