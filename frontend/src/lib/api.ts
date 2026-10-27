@@ -1202,6 +1202,7 @@ export async function approveSingleMetricApi(
 
 /** One column in the HITL schema-review queue. */
 export interface SchemaReviewColumn {
+  column_id: number;
   column_name: string;
   business_name: string;
   description: string;
@@ -1235,6 +1236,7 @@ export interface SchemaReview {
   status: 'pending_review' | 'approved';
   pending_tables: number;
   pending_columns: number;
+  pending_relationships: number;
   tables: SchemaReviewTable[];
 }
 
@@ -1244,6 +1246,7 @@ export interface SchemaApproveResult {
   approved_columns: number;
   pending_tables: number;
   pending_columns: number;
+  pending_relationships: number;
   status: 'pending_review' | 'approved';
 }
 
