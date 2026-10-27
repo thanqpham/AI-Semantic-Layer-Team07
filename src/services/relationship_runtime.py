@@ -39,10 +39,7 @@ def _step(rel: CanonicalRelationshipModel, reverse: bool = False) -> Relationshi
     )
 
 
-def relationship_paths(
-    relationships: list[CanonicalRelationshipModel], start: int, target: int, *, allow_fanout: bool = False
-) -> list[list[RelationshipStep]]:
-    """Find at most two simple paths, including alternatives of different lengths."""
+def _graph(relationships: list[CanonicalRelationshipModel], allow_fanout: bool) -> dict[int, list[RelationshipStep]]:
     graph: dict[int, list[RelationshipStep]] = {}
     for rel in relationships:
         kind = rel.relationship_type.replace("-", "_").lower()
@@ -50,17 +47,65 @@ def relationship_paths(
             graph.setdefault(rel.from_entity_id, []).append(_step(rel))
         if allow_fanout or kind in {"one_to_one", "1:1"}:
             graph.setdefault(rel.to_entity_id, []).append(_step(rel, True))
-    queue = deque([(start, [], {start})])
-    matches = []
-    while queue and len(matches) < 2:
-        current, path, visited = queue.popleft()
+    return graph
+
+
+def _can_reach_target(graph: dict[int, list[RelationshipStep]], target: int) -> set[int]:
+    reverse: dict[int, list[int]] = {}
+    for source, steps in graph.items():
+        for step in steps:
+            reverse.setdefault(step.to_entity_id, []).append(source)
+    reached, pending = {target}, [target]
+    while pending:
+        for source in reverse.get(pending.pop(), []):
+            if source not in reached:
+                reached.add(source)
+                pending.append(source)
+    return reached
+
+
+def _find_path(
+    graph: dict[int, list[RelationshipStep]],
+    start: int,
+    target: int,
+    eligible: set[int],
+    excluded: RelationshipStep | None = None,
+) -> list[RelationshipStep] | None:
+    if start not in eligible:
+        return None
+    previous: dict[int, RelationshipStep | None] = {start: None}
+    queue = deque([start])
+    while queue:
+        current = queue.popleft()
         if current == target:
-            matches.append(path)
-            continue
+            path = []
+            while (step := previous[current]) is not None:
+                path.append(step)
+                current = step.from_entity_id
+            return list(reversed(path))
         for step in graph.get(current, []):
-            if step.to_entity_id not in visited:
-                queue.append((step.to_entity_id, [*path, step], visited | {step.to_entity_id}))
-    return matches
+            if step != excluded and step.to_entity_id in eligible and step.to_entity_id not in previous:
+                previous[step.to_entity_id] = step
+                queue.append(step.to_entity_id)
+    return None
+
+
+def relationship_paths(
+    relationships: list[CanonicalRelationshipModel], start: int, target: int, *, allow_fanout: bool = False
+) -> list[list[RelationshipStep]]:
+    """Find up to two simple paths using bounded-memory reachability searches."""
+    graph = _graph(relationships, allow_fanout)
+    eligible = _can_reach_target(graph, target)
+    first = _find_path(graph, start, target, eligible)
+    if first is None:
+        return []
+    if not allow_fanout:
+        # Any distinct simple path omits at least one directed edge of the first path.
+        for step in first:
+            alternative = _find_path(graph, start, target, eligible, step)
+            if alternative is not None:
+                return [first, alternative]
+    return [first]
 
 
 def safe_join_path(relationships: list[CanonicalRelationshipModel], start: int, target: int) -> list[RelationshipStep]:

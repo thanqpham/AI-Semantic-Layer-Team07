@@ -13,7 +13,9 @@ from src.models.db import SemanticMetricModel, UserModel, utc_now
 from src.models.db_relationships import RelationshipCandidateModel as Candidate
 from src.models.relationship_review import ColumnPair, RelationshipDraft, RelationshipImpact, RelationshipReviewItem
 from src.services.database import lock_semantic_database
+from src.services.relationship_runtime import active_relationship_filters, safe_join_path
 from src.services.relationship_validation import endpoints, fingerprint, invalid, validate_relationship
+from src.services.semantic_compile_error import SemanticCompileError
 
 
 async def scoped(db: AsyncSession, db_id: int, item_id: int, kind: str) -> Active | Candidate:
@@ -47,6 +49,7 @@ async def review_item(db: AsyncSession, db_id: int, row: Active | Candidate, kin
         preview, warnings = validated["on_preview"], validated["warnings"]
     except HTTPException as exc:
         errors = exc.detail["errors"]
+    warnings.extend(await runtime_warnings(db, db_id, row))
     actor = await db.get(UserModel, row.reviewed_by) if row.reviewed_by else None
     values = row_values(row, "id revision column_pairs relationship_type source evidence reviewed_by reviewed_at")
     return RelationshipReviewItem(
@@ -63,6 +66,19 @@ async def review_item(db: AsyncSession, db_id: int, row: Active | Candidate, kin
         errors=errors,
         warnings=warnings,
     )
+
+
+async def runtime_warnings(db: AsyncSession, db_id: int, row: Active | Candidate) -> list[dict]:
+    """Expose compiler graph diagnostics without allowing candidates into runtime paths."""
+    graph = list(
+        (await db.scalars(select(Active).where(Active.connection_id == db_id, *active_relationship_filters()))).all()
+    )
+    try:
+        safe_join_path(graph, row.from_entity_id, row.to_entity_id)
+    except SemanticCompileError as exc:
+        if exc.code in {"AMBIGUOUS_JOIN_PATH", "UNSAFE_FANOUT"}:
+            return [exc.to_detail()]
+    return []
 
 
 def entity_view(side: tuple) -> dict:

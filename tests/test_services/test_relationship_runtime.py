@@ -202,3 +202,53 @@ def test_composite_one_to_one_predicate_keeps_all_pairs(reverse):
         name in condition for name in ["orders.tenant_id", "orders.customer_id", "customers.tenant_id", "customers.id"]
     )
     assert path[0].id == 7
+
+
+@pytest.mark.parametrize("reachable", [False, True])
+def test_dense_cycles_use_bounded_reachability(monkeypatch, reachable):
+    from collections import deque
+
+    import src.services.relationship_runtime as runtime
+
+    class BoundedDeque(deque):
+        pushes = 0
+
+        def append(self, value):
+            type(self).pushes += 1
+            assert type(self).pushes < 500, "Traversal enumerated cyclic path prefixes"
+            return super().append(value)
+
+    monkeypatch.setattr(runtime, "deque", BoundedDeque)
+    edges = [edge(a * 20 + b, a, b) for a in range(1, 13) for b in range(1, 13) if a != b]
+    if reachable:
+        edges.append(edge(999, 1, 99))
+    paths = runtime.relationship_paths(edges, 1, 99)
+    assert bool(paths) is reachable
+    if reachable:
+        assert [[step.id for step in path] for path in paths] == [[999]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("diamond", [False, True])
+async def test_review_detail_reuses_ambiguous_path_ids(async_session, diamond):
+    from src.services.relationship_review_service import review_item
+
+    db, tables, columns = await _seed_runtime_tables(async_session)
+    first = await _seed_runtime_relationship(async_session, db, tables, columns, "manual", "approved", "valid")
+    second = await _seed_runtime_relationship(async_session, db, tables, columns, "manual", "approved", "valid")
+    second.relationship_key = "alternative"
+    if diamond:
+        from src.models.db import SemanticTableModel
+
+        middle = SemanticTableModel(db_id=db.id, table_name="middle", business_name="Middle")
+        async_session.add(middle)
+        await async_session.flush()
+        second.to_entity_id = middle.id
+        third = edge(999, middle.id, tables[1].id)
+        third.connection_id, third.relationship_key, third.join_condition = db.id, "third", "preview"
+        async_session.add(third)
+    await async_session.commit()
+    detail = await review_item(async_session, db.id, first, "active")
+    warning = next(item for item in detail.warnings if item["code"] == "AMBIGUOUS_JOIN_PATH")
+    assert warning["context"]["paths"] == [[first.id], [second.id, 999] if diamond else [second.id]]
+    assert detail.model_dump()["warnings"] == detail.warnings

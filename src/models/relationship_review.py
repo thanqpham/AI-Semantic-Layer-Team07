@@ -48,7 +48,7 @@ class RelationshipReviewItem(BaseModel):
     reviewed_at: datetime | None = None
     on_preview: str = ""
     errors: list[dict[str, Any]] = Field(default_factory=list)
-    warnings: list[dict[str, str]] = Field(default_factory=list)
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RelationshipImpact(BaseModel):
