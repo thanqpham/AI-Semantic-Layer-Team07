@@ -23,10 +23,19 @@ export function selfLoopPath(sx: number, sy: number, tx: number, ty: number): [s
   return [path, mid, top];
 }
 
+function computeLabelPos(sourceX: number, sourceY: number, targetX: number, defaultX: number, defaultY: number): [number, number] {
+  const dx = targetX - sourceX;
+  if (dx > 0 && dx <= 200) {
+    return [defaultX, defaultY];
+  }
+  return [sourceX + 34, sourceY];
+}
+
 function edgePath(props: EdgeProps<RelEdge>): [string, number, number] {
   const { source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = props;
   if (source === target) return selfLoopPath(sourceX, sourceY, targetX, targetY);
-  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, curvature: 0.35 });
+  const [path, defaultX, defaultY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, curvature: 0.35 });
+  const [labelX, labelY] = computeLabelPos(sourceX, sourceY, targetX, defaultX, defaultY);
   return [path, labelX, labelY];
 }
 
@@ -86,7 +95,7 @@ function RelationshipEdgeComponent(props: EdgeProps<RelEdge>) {
       <EdgeLabelRenderer>
         <div
           className="nodrag nopan absolute origin-center pointer-events-auto"
-          style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`, opacity: data.dimmed ? 0.25 : 1, zIndex: data.selected ? 20 : 5 }}
+          style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`, opacity: data.dimmed ? 0.25 : 1, zIndex: data.selected ? 30 : 1 }}
         >
           <EdgeBadge
             name={name}

@@ -832,3 +832,13 @@
   animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Ensure ERD table cards always render on top of passing relationship lines and unselected labels */
+.react-flow__node {
+  z-index: 10 !important;
+}
+
+.react-flow__node:hover {
+  z-index: 25 !important;
+}
+
+
