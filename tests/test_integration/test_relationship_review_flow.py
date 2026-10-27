@@ -116,7 +116,14 @@ async def suggest(db, db_id, draft):
         return (await suggest_relationships(db, db_id, 1))[0]
 
 
-async def assert_compound_preserved(db, db_id, original_id):
+def expected_compound_pairs(tables, columns):
+    return [
+        {"from_column_id": columns[tables["orders"].id, name], "to_column_id": columns[tables["users"].id, name]}
+        for name in ("user_id", "tenant_id")
+    ]
+
+
+async def assert_compound_preserved(db, db_id, original_id, expected_pairs):
     rows = (
         await db.scalars(
             select(CanonicalRelationshipModel).where(
@@ -125,7 +132,7 @@ async def assert_compound_preserved(db, db_id, original_id):
         )
     ).all()
     assert len(rows) == 1 and rows[0].id == original_id
-    assert len(rows[0].column_pairs) == 2 and rows[0].review_status == "approved"
+    assert rows[0].column_pairs == expected_pairs and rows[0].review_status == "approved"
 
 
 @pytest.mark.asyncio
@@ -133,6 +140,8 @@ async def test_relationship_review_flow(async_session):
     db = async_session
     db_id, raw, tables, columns, draft = await import_schema(db)
     trusted = (await list_relationship_reviews(db, db_id))[0]
+    expected_pairs = expected_compound_pairs(tables, columns)
+    assert trusted.column_pairs == expected_pairs
     assert trusted.source == "fk" and trusted.status == "approved" and len(trusted.column_pairs) == 2
     candidate = await suggest(db, db_id, draft)
     metric = await create_metric(db, db_id, _make_def(), 1)
@@ -142,15 +151,15 @@ async def test_relationship_review_flow(async_session):
     with pytest.raises(SemanticCompileError, match="not reachable"):
         await compiler.compile(db_id, metric_ids=[metric.id], dimension_ids=[dimension])
     approved, impact = await review_suggestion(db, db_id, draft, candidate)
-    await assert_compound_preserved(db, db_id, trusted.id)
+    await assert_compound_preserved(db, db_id, trusted.id, expected_pairs)
     assert metric.id in impact.metric_ids and metric.status == "needs_review"
     await approve_metric(db, metric.id, 1)
     before = await compiler.compile(db_id, metric_ids=[metric.id], dimension_ids=[dimension])
     assert "JOIN" in before.sql and "LIMIT" in before.sql
     await assert_active_edit(db, db_id, approved, draft, metric, compiler, dimension, before.sql)
-    await assert_compound_preserved(db, db_id, trusted.id)
+    await assert_compound_preserved(db, db_id, trusted.id, expected_pairs)
     await assert_disabled_sync(db, db_id, raw, approved.active_relationship_id, metric, compiler, dimension)
-    await assert_compound_preserved(db, db_id, trusted.id)
+    await assert_compound_preserved(db, db_id, trusted.id, expected_pairs)
 
 
 async def review_suggestion(db, db_id, draft, candidate):
