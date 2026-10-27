@@ -165,6 +165,7 @@ from src.services.organization_service import (
 )
 from src.services.query_compiler import SemanticQueryCompiler
 from src.services.query_execution import execute_compiled_query
+from src.services.relationship_runtime import active_relationship_filters
 from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 from src.services.schema_ingestion import parse_sql_dump_preview
 from src.services.schema_review_service import (
@@ -1290,7 +1291,7 @@ async def _catalog_relationships(db: AsyncSession, db_id: int) -> list[Canonical
     """Load canonical relationships for a semantic database."""
     stmt = (
         select(CanonicalRelationshipModel)
-        .where(CanonicalRelationshipModel.connection_id == db_id)
+        .where(CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters())
         .order_by(CanonicalRelationshipModel.id)
     )
     records = (await db.execute(stmt)).scalars().all()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,6 +27,8 @@ from src.models.metric_definition import (
 from src.models.schemas import SemanticQueryFilter
 from src.services.query_compiler_plan import resolve_scoped_filter_stages
 from src.services.query_compiler_sql import _coerce_literal, _column_info, _raw_qualified
+from src.services.relationship_runtime import RelationshipStep, active_relationship_filters
+from src.services.relationship_runtime import safe_join_path as _safe_join_path
 from src.services.semantic_compile_error import SemanticCompileError
 
 
@@ -107,14 +108,16 @@ class QueryCompilerMetadata:
         tables: dict[int, SemanticTableModel],
     ) -> list[dict[str, Any]]:
         result = await self._db.execute(
-            select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id)
+            select(CanonicalRelationshipModel).where(
+                CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters()
+            )
         )
-        relationships = [item for item in result.scalars().all() if item.validation_status in {"valid", None}]
+        relationships = list(result.scalars().all())
         column_names = await self._relationship_columns(relationships)
         joins: list[dict[str, Any]] = []
         joined = {base.id}
         for table_id in {item["table_id"] for item in dimensions} - joined:
-            for relationship in _safe_join_path(relationships, base.id, table_id, tables, column_names):
+            for relationship in _safe_join_path(relationships, base.id, table_id):
                 target_id = relationship.to_entity_id
                 if target_id not in joined:
                     joins.append(
@@ -154,9 +157,11 @@ class QueryCompilerMetadata:
         tables_by_id = {table.id: table for table in tables_list}
         columns, columns_by_id = await self._load_plan_columns(tables_list, tables_by_id)
         result = await self._db.execute(
-            select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == connection_id)
+            select(CanonicalRelationshipModel).where(
+                CanonicalRelationshipModel.connection_id == connection_id, *active_relationship_filters()
+            )
         )
-        relationships = [item for item in result.scalars().all() if item.validation_status in {"valid", None}]
+        relationships = list(result.scalars().all())
         relationship_columns = await self._relationship_columns(relationships)
         return MetricPlanMetadata(
             tables, tables_folded, tables_by_id, columns, columns_by_id, relationships, relationship_columns, {}, {}
@@ -214,15 +219,13 @@ class QueryCompilerMetadata:
                 raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan references an unknown joined table")
             if target.id == base.id:
                 raise SemanticCompileError("UNSAFE_JOIN", "Metric plan cannot join its source table to itself")
-            path = _safe_join_path(
-                metadata.relationships, base.id, target.id, metadata.tables_by_id, metadata.relationship_columns
-            )
+            path = _safe_join_path(metadata.relationships, base.id, target.id)
             metadata.join_paths[(base.table_name, target.table_name)] = self._plan_join_records(stage, path, metadata)
             resolved_joins.append(target.table_name)
         return list(dict.fromkeys(resolved_joins))
 
     def _plan_join_records(
-        self, stage: MetricPlanStage, path: list[CanonicalRelationshipModel], metadata: MetricPlanMetadata
+        self, stage: MetricPlanStage, path: list[RelationshipStep], metadata: MetricPlanMetadata
     ) -> list[dict[str, str]]:
         joins = []
         for relationship in path:
@@ -334,82 +337,8 @@ class MetricPlanMetadata:
     stage_tables: dict[str, set[str]]
 
 
-def _safe_join_path(
-    relationships: list[CanonicalRelationshipModel],
-    base_id: int,
-    table_id: int,
-    tables: dict[int, SemanticTableModel] | None = None,
-    column_names: dict[int, tuple[str, str]] | None = None,
-) -> list[CanonicalRelationshipModel]:
-    paths = _many_to_one_paths(relationships, base_id, table_id)
-    if len(paths) > 1:
-        if tables and column_names and table_id in tables:
-            target_table = tables[table_id].table_name.lower().rstrip("s")
-
-            def _path_score(path: list[CanonicalRelationshipModel]) -> tuple[int, int, int]:
-                hop_len = len(path)
-                match_name = 0
-                if hop_len == 1 and path[0].column_pairs:
-                    from_col_id = path[0].column_pairs[0].get("from_column_id")
-                    if from_col_id in column_names:
-                        column_name = column_names[from_col_id][1].lower()
-                        if column_name in {f"{target_table}_id", f"{target_table}id", target_table}:
-                            match_name = -1
-                return (hop_len, match_name, path[0].id if path else 0)
-
-            return sorted(paths, key=_path_score)[0]
-        raise SemanticCompileError("AMBIGUOUS_JOIN_PATH", "Multiple safe join paths exist", {"table_id": table_id})
-    if not paths:
-        _raise_unreachable(relationships, base_id, table_id)
-    return paths[0]
-
-
-def _many_to_one_paths(
-    relationships: list[CanonicalRelationshipModel], start: int, target: int
-) -> list[list[CanonicalRelationshipModel]]:
-    graph: dict[int, list[CanonicalRelationshipModel]] = {}
-    for relationship in relationships:
-        if relationship.relationship_type in {"many_to_one", "many-to-one"}:
-            graph.setdefault(relationship.from_entity_id, []).append(relationship)
-    queue: deque[tuple[int, list[CanonicalRelationshipModel], set[int]]] = deque([(start, [], {start})])
-    matches: list[list[CanonicalRelationshipModel]] = []
-    shortest: int | None = None
-    while queue:
-        current, path, visited = queue.popleft()
-        if current == target:
-            shortest = len(path) if shortest is None else shortest
-            if len(path) == shortest:
-                matches.append(path)
-            continue
-        if shortest is not None and len(path) >= shortest:
-            continue
-        for relationship in graph.get(current, []):
-            if relationship.to_entity_id not in visited:
-                queue.append(
-                    (
-                        relationship.to_entity_id,
-                        [*path, relationship],
-                        {*visited, relationship.to_entity_id},
-                    )
-                )
-    return matches
-
-
-def _raise_unreachable(
-    relationships: list[CanonicalRelationshipModel],
-    base_id: int,
-    target_id: int,
-) -> None:
-    reverse_paths = _many_to_one_paths(relationships, target_id, base_id)
-    if reverse_paths:
-        raise SemanticCompileError("UNSAFE_FANOUT", "Dimension requires a one-to-many join", {"table_id": target_id})
-    raise SemanticCompileError(
-        "UNREACHABLE_DIMENSION", "Dimension is not reachable through a safe path", {"table_id": target_id}
-    )
-
-
 def _relationship_condition(
-    relationship: CanonicalRelationshipModel,
+    relationship: CanonicalRelationshipModel | RelationshipStep,
     columns: dict[int, tuple[str, str]],
 ) -> str:
     if relationship.column_pairs:
