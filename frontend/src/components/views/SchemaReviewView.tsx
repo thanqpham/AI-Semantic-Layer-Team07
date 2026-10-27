@@ -292,9 +292,16 @@ export function SchemaReviewView({
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         <div role="tablist" onKeyDown={event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setReviewTab(current=>current==='tables'?'relationships':'tables');const tabs=event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');tabs[reviewTab==='tables'?1:0]?.focus();}}} aria-label={translate('Loại review')} className="flex flex-wrap gap-2">
           <Button role="tab" id="tables-tab" tabIndex={reviewTab==='tables'?0:-1} aria-selected={reviewTab==='tables'} aria-controls="tables-review" onClick={()=>setReviewTab('tables')} variant={reviewTab==='tables'?'default':'outline'}><Translated text="Bảng & cột" /></Button>
-          <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}><Translated text="Liên kết" /> ({review?.pending_relationships??0})</Button>
+          <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}>
+            <Translated text="Liên kết" />
+            {Boolean(review?.pending_relationships) && ` (${review?.pending_relationships})`}
+          </Button>
         </div>
-        <p className="text-xs text-muted-foreground">{review?.pending_relationships??0} <Translated text="liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết." /></p>
+        <p className="text-xs text-muted-foreground">
+          {review?.pending_relationships
+            ? `${review.pending_relationships} liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết.`
+            : 'Tất cả liên kết đã được phê duyệt; bạn có thể dùng AI đề xuất hoặc thêm liên kết thủ công.'}
+        </p>
         {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'} className={cn("min-h-0 flex-1 flex-col", reviewTab==='relationships' ? "flex" : "hidden")}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
         <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {error && (
