@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.models.db import SemanticColumnModel, SemanticTableModel, utc_now
+from src.models.db_relationships import RelationshipCandidateModel
 from src.models.review_mixin import REVIEW_STATUS_APPROVED, REVIEW_STATUS_PENDING
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,19 @@ async def pending_review_counts(db: AsyncSession, db_id: int) -> dict[str, int]:
         )
     )
     return {
+        "pending_relationships": int(
+            (
+                await db.scalar(
+                    select(func.count())
+                    .select_from(RelationshipCandidateModel)
+                    .where(
+                        RelationshipCandidateModel.connection_id == db_id,
+                        RelationshipCandidateModel.status == "pending_review",
+                    )
+                )
+            )
+            or 0
+        ),
         "pending_tables": int((await db.execute(table_stmt)).scalar_one() or 0),
         "pending_columns": int((await db.execute(column_stmt)).scalar_one() or 0),
     }

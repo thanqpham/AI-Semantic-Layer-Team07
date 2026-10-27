@@ -145,7 +145,11 @@ async def test_column_inline_edit_and_missing_rows(async_session: AsyncSession):
 async def test_approve_schema_promotes_tables_and_columns(async_session: AsyncSession):
     """Approval stamps every pending row and empties the queue."""
     db_id, _, _ = await _seed(async_session)
-    assert await pending_review_counts(async_session, db_id) == {"pending_tables": 1, "pending_columns": 1}
+    assert await pending_review_counts(async_session, db_id) == {
+        "pending_tables": 1,
+        "pending_columns": 1,
+        "pending_relationships": 0,
+    }
 
     result = await approve_schema(async_session, db_id, actor_id=7)
 
@@ -154,6 +158,7 @@ async def test_approve_schema_promotes_tables_and_columns(async_session: AsyncSe
         "approved_columns": 1,
         "pending_tables": 0,
         "pending_columns": 0,
+        "pending_relationships": 0,
     }
     table = (await load_review_tables(async_session, db_id))[0]
     assert table.review_status == REVIEW_STATUS_APPROVED

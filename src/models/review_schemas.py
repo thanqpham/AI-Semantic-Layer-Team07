@@ -54,6 +54,7 @@ class SchemaReviewResponse(BaseModel):
     status: str = Field(..., description="'pending_review' khi còn hàng đợi, ngược lại 'approved'")
     pending_tables: int = 0
     pending_columns: int = 0
+    pending_relationships: int = 0
     tables: list[ReviewTableItem] = Field(default_factory=list)
 
 
@@ -74,6 +75,7 @@ class SchemaApproveResponse(BaseModel):
     approved_columns: int = 0
     pending_tables: int = 0
     pending_columns: int = 0
+    pending_relationships: int = 0
     status: str = "approved"
 
 
