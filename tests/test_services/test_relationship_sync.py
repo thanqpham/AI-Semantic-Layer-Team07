@@ -239,6 +239,8 @@ async def test_legacy_null_namespace_fk_does_not_guess_schema(async_session):
     tables = (await async_session.scalars(select(SemanticTableModel))).all()
     for table in tables:
         table.physical_schema = None
+        table.physical_schema_key = None
+        table.table_name_key = None
     await async_session.flush()
     with pytest.raises(ValueError, match="FK endpoints must be persisted"):
         await reconcile_relationships(async_session, 90, raw)

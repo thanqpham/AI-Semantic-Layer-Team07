@@ -109,9 +109,7 @@ async def _require_table(
     """Load one table of *db_id* by physical name or raise SchemaRowNotFoundError."""
     stmt = select(SemanticTableModel).where(
         SemanticTableModel.db_id == db_id,
-        SemanticTableModel.id == table_id
-        if table_id is not None
-        else func.lower(SemanticTableModel.table_name) == table_name.lower(),
+        SemanticTableModel.id == table_id if table_id is not None else SemanticTableModel.table_name == table_name,
     )
     rows = (await db.execute(stmt)).scalars().all()
     if len(rows) > 1:

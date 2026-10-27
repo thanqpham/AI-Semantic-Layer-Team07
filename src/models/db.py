@@ -390,6 +390,8 @@ class SemanticTableModel(ReviewStateMixin, Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     row_count_approx: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     physical_schema: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    physical_schema_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    table_name_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     primary_key_column: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
@@ -525,7 +527,9 @@ class CanonicalRelationshipModel(Base):
     column_pairs: Mapped[list[dict[str, int]]] = mapped_column(JSON, nullable=False, default=list)
     validation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="valid")
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="fk", server_default="fk")
-    review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="approved", server_default="approved")
+    review_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="approved", server_default="approved"
+    )
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     human_modified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
@@ -658,7 +662,7 @@ class NotificationModel(Base):
 Index(
     "uq_semantic_tables_db_schema_table",
     SemanticTableModel.db_id,
-    func.lower(func.coalesce(SemanticTableModel.physical_schema, "")),
-    func.lower(SemanticTableModel.table_name),
+    func.coalesce(SemanticTableModel.physical_schema_key, SemanticTableModel.physical_schema, ""),
+    func.coalesce(SemanticTableModel.table_name_key, SemanticTableModel.table_name),
     unique=True,
 )

@@ -23,20 +23,38 @@ def test_upgrade_preserves_rows_and_safe_downgrade():
         connection.exec_driver_sql(
             "CREATE TABLE semantic_metrics (id INTEGER PRIMARY KEY, base_entity_id INTEGER REFERENCES semantic_tables(id), formula TEXT)"
         )
-        connection.exec_driver_sql("INSERT INTO semantic_tables VALUES (11,1,'orders','public'),(12,1,'legacy',NULL)")
+        connection.exec_driver_sql(
+            "INSERT INTO semantic_tables VALUES (11,1,'orders','public'),(12,1,'legacy',NULL),(15,1,'Orders','public')"
+        )
         connection.exec_driver_sql("INSERT INTO semantic_metrics VALUES (21,11,'COUNT(*)')")
-        before = connection.exec_driver_sql("SELECT * FROM semantic_tables ORDER BY id").all()
+        before = connection.exec_driver_sql(
+            "SELECT id, db_id, table_name, physical_schema FROM semantic_tables ORDER BY id"
+        ).all()
         with patch.object(migration, "op", Operations(MigrationContext.configure(connection))):
             migration.upgrade()
-            assert connection.exec_driver_sql("SELECT * FROM semantic_tables ORDER BY id").all() == before
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT id, db_id, table_name, physical_schema FROM semantic_tables ORDER BY id"
+                ).all()
+                == before
+            )
             assert connection.exec_driver_sql("SELECT * FROM semantic_metrics").all() == [(21, 11, "COUNT(*)")]
-            connection.exec_driver_sql("INSERT INTO semantic_tables VALUES (13,1,'orders','archive')")
+            connection.exec_driver_sql(
+                "INSERT INTO semantic_tables(id,db_id,table_name,physical_schema) VALUES (13,1,'orders','archive')"
+            )
             with pytest.raises(RuntimeError, match="duplicate table names"):
                 migration.downgrade()
-            assert connection.exec_driver_sql("SELECT count(*) FROM semantic_tables").scalar() == 3
+            assert connection.exec_driver_sql("SELECT count(*) FROM semantic_tables").scalar() == 4
             with pytest.raises(sa.exc.IntegrityError):
-                connection.exec_driver_sql("INSERT INTO semantic_tables VALUES (14,1,'ORDERS','PUBLIC')")
+                connection.exec_driver_sql(
+                    "INSERT INTO semantic_tables(id,db_id,table_name,physical_schema,table_name_key,physical_schema_key) VALUES (14,1,'ORDERS','PUBLIC','orders','public')"
+                )
             connection.exec_driver_sql("DELETE FROM semantic_tables WHERE id=13")
             migration.downgrade()
-            assert connection.exec_driver_sql("SELECT * FROM semantic_tables ORDER BY id").all() == before
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT id, db_id, table_name, physical_schema FROM semantic_tables ORDER BY id"
+                ).all()
+                == before
+            )
             assert connection.exec_driver_sql("SELECT * FROM semantic_metrics").all() == [(21, 11, "COUNT(*)")]
