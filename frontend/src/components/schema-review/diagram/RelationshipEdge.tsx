@@ -30,16 +30,49 @@ function edgePath(props: EdgeProps<RelEdge>): [string, number, number] {
   return [path, labelX, labelY];
 }
 
+interface BadgeProps {
+  name: string;
+  selected: boolean;
+  item: RelationshipItem;
+  pairCount: number;
+  stroke: string;
+  label: string;
+  onSelect: (item: RelationshipItem, trigger: HTMLButtonElement) => void;
+}
+
+function EdgeBadge({ name, selected, item, pairCount, stroke, label, onSelect }: BadgeProps) {
+  const { translate: t } = useLanguage();
+  return (
+    <button
+      type="button"
+      aria-label={name}
+      aria-pressed={selected}
+      title={`${name} · ${t(label)}`}
+      onClick={(event) => onSelect(item, event.currentTarget)}
+      className={cn(
+        'origin-center cursor-pointer select-none rounded-full border bg-card px-2 py-0.5 font-mono text-[10px] font-semibold shadow-sm transition-transform duration-150 hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500',
+        selected && 'scale-110 shadow-md ring-2 ring-primary/40',
+      )}
+      style={{ borderColor: stroke, color: stroke }}
+    >
+      {CARDINALITY[item.relationship_type] ?? '—'}
+      {pairCount > 1 && <span className="ml-1 font-normal opacity-80">· {pairCount} {t('cột')}</span>}
+    </button>
+  );
+}
+
 /** Status-colored relationship edge with an accessible cardinality pill acting as the select button. */
 function RelationshipEdgeComponent(props: EdgeProps<RelEdge>) {
   const { id, data, markerEnd } = props;
   const { onSelect } = useContext(DiagramActionsContext);
-  const { translate: t } = useLanguage();
   if (!data) return null;
   const style = statusStyle(data.item.status);
   const [path, labelX, labelY] = edgePath(props);
   const opacity = data.dimmed ? 0.12 : style.faded ? 0.55 : 1;
   const name = `${qualifiedEntity(data.item.from_entity)} → ${qualifiedEntity(data.item.to_entity)}`;
+  const x = Math.round(labelX);
+  const y = Math.round(labelY);
+
   return (
     <>
       <BaseEdge
@@ -51,21 +84,20 @@ function RelationshipEdgeComponent(props: EdgeProps<RelEdge>) {
         style={{ stroke: style.stroke, strokeWidth: data.selected ? 2.75 : 1.75, strokeDasharray: style.dash, opacity, transition: 'opacity .2s, stroke-width .2s' }}
       />
       <EdgeLabelRenderer>
-        <button
-          type="button"
-          aria-label={name}
-          aria-pressed={data.selected}
-          title={`${name} · ${t(style.label)}`}
-          onClick={(event) => onSelect(data.item, event.currentTarget)}
-          className={cn(
-            'nodrag nopan absolute rounded-full border bg-card px-2 py-0.5 font-mono text-[10px] font-semibold shadow-sm transition-all hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500',
-            data.selected && 'scale-110 shadow-md',
-          )}
-          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, borderColor: style.stroke, color: style.stroke, opacity: data.dimmed ? 0.25 : 1, pointerEvents: 'all' }}
+        <div
+          className="nodrag nopan absolute origin-center pointer-events-auto"
+          style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`, opacity: data.dimmed ? 0.25 : 1, zIndex: data.selected ? 20 : 5 }}
         >
-          {CARDINALITY[data.item.relationship_type] ?? '—'}
-          {data.pairCount > 1 && <span className="ml-1 font-normal opacity-80">· {data.pairCount} {t('cột')}</span>}
-        </button>
+          <EdgeBadge
+            name={name}
+            selected={data.selected}
+            item={data.item}
+            pairCount={data.pairCount}
+            stroke={style.stroke}
+            label={style.label}
+            onSelect={onSelect}
+          />
+        </div>
       </EdgeLabelRenderer>
     </>
   );
