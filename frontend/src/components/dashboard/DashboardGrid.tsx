@@ -24,6 +24,7 @@ import {
   DashboardDatePreset,
   DashboardWidgetConfig,
   getWidgetColSpan,
+  getWidgetMetricIds,
   getWidgetRowSpan,
 } from '@/lib/dashboard';
 import { cn } from '@/lib/utils';
@@ -72,6 +73,7 @@ export interface DashboardGridProps {
 interface WidgetViewModel {
   widget: DashboardWidgetConfig;
   metricName: string;
+  metricNames: string[];
   dimensionLabel: string | null;
 }
 
@@ -157,11 +159,15 @@ export function DashboardGrid(props: DashboardGridProps) {
 
 function buildWidgetViewModels(props: DashboardGridProps): WidgetViewModel[] {
   const nameById = new Map(props.metrics.map((m) => [m.metric_id, m.name]));
-  return props.widgets.map((widget) => ({
-    widget,
-    metricName: nameById.get(widget.metric_id) ?? `Metric ${widget.metric_id}`,
-    dimensionLabel: resolveDimensionLabel(widget, props.catalog),
-  }));
+  return props.widgets.map((widget) => {
+    const metricNames = getWidgetMetricIds(widget).map((id) => nameById.get(id) ?? `Metric ${id}`);
+    return {
+      widget,
+      metricName: metricNames[0],
+      metricNames,
+      dimensionLabel: resolveDimensionLabel(widget, props.catalog),
+    };
+  });
 }
 
 function resolveDimensionLabel(
@@ -220,6 +226,7 @@ function SortableCard(props: SortableCardProps) {
         querySupported={props.gridProps.querySupported}
         editMode={props.gridProps.editMode}
         metricName={props.model.metricName}
+        metricNames={props.model.metricNames}
         dimensionLabel={props.model.dimensionLabel}
         isFirst={props.index === 0}
         isLast={props.index === props.total - 1}

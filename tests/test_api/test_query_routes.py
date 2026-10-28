@@ -228,6 +228,8 @@ async def test_compile_preview_does_not_access_target_database(
         "metric_ids": [data["metric_id"]],
         "dimensions": [{"column_id": data["col_created_id"], "time_grain": "month"}],
         "limit": 100,
+        "order_by": "metric_desc",
+        "order_metric_id": data["metric_id"],
     }
     with (
         patch("src.api.routes.decrypt_conn_url") as decrypt,
@@ -242,6 +244,7 @@ async def test_compile_preview_does_not_access_target_database(
     assert response.status_code == 200
     assert "strftime" in response.json()["sql"]
     assert response.json()["metadata"]["base_entity"] == "orders"
+    assert "ORDER BY" in response.json()["sql"]
     decrypt.assert_not_called()
     execute.assert_not_called()
 
@@ -294,6 +297,84 @@ async def test_query_success(
     assert resp_data["columns"] == ["created_at", "sum"]
     assert resp_data["row_count"] == 2
     assert len(resp_data["rows"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_query_endpoint_passes_order_metric_id(client: Any, async_session: AsyncSession) -> None:
+    data = await _seed_live_db_with_semantic(async_session)
+    compiled = CompiledQuery(sql="SELECT 1 LIMIT 100", parameters={}, metadata={})
+    with (
+        patch("src.api.routes.SemanticQueryCompiler") as compiler_class,
+        patch("src.api.routes.decrypt_conn_url", return_value="sqlite:///:memory:"),
+        patch("src.api.routes._execute_sql_on_live_db", return_value={"columns": [], "rows": [], "row_count": 0}),
+    ):
+        compiler = AsyncMock()
+        compiler.compile.return_value = compiled
+        compiler_class.return_value = compiler
+        response = await client.post(
+            QUERY_ENDPOINT.format(db_id=data["sem_db_id"]),
+            json={
+                "metric_ids": [data["metric_id"]],
+                "dimension_ids": [data["col_created_id"]],
+                "order_by": "metric_desc",
+                "order_metric_id": data["metric_id"],
+            },
+            headers=_token_headers(),
+        )
+    assert response.status_code == 200
+    assert compiler.compile.await_args.args[1].order_metric_id == data["metric_id"]
+
+
+@pytest.mark.asyncio
+async def test_compile_endpoint_requires_valid_order_metric_id(client: Any, async_session: AsyncSession) -> None:
+    data = await _seed_live_db_with_semantic(async_session)
+    second_id = await _add_second_metric(async_session, data)
+    endpoint = COMPILE_ENDPOINT.format(db_id=data["sem_db_id"])
+    headers = _token_headers()
+    payload = {
+        "metric_ids": [data["metric_id"], second_id],
+        "dimensions": [{"column_id": data["col_created_id"]}],
+        "order_by": "metric_desc",
+    }
+
+    with (
+        patch("src.api.routes.decrypt_conn_url"),
+        patch("src.api.routes._execute_sql_on_live_db") as execute,
+    ):
+        for target in (endpoint, QUERY_ENDPOINT.format(db_id=data["sem_db_id"])):
+            await _assert_order_metric_diagnostics(client, target, payload, headers)
+    execute.assert_not_called()
+
+
+async def _add_second_metric(db: AsyncSession, data: dict[str, Any]) -> int:
+    metric = await db.get(SemanticMetricModel, data["metric_id"])
+    assert metric is not None
+    duplicate = SemanticMetricModel(
+        db_id=data["sem_db_id"],
+        name="Second Revenue",
+        description="Revenue copy",
+        sql_template=metric.sql_template,
+        formula=metric.formula,
+        aggregation_type=metric.aggregation_type,
+        status="approved",
+        base_entity_id=data["table_id"],
+        created_by=1,
+        definition=metric.definition,
+    )
+    db.add(duplicate)
+    await db.commit()
+    return duplicate.id
+
+
+async def _assert_order_metric_diagnostics(
+    client: Any, endpoint: str, payload: dict[str, Any], headers: dict[str, str]
+) -> None:
+    missing = await client.post(endpoint, json=payload, headers=headers)
+    assert missing.status_code == 400
+    assert missing.json()["detail"]["code"] == "SORT_METRIC_REQUIRED"
+    invalid = await client.post(endpoint, json={**payload, "order_metric_id": 999}, headers=headers)
+    assert invalid.status_code == 400
+    assert invalid.json()["detail"]["code"] == "INVALID_SORT_METRIC"
 
 
 # ===================================================================

@@ -8,10 +8,13 @@ import sqlglot
 from sqlglot import exp
 
 from src.models.metric_definition import MetricPlanStage
-from src.services.query_compiler_sql import _normalize_value, _quoted, _table_name, _validated_join_condition
+from src.services.query_compiler_sql import (
+    _normalize_value,
+    _quoted,
+    _table_name,
+    _validated_join_condition,
+)
 from src.services.semantic_compile_error import SemanticCompileError
-
-_RUNTIME_FILTERS_MSG = "Runtime filters must be resolved to stage-level filters by the caller before compilation"
 
 
 def compile_plan_sql(
@@ -27,77 +30,25 @@ def compile_plan_sql(
     limit: int,
     parameters: dict[str, Any],
     order_by: str | None = None,
+    order_metric_id: int | None = None,
 ) -> str:
-    """Render stage CTEs and a result aligned on their declared grouping names."""
-    if runtime_filters:
-        raise _plan_filter_error("unresolved_lineage", None, _RUNTIME_FILTERS_MSG)
-    stage_map = {stage.name: stage for stage in plan.stages}
-    output_refs = _refs(plan.output_expression, stage_map)
-    terminals = sorted({stage for stage, _ in output_refs})
-    if not terminals:
-        raise SemanticCompileError("METRIC_NEEDS_REVIEW", "Output expression must reference a plan stage")
-    group_names = [field.name for field in stage_map[terminals[0]].group_by]
-    if any([field.name for field in stage_map[name].group_by] != group_names for name in terminals):
-        raise SemanticCompileError("INCOMPATIBLE_GRAIN", "Metric plan result stages must share the same grouping grain")
-    selected_group_names = set()
-    for dimension in runtime_dimensions:
-        match = [field for field in stage_map[terminals[0]].group_by if field.column_id == dimension["column_id"]]
-        if not match or any(
-            not any(
-                field.name == match[0].name and field.column_id == dimension["column_id"]
-                for field in stage_map[name].group_by
-            )
-            for name in terminals
-        ):
-            raise SemanticCompileError("INCOMPATIBLE_GRAIN", "Selected dimension is not present in every result stage")
-        selected_group_names.add(match[0].name)
-    if group_names and not runtime_dimensions:
-        # Grouped plans need an explicit output dimension to avoid returning hidden grain rows.
-        raise SemanticCompileError("DIMENSION_REQUIRED", "Select a dimension declared by the metric plan")
-    if set(group_names) != selected_group_names:
-        raise SemanticCompileError(
-            "INCOMPATIBLE_GRAIN", "Selected dimensions must match the metric plan's complete result grain"
-        )
+    """Render one plan through the common metric-plan bundle renderer."""
+    from src.services.query_compiler_plan_bundle import compile_plan_bundle_sql
 
-    ctes: list[str] = []
-    for stage in plan.stages:
-        ctes.append(_stage_sql(stage, stage_map, tables, columns, join_paths, dialect, parameters, dimension_grains))
-    if group_names:
-        key_columns = ", ".join(_quoted(name, dialect) for name in group_names)
-        # Stage names and output identifiers are validated models and quoted per dialect.
-        key_parts = [f"SELECT {key_columns} FROM {_quoted(name, dialect)}" for name in terminals]  # noqa: S608
-        ctes.append(f"{_quoted('__metric_keys', dialect)} AS (" + " UNION ".join(key_parts) + ")")
-        from_sql = f"FROM {_quoted('__metric_keys', dialect)}"
-        for name in terminals:
-            condition = " AND ".join(
-                _null_safe_equal(
-                    f"{_quoted('__metric_keys', dialect)}.{_quoted(key, dialect)}",
-                    f"{_quoted(name, dialect)}.{_quoted(key, dialect)}",
-                    dialect,
-                )
-                for key in group_names
-            )
-            from_sql += f" LEFT JOIN {_quoted(name, dialect)} ON {condition}"
-        selected_dimensions = []
-        for dimension in runtime_dimensions:
-            field = next(item for item in stage_map[terminals[0]].group_by if item.column_id == dimension["column_id"])
-            selected_dimensions.append(
-                f"{_quoted('__metric_keys', dialect)}.{_quoted(field.name, dialect)} AS "
-                f"{_quoted('dimension_' + str(dimension['column_id']), dialect)}"
-            )
-    else:
-        from_sql = "FROM " + " CROSS JOIN ".join(_quoted(name, dialect) for name in terminals)
-        selected_dimensions = []
-    expression = _output_expression(plan.output_expression, terminals, dialect)
-    metric = f"{expression} AS {_quoted('metric_' + str(metric_id), dialect)}"
-    selections = ", ".join([*selected_dimensions, metric])
-    order_clause = _plan_order_clause(order_by, runtime_dimensions, metric_id, dialect)
-    result = f"SELECT {selections}\n{from_sql}"
-    if order_clause:
-        result_name = _quoted("__metric_result", dialect)
-        ctes.append(f"{result_name} AS ({result})")
-        return "WITH " + ",\n".join(ctes) + f"\nSELECT * FROM {result_name}\n{order_clause}\nLIMIT {limit}"
-    return "WITH " + ",\n".join(ctes) + f"\n{result}\nLIMIT {limit}"
+    return compile_plan_bundle_sql(
+        [(metric_id, plan)],
+        dialect,
+        tables,
+        columns,
+        join_paths,
+        runtime_dimensions,
+        dimension_grains,
+        runtime_filters,
+        limit,
+        parameters,
+        order_by,
+        order_metric_id,
+    )
 
 
 def resolve_scoped_filter_stages(
@@ -148,7 +99,7 @@ def _plan_filter_error(
 def _plan_order_clause(
     order_by: str | None,
     dimensions: list[dict[str, Any]],
-    metric_id: int,
+    metric_id: int | None,
     dialect: str,
 ) -> str | None:
     if order_by is None:
@@ -157,6 +108,8 @@ def _plan_order_clause(
         raise ValueError("Ordered dashboard queries require one metric and one dimension")
     dimension = _quoted("dimension_" + str(dimensions[0]["column_id"]), dialect)
     if order_by == "metric_desc":
+        if metric_id is None:
+            raise SemanticCompileError("SORT_METRIC_REQUIRED", "Select a metric ID to sort multiple metrics")
         metric = _quoted("metric_" + str(metric_id), dialect)
         return f"ORDER BY CASE WHEN {metric} IS NULL THEN 1 ELSE 0 END, {metric} DESC, {dimension} ASC"
     if order_by == "dimension_desc":
@@ -173,6 +126,7 @@ def _stage_sql(
     dialect: str,
     parameters: dict[str, Any],
     dimension_grains: dict[int, str],
+    parameter_namespace: str = "",
 ) -> str:
     if stage.source_stage:
         source = stage_map[stage.source_stage]
@@ -212,7 +166,9 @@ def _stage_sql(
         for item, expression in zip(stage.group_by, group_expressions, strict=True)
     ]
     where = [
-        _plan_filter(item, stage, source_table, tables, columns, available, dialect, parameters, "plan")
+        _plan_filter(
+            item, stage, source_table, tables, columns, available, dialect, parameters, "plan", parameter_namespace
+        )
         for item in stage.filters
     ]
     for aggregate in stage.aggregates:
@@ -222,7 +178,18 @@ def _stage_sql(
             else _plan_expression(aggregate.expression, stage, source_table, tables, columns, available, dialect)
         )
         predicates = [
-            _plan_filter(item, stage, source_table, tables, columns, available, dialect, parameters, aggregate.name)
+            _plan_filter(
+                item,
+                stage,
+                source_table,
+                tables,
+                columns,
+                available,
+                dialect,
+                parameters,
+                aggregate.name,
+                parameter_namespace,
+            )
             for item in aggregate.filters
         ]
         if predicates:
@@ -294,6 +261,7 @@ def _plan_filter(
     dialect: str,
     parameters: dict[str, Any],
     prefix: str,
+    parameter_namespace: str = "",
 ) -> str:
     field = item.field
     if source_table is None:
@@ -318,11 +286,11 @@ def _plan_filter(
     if item.operator in {"in", "not_in"}:
         names = []
         for value in item.value:
-            key = f"{prefix}_{len(parameters)}"
+            key = f"{parameter_namespace}{prefix}_{len(parameters)}"
             parameters[key] = _normalize_value(value)
             names.append(":" + key)
         return f"{column} {'NOT IN' if item.operator == 'not_in' else 'IN'} ({', '.join(names)})"
-    key = f"{prefix}_{len(parameters)}"
+    key = f"{parameter_namespace}{prefix}_{len(parameters)}"
     parameters[key] = _normalize_value(item.value)
     symbol = {"eq": "=", "neq": "<>", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[item.operator]
     return f"{column} {symbol} :{key}"

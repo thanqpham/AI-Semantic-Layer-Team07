@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,12 +16,19 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
+from src.models.metric_definition import MetricDefinition
 from src.models.schemas import (
     DashboardLayout,
     DashboardLayoutResponse,
     DashboardSaveRequest,
+    DashboardWidgetConfig,
+    DimensionSelection,
+    SemanticQueryFilter,
+    SemanticQuerySpec,
 )
 from src.services.organization_service import require_permission, resolve_membership
+from src.services.query_compiler import SemanticQueryCompiler
+from src.services.semantic_compile_error import SemanticCompileError
 
 
 class DashboardNotFoundError(Exception):
@@ -103,7 +111,7 @@ async def _resolve_active_membership(
 
 def _collect_reference_ids(layout: DashboardLayout) -> tuple[set[int], set[int]]:
     """Collect metric and column IDs referenced by the layout widgets."""
-    metric_ids = {widget.metric_id for widget in layout.widgets}
+    metric_ids = {metric_id for widget in layout.widgets for metric_id in (widget.metric_ids or [widget.metric_id])}
     column_ids = {
         column_id
         for widget in layout.widgets
@@ -120,6 +128,9 @@ async def _validate_references(db: AsyncSession, db_id: int, layout: DashboardLa
         await _validate_metrics(db, db_id, metric_ids)
     if column_ids:
         await _validate_columns(db, db_id, column_ids)
+    for widget in layout.widgets:
+        if widget.metric_ids:
+            await _validate_metric_widget_plan(db, db_id, widget)
 
 
 async def _validate_metrics(db: AsyncSession, db_id: int, metric_ids: set[int]) -> None:
@@ -133,6 +144,54 @@ async def _validate_metrics(db: AsyncSession, db_id: int, metric_ids: set[int]) 
     rejected = sorted(metric_ids - found)
     if rejected:
         raise DashboardValidationError(f"Metrics are missing, cross-database, or not approved: {rejected}")
+
+
+async def _validate_metric_widget_plan(db: AsyncSession, db_id: int, widget: DashboardWidgetConfig) -> None:
+    metric_ids = widget.metric_ids or []
+    records = await db.execute(
+        select(SemanticMetricModel).where(
+            SemanticMetricModel.db_id == db_id,
+            SemanticMetricModel.id.in_(metric_ids),
+            SemanticMetricModel.is_deleted.is_(False),
+        )
+    )
+    metric_records = list(records.scalars().all())
+    if len(metric_records) != len(metric_ids) or any(record.definition is None for record in metric_records):
+        raise DashboardValidationError("Multi-metric widgets require approved query-plan metrics")
+    try:
+        definitions = [MetricDefinition.model_validate(record.definition) for record in metric_records]
+    except ValidationError as exc:
+        raise DashboardValidationError("Multi-metric widget contains an invalid metric definition") from exc
+    if any(item.metric.query_plan is None for item in definitions):
+        raise DashboardValidationError("Multi-metric widgets require approved query-plan metrics")
+    await _compile_widget_plan(db, db_id, widget)
+
+
+async def _compile_widget_plan(db: AsyncSession, db_id: int, widget: DashboardWidgetConfig) -> None:
+    dimensions = []
+    if widget.dimension_col_id is not None:
+        dimensions = [DimensionSelection(column_id=widget.dimension_col_id, time_grain=widget.time_grain)]
+    filters = []
+    if widget.date_filter_column_id is not None:
+        filters = [
+            SemanticQueryFilter(
+                column_id=widget.date_filter_column_id,
+                operator="is_not_null",
+                value=None,
+            )
+        ]
+    spec = SemanticQuerySpec(
+        metric_ids=widget.metric_ids or [],
+        dimensions=dimensions,
+        filters=filters,
+        limit=100,
+        order_by="metric_desc" if widget.chart_type in ("bar", "table") else None,
+        order_metric_id=widget.order_metric_id,
+    )
+    try:
+        await SemanticQueryCompiler(db).compile(db_id, spec)
+    except SemanticCompileError as exc:
+        raise DashboardValidationError(f"Incompatible widget metric plans or filters ({exc.code}): {exc}") from exc
 
 
 async def _validate_columns(db: AsyncSession, db_id: int, column_ids: set[int]) -> None:

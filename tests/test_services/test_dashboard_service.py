@@ -51,6 +51,33 @@ def _widget_payload(**overrides):
     return payload
 
 
+def _dashboard_plan_definition(name, region_id):
+    return {
+        "schema_version": 3,
+        "metric": {
+            "name": name,
+            "formula": {"function": "COUNT", "expression": "*"},
+            "base_entity": "orders",
+            "filters": [],
+            "status": "approved",
+            "excluded_notes": "",
+            "query_plan": {
+                "stages": [
+                    {
+                        "name": "result",
+                        "base_entity": "orders",
+                        "joins": [],
+                        "group_by": [{"name": "region", "expression": "orders.region", "column_id": region_id}],
+                        "aggregates": [{"name": "amount", "function": "COUNT", "expression": "*"}],
+                        "filters": [],
+                    }
+                ],
+                "output_expression": "result.amount",
+            },
+        },
+    }
+
+
 @pytest.mark.parametrize("chart_type", ["kpi", "line", "area", "bar", "pie", "table"])
 def test_widget_accepts_every_supported_chart_type(chart_type):
     overrides = {"chart_type": chart_type}
@@ -60,6 +87,28 @@ def test_widget_accepts_every_supported_chart_type(chart_type):
         overrides["time_grain"] = None
     widget = DashboardWidgetConfig(**_widget_payload(**overrides))
     assert widget.chart_type == chart_type
+
+
+def test_widget_accepts_multi_metric_plan_config_with_selected_sort_metric():
+    widget = DashboardWidgetConfig(**_widget_payload(metric_ids=[7, 8], order_metric_id=8))
+
+    assert widget.metric_ids == [7, 8]
+    assert widget.order_metric_id == 8
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"metric_ids": [7, 0]},
+        {"metric_ids": [7, 7]},
+        {"metric_ids": [7, 8], "order_metric_id": 9},
+        {"metric_ids": [7, 8], "chart_type": "pie"},
+        {"metric_ids": [7, 8], "order_metric_id": None, "chart_type": "bar"},
+    ],
+)
+def test_widget_rejects_invalid_multi_metric_config(overrides):
+    with pytest.raises(ValidationError):
+        DashboardWidgetConfig(**_widget_payload(**overrides))
 
 
 @pytest.mark.parametrize(
@@ -189,7 +238,22 @@ async def _seed_semantic_database(async_session, org_id=None, created_by=1, disp
     )
     async_session.add(database)
     await async_session.flush()
-    table = SemanticTableModel(db_id=database.id, table_name="orders", business_name="Don hang")
+    table, region_col, date_col = await _seed_dashboard_table(async_session, database.id)
+    metric = SemanticMetricModel(
+        db_id=database.id,
+        created_by=created_by,
+        name="doanh_thu",
+        description="Tong doanh thu",
+        sql_template="SELECT amount FROM orders",
+        status="approved",
+    )
+    async_session.add(metric)
+    await async_session.commit()
+    return database.id, metric.id, region_col.id, date_col.id
+
+
+async def _seed_dashboard_table(async_session, db_id):
+    table = SemanticTableModel(db_id=db_id, table_name="orders", business_name="Don hang")
     async_session.add(table)
     await async_session.flush()
     date_col = SemanticColumnModel(
@@ -206,17 +270,7 @@ async def _seed_semantic_database(async_session, org_id=None, created_by=1, disp
         business_name="Khu vuc",
     )
     async_session.add_all([date_col, region_col])
-    metric = SemanticMetricModel(
-        db_id=database.id,
-        created_by=created_by,
-        name="doanh_thu",
-        description="Tong doanh thu",
-        sql_template="SELECT amount FROM orders",
-        status="approved",
-    )
-    async_session.add(metric)
-    await async_session.commit()
-    return database.id, metric.id, region_col.id, date_col.id
+    return table, region_col, date_col
 
 
 async def _seed_workspace_database(async_session, slug):
@@ -503,10 +557,9 @@ async def test_missing_metric_reference_is_rejected(async_session):
 
 async def test_cross_database_references_are_rejected(async_session):
     organization, db_id, metric_id, region_id, date_id = await _seed_workspace_database(async_session, "acme-cross")
-    other_db_id, other_metric_id, other_region_id, other_date_id = await _seed_semantic_database(
+    _, other_metric_id, other_region_id, other_date_id = await _seed_semantic_database(
         async_session, org_id=organization.id, display_name="Other DB"
     )
-    del other_db_id
 
     with pytest.raises(DashboardValidationError):
         await save_dashboard_layout(
@@ -549,6 +602,124 @@ async def test_non_approved_metric_is_rejected(async_session):
             DashboardSaveRequest(layout=layout, expected_version=0),
             org_id=organization.id,
         )
+
+
+async def test_dashboard_rejects_multi_metric_widgets_without_query_plans(async_session):
+    organization, db_id, metric_id, region_id, date_id = await _seed_workspace_database(async_session, "acme-mixed")
+    other = SemanticMetricModel(
+        db_id=db_id, name="orders", description="Orders", sql_template="SELECT 1", status="approved"
+    )
+    async_session.add(other)
+    await async_session.flush()
+    widget = DashboardWidgetConfig(
+        **_widget_payload(
+            metric_id=metric_id,
+            chart_type="bar",
+            time_grain=None,
+            dimension_col_id=region_id,
+            date_filter_column_id=date_id,
+            metric_ids=[metric_id, other.id],
+            order_metric_id=metric_id,
+        )
+    )
+
+    with pytest.raises(DashboardValidationError, match="query-plan"):
+        await save_dashboard_layout(
+            async_session,
+            1,
+            db_id,
+            DashboardSaveRequest(layout=DashboardLayout(widgets=[widget]), expected_version=0),
+            org_id=organization.id,
+        )
+
+
+async def _seed_unrelated_plan_date_filter(async_session, db_id, region_id):
+    other = SemanticMetricModel(
+        db_id=db_id,
+        name="orders_copy",
+        description="Orders copy",
+        sql_template="SELECT 1",
+        status="approved",
+    )
+    unrelated_table = SemanticTableModel(db_id=db_id, table_name="customers", business_name="Khach hang")
+    async_session.add_all([other, unrelated_table])
+    await async_session.flush()
+    unrelated_date = SemanticColumnModel(
+        table_id=unrelated_table.id,
+        column_name="created_at",
+        data_type="date",
+        business_name="Ngay tao",
+    )
+    async_session.add(unrelated_date)
+    await async_session.flush()
+    records = list(
+        (await async_session.scalars(select(SemanticMetricModel).where(SemanticMetricModel.db_id == db_id))).all()
+    )
+    for record in records:
+        record.definition = _dashboard_plan_definition(record.name, region_id)
+    return other.id, unrelated_date.id
+
+
+async def test_multi_metric_save_rejects_date_filter_outside_plan(async_session):
+    organization, db_id, metric_id, region_id, _ = await _seed_workspace_database(async_session, "acme-date-filter-gap")
+    other_id, unrelated_date_id = await _seed_unrelated_plan_date_filter(async_session, db_id, region_id)
+    widget = DashboardWidgetConfig(
+        **_widget_payload(
+            metric_id=metric_id,
+            metric_ids=[metric_id, other_id],
+            dimension_col_id=region_id,
+            date_filter_column_id=unrelated_date_id,
+            chart_type="bar",
+            time_grain=None,
+            order_metric_id=metric_id,
+        )
+    )
+
+    with pytest.raises(DashboardValidationError, match="UNSUPPORTED_PLAN_FILTER"):
+        await save_dashboard_layout(
+            async_session,
+            1,
+            db_id,
+            DashboardSaveRequest(layout=DashboardLayout(widgets=[widget]), expected_version=0),
+            org_id=organization.id,
+        )
+
+
+async def _assign_dashboard_plans(async_session, db_id, region_id):
+    records = await async_session.scalars(select(SemanticMetricModel).where(SemanticMetricModel.db_id == db_id))
+    for record in records:
+        record.definition = _dashboard_plan_definition(record.name, region_id)
+
+
+@pytest.mark.parametrize("has_date_filter", [True, False])
+async def test_multi_metric_widget_layout_round_trips_selected_order(async_session, has_date_filter):
+    organization, db_id, metric_id, region_id, date_id = await _seed_workspace_database(
+        async_session, "acme-multi-save"
+    )
+    other = SemanticMetricModel(
+        db_id=db_id, name="orders", description="Orders", sql_template="SELECT 1", status="approved"
+    )
+    async_session.add(other)
+    await async_session.flush()
+
+    await _assign_dashboard_plans(async_session, db_id, region_id)
+    widget = DashboardWidgetConfig(
+        **_widget_payload(
+            metric_id=metric_id,
+            chart_type="bar",
+            time_grain=None,
+            dimension_col_id=region_id,
+            date_filter_column_id=date_id if has_date_filter else None,
+            metric_ids=[metric_id, other.id],
+            order_metric_id=other.id,
+        )
+    )
+    request = DashboardSaveRequest(layout=DashboardLayout(widgets=[widget]), expected_version=0)
+    await save_dashboard_layout(async_session, 1, db_id, request, org_id=organization.id)
+    loaded = await get_dashboard_layout(async_session, 1, db_id, org_id=organization.id)
+
+    assert loaded.layout.widgets[0].metric_ids == [metric_id, other.id]
+    assert loaded.layout.widgets[0].order_metric_id == other.id
 
 
 async def test_sql_dump_database_persists_layout_without_query_execution(async_session, monkeypatch):

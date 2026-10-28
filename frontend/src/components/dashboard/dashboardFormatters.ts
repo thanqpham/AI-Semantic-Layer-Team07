@@ -12,6 +12,8 @@ export interface DashboardPoint {
   value: number | null;
   /** Original cell value preserved for accessible/table rendering. */
   rawValue: unknown;
+  seriesValues?: Record<number, number | null>;
+  seriesRawValues?: Record<number, unknown>;
 }
 
 export interface WidgetLabelContext {
@@ -210,8 +212,18 @@ export function truncatePieSlices(
 export function truncateRankingRows(
   points: DashboardPoint[],
   maxRows: number = RANKING_MAX_ROWS,
+  metricId?: number,
 ): { rows: DashboardPoint[]; hiddenCount: number } {
-  const ordered = sortPointsByValueDesc(points);
+  const ordered = metricId === undefined
+    ? sortPointsByValueDesc(points)
+    : points
+        .map((point, index) => ({ point, index }))
+        .sort((left, right) =>
+          (right.point.seriesValues?.[metricId] ?? -Infinity) -
+            (left.point.seriesValues?.[metricId] ?? -Infinity) ||
+          left.index - right.index,
+        )
+        .map((entry) => entry.point);
   return {
     rows: ordered.slice(0, maxRows),
     hiddenCount: Math.max(0, ordered.length - maxRows),

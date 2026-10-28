@@ -270,6 +270,7 @@ export interface SemanticQueryFilter {
 
 export interface SemanticQueryRequest {
   metric_ids: number[];
+  order_metric_id?: number | null;
   dimensions?: DimensionSelection[];
   dimension_ids?: number[];
   filters: SemanticQueryFilter[];
