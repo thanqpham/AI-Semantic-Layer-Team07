@@ -39,6 +39,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.db_base import Base, utc_now
+from src.models.db_categorical_proposals import (
+    ColumnValueProposalModel,  # noqa: F401 - registers the table in Base.metadata
+)
 from src.models.db_chat import ChatMessageModel, ChatSessionModel
 from src.models.db_metric_proposals import MetricProposalModel
 from src.models.db_relationships import RelationshipCandidateModel
@@ -278,6 +281,7 @@ class LiveTargetDbModel(Base):
     dialect: Mapped[str] = mapped_column(String(50), nullable=False)
     conn_url_enc: Mapped[str] = mapped_column(Text, nullable=False)
     schema_metadata: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    categorical_discovery_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     semantic_db_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("semantic_databases.id", ondelete="SET NULL"), nullable=True
     )
@@ -433,6 +437,7 @@ class SemanticColumnModel(ReviewStateMixin, Base):
     is_nullable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_time_dimension: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     allowed_values: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    allowed_values_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now

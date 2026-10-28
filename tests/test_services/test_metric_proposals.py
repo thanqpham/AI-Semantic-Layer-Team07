@@ -74,6 +74,10 @@ async def test_metadata_semantics_and_constraints_invalidate_review(async_sessio
         column.is_nullable = False
         proposal.context = {**proposal.context, "schema": await load_review_schema(async_session, proposal.db_id)}
         proposal.schema_fingerprint = review_schema_fingerprint(proposal.context["schema"])
+    elif attribute == "allowed_values":
+        column.review_status = "approved"
+        proposal.context = {**proposal.context, "schema": await load_review_schema(async_session, proposal.db_id)}
+        proposal.schema_fingerprint = review_schema_fingerprint(proposal.context["schema"])
     setattr(column, attribute, value)
     await async_session.flush()
     with pytest.raises(ValueError, match="Metadata"):

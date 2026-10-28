@@ -170,6 +170,7 @@ class SemanticColumnUpdate(BaseModel):
 
     business_name: str = Field(..., min_length=1, max_length=200, description="Tên nghiệp vụ tiếng Việt")
     description: str = Field(default="", max_length=1000, description="Mô tả chi tiết")
+    allowed_values: list[str | int | float | bool] | None = None
 
 
 # ---------------------------------------------------------------------------

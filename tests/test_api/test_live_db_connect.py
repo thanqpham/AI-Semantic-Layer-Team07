@@ -165,8 +165,8 @@ async def test_saved_dbs_handles_empty_or_corrupted_metadata(client, async_sessi
     assert detail_res.json()["table_count"] == 0
 
 
-def test_live_db_introspect_samples_categorical_columns(temp_sqlite_db: str) -> None:
-    """Test that introspect_live_database samples categorical and flag columns."""
+def test_live_db_introspect_does_not_read_categorical_rows(temp_sqlite_db: str) -> None:
+    """Schema introspection never samples row values, even for category-like columns."""
     from src.models.schema_metadata import SchemaDialect
     from src.services.live_db_service import introspect_live_database
 
@@ -182,7 +182,5 @@ def test_live_db_introspect_samples_categorical_columns(temp_sqlite_db: str) -> 
     is_completed_col = next(c for c in orders_table.columns if c.column_name.raw_name == "is_completed")
     status_col = next(c for c in orders_table.columns if c.column_name.raw_name == "status")
 
-    assert is_completed_col.sample_values is not None
-    assert set(is_completed_col.sample_values) == {"0", "1"}
-    assert status_col.sample_values is not None
-    assert set(status_col.sample_values) == {"Completed", "Pending"}
+    assert is_completed_col.sample_values is None
+    assert status_col.sample_values is None

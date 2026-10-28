@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from src.models.db import CanonicalRelationshipModel, SemanticTableModel
 from src.models.metric_review import MetricScopeSelection
 from src.models.schemas import ChatClarificationOption, ChatClarificationPayload
+from src.services.categorical_discovery_policy import safe_observed_values
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 from src.services.metric_runtime import MetricCallError, invoke_metric_json
@@ -319,7 +320,14 @@ def _column_payload(column: Any) -> dict[str, Any]:
         "description": column.description,
         "is_primary_key": column.is_primary_key,
         "is_nullable": column.is_nullable,
-        "allowed_values": list(column.allowed_values) if column.allowed_values else None,
+        "allowed_values": (
+            list(column.allowed_values)
+            if column.review_status == "approved"
+            and column.allowed_values
+            and safe_observed_values(list(column.allowed_values)) is not None
+            else None
+        ),
+        "allowed_values_complete": getattr(column, "allowed_values_complete", True) is not False,
         "review_status": column.review_status,
         "is_foreign_key": column.is_foreign_key,
         "fk_target_table": column.fk_target_table,

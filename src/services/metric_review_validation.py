@@ -328,7 +328,7 @@ def _validate_plan_filter(item: Any, allowed_tables: set[str], tables: dict[str,
     for value in values:
         _validate_filter_value(SimpleNamespace(**{
             "column_name": column["column_name"], "data_type": column.get("data_type", ""),
-            "allowed_values": column.get("allowed_values"), "is_nullable": column.get("is_nullable", True),
+            "allowed_values": column.get("allowed_values"), "allowed_values_complete": column.get("allowed_values_complete", True), "is_nullable": column.get("is_nullable", True),
         }), value)
 
 
@@ -356,6 +356,7 @@ def _columns(table: dict[str, Any]) -> dict[str, Any]:
                 "is_primary_key": c.get("is_primary_key", False),
                 "is_nullable": c.get("is_nullable", True),
                 "allowed_values": c.get("allowed_values"),
+                "allowed_values_complete": c.get("allowed_values_complete", True),
             }
         )
         for i, c in enumerate(table.get("columns", []), 1)
@@ -422,7 +423,7 @@ def _validate_filter_value(column: Any, value: Any) -> None:
     dtype = column.data_type.upper()
     if value is None or isinstance(value, (dict, list)):
         raise ValueError(f"Filter {column.column_name} cần literal khác NULL.")
-    if column.allowed_values and value not in column.allowed_values:
+    if column.allowed_values and getattr(column, "allowed_values_complete", True) and value not in column.allowed_values:
         raise ValueError(f"Giá trị filter {column.column_name} không có trong metadata khai báo.")
     if "BOOL" in dtype and not isinstance(value, bool):
         raise ValueError(f"Filter {column.column_name} cần true/false.")

@@ -17,6 +17,7 @@ from src.models.schemas import (
     MetricSuggestions,
     MetricSuggestionsV2,
 )
+from src.services.categorical_discovery_policy import safe_observed_values
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json, extract_json
 from src.services.metric_dedupe import format_existing_metrics_context, merge_dedupe
@@ -82,11 +83,8 @@ def _format_columns(columns: list[dict[str, Any]]) -> list[str]:
         desc = (column.get("description") or "").strip()
         desc_str = f" — {desc}" if desc and desc.lower() != business.lower() else ""
         suffix = f"; {', '.join(flags)}" if flags else ""
-        default_val = column.get("default_value")
-        if default_val is not None:
-            suffix += f"; default: {default_val}"
-        sample_vals = column.get("sample_values") or column.get("allowed_values")
-        if sample_vals:
+        sample_vals = column.get("allowed_values") if column.get("review_status") == "approved" else None
+        if isinstance(sample_vals, list) and safe_observed_values(sample_vals) is not None:
             suffix += f"; values: {sample_vals}"
         lines.append(f"- `{name}` ({column.get('data_type', 'TEXT')}; {business}{desc_str}{suffix})")
     return lines

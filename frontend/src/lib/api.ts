@@ -1225,6 +1225,7 @@ export interface SchemaReviewColumn {
   review_status: 'pending_review' | 'approved';
   is_primary_key: boolean;
   is_time_dimension: boolean;
+  allowed_values?: (string | number | boolean)[] | null;
   reviewed_by?: number | null;
   reviewed_at?: string | null;
 }
@@ -1268,6 +1269,42 @@ export async function getSchemaReviewApi(dbId: string): Promise<SchemaReview> {
   return semanticRequest<SchemaReview>(`/api/v1/semantic/${dbId}/schema/review`);
 }
 
+export interface ColumnValueProposal {
+  id: number;
+  column_id: number;
+  table_name: string;
+  physical_schema: string | null;
+  column_name: string;
+  source: 'declared' | 'observed';
+  status: string;
+  values: (string | number | boolean)[] | null;
+  observed_at: string | null;
+}
+
+export async function getColumnValueProposalsApi(dbId: string): Promise<{
+  items: ColumnValueProposal[]; enabled: boolean; available: boolean;
+}> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals`);
+}
+
+export async function setColumnValueDiscoveryApi(dbId: string, enabled: boolean): Promise<{ enabled: boolean }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals/settings`, {
+    method: 'PUT', body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function scanColumnValueProposalsApi(dbId: string): Promise<{ status: string }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals/scan`, { method: 'POST' });
+}
+
+export async function reviewColumnValueProposalsApi(
+  dbId: string, proposalIds: number[], action: 'approve' | 'dismiss',
+): Promise<{ updated: number }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals/review`, {
+    method: 'POST', body: JSON.stringify({ proposal_ids: proposalIds, action }),
+  });
+}
+
 /** Save a reviewer's inline edit of a table; the row stays pending until approved. */
 export async function updateTableReviewApi(
   dbId: string,
@@ -1290,11 +1327,12 @@ export async function updateColumnReviewApi(
   businessName: string,
   description: string,
   tableId?: number,
+  allowedValues?: (string | number | boolean)[] | null,
 ): Promise<{ message: string; review_status: string }> {
   const path = `/api/v1/semantic/${dbId}/column/${encodeURIComponent(tableName)}/${encodeURIComponent(columnName)}${tableId === undefined ? "" : `?table_id=${tableId}`}`;
   return semanticRequest(path, {
     method: 'PUT',
-    body: JSON.stringify({ business_name: businessName, description }),
+    body: JSON.stringify({ business_name: businessName, description, ...(allowedValues === undefined ? {} : { allowed_values: allowedValues }) }),
   });
 }
 
