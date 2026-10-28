@@ -165,12 +165,18 @@ export interface MetricSuggestion {
   yaml_preview: string;
   conflict?: MetricConflictInfo | null;
   proposal_id?: string | null;
+  candidate_id?: string | null;
+  group_id?: string | null;
+  group_name?: string | null;
   review?: MetricReview | null;
   variant_id?: string | null;
   criteria?: Record<string, string>;
 }
 
 export interface MetricReview {
+  reason_code?: 'UNRESOLVED_ASSUMPTION' | 'MISSING_GRAIN' | 'VARIANT_CONFLICT' | 'MISSING_RATIO'
+    | 'TECHNICAL_VALIDATION' | 'REVIEWER_FINDING' | 'BUILDER_CLARIFICATION' | 'BUILDER_UNSUPPORTED'
+    | 'BUILDER_REJECTED' | 'INVALID_AGENT_OUTPUT' | 'PROVIDER_FAILURE' | 'OTHER' | null;
   variant_id?: string | null;
   criteria?: Record<string, string>;
   execution_error?: {
@@ -198,11 +204,16 @@ export interface MetricReview {
 export interface MetricCandidateReport {
   name: string;
   proposal_id?: string | null;
+  candidate_id?: string | null;
+  group_id?: string | null;
+  group_name?: string | null;
   review: MetricReview;
 }
 
 export interface ReviewedMetricProposal {
   proposal_id: string;
+  candidate_id?: string | null;
+  group_id?: string | null;
   definition: MetricDefinition | null;
   yaml_preview: string;
   review: MetricReview;
@@ -770,6 +781,7 @@ export interface ChatClarificationOption {
     limit?: number;
   } | null;
   action?: string | null;
+  action_payload?: { requirement?: string; knowledge_id?: string; variant_id?: string; criteria?: Record<string, string> } | null;
 }
 
 export interface ChatClarificationSelection {

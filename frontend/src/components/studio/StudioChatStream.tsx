@@ -82,8 +82,8 @@ interface StudioChatStreamProps {
   onSelectClarification?: (assistantMessageId: string, optionId: string, label: string) => void;
 }
 
-export function metricRequestKey(messageId: string, suggestionIndex: number): string {
-  return `${messageId}:${suggestionIndex}`;
+export function metricRequestKey(messageId: string, suggestionIndex: number, proposalId?: string | null): string {
+  return proposalId ? `proposal:${proposalId}` : `${messageId}:${suggestionIndex}`;
 }
 
 interface PromptSuggestionItem {
@@ -162,7 +162,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const graphMessage = props.messages.find((message) => message.executionTrace?.run_id === graph?.runId);
   const graphTrace = graphMessage?.executionTrace;
   const [input, setInput] = useState(props.activePromptText || '');
-  const [saved, setSaved] = useState<string[]>([]);
+  const [savedProposalIds, setSavedProposalIds] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const messagesRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -198,16 +198,13 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     window.setTimeout(() => { dragRef.current.moved = false; }, 0);
   };
 
-  const allSavedNames = useMemo(() => {
+  const catalogNames = useMemo(() => {
     const set = new Set<string>();
     (props.savedMetricNames || []).forEach((name) => {
       if (name) set.add(name.trim().toLowerCase());
     });
-    saved.forEach((name) => {
-      if (name) set.add(name.trim().toLowerCase());
-    });
     return set;
-  }, [props.savedMetricNames, saved]);
+  }, [props.savedMetricNames]);
 
   useEffect(() => {
     if (props.activePromptText) {
@@ -234,10 +231,11 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     }
   };
 
-  const save = async (suggestion: MetricSuggestion) => {
+  const save = async (suggestion: MetricSuggestion, messageId: string, index: number) => {
     if (props.onAddMetric) {
       await props.onAddMetric(suggestion);
-      setSaved((prev) => [...prev, suggestion.definition.metric.name]);
+      const key = suggestion.proposal_id ? `proposal:${suggestion.proposal_id}` : `message:${messageId}:${index}`;
+      setSavedProposalIds((prev) => [...new Set([...prev, key])]);
     }
   };
 
@@ -290,7 +288,8 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                 runId: message.executionTrace.run_id, trigger,
                 title: props.messages.slice(0, index).reverse().find((item) => item.sender === 'user')?.text || message.timestamp,
               })}
-              saved={allSavedNames}
+              catalogNames={catalogNames}
+              savedProposalIds={new Set(savedProposalIds)}
               onSave={save}
               onEdit={props.onEditMetric}
               onRefine={props.onRefineWithAI}
@@ -431,7 +430,8 @@ export function StudioChatStream(props: StudioChatStreamProps) {
 function MessageBubble({
   onOpenGraph,
   message,
-  saved,
+  catalogNames,
+  savedProposalIds,
   onSave,
   onEdit,
   onRefine,
@@ -448,8 +448,9 @@ function MessageBubble({
 }: {
   onOpenGraph?: (trigger: HTMLButtonElement) => void;
   message: ChatMessage;
-  saved: ReadonlySet<string>;
-  onSave: (suggestion: MetricSuggestion) => Promise<void>;
+  catalogNames: ReadonlySet<string>;
+  savedProposalIds: ReadonlySet<string>;
+  onSave: (suggestion: MetricSuggestion, messageId: string, index: number) => Promise<void>;
   onEdit?: (suggestion: MetricSuggestion) => void;
   onRefine?: (suggestion: MetricSuggestion) => void;
   onOpenCatalog?: () => void;
@@ -464,6 +465,7 @@ function MessageBubble({
   theme?: 'light' | 'dark';
 }) {
   const isUser = message.sender === 'user';
+  const candidateGroups = groupMetricCandidates(message.suggestions || [], message.blockedCandidates || []);
 
   return (
     <div className={cn('flex gap-2.5', isUser && 'flex-row-reverse')}>
@@ -520,9 +522,10 @@ function MessageBubble({
                   key={opt.id}
                   type="button"
                   onClick={() => onSelectClarification?.(message.id, opt.id, opt.label)}
-                  className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/20 hover:border-primary/50 transition-all cursor-pointer shadow-2xs"
+                  className="flex flex-col items-start gap-0.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-left text-xs font-medium text-primary hover:bg-primary/20 hover:border-primary/50 transition-all cursor-pointer shadow-2xs"
                 >
                   <span>{opt.label}</span>
+                  {opt.description && <span className="text-[10px] font-normal text-muted-foreground">{opt.description}</span>}
                 </button>
               ))}
             </div>
@@ -541,38 +544,39 @@ function MessageBubble({
         {message.runStatus === 'partial' && <p role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
           Một phần tác vụ đã hoàn tất. Các KPI đạt vẫn có thể gửi duyệt; phần lỗi được ghi riêng bên dưới.
         </p>}
-        {message.blockedCandidates?.map((candidate, index) => <div key={candidate.proposal_id || index} className="w-full">
-          <p className="text-sm font-medium">{candidate.name}</p>
-          <MetricReviewPanel review={candidate.review} />
-        </div>)}
-
-        {message.suggestions && message.suggestions.length > 0 && (
+        {candidateGroups.length > 0 && (
           <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-xs">
             <div className="border-b border-border bg-secondary/20 px-4 py-3 text-sm leading-relaxed text-card-foreground">
-              <AssistantMarkdown content={message.text || `Đề xuất ${message.suggestions.length} Metric Definition`} />
+              <AssistantMarkdown content={message.text || `Đề xuất ${message.suggestions?.length || 0} Metric Definition`} />
             </div>
-            {message.suggestions.map((sug, idx) => (
-              <SuggestionCard
-                key={idx}
-                suggestion={sug}
-                embedded
-                isSaved={saved.has(sug.definition.metric.name.trim().toLowerCase())}
-                onSave={() => onSave(sug)}
-                onEdit={() => onEdit?.(sug)}
-                onRefine={() => onRefine?.(sug)}
-                onOpenCatalog={onOpenCatalog}
-                action={message.suggestionAction}
-                isSubmitted={submittedKeys.has(metricRequestKey(message.id, idx))}
-                isApproved={
-                  approvedKeys.has(metricRequestKey(message.id, idx)) ||
-                  saved.has(sug.definition.metric.name.trim().toLowerCase())
-                }
-                onSubmitRequest={
-                  onSubmitMetricRequest ? () => onSubmitMetricRequest(message.id, idx) : undefined
-                }
-                onRename={() => onRenameSuggestion?.(message.id, idx)}
-                onUseExisting={() => onUseExistingSuggestion?.(message.id, idx)}
-              />
+            {candidateGroups.map((group) => (
+              <section key={group.id}>
+                {group.name && <h3 className="border-b border-border bg-secondary/10 px-4 py-2 text-xs font-semibold">{group.name}</h3>}
+                {group.items.map((entry) => entry.kind === 'blocked' ? (
+                  <div key={entry.item.proposal_id || entry.item.candidate_id || `blocked-${entry.index}`} className="border-b border-border p-4 last:border-b-0">
+                    <p className="text-sm font-medium">{entry.item.name}</p>
+                    <MetricReviewPanel review={entry.item.review} />
+                  </div>
+                ) : (
+                  <SuggestionCard
+                    key={entry.item.proposal_id || entry.item.candidate_id || `suggestion-${entry.index}`}
+                    suggestion={entry.item}
+                    embedded
+                    isSaved={savedProposalIds.has(suggestionStateKey(entry.item, message.id, entry.index))}
+                    catalogNameConflict={catalogNames.has(entry.item.definition.metric.name.trim().toLowerCase())}
+                    onSave={() => onSave(entry.item, message.id, entry.index)}
+                    onEdit={() => onEdit?.(entry.item)}
+                    onRefine={() => onRefine?.(entry.item)}
+                    onOpenCatalog={onOpenCatalog}
+                    action={message.suggestionAction}
+                    isSubmitted={submittedKeys.has(metricRequestKey(message.id, entry.index, entry.item.proposal_id))}
+                    isApproved={approvedKeys.has(metricRequestKey(message.id, entry.index, entry.item.proposal_id)) || savedProposalIds.has(suggestionStateKey(entry.item, message.id, entry.index))}
+                    onSubmitRequest={onSubmitMetricRequest ? () => onSubmitMetricRequest(message.id, entry.index) : undefined}
+                    onRename={() => onRenameSuggestion?.(message.id, entry.index)}
+                    onUseExisting={() => onUseExistingSuggestion?.(message.id, entry.index)}
+                  />
+                ))}
+              </section>
             ))}
           </div>
         )}
@@ -592,6 +596,39 @@ function MessageBubble({
       </div>
     </div>
   );
+}
+
+type CandidateEntry =
+  | { kind: 'suggestion'; item: MetricSuggestion; index: number }
+  | { kind: 'blocked'; item: MetricCandidateReport; index: number };
+
+interface CandidateGroup {
+  id: string;
+  name?: string;
+  items: CandidateEntry[];
+}
+
+function suggestionStateKey(suggestion: MetricSuggestion, messageId: string, index: number): string {
+  return suggestion.proposal_id ? `proposal:${suggestion.proposal_id}` : `message:${messageId}:${index}`;
+}
+
+function groupMetricCandidates(suggestions: MetricSuggestion[], blocked: MetricCandidateReport[]): CandidateGroup[] {
+  const groups = new Map<string, CandidateGroup>();
+  const add = (id: string, name: string | undefined, entry: CandidateEntry) => {
+    const group = groups.get(id) || { id, name, items: [] };
+    if (!group.name && name) group.name = name;
+    group.items.push(entry);
+    groups.set(id, group);
+  };
+  suggestions.forEach((suggestion, index) => {
+    const id = suggestion.group_id || `candidate-${index}`;
+    add(id, suggestion.group_name || undefined, { kind: 'suggestion', item: suggestion, index });
+  });
+  blocked.forEach((candidate, index) => {
+    const id = candidate.group_id || `blocked-${index}`;
+    add(id, candidate.group_name || undefined, { kind: 'blocked', item: candidate, index });
+  });
+  return [...groups.values()];
 }
 
 function renderFormattedContent(node: React.ReactNode): React.ReactNode {
@@ -678,6 +715,7 @@ function SuggestionCard({
   suggestion,
   embedded = false,
   isSaved,
+  catalogNameConflict,
   onSave,
   onEdit,
   onRefine,
@@ -692,6 +730,7 @@ function SuggestionCard({
   suggestion: MetricSuggestion;
   embedded?: boolean;
   isSaved: boolean;
+  catalogNameConflict: boolean;
   onSave: () => Promise<void>;
   onEdit?: () => void;
   onRefine?: () => void;
@@ -755,6 +794,11 @@ function SuggestionCard({
             onRename={() => onRename?.()}
             onUseExisting={() => onUseExisting?.()}
           />
+        </div>
+      )}
+      {catalogNameConflict && !suggestion.conflict && (
+        <div role="status" className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          Tên này đã có trong catalog. Kiểm tra metric hiện tại trước khi lưu biến thể.
         </div>
       )}
 

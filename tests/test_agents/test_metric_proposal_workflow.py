@@ -102,6 +102,30 @@ async def test_duplicate_evidence_does_not_override_reviewer_clarification():
     assert result["blocked_candidates"][0]["review"]["status"] == "needs_clarification"
 
 
+async def test_clarification_options_only_offer_reviewed_sibling_variants():
+    evidence = context()
+    evidence["question"] = evidence["requirement"] = "Doanh thu trước thuế hay gồm VAT"
+    evidence["schema"]["tables"][0]["columns"].append({"column_name": "vat", "data_type": "NUMERIC"})
+    evidence["knowledge"] = metric_knowledge("KPI discovery", discovery=True)
+    drafts = [
+        {**draft("amount", "Doanh thu trước thuế"), "knowledge_id": "net_sales", "variant_id": "merchandise_net_sales"},
+        {**draft("amount + vat", "Doanh thu gồm VAT"), "knowledge_id": "net_sales", "variant_id": "merchandise_net_including_vat"},
+    ]
+    with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
+        proposals = await run_metric_workflow(evidence, drafts=drafts, allow_repair=False)
+    proposals[0]["review"].update(status="needs_clarification", clarification="Confirm tax basis")
+    result = reviewed_state(proposals, {})
+    assert len(result["suggested_metrics"]) == 1
+    option = next(
+        item for item in result["clarification"]["options"]
+        if item["action_payload"]["variant_id"] == "merchandise_net_including_vat"
+    )
+    assert option["action"] == "generate_metric_variant"
+    assert option["action_payload"]["requirement"] == evidence["requirement"]
+    assert option["action_payload"]["knowledge_id"] == "net_sales"
+    assert option["action_payload"]["variant_id"] == "merchandise_net_including_vat"
+
+
 async def test_trace_orders_validation_dedupe_review_and_coordinator_conclusion():
     execution = ChatExecution()
     with execution_context(execution), patch(
@@ -393,15 +417,92 @@ async def test_compound_metrics_without_explicit_ratio_need_revision(name, knowl
     review.assert_not_awaited()
 
 
-async def test_unconfirmed_assumptions_cannot_pass_and_sources_are_server_owned():
+async def test_assumptions_not_covered_by_variant_criteria_cannot_pass_and_sources_are_server_owned():
     evidence = context()
-    evidence["assumptions"] = ["Refund population unclear"]
+    evidence["assumptions"] = ["Customer cohort is unclear"]
     with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
         result = await run_metric_workflow(
             evidence, drafts=[{**draft(), "knowledge_id": "net_sales", "variant_id": "merchandise_net_sales"}]
         )
     assert result[0]["review"]["status"] == "needs_clarification"
     assert {s["id"] for s in result[0]["review"]["sources"]} == {"woocommerce_analytics"}
+
+
+@pytest.mark.parametrize(
+    "assumptions,expected_status,remaining",
+    [
+        (["Tax basis is unclear"], "pass", ""),
+        (["Customer cohort is unclear"], "needs_clarification", "Customer cohort is unclear"),
+        (["Tax basis is unclear", "Customer cohort is unclear"], "needs_clarification", "Customer cohort is unclear"),
+    ],
+)
+async def test_variant_criteria_resolve_only_the_assumptions_they_cover(assumptions, expected_status, remaining):
+    evidence = context()
+    evidence["assumptions"] = assumptions
+    draft_item = {
+        **draft(), "knowledge_id": "net_sales", "variant_id": "merchandise_net_sales",
+        "criteria": {"tax_basis": "excludes_tax", "refund_policy": "subtract_returns_and_coupons"},
+    }
+    with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
+        result = await run_metric_workflow(evidence, drafts=[draft_item], allow_repair=False)
+    assert result[0]["review"]["status"] == expected_status
+    if remaining:
+        assert result[0]["review"]["clarification"] == remaining
+
+
+@pytest.mark.parametrize(
+    "requirement,assumptions",
+    [
+        ("Revenue after tax", ["Tax basis is unclear"]),
+        ("Revenue before tax", ["After tax is required"]),
+    ],
+)
+async def test_tax_criterion_must_match_requested_and_assumed_polarity(requirement, assumptions):
+    evidence = context()
+    evidence["requirement"] = requirement
+    evidence["question"] = requirement
+    evidence["assumptions"] = assumptions
+    candidate = {
+        **draft(), "knowledge_id": "net_sales", "variant_id": "merchandise_net_sales",
+        "criteria": {"tax_basis": "excludes_tax", "refund_policy": "subtract_returns_and_coupons"},
+    }
+    with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
+        result = await run_metric_workflow(evidence, drafts=[candidate], allow_repair=False)
+    assert result[0]["review"]["status"] == "needs_clarification"
+
+
+async def test_ambiguous_tax_request_allows_each_validated_basis_as_a_separate_variant():
+    evidence = context()
+    evidence["requirement"] = "Doanh thu trước thuế hay gồm VAT"
+    evidence["question"] = "Doanh thu trước thuế hay gồm VAT"
+    evidence["schema"]["tables"][0]["columns"].append({"column_name": "vat", "data_type": "NUMERIC"})
+    candidates = [
+        {**draft("amount", "Doanh thu trước thuế"), "knowledge_id": "net_sales", "variant_id": "merchandise_net_sales"},
+        {**draft("amount + vat", "Doanh thu gồm VAT"), "knowledge_id": "net_sales", "variant_id": "merchandise_net_including_vat"},
+    ]
+    with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
+        result = await run_metric_workflow(evidence, drafts=candidates, allow_repair=False)
+    assert [proposal["review"]["status"] for proposal in result] == ["pass", "pass"]
+
+
+async def test_selected_variant_rerun_is_exact_and_ignores_ambiguous_history():
+    evidence = context()
+    evidence["requirement"] = "Doanh thu trước thuế? Earlier request: doanh thu gồm VAT? Latest selection: gồm VAT."
+    evidence["question"] = "Doanh thu gồm VAT"
+    evidence["schema"]["tables"][0]["columns"].append({"column_name": "vat", "data_type": "NUMERIC"})
+    evidence["knowledge"] = metric_knowledge("KPI discovery", discovery=True)
+    selected = {
+        "knowledge_id": "net_sales", "variant_id": "merchandise_net_including_vat",
+        "criteria": {"tax_basis": "includes_vat", "refund_policy": "subtract_sales_reversals"},
+    }
+    evidence["selected_metric_variant"] = selected
+    candidate = {**draft("amount + vat", "Doanh thu gồm VAT"), **selected}
+    with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
+        result = await run_metric_workflow(evidence, drafts=[candidate], allow_repair=False)
+    assert result[0]["review"]["status"] == "pass"
+    wrong = {**draft("amount", "Doanh thu trước thuế"), "knowledge_id": "net_sales", "variant_id": "merchandise_net_sales"}
+    invalid = await run_metric_workflow(evidence, drafts=[wrong], allow_repair=False)
+    assert invalid[0]["review"]["execution_error"]["code"] == "INVALID_AGENT_OUTPUT"
 
 
 async def test_generic_request_keeps_two_named_tax_variants_as_separate_proposals():

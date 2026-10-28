@@ -1072,8 +1072,11 @@ async def review_edited_metric_proposal(
         await db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     definition = MetricDefinition.model_validate(proposal.final_definition) if proposal.final_definition else None
+    candidate = proposal.context.get("candidate") or {}
     return MetricProposalReviewResponse(
         proposal_id=proposal.id,
+        candidate_id=candidate.get("id"),
+        group_id=candidate.get("group_id") or candidate.get("knowledge_id"),
         definition=definition,
         yaml_preview=definition.to_yaml() if definition else "",
         review=MetricReview.model_validate(proposal.review),
@@ -2236,6 +2239,25 @@ async def _handle_clarification_selection(
             intent_override="metric_query",
         )
 
+    if matched_option.get("action") == "generate_metric_variant":
+        payload = matched_option.get("action_payload") or {}
+        requirement = str(payload.get("requirement") or "").strip()
+        variant_id = str(payload.get("variant_id") or "").strip()
+        criteria = payload.get("criteria") if isinstance(payload.get("criteria"), dict) else {}
+        if not requirement or not variant_id or not payload.get("knowledge_id"):
+            raise HTTPException(status_code=400, detail="Invalid metric variant clarification")
+        choice = ", ".join(f"{key}: {value}" for key, value in criteria.items())
+        body_copy = body.model_copy(update={
+            "message": f"{requirement}\n\nĐã xác nhận biến thể {variant_id} thuộc nhóm "
+                       f"{payload['knowledge_id']} ({choice}). "
+                       "Hãy tạo lại đề xuất theo lựa chọn này và vẫn kiểm tra đầy đủ metadata schema.",
+            "clarification_selection": None,
+        })
+        return await _process_standard_chat(
+            db, session, current_user, numeric_db_id, body_copy, can_generate_metrics, org_id,
+            intent_override="metric_query", selected_metric_variant=payload,
+        )
+
     # Other non-query options delegate to the standard chat flow.
     body_copy = body.model_copy(update={"clarification_selection": None})
     return await _process_standard_chat(
@@ -2292,11 +2314,13 @@ async def _process_standard_chat(
     can_generate_metrics: bool,
     org_id: int | None = None,
     intent_override: str | None = None,
+    selected_metric_variant: dict[str, Any] | None = None,
 ) -> ChatResponse:
     """Trace one chat agent run independently of its HTTP request."""
     with observation("chat_agent", session_id=session.id, agent=True) as span:
         response = await _process_standard_chat_inner(
-            db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id, intent_override
+            db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id, intent_override,
+            selected_metric_variant,
         )
         if span is not None:
             span.update(
@@ -2318,6 +2342,7 @@ async def _process_standard_chat_inner(
     can_generate_metrics: bool,
     org_id: int | None = None,
     intent_override: str | None = None,
+    selected_metric_variant: dict[str, Any] | None = None,
 ) -> ChatResponse:
     """Process a standard chat query through the graph and execution layer."""
     from src.agents.graphs.chat_graph import chat_agent
@@ -2399,6 +2424,7 @@ async def _process_standard_chat_inner(
         chat_response=preclassified_chat_response,
         proposal_mode=body.proposal_mode,
         user_message_id=user_message.id,
+        selected_metric_variant=selected_metric_variant,
     )
     await persist_reviewed_state(db, numeric_db_id, current_user.id, final_state)
     return await _build_and_save_chat_response(
@@ -2588,6 +2614,7 @@ async def _chat_state_for_context(
     chat_response: str | None = None,
     proposal_mode: str = "requested",
     user_message_id: str | None = None,
+    selected_metric_variant: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the graph only after consented context preparation succeeds."""
     if context.diagnostic["status"] != "ready":
@@ -2613,6 +2640,7 @@ async def _chat_state_for_context(
             "dedupe_performed": dedupe_performed,
             "parser_catalog": parser_catalog or {},
             "chat_response": chat_response,
+            "selected_metric_variant": selected_metric_variant,
         }
     )
 

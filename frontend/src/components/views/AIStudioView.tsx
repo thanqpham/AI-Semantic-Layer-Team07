@@ -79,7 +79,7 @@ export function AIStudioView({
       new Set(
         metricRequests
           .filter((item) => item.status === 'pending')
-          .map((item) => metricRequestKey(item.assistant_message_id, item.suggestion_index)),
+          .map((item) => metricRequestKey(item.assistant_message_id, item.suggestion_index, item.proposal_id)),
       ),
     [metricRequests],
   );
@@ -89,7 +89,7 @@ export function AIStudioView({
       new Set(
         metricRequests
           .filter((item) => item.status === 'approved')
-          .map((item) => metricRequestKey(item.assistant_message_id, item.suggestion_index)),
+          .map((item) => metricRequestKey(item.assistant_message_id, item.suggestion_index, item.proposal_id)),
       ),
     [metricRequests],
   );

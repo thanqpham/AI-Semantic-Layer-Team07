@@ -1,5 +1,5 @@
 import { reviewedSuggestionFields } from '@/test/metricReviewFixture';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioChatStream } from '@/components/studio/StudioChatStream';
@@ -75,6 +75,70 @@ describe('StudioChatStream', () => {
     fireEvent.click(toggleYamlBtn);
     expect(screen.getByText(/name: Doanh thu/)).toBeInTheDocument();
     expect(screen.queryByText(/SQL Compiled/)).not.toBeInTheDocument();
+  });
+
+  it('groups passing and blocked variants together under their curated family', () => {
+    render(
+      <StudioChatStream
+        messages={[{
+          id: 'family', sender: 'assistant', text: 'Net sales variants', timestamp: '10:00',
+          suggestions: [{
+            ...reviewedSuggestionFields,
+            candidate_id: 'candidate-pass', group_id: 'net_sales', group_name: 'Doanh số thuần',
+            definition: {
+              metric: {
+                name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' },
+                base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high',
+              },
+            } as never,
+            yaml_preview: '',
+          }],
+          blockedCandidates: [{
+            name: 'Doanh thu sau thuế', candidate_id: 'candidate-blocked', group_id: 'net_sales',
+            group_name: 'Doanh số thuần',
+            review: { ...reviewedSuggestionFields.review!, status: 'needs_clarification', summary: 'Thiếu cột VAT' },
+          }],
+        }]}
+        onSendMessage={vi.fn()}
+        isLoading={false}
+        tableNames={[]}
+      />,
+    );
+    const family = screen.getByRole('heading', { name: 'Doanh số thuần' }).closest('section');
+    expect(family).toContainElement(screen.getByText('Doanh thu trước thuế'));
+    expect(family).toContainElement(screen.getByText('Doanh thu sau thuế'));
+  });
+
+  it('tracks saved state by proposal id when candidate names match', async () => {
+    const addMetric = vi.fn().mockResolvedValue(undefined);
+    const suggestion = {
+      ...reviewedSuggestionFields,
+      definition: {
+        metric: {
+          name: 'Same name', formula: { function: 'SUM', expression: 'amount' },
+          base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high',
+        },
+      } as never,
+      yaml_preview: '',
+    };
+    render(
+      <StudioChatStream
+        messages={[{
+          id: 'same-name', sender: 'assistant', text: 'Two variants', timestamp: '10:00', suggestionAction: 'save_metric',
+          suggestions: [
+            { ...suggestion, proposal_id: 'proposal-first', candidate_id: 'candidate-first' },
+            { ...suggestion, proposal_id: 'proposal-second', candidate_id: 'candidate-second' },
+          ],
+        }]}
+        onSendMessage={vi.fn()}
+        onAddMetric={addMetric}
+        isLoading={false}
+        tableNames={[]}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Lưu vào Semantic Layer' })[0]);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Đã lưu — mở catalog' })).toHaveLength(1));
+    expect(screen.getAllByRole('button', { name: 'Lưu vào Semantic Layer' })).toHaveLength(1);
   });
 
   it('shows unresolved business assumptions on a low-confidence proposal', () => {

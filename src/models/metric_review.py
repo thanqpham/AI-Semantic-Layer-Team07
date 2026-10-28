@@ -12,6 +12,20 @@ from src.models.metric_definition import MetricDefinition
 ProposalMode = Literal["requested", "discovery"]
 ReviewStatus = Literal["pass", "needs_revision", "needs_clarification", "rejected", "unsupported", "error"]
 RunStatus = Literal["completed", "partial", "needs_clarification", "error"]
+MetricReasonCode = Literal[
+    "UNRESOLVED_ASSUMPTION",
+    "MISSING_GRAIN",
+    "VARIANT_CONFLICT",
+    "MISSING_RATIO",
+    "TECHNICAL_VALIDATION",
+    "REVIEWER_FINDING",
+    "BUILDER_CLARIFICATION",
+    "BUILDER_UNSUPPORTED",
+    "BUILDER_REJECTED",
+    "INVALID_AGENT_OUTPUT",
+    "PROVIDER_FAILURE",
+    "OTHER",
+]
 
 
 class MetricOutputIssue(BaseModel):
@@ -133,6 +147,7 @@ class MetricReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: ReviewStatus
     summary: str = Field(min_length=1)
+    reason_code: MetricReasonCode | None = None
     issues: list[ReviewIssue] = Field(default_factory=list)
     clarification: str | None = None
     sources: list[KnowledgeSource] = Field(default_factory=list)
@@ -153,6 +168,9 @@ class MetricCandidateReport(BaseModel):
 
     name: str
     proposal_id: str | None = None
+    candidate_id: str | None = None
+    group_id: str | None = None
+    group_name: str | None = None
     review: MetricReview
 
 
@@ -166,6 +184,8 @@ class MetricProposalReviewResponse(BaseModel):
     """Return a new immutable proposal after a review attempt."""
 
     proposal_id: str
+    candidate_id: str | None = None
+    group_id: str | None = None
     definition: MetricDefinition | None
     yaml_preview: str = ""
     review: MetricReview

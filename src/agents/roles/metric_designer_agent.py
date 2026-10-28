@@ -18,6 +18,8 @@ async def generate_metric_drafts(context: dict[str, Any], task_id: str | None = 
     discovery = context["proposal_mode"] == "discovery"
     prompt = "Bạn là Metric Designer Agent. Schema và yêu cầu đầy đủ nằm trong context JSON đính kèm.\n" + _BASE_RULES
     prompt += "\n" + CONTEXT_RULES + "\n" + _draft_instructions(discovery) + "\n" + MULTI_TABLE_RULES + "\n" + _knowledge_instructions(context)
+    if context.get("selected_metric_variant"):
+        prompt += "\n" + _selected_variant_instructions(context["selected_metric_variant"])
     task_id = task_id or str(uuid4())
     payload = {"task_id": task_id, "context": context}
     batch = await trace_action(
@@ -68,6 +70,16 @@ Khi yêu cầu chưa chọn thuế, hoàn tiền, trạng thái hay mốc thời
 Chỉ hỏi lại nếu không thể ánh xạ dữ liệu một cách đáng tin cậy. Mỗi KPI cần nêu ánh xạ dữ liệu và lý do phù hợp.
 {count} Ưu tiên căn cứ schema rõ ràng và KPI chưa có trong catalog.
 """
+
+
+def _selected_variant_instructions(selection: dict[str, Any]) -> str:
+    """Constrain a clarification rerun to the server-validated family variant."""
+    return (
+        "Người dùng đã chọn rõ một biến thể trong clarification. Chỉ tạo lại đúng biến thể này; "
+        f"knowledge_id={selection['knowledge_id']}, variant_id={selection['variant_id']}, "
+        f"criteria={json.dumps(selection['criteria'], ensure_ascii=False)}. "
+        "Không thay bằng biến thể khác; nếu schema không đủ thì trả needs_clarification/unsupported."
+    )
 
 
 async def repair_metric_drafts(

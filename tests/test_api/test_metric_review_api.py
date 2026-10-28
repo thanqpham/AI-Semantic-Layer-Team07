@@ -161,6 +161,10 @@ async def test_generate_discovery_returns_supported_and_blocked_without_inventin
 
 async def test_re_review_endpoint_rejects_forged_scope_and_leaves_original_intact(client, async_session, setup_review):
     db_id, original, headers = setup_review
+    original.context = {
+        **original.context,
+        "candidate": {"id": "candidate-stable", "knowledge_id": "net_sales", "group_id": "net_sales"},
+    }
     with patch(
         "src.agents.workflows.metric_proposal_workflow.review_metric_batch",
         reviewer_mock(),
@@ -172,6 +176,8 @@ async def test_re_review_endpoint_rejects_forged_scope_and_leaves_original_intac
         )
     assert response.status_code == 200, response.text
     assert response.json()["proposal_id"] != original.id
+    assert response.json()["candidate_id"] == "candidate-stable"
+    assert response.json()["group_id"] == "net_sales"
     assert original.final_definition["metric"]["formula"]["expression"] == "amount"
     missing = await client.post(
         f"/api/v1/semantic/{db_id}/metric-proposals/nonexistent/review",
