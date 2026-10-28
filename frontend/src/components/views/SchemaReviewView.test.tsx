@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { approveSchemaReviewApi, getSchemaReviewApi, updateTableReviewApi } from '@/lib/api';
+import { approveSchemaReviewApi, getSchemaReviewApi, updateColumnReviewApi, updateTableReviewApi } from '@/lib/api';
 import { SchemaReviewView } from './SchemaReviewView';
 
 vi.mock('@/components/schema-review/RelationshipsPanel', () => ({RelationshipsPanel:()=> <div>Relationship queue</div>}));
@@ -59,3 +59,16 @@ it('does not advertise or load a read-only review queue without schema permissio
  const buttons=screen.getAllByRole('button',{name:'Duy\u1ec7t b\u1ea3ng n\u00e0y'}); fireEvent.click(buttons[1]);
  await waitFor(()=>expect(approveSchemaReviewApi).toHaveBeenCalledWith('7',undefined,[12]));
  });
+
+it('saves edited allowed values as JSON metadata', async () => {
+ vi.mocked(getSchemaReviewApi).mockResolvedValue({db_id:7,status:'pending_review',pending_tables:0,pending_columns:1,pending_relationships:0,tables:[
+  {table_id:11,table_name:'orders',business_name:'Orders',description:'',review_status:'approved',columns:[
+   {column_id:21,column_name:'status',business_name:'Status',description:'',data_type:'TEXT',review_status:'pending_review',is_primary_key:false,is_time_dimension:false,allowed_values:['completed','cancelled']},
+  ]},
+ ]});
+ render(<SchemaReviewView dbId={7} canManageSchema/>);
+ const values = await screen.findByRole('textbox',{name:'Giá trị cho phép (JSON array)'});
+ fireEvent.change(values,{target:{value:'["completed", "returned"]'}});
+ fireEvent.click(screen.getAllByRole('button').find(button=>button.textContent === 'Lưu' && !button.hasAttribute('disabled'))!);
+ await waitFor(()=>expect(updateColumnReviewApi).toHaveBeenCalledWith('7','orders','status','Status','',11,['completed','returned']));
+});

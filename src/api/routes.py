@@ -739,6 +739,9 @@ async def update_column(
         column = await update_column_review(
             db, int_id, table_name, column_name, body.business_name, body.description, user.id, table_id
         )
+        if "allowed_values" in body.model_fields_set:
+            column.allowed_values = body.allowed_values
+            column.allowed_values_complete = True
     except SchemaTableAmbiguousError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:

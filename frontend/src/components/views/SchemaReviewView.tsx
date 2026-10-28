@@ -19,6 +19,7 @@ import { SectionLabel, type WorkspaceDatabase } from '@/components/workspace/sha
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { Translated } from '@/components/ui/translated';
 import { RelationshipsPanel } from '@/components/schema-review/RelationshipsPanel';
+import { ColumnValueProposals } from '@/components/schema-review/ColumnValueProposals';
 import { useLanguage } from '@/context/LanguageContext';
 
 interface SchemaReviewViewProps {
@@ -80,11 +81,12 @@ function AiSuggestion({
 interface RowEditorProps {
   businessName: string;
   description: string;
+  allowedValues?: string;
   aiBusinessName?: string | null;
   disabled?: boolean;
   saving?: boolean;
   dirty?: boolean;
-  onChange: (patch: { business_name?: string; description?: string }) => void;
+  onChange: (patch: Partial<Draft>) => void;
   onSave: () => void;
 }
 
@@ -92,6 +94,7 @@ interface RowEditorProps {
 function RowEditor({
   businessName,
   description,
+  allowedValues,
   aiBusinessName,
   disabled,
   saving,
@@ -101,7 +104,12 @@ function RowEditor({
 }: RowEditorProps) {
   const { translate } = useLanguage();
   return (
-    <div className="grid flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+    <div className={cn(
+      'grid flex-1 gap-2',
+      allowedValues === undefined
+        ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]'
+        : 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto]',
+    )}>
       <div className="min-w-0">
         <Input
           value={businessName}
@@ -124,6 +132,16 @@ function RowEditor({
         className="h-8 text-xs"
         onChange={(event) => onChange({ description: event.target.value })}
       />
+      {allowedValues !== undefined && (
+        <Input
+          value={allowedValues}
+          disabled={disabled}
+          aria-label={translate("Giá trị cho phép (JSON array)")}
+          placeholder='["completed", "cancelled"]'
+          className="h-8 font-mono text-xs"
+          onChange={(event) => onChange({ allowed_values: event.target.value })}
+        />
+      )}
       <Button
         size="sm"
         variant="outline"
@@ -138,7 +156,7 @@ function RowEditor({
   );
 }
 
-type Draft = { business_name: string; description: string };
+type Draft = { business_name: string; description: string; allowed_values?: string };
 type DraftMap = Record<string, Draft>;
 
 function tableKey(table: SchemaReviewTable): string {
@@ -147,6 +165,18 @@ function tableKey(table: SchemaReviewTable): string {
 
 function columnKey(table: SchemaReviewTable, column: SchemaReviewColumn): string {
   return `c:${table.table_id}:${column.column_id}`;
+}
+
+function parseAllowedValues(value: string): (string | number | boolean)[] | null {
+  const parsed: unknown = JSON.parse(value);
+  if (parsed === null) return null;
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((item) => !['string', 'number', 'boolean'].includes(typeof item))
+  ) {
+    throw new Error('Giá trị cho phép phải là mảng JSON gồm string, number, boolean hoặc null ở cấp cao nhất.');
+  }
+  return parsed;
 }
 
 function buildDrafts(review: SchemaReview): DraftMap {
@@ -160,6 +190,7 @@ function buildDrafts(review: SchemaReview): DraftMap {
       drafts[columnKey(table, column)] = {
         business_name: column.business_name || '',
         description: column.description || '',
+        allowed_values: JSON.stringify(column.allowed_values ?? null),
       };
     }
   }
@@ -176,7 +207,7 @@ export function SchemaReviewView({
   onRelationshipDirtyChange,
 }: SchemaReviewViewProps) {
   const { translate } = useLanguage();
-  const [reviewTab, setReviewTab] = useState<'tables' | 'relationships'>('tables');
+  const [reviewTab, setReviewTab] = useState<'tables' | 'relationships' | 'values'>('tables');
   const [review, setReview] = useState<SchemaReview | null>(null);
   const [drafts, setDrafts] = useState<DraftMap>({});
   const [baseline, setBaseline] = useState<DraftMap>({});
@@ -210,7 +241,8 @@ export function SchemaReviewView({
   const isDirty = (key: string) =>
     drafts[key] !== undefined &&
     (drafts[key].business_name !== baseline[key]?.business_name ||
-      drafts[key].description !== baseline[key]?.description);
+      drafts[key].description !== baseline[key]?.description ||
+      drafts[key].allowed_values !== baseline[key]?.allowed_values);
 
   const patch = (key: string, value: Partial<Draft>) =>
     setDrafts((current) => ({ ...current, [key]: { ...current[key], ...value } }));
@@ -290,12 +322,21 @@ export function SchemaReviewView({
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        <div role="tablist" onKeyDown={event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setReviewTab(current=>current==='tables'?'relationships':'tables');const tabs=event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');tabs[reviewTab==='tables'?1:0]?.focus();}}} aria-label={translate('Loại review')} className="flex flex-wrap gap-2">
+        <div role="tablist" onKeyDown={event => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const names = ['tables', 'relationships', 'values'] as const;
+          const offset = event.key === 'ArrowRight' ? 1 : -1;
+          const index = (names.indexOf(reviewTab) + offset + names.length) % names.length;
+          setReviewTab(names[index]);
+          event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus();
+        }} aria-label={translate('Loại review')} className="flex flex-wrap gap-2">
           <Button role="tab" id="tables-tab" tabIndex={reviewTab==='tables'?0:-1} aria-selected={reviewTab==='tables'} aria-controls="tables-review" onClick={()=>setReviewTab('tables')} variant={reviewTab==='tables'?'default':'outline'}><Translated text="Bảng & cột" /></Button>
           <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}>
             <Translated text="Liên kết" />
             {Boolean(review?.pending_relationships) && ` (${review?.pending_relationships})`}
           </Button>
+          <Button role="tab" id="values-tab" tabIndex={reviewTab === 'values' ? 0 : -1} aria-selected={reviewTab === 'values'} aria-controls="values-review" onClick={() => setReviewTab('values')} variant={reviewTab === 'values' ? 'default' : 'outline'}>Giá trị đề xuất</Button>
         </div>
         <p className="text-xs text-muted-foreground">
           {review?.pending_relationships
@@ -303,6 +344,9 @@ export function SchemaReviewView({
             : 'Tất cả liên kết đã được phê duyệt; bạn có thể dùng AI đề xuất hoặc thêm liên kết thủ công.'}
         </p>
         {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'} className={cn("min-h-0 flex-1 flex-col", reviewTab==='relationships' ? "flex" : "hidden")}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
+        <div id="values-review" role="tabpanel" aria-labelledby="values-tab" hidden={reviewTab !== 'values'}>
+          {dbId && reviewTab === 'values' && <ColumnValueProposals key={dbId} dbId={String(dbId)} canManage={canManageSchema} canApprove={canApproveSchema} onReviewChanged={() => { void load(); onReviewChanged?.(); }} />}
+        </div>
         <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {error && (
           <p className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
@@ -429,6 +473,7 @@ export function SchemaReviewView({
                         <RowEditor
                           businessName={drafts[colKey]?.business_name ?? ''}
                           description={drafts[colKey]?.description ?? ''}
+                              allowedValues={drafts[colKey]?.allowed_values ?? 'null'}
                           aiBusinessName={column.ai_business_name}
                           disabled={!canManageSchema}
                           saving={savingKey === colKey}
@@ -443,6 +488,7 @@ export function SchemaReviewView({
                                 draft.business_name,
                                 draft.description,
                                 table.table_id,
+                                parseAllowedValues(draft.allowed_values ?? 'null'),
                               ),
                             )
                           }
