@@ -145,7 +145,7 @@ describe('AIStudioView', () => {
       />
     );
 
-    expect(screen.getByText('Trợ lý dữ liệu')).toBeInTheDocument();
+    expect(screen.getByText('Data Assistant')).toBeInTheDocument();
     expect(screen.getByText(/Hỏi về cấu trúc, chỉ số đã duyệt/i)).toBeInTheDocument();
   });
 
