@@ -6,7 +6,6 @@ import {
   Code2,
   Copy,
   Edit3,
-  Lightbulb,
   RefreshCw,
   Save,
   Sparkles,
@@ -86,68 +85,6 @@ export function metricRequestKey(messageId: string, suggestionIndex: number): st
   return `${messageId}:${suggestionIndex}`;
 }
 
-interface PromptSuggestionItem {
-  icon: string;
-  title: string;
-  prompt: string;
-}
-
-const DEFAULT_SUGGESTIONS: PromptSuggestionItem[] = [
-  {
-    icon: '💰',
-    title: 'Tạo metric doanh thu thuần',
-    prompt: 'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
-  },
-  {
-    icon: '📦',
-    title: 'Số đơn hoàn tất',
-    prompt: 'Đề xuất metric số đơn hoàn tất: đếm mã đơn duy nhất, xác định trạng thái hợp lệ và mốc thời gian ghi nhận. Kiểm tra nguy cơ đếm trùng khi nối bảng chi tiết.',
-  },
-  {
-    icon: '🎫',
-    title: 'Giá trị đơn hàng trung bình (AOV)',
-    prompt: 'Đề xuất metric AOV = doanh thu thuần / số đơn hoàn tất trong cùng kỳ. Làm rõ cách xử lý đơn hủy, hoàn tiền và mẫu số bằng 0.',
-  },
-  {
-    icon: '👥',
-    title: 'Khách hàng mua hàng',
-    prompt: 'Đề xuất metric số khách hàng mua hàng: đếm mã khách hàng duy nhất có giao dịch hợp lệ trong kỳ. Nêu cách xử lý đơn khách vãng lai và giao dịch bị hủy.',
-  },
-  {
-    icon: '🔁',
-    title: 'Tỷ lệ khách hàng quay lại',
-    prompt: 'Đề xuất metric tỷ lệ khách hàng quay lại: xác định khách hàng có ít nhất hai đơn hợp lệ, mẫu số là khách hàng mua hàng trong kỳ. Làm rõ thời điểm xét đơn trước kỳ và công thức phần trăm.',
-  },
-  {
-    icon: '📈',
-    title: 'Tăng trưởng doanh thu MoM',
-    prompt: 'Đề xuất metric tăng trưởng doanh thu thuần theo tháng = (doanh thu tháng này - tháng trước) / doanh thu tháng trước. Nêu cách xử lý tháng trước bằng 0 và múi giờ của ngày giao dịch.',
-  },
-];
-
-const DATA_ASSISTANT_SUGGESTIONS: PromptSuggestionItem[] = [
-  {
-    icon: '📊',
-    title: 'Doanh thu theo khách hàng',
-    prompt: 'Tổng doanh thu theo khách hàng năm 2024',
-  },
-  {
-    icon: '📅',
-    title: 'Doanh thu tháng này',
-    prompt: 'Doanh thu tháng này theo chi nhánh',
-  },
-  {
-    icon: '🔎',
-    title: 'Tìm metric doanh thu đã duyệt',
-    prompt: 'Có những metric doanh thu nào đã được phê duyệt? Giải thích ngắn gọn từng metric.',
-  },
-  {
-    icon: '🧭',
-    title: 'Tìm bảng khách hàng',
-    prompt: 'Bảng hoặc cột nào liên quan đến khách hàng trong semantic layer này?',
-  },
-];
-
 export function StudioChatStream(props: StudioChatStreamProps) {
   const { translate } = useLanguage();
   const mode = props.mode || 'metric_studio';
@@ -163,40 +100,8 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const graphTrace = graphMessage?.executionTrace;
   const [input, setInput] = useState(props.activePromptText || '');
   const [saved, setSaved] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(true);
   const messagesRef = useRef<HTMLDivElement>(null);
-  const stripRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ startX: number; scrollLeft: number; isDragging: boolean; moved: boolean }>({
-    startX: 0,
-    scrollLeft: 0,
-    isDragging: false,
-    moved: false,
-  });
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    const el = stripRef.current;
-    if (!el) return;
-    dragRef.current = {
-      startX: e.clientX,
-      scrollLeft: el.scrollLeft,
-      isDragging: true,
-      moved: false,
-    };
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.isDragging || !stripRef.current) return;
-    const dx = e.clientX - dragRef.current.startX;
-    if (Math.abs(dx) > 8) {
-      dragRef.current.moved = true;
-    }
-    stripRef.current.scrollLeft = dragRef.current.scrollLeft - dx;
-  };
-
-  const handlePointerUp = () => {
-    dragRef.current.isDragging = false;
-    window.setTimeout(() => { dragRef.current.moved = false; }, 0);
-  };
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const allSavedNames = useMemo(() => {
     const set = new Set<string>();
@@ -214,6 +119,14 @@ export function StudioChatStream(props: StudioChatStreamProps) {
       setInput(props.activePromptText);
     }
   }, [props.activePromptText]);
+
+  // Auto-grow the composer with its content; max-h-40 caps it and then it scrolls.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   useLayoutEffect(() => {
     const pane = messagesRef.current;
@@ -240,36 +153,6 @@ export function StudioChatStream(props: StudioChatStreamProps) {
       setSaved((prev) => [...prev, suggestion.definition.metric.name]);
     }
   };
-
-  const handleSelectSuggestion = (promptText: string) => {
-    setInput(promptText);
-  };
-
-  const toggleShowSuggestions = () => {
-    setShowSuggestions((prev) => !prev);
-  };
-
-  const contextualSuggestions = useMemo(() => {
-    const list = [
-      ...(canGenerateMetrics ? DEFAULT_SUGGESTIONS : DATA_ASSISTANT_SUGGESTIONS),
-    ];
-    const tableStr = props.tableNames.join(' ').toLowerCase();
-    if (canGenerateMetrics && (tableStr.includes('order') || tableStr.includes('don_hang'))) {
-      list.unshift({
-        icon: '📈',
-        title: 'Tỷ lệ hủy đơn hàng',
-        prompt: 'Đề xuất metric tỷ lệ hủy đơn = số đơn hủy / tổng số đơn được tạo trong cùng kỳ. Đếm mã đơn duy nhất, xác định trạng thái hủy và ngày tạo đơn.',
-      });
-    }
-    if (canGenerateMetrics && (tableStr.includes('product') || tableStr.includes('san_pham'))) {
-      list.push({
-        icon: '🏷️',
-        title: 'Số lượng sản phẩm bán',
-        prompt: 'Đề xuất metric số lượng sản phẩm bán từ chi tiết đơn hợp lệ: cộng số lượng sau hoàn trả, nêu đơn vị tính và cách nối sản phẩm mà không nhân bản dòng.',
-      });
-    }
-    return list;
-  }, [canGenerateMetrics, props.tableNames]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -332,68 +215,12 @@ export function StudioChatStream(props: StudioChatStreamProps) {
         </div>
       </div>
 
-      {/* 💡 Suggested Prompts Bar */}
-      <div className="shrink-0 px-4 pb-1 sm:px-6">
-        <div className="mx-auto max-w-4xl">
-          <div className="space-y-1 rounded-lg border border-border bg-card px-2.5 py-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <Translated text={canGenerateMetrics ? 'GỢI Ý CÂU HỎI TẠO METRIC' : 'GỢI Ý CÂU HỎI VỀ DỮ LIỆU'} />
-                </span>
-                {showSuggestions && (
-                  <span className="font-mono text-[10px] text-muted-foreground/70">
-                    ({contextualSuggestions.length} <Translated text={"mẫu)"} /></span>
-                )}
-              </div>
-
-              <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showSuggestions}
-                  onChange={toggleShowSuggestions}
-                  className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
-                />
-                <span><Translated text={showSuggestions ? 'Hiển thị gợi ý' : 'Đã ẩn (Tick để hiện)'} /></span>
-              </label>
-            </div>
-
-            {showSuggestions && (
-              <div
-                ref={stripRef}
-                data-testid="prompt-suggestion-strip"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-                onClickCapture={(e) => {
-                  if (dragRef.current.moved) e.stopPropagation();
-                }}
-                className="flex gap-1.5 overflow-x-auto whitespace-nowrap touch-pan-x cursor-grab active:cursor-grabbing"
-              >
-                {contextualSuggestions.map((item, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSelectSuggestion(translate(item.prompt))}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary/60 px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-secondary hover:text-foreground cursor-pointer"
-                  >
-                    <span>{item.icon}</span>
-                    <span><Translated text={item.title} /></span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Composer Input Box */}
       <div className="shrink-0 bg-card/40 px-4 py-2 sm:px-6">
         <div className="mx-auto max-w-4xl space-y-1.5">
           <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-1.5 shadow-xs focus-within:border-foreground/30 focus-within:ring-1 focus-within:ring-ring/20">
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -403,7 +230,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                   ? 'Mô tả chỉ số bạn muốn tạo hoặc đặt câu hỏi về schema...'
                   : 'Hỏi về schema, metric đã duyệt hoặc cách chọn dữ liệu...'
               )}
-              className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="max-h-40 min-h-8 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <Button
               size="icon"

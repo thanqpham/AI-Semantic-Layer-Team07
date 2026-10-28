@@ -150,8 +150,7 @@ describe('StudioChatStream', () => {
     );
 
     expect(screen.getByRole('status')).toHaveTextContent(/không có quyền tạo, sửa hoặc lưu metric/i);
-    expect(screen.getByTestId('prompt-suggestion-strip')).toBeInTheDocument();
-    expect(screen.getByText('Tìm metric doanh thu đã duyệt')).toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
   });
 
   it('lets a Member submit a generated metric request instead of saving it', () => {
@@ -368,80 +367,23 @@ describe('StudioChatStream', () => {
     expect(screen.queryByRole('button', { name: /Lưu vào Semantic Layer/i })).not.toBeInTheDocument();
   });
 
-  it('prefills the input with a suggested prompt when clicked', () => {
+  it('grows the composer with typed content and shrinks it back after sending', () => {
     const onSendMessage = vi.fn().mockResolvedValue(undefined);
     render(
-      <StudioChatStream
-        messages={[]}
-        onSendMessage={onSendMessage}
-        isLoading={false}
-        tableNames={['orders', 'customers']}
-      />
+      <StudioChatStream messages={[]} onSendMessage={onSendMessage} isLoading={false} tableNames={[]} />,
     );
-
-    const strip = screen.getByTestId('prompt-suggestion-strip');
-    expect(strip).toHaveClass('overflow-x-auto');
-    expect(strip).toHaveClass('whitespace-nowrap');
-    const suggestionChip = screen.getByText('Tạo metric doanh thu thuần');
-    expect(suggestionChip).toBeInTheDocument();
-    expect(strip.querySelectorAll('button')).toHaveLength(7);
-    expect(strip.closest('.shrink-0')).not.toHaveClass('border-t');
-    expect(strip.closest('.shrink-0')?.nextElementSibling).not.toHaveClass('border-t');
-
-    fireEvent.click(suggestionChip);
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
 
     const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
-    expect(onSendMessage).not.toHaveBeenCalled();
-    expect(textarea.value).toBe(
-      'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
-    );
-  });
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 132 });
+    fireEvent.change(textarea, { target: { value: 'Đề xuất metric doanh thu thuần kèm giả định chi tiết' } });
+    expect(textarea.style.height).toBe('132px');
 
-  it('prefills the input when a click has slight pointer movement', () => {
-    render(
-      <StudioChatStream
-        messages={[]}
-        onSendMessage={vi.fn()}
-        isLoading={false}
-        tableNames={['orders']}
-      />,
-    );
-
-    const strip = screen.getByTestId('prompt-suggestion-strip');
-    fireEvent.pointerDown(strip, { pointerId: 1, clientX: 100, isPrimary: true });
-    fireEvent.pointerMove(strip, { pointerId: 1, clientX: 106, isPrimary: true });
-    fireEvent.pointerUp(strip, { pointerId: 1, clientX: 106, isPrimary: true });
-    fireEvent.click(screen.getByText('Tạo metric doanh thu thuần'));
-
-    const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
-    expect(textarea.value).toContain('Đề xuất metric doanh thu thuần');
-  });
-
-  it('allows selecting a prompt after dragging the suggestion strip', async () => {
-    render(
-      <StudioChatStream
-        messages={[{ id: 'user-1', sender: 'user', text: 'Xin chào', timestamp: '10:00' }]}
-        onSendMessage={vi.fn()}
-        isLoading={false}
-        tableNames={['orders']}
-      />
-    );
-
-    const strip = screen.getByTestId('prompt-suggestion-strip');
-    Object.defineProperty(strip, 'clientWidth', { configurable: true, value: 240 });
-    Object.defineProperty(strip, 'scrollWidth', { configurable: true, value: 720 });
-    fireEvent.pointerDown(strip, { pointerId: 1, clientX: 200, isPrimary: true });
-    fireEvent.pointerMove(strip, { pointerId: 1, clientX: 80, isPrimary: true });
-    fireEvent.pointerUp(strip, { pointerId: 1, clientX: 80, isPrimary: true });
-
-    expect(strip.scrollLeft).toBe(120);
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-    fireEvent.click(screen.getByText('Tạo metric doanh thu thuần'));
-
-    const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
-    expect(textarea.value).toBe(
-      'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
-    );
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 34 });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(onSendMessage).toHaveBeenCalledTimes(1);
+    expect(textarea.value).toBe('');
+    expect(textarea.style.height).toBe('34px');
   });
 
   it('renders formula display with function and expression parts', () => {
