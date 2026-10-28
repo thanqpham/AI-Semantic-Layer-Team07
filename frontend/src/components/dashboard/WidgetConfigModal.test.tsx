@@ -70,6 +70,17 @@ function makeMetric(overrides: Partial<MetricRecord>): MetricRecord {
 }
 
 const APPROVED_METRIC = makeMetric({});
+const PLAN_DEFINITION = {
+  ...APPROVED_METRIC.definition!,
+  schema_version: 3 as const,
+  metric: {
+    ...APPROVED_METRIC.definition!.metric,
+    query_plan: {
+      stages: [{ name: 'result', base_entity: 'orders', joins: [], group_by: [], aggregates: [], filters: [] }],
+      output_expression: 'result.amount',
+    },
+  },
+};
 const PENDING_METRIC = makeMetric({ metric_id: 6, name: 'Metric chờ duyệt', status: 'pending_approval' });
 const LEGACY_METRIC = makeMetric({
   metric_id: 7,
@@ -392,6 +403,20 @@ describe('WidgetConfigModal', () => {
     fireEvent.change(screen.getByLabelText('Tiêu đề widget'), { target: { value: 'đổi tiêu đề' } });
     await waitFor(() => expect(screen.getByLabelText('Tiêu đề widget')).toHaveValue('đổi tiêu đề'));
     expect(apiMocks.executeSemanticQueryApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('previews and saves compatible selected metrics with an explicit bar sort metric', async () => {
+    const { onSave } = renderModal({ metrics: [makeMetric({ definition: PLAN_DEFINITION }), makeMetric({ metric_id: 9, name: 'Orders', definition: PLAN_DEFINITION })] });
+    await pickMetricAndBuildBarForm();
+    const compare = selectByLabel('Thêm metric để so sánh');
+    fireEvent.change(compare, { target: { value: '9' } });
+    choose('Sắp xếp theo metric', '9');
+    fireEvent.click(screen.getByRole('button', { name: 'Xem trước' }));
+    await waitFor(() => expect(apiMocks.executeSemanticQueryApi).toHaveBeenCalledTimes(1));
+    expect(apiMocks.executeSemanticQueryApi.mock.calls[0][1]).toMatchObject({ metric_ids: [5, 9], order_metric_id: 9 });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0]).toMatchObject({ metric_id: 5, metric_ids: [5, 9], order_metric_id: 9 });
   });
 
   it('never queries and explains the limitation for SQL Dump sources', async () => {

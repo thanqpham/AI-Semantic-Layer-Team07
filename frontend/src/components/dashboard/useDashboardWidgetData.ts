@@ -13,6 +13,7 @@ import {
   DashboardChartType,
   DashboardDatePreset,
   DashboardWidgetConfig,
+  getWidgetMetricIds,
 } from '@/lib/dashboard';
 
 import {
@@ -115,6 +116,7 @@ async function loadSeriesPayload(
   const points = buildWidgetPoints({
     result: { ...result, rows: result.rows.slice(0, WIDGET_ROW_LIMIT) },
     metricId: widget.metric_id,
+    metricIds: getWidgetMetricIds(widget),
     dimensionId: widget.dimension_col_id,
     sortByTime: isTimeSeriesChart(widget.chart_type),
   });
@@ -123,7 +125,11 @@ async function loadSeriesPayload(
     return { ...EMPTY_PAYLOAD, points: sliced, hiddenCount: hasMore ? 0 : points.length - sliced.length, hasMore };
   }
   if (widget.chart_type === 'table') {
-    const ranked = truncateRankingRows(points);
+    const ranked = truncateRankingRows(
+      points,
+      undefined,
+      getWidgetMetricIds(widget).length > 1 ? widget.order_metric_id ?? undefined : undefined,
+    );
     return { ...EMPTY_PAYLOAD, points: ranked.rows, hiddenCount: ranked.hiddenCount, hasMore };
   }
   return { ...EMPTY_PAYLOAD, points, hasMore };
@@ -166,6 +172,8 @@ export function useDashboardWidgetData(args: UseDashboardWidgetDataArgs): Dashbo
       JSON.stringify([
         dbId,
         widget.metric_id,
+        widget.metric_ids,
+        widget.order_metric_id,
         widget.dimension_col_id,
         widget.date_filter_column_id,
         widget.time_grain,
@@ -178,6 +186,8 @@ export function useDashboardWidgetData(args: UseDashboardWidgetDataArgs): Dashbo
     [
       dbId,
       widget.metric_id,
+      widget.metric_ids,
+      widget.order_metric_id,
       widget.dimension_col_id,
       widget.date_filter_column_id,
       widget.time_grain,
@@ -243,6 +253,8 @@ export function useDashboardWidgetData(args: UseDashboardWidgetDataArgs): Dashbo
     enabled,
     dbId,
     widget.metric_id,
+    widget.metric_ids,
+    widget.order_metric_id,
     widget.dimension_col_id,
     widget.date_filter_column_id,
     widget.time_grain,

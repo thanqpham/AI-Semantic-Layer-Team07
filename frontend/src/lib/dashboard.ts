@@ -16,6 +16,8 @@ export type DashboardWidgetHeight = 'compact' | 'normal' | 'expanded';
 export interface DashboardWidgetConfig {
   id: string;
   metric_id: number;
+  metric_ids?: number[];
+  order_metric_id?: number | null;
   dimension_col_id: number | null;
   date_filter_column_id: number | null;
   time_grain: TimeGrain | null;
@@ -113,6 +115,11 @@ const CHART_TYPES: readonly DashboardChartType[] = ['kpi', 'line', 'area', 'bar'
 const WIDGET_WIDTHS: readonly DashboardWidgetWidth[] = ['third', 'half', 'full'];
 const WIDGET_HEIGHTS: readonly DashboardWidgetHeight[] = ['compact', 'normal', 'expanded'];
 const TIME_GRAINS: readonly TimeGrain[] = ['day', 'week', 'month', 'quarter', 'year'];
+export const DASHBOARD_WIDGET_MAX_METRICS = 5;
+
+export function getWidgetMetricIds(widget: DashboardWidgetConfig): number[] {
+  return widget.metric_ids?.length ? widget.metric_ids : [widget.metric_id];
+}
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -158,6 +165,25 @@ function parseCustomTitle(value: unknown): string | null {
 }
 
 function assertChartCompatibility(widget: DashboardWidgetConfig): void {
+  const metricIds = getWidgetMetricIds(widget);
+  if (
+    metricIds.length > DASHBOARD_WIDGET_MAX_METRICS ||
+    metricIds[0] !== widget.metric_id ||
+    new Set(metricIds).size !== metricIds.length
+  ) {
+    throw new DashboardLayoutParseError('metric_ids must be unique, start with metric_id, and contain at most five metrics');
+  }
+  if (widget.order_metric_id != null && !metricIds.includes(widget.order_metric_id)) {
+    throw new DashboardLayoutParseError('order_metric_id must reference a selected metric');
+  }
+  if (metricIds.length > 1) {
+    if (widget.chart_type === 'kpi' || widget.chart_type === 'pie') {
+      throw new DashboardLayoutParseError('KPI and pie widgets support one metric only');
+    }
+    if ((widget.chart_type === 'bar' || widget.chart_type === 'table') && widget.order_metric_id == null) {
+      throw new DashboardLayoutParseError('Bar and table widgets require a sort metric');
+    }
+  }
   if (widget.chart_type === 'kpi') {
     if (widget.date_filter_column_id === null) {
       throw new DashboardLayoutParseError('KPI widgets require date_filter_column_id');
@@ -196,9 +222,13 @@ function parseDashboardWidget(raw: unknown): DashboardWidgetConfig {
   }
   const colSpan = parseDimensionSpan(record.col_span, 1, 24, 'col_span');
   const rowSpan = parseDimensionSpan(record.row_span, 1, 48, 'row_span');
+  const metricIds = parseMetricIds(record.metric_ids, record.metric_id);
+  const orderMetricId = parseColumnReference(record.order_metric_id, 'order_metric_id');
   const widget: DashboardWidgetConfig = {
     id: record.id,
     metric_id: record.metric_id,
+    ...(metricIds ? { metric_ids: metricIds } : {}),
+    ...(orderMetricId !== null ? { order_metric_id: orderMetricId } : {}),
     dimension_col_id: parseColumnReference(record.dimension_col_id, 'dimension_col_id'),
     date_filter_column_id: parseColumnReference(record.date_filter_column_id, 'date_filter_column_id'),
     time_grain: parseOptionalEnum(record.time_grain, TIME_GRAINS, 'time_grain'),
@@ -211,6 +241,17 @@ function parseDashboardWidget(raw: unknown): DashboardWidgetConfig {
   };
   assertChartCompatibility(widget);
   return widget;
+}
+
+function parseMetricIds(value: unknown, primaryId: number): number[] | null {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || value.length < 2 || value.length > DASHBOARD_WIDGET_MAX_METRICS) {
+    throw new DashboardLayoutParseError('metric_ids must contain two to five metric IDs');
+  }
+  if (!value.every(isPositiveInteger) || value[0] !== primaryId || new Set(value).size !== value.length) {
+    throw new DashboardLayoutParseError('metric_ids must be unique and start with metric_id');
+  }
+  return value;
 }
 
 function parseDashboardLayout(raw: unknown): DashboardLayout {

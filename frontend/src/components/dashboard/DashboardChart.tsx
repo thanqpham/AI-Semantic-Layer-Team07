@@ -11,7 +11,6 @@ import {
   AreaChart,
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
   Legend,
   Line,
@@ -20,31 +19,31 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
-  XAxis,
-  YAxis,
 } from 'recharts';
 
 import {
   DashboardChartType,
   DashboardWidgetConfig,
+  getWidgetMetricIds,
 } from '@/lib/dashboard';
 
 import {
   DashboardPoint,
   formatCellValue,
   formatNumberVi,
-  formatShortNumber,
   PIE_MAX_SLICES,
   sortPointsByTimeKey,
   truncatePieSlices,
 } from './dashboardFormatters';
 import { DashboardWidgetData } from './useDashboardWidgetData';
+import { ChartAxes, DashboardMultiSeriesChart } from './DashboardMultiSeriesChart';
 import { Translated } from '@/components/ui/translated';
 
 export interface DashboardChartProps {
   widget: DashboardWidgetConfig;
   title: string;
   metricName: string;
+  metricNames?: string[];
   dimensionLabel: string | null;
   data: DashboardWidgetData;
   dateFilterIgnored?: boolean;
@@ -53,18 +52,15 @@ export interface DashboardChartProps {
 const SERIES_COLORS = [1, 2, 3, 4, 5].map((n) => `var(--color-chart-${n})`);
 const CHART_MARGIN = { top: 8, right: 12, left: 0, bottom: 4 };
 
-function axisTickFormatter(value: unknown): string {
-  return formatShortNumber(Number(value));
-}
-
 /** Render one dashboard widget visualization body including states and fallbacks. */
-export function DashboardChart({ widget, title, metricName, dimensionLabel, data, dateFilterIgnored }: DashboardChartProps) {
+export function DashboardChart({ widget, title, metricName, metricNames, dimensionLabel, data, dateFilterIgnored }: DashboardChartProps) {
   return (
     <div className="flex h-full w-full min-h-0 min-w-0 flex-1 flex-col">
       <WidgetBody
         widget={widget}
         title={title}
         metricName={metricName}
+        metricNames={metricNames}
         dimensionLabel={dimensionLabel}
         data={data}
         dateFilterIgnored={dateFilterIgnored}
@@ -97,6 +93,7 @@ function WidgetBody(props: DashboardChartProps) {
       widget={widget}
       title={title}
       metricName={metricName}
+      metricNames={props.metricNames}
       dimensionLabel={dimensionLabel}
       data={data}
       dateFilterIgnored={props.dateFilterIgnored}
@@ -108,10 +105,14 @@ function isMissingData(chartType: DashboardChartType, data: DashboardWidgetData)
   if (chartType === 'kpi') return data.totalValue === null && !data.trendPoints.some((point) => point.value !== null);
   if (chartType === 'table') return data.points.length === 0;
   if (chartType === 'pie') return !data.points.some((point) => point.value !== null && point.value > 0);
-  return !data.points.some((point) => point.value !== null);
+  return !data.points.some((point) => point.value !== null || Object.values(point.seriesValues ?? {}).some((value) => value !== null));
 }
 
-function SuccessBody({ widget, title, metricName, dimensionLabel, data, dateFilterIgnored }: DashboardChartProps) {
+function SuccessBody({ widget, title, metricName, metricNames, dimensionLabel, data, dateFilterIgnored }: DashboardChartProps) {
+  const series = getWidgetMetricIds(widget).map((id, index) => ({
+    id,
+    name: metricNames?.[index] ?? (index === 0 ? metricName : `Metric ${id}`),
+  }));
   const notice = dateFilterIgnored ? 'Bộ lọc ngày không áp dụng · Số liệu toàn thời gian' : null;
   const limitNotice = data.hasMore
     ? widget.chart_type === 'kpi' || widget.chart_type === 'line' || widget.chart_type === 'area'
@@ -126,14 +127,14 @@ function SuccessBody({ widget, title, metricName, dimensionLabel, data, dateFilt
       <>
         <KpiPanel metricName={metricName} data={data} />
         {(notice || limitNotice) && <p className="text-[11px] text-muted-foreground">{[notice, limitNotice].filter(Boolean).join(' · ')}</p>}
-        <SummaryTable title={title} metricName={metricName} points={data.trendPoints} />
+        <SummaryTable title={title} series={[series[0]]} points={data.trendPoints} />
       </>
     );
   }
   if (widget.chart_type === 'table') {
     return (
       <>
-        <RankingTable title={title} metricName={metricName} dimensionLabel={dimensionLabel} data={data} />
+        <RankingTable title={title} series={series} dimensionLabel={dimensionLabel} data={data} />
         {(notice || limitNotice) && <p className="text-[11px] text-muted-foreground">{[notice, limitNotice].filter(Boolean).join(' · ')}</p>}
       </>
     );
@@ -143,10 +144,10 @@ function SuccessBody({ widget, title, metricName, dimensionLabel, data, dateFilt
       {widget.chart_type === 'pie' ? (
         <PiePanel metricName={metricName} points={data.points} />
       ) : (
-        <CartesianPanel chartType={widget.chart_type} metricName={metricName} points={data.points} />
+        <CartesianPanel chartType={widget.chart_type} series={series} points={data.points} />
       )}
       {(notice || limitNotice || barNotice) && <p className="text-[11px] text-muted-foreground">{[notice, limitNotice, barNotice].filter(Boolean).join(' · ')}</p>}
-      <SummaryTable title={title} metricName={metricName} points={data.points} />
+      <SummaryTable title={title} series={series} points={data.points} />
     </>
   );
 }
@@ -249,11 +250,11 @@ function trendSummary(metricName: string, points: DashboardPoint[]): string {
 
 function SummaryTable({
   title,
-  metricName,
+  series,
   points,
 }: {
   title: string;
-  metricName: string;
+  series: Array<{ id: number; name: string }>;
   points: DashboardPoint[];
 }) {
   return (
@@ -262,46 +263,20 @@ function SummaryTable({
       <thead>
         <tr>
           <th scope="col"><Translated text={"Mục"} /></th>
-          <th scope="col">{metricName}</th>
+          {series.map((item) => <th key={item.id} scope="col">{item.name}</th>)}
         </tr>
       </thead>
       <tbody>
         {points.map((point) => (
           <tr key={`${point.rawLabel}-${point.label}`}>
             <th scope="row">{point.label}</th>
-            <td>{formatCellValue(point.rawValue)}</td>
+            {series.map((item, index) => (
+              <td key={item.id}>{formatCellValue(point.seriesRawValues?.[item.id] ?? (index === 0 ? point.rawValue : null))}</td>
+            ))}
           </tr>
         ))}
       </tbody>
     </table>
-  );
-}
-
-function ChartAxes() {
-  return (
-    <>
-      <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
-      <XAxis
-        dataKey="label"
-        tickLine={false}
-        axisLine={false}
-        interval="preserveStartEnd"
-        minTickGap={16}
-        angle={-15}
-        textAnchor="end"
-        height={48}
-        tick={{ fontSize: 10 }}
-        className="fill-muted-foreground"
-      />
-      <YAxis
-        tickLine={false}
-        axisLine={false}
-        width={52}
-        tickFormatter={axisTickFormatter}
-        tick={{ fontSize: 10 }}
-        className="fill-muted-foreground"
-      />
-    </>
   );
 }
 
@@ -329,13 +304,15 @@ function TooltipCard({
 
 function CartesianPanel({
   chartType,
-  metricName,
+  series,
   points,
 }: {
   chartType: 'line' | 'area' | 'bar';
-  metricName: string;
+  series: Array<{ id: number; name: string }>;
   points: DashboardPoint[];
 }) {
+  if (series.length > 1) return <MultiCartesianPanel chartType={chartType} series={series} points={points} />;
+  const metricName = series[0]?.name ?? '';
   const ordered = chartType === 'bar' ? points : sortPointsByTimeKey(points);
   const displayed = chartType === 'bar' ? ordered.slice(0, 12) : ordered;
   return (
@@ -392,6 +369,14 @@ function CartesianPanel({
   );
 }
 
+function MultiCartesianPanel({ chartType, series, points }: {
+  chartType: 'line' | 'area' | 'bar';
+  series: Array<{ id: number; name: string }>;
+  points: DashboardPoint[];
+}) {
+  return <DashboardMultiSeriesChart chartType={chartType} series={series} points={points} />;
+}
+
 function PiePanel({ metricName, points }: { metricName: string; points: DashboardPoint[] }) {
   const sliced = truncatePieSlices(points).slice(0, PIE_MAX_SLICES);
   return (
@@ -427,12 +412,12 @@ function PiePanel({ metricName, points }: { metricName: string; points: Dashboar
 
 function RankingTable({
   title,
-  metricName,
+  series,
   dimensionLabel,
   data,
 }: {
   title: string;
-  metricName: string;
+  series: Array<{ id: number; name: string }>;
   dimensionLabel: string | null;
   data: DashboardWidgetData;
 }) {
@@ -441,15 +426,17 @@ function RankingTable({
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">{title}</caption>
-          <RankingHeader dimensionLabel={dimensionLabel} metricName={metricName} />
+          <RankingHeader dimensionLabel={dimensionLabel} series={series} />
           <tbody>
             {data.points.map((point, index) => (
               <tr key={`${point.rawLabel}-${index}`} className="border-b border-border/60">
                 <td className="px-2 py-1.5 tabular-nums text-muted-foreground">{index + 1}</td>
                 <th scope="row" className="px-2 py-1.5 font-normal text-foreground">{point.label}</th>
-                <td className="px-2 py-1.5 text-right tabular-nums text-foreground">
-                  {formatCellValue(point.rawValue)}
-                </td>
+                {series.map((item, seriesIndex) => (
+                  <td key={item.id} className="px-2 py-1.5 text-right tabular-nums text-foreground">
+                    {formatCellValue(point.seriesRawValues?.[item.id] ?? (seriesIndex === 0 ? point.rawValue : null))}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -464,17 +451,17 @@ function RankingTable({
 
 function RankingHeader({
   dimensionLabel,
-  metricName,
+  series,
 }: {
   dimensionLabel: string | null;
-  metricName: string;
+  series: Array<{ id: number; name: string }>;
 }) {
   return (
     <thead className="sticky top-0 bg-card">
       <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
         <th scope="col" className="px-2 py-2 font-medium">#</th>
         <th scope="col" className="px-2 py-2 font-medium">{dimensionLabel ?? 'Mục'}</th>
-        <th scope="col" className="px-2 py-2 text-right font-medium">{metricName}</th>
+        {series.map((item) => <th key={item.id} scope="col" className="px-2 py-2 text-right font-medium">{item.name}</th>)}
       </tr>
     </thead>
   );

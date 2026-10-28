@@ -139,6 +139,16 @@ describe('buildWidgetQueryRequests', () => {
     expect(requests[0].dimensions?.[0]?.time_grain).toBe('quarter');
   });
 
+  it('queries each selected metric and carries the chosen sort metric', () => {
+    const requests = buildWidgetQueryRequests({
+      widget: widget({ chart_type: 'bar', dimension_col_id: 12, metric_ids: [5, 8], order_metric_id: 8 }),
+      globalGrain: null,
+      datePreset: null,
+    });
+
+    expect(requests[0]).toMatchObject({ metric_ids: [5, 8], order_metric_id: 8, order_by: 'metric_desc' });
+  });
+
   it('requests categorical dimensions without a time grain', () => {
     for (const chartType of ['bar', 'pie', 'table'] as const) {
       const requests = buildWidgetQueryRequests({
@@ -199,6 +209,22 @@ describe('buildWidgetQueryRequests', () => {
 });
 
 describe('result to points mapping', () => {
+  it('preserves missing metric cells in each multi-metric point', () => {
+    const points = buildWidgetPoints({
+      result: makeResult(['metric_8', 'dimension_12', 'metric_5'], [[null, '2026-01', 4]]),
+      metricId: 5,
+      metricIds: [5, 8],
+      dimensionId: 12,
+      sortByTime: false,
+    });
+
+    expect(points[0]).toMatchObject({
+      value: 4,
+      seriesValues: { 5: 4, 8: null },
+      seriesRawValues: { 5: 4, 8: null },
+    });
+  });
+
   it('maps alias columns into formatted points with null safety', () => {
     const points = buildWidgetPoints({
       result: makeResult(

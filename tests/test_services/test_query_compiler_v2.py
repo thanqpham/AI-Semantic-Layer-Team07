@@ -1,5 +1,6 @@
 """Behavior tests for the canonical semantic query compiler interface."""
 
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -22,6 +23,11 @@ def test_query_request_passes_optional_order_to_compiler_spec() -> None:
     request = SemanticQueryRequest(metric_ids=[5], dimensions=[DimensionSelection(column_id=3)], order_by="metric_desc")
     assert request.to_spec().order_by == "metric_desc"
     assert SemanticQueryRequest(metric_ids=[5]).to_spec().order_by is None
+
+
+def test_query_request_passes_sort_metric_to_compiler_spec() -> None:
+    request = SemanticQueryRequest(metric_ids=[5, 6], order_by="metric_desc", order_metric_id=6)
+    assert request.to_spec().order_metric_id == 6
 
 
 async def _seed_filtered_metrics(db: AsyncSession) -> tuple[int, list[int]]:
@@ -902,6 +908,338 @@ async def test_multi_fact_plan_aligns_shared_dimension_and_compiles_all_dialects
     )
     result = await async_session.execute(text(compiled.sql), compiled.parameters)
     assert result.all() == [("north", 2.0), ("south", None)]
+
+
+async def _seed_same_fact_plan_bundle(db: AsyncSession) -> tuple[int, list[int], int, int, int]:
+    db_id, metric_ids = await _seed_filtered_metrics(db)
+    orders = await _table(db, db_id, "orders")
+    category = SemanticColumnModel(
+        table_id=orders.id, column_name="category", data_type="TEXT", business_name="Category"
+    )
+    status = await _column(db, orders.id, "status")
+    is_test = await _column(db, orders.id, "is_test")
+    db.add(category)
+    await db.flush()
+    for metric_id, name, status_value, group_name in (
+        (metric_ids[0], "completed_amount", "completed", "category"),
+        (metric_ids[1], "cancelled_amount", "cancelled", "sales_category"),
+    ):
+        await _update_same_fact_plan(db, metric_id, name, status_value, group_name, category.id, status.id)
+    await db.commit()
+    await _create_same_fact_rows(db)
+    return db_id, metric_ids, category.id, status.id, is_test.id
+
+
+def _same_fact_plan_definition(
+    name: str, status_value: str, group_name: str, category_id: int, status_id: int
+) -> dict[str, Any]:
+    return {
+        "schema_version": 3,
+        "metric": {
+            "name": name,
+            "base_entity": "orders",
+            "formula": {"function": "COUNT", "expression": "*"},
+            "query_plan": {"stages": [_same_fact_stage(group_name, category_id)], "output_expression": "result.amount"},
+            "filters": [{"field": "status", "column_id": status_id, "operator": "eq", "value": status_value}],
+            "status": "approved",
+        },
+    }
+
+
+def _same_fact_stage(group_name: str, category_id: int) -> dict[str, Any]:
+    return {
+        "name": "result",
+        "base_entity": "orders",
+        "group_by": [{"name": group_name, "expression": "orders.category", "column_id": category_id}],
+        "aggregates": [{"name": "amount", "function": "SUM", "expression": "orders.amount"}],
+    }
+
+
+async def _update_same_fact_plan(
+    db: AsyncSession, metric_id: int, name: str, status_value: str, group_name: str, category_id: int, status_id: int
+) -> None:
+    metric = await db.get(SemanticMetricModel, metric_id)
+    assert metric is not None
+    metric.name = name
+    metric.definition = _same_fact_plan_definition(name, status_value, group_name, category_id, status_id)
+
+
+async def _create_same_fact_rows(db: AsyncSession) -> None:
+    await db.execute(
+        text('CREATE TABLE "orders" ("id" INTEGER, "amount" NUMERIC, "status" TEXT, "category" TEXT, "is_test" INTEGER)')
+    )
+    await db.execute(
+        text(
+            "INSERT INTO orders VALUES (1,10,'completed','A',0),(2,20,'completed','A',0),"
+            "(3,7,'cancelled','B',0),(4,5,'completed',NULL,0),(5,2,'cancelled',NULL,0),"
+            "(6,99,'cancelled','C',1)"
+        )
+    )
+
+
+async def _add_shared_region(
+    db: AsyncSession, db_id: int
+) -> tuple[SemanticTableModel, SemanticColumnModel, SemanticColumnModel]:
+    customers = SemanticTableModel(
+        db_id=db_id, table_name="customers", business_name="Customers", description="", primary_key_column="id"
+    )
+    db.add(customers)
+    await db.flush()
+    customer_id = SemanticColumnModel(
+        table_id=customers.id, column_name="id", data_type="INTEGER", business_name="ID", is_primary_key=True
+    )
+    region = SemanticColumnModel(table_id=customers.id, column_name="region", data_type="TEXT", business_name="Region")
+    db.add_all([customer_id, region])
+    await db.flush()
+    return customers, customer_id, region
+
+
+async def _add_returns_fact(
+    db: AsyncSession, db_id: int
+) -> tuple[SemanticTableModel, SemanticColumnModel, SemanticColumnModel]:
+    returns = SemanticTableModel(
+        db_id=db_id, table_name="returns", business_name="Returns", description="", primary_key_column="id"
+    )
+    db.add(returns)
+    await db.flush()
+    customer_id = SemanticColumnModel(
+        table_id=returns.id, column_name="customer_id", data_type="INTEGER", business_name="Customer ID"
+    )
+    amount = SemanticColumnModel(table_id=returns.id, column_name="amount", data_type="NUMERIC", business_name="Amount")
+    db.add_all([customer_id, amount])
+    await db.flush()
+    return returns, customer_id, amount
+
+
+def _fact_plan_definition(name: str, base: str, dimension_id: int, aggregate: str) -> dict[str, Any]:
+    return {
+        "schema_version": 3,
+        "metric": {
+            "name": name,
+            "base_entity": base,
+            "formula": {"function": "COUNT", "expression": "*"},
+            "query_plan": {
+                "stages": [
+                    {
+                        "name": "result",
+                        "base_entity": base,
+                        "joins": ["customers"],
+                        "group_by": [
+                            {"name": "region", "expression": "customers.region", "column_id": dimension_id}
+                        ],
+                        "aggregates": [{"name": "amount", "function": "SUM", "expression": aggregate}],
+                    }
+                ],
+                "output_expression": "result.amount",
+            },
+            "filters": [],
+            "status": "approved",
+        },
+    }
+
+
+async def _link_fact_to_region(
+    db: AsyncSession,
+    db_id: int,
+    fact: SemanticTableModel,
+    fact_column: SemanticColumnModel,
+    customers: SemanticTableModel,
+    customer_id: SemanticColumnModel,
+) -> None:
+    db.add(
+        CanonicalRelationshipModel(
+            connection_id=db_id,
+            from_entity_id=fact.id,
+            to_entity_id=customers.id,
+            relationship_type="many_to_one",
+            join_condition=f"{fact.table_name}.customer_id = customers.id",
+            relationship_key=f"{fact.table_name}_region_plan_test",
+            column_pairs=[{"from_column_id": fact_column.id, "to_column_id": customer_id.id}],
+            validation_status="valid",
+        )
+    )
+
+
+async def _seed_distinct_fact_bundle(db: AsyncSession) -> tuple[int, list[int], int, int]:
+    db_id, metric_ids = await _seed_filtered_metrics(db)
+    orders = await _table(db, db_id, "orders")
+    order_customer = SemanticColumnModel(
+        table_id=orders.id, column_name="customer_id", data_type="INTEGER", business_name="Customer ID"
+    )
+    db.add(order_customer)
+    customers, customer_id, region = await _add_shared_region(db, db_id)
+    returns, return_customer, _ = await _add_returns_fact(db, db_id)
+    await _link_fact_to_region(db, db_id, orders, order_customer, customers, customer_id)
+    await _link_fact_to_region(db, db_id, returns, return_customer, customers, customer_id)
+    await _set_fact_plans(db, metric_ids, orders, returns, region.id)
+    await db.commit()
+    await _create_distinct_fact_rows(db)
+    return db_id, metric_ids, region.id, await _column_id(db, orders.id, "status")
+
+
+async def _set_fact_plans(
+    db: AsyncSession, metric_ids: list[int], orders: SemanticTableModel, returns: SemanticTableModel, region_id: int
+) -> None:
+    for metric_id, name, base, table in (
+        (metric_ids[0], "Sales", "orders", orders),
+        (metric_ids[1], "Refunds", "returns", returns),
+    ):
+        metric = await db.get(SemanticMetricModel, metric_id)
+        assert metric is not None
+        metric.name = name
+        metric.base_entity_id = table.id
+        metric.definition = _fact_plan_definition(name, base, region_id, f"{base}.amount")
+
+
+async def _create_distinct_fact_rows(db: AsyncSession) -> None:
+    await db.execute(text('CREATE TABLE "customers" ("id" INTEGER, "region" TEXT)'))
+    await db.execute(
+        text(
+            'CREATE TABLE "orders" ("id" INTEGER, "amount" NUMERIC, "status" TEXT, "is_test" INTEGER, "customer_id" INTEGER)'
+        )
+    )
+    await db.execute(text('CREATE TABLE "returns" ("id" INTEGER, "amount" NUMERIC, "customer_id" INTEGER)'))
+    await db.execute(text("INSERT INTO customers VALUES (1, 'north'), (2, 'south')"))
+    await db.execute(
+        text("INSERT INTO orders VALUES (1, 10, 'completed', 0, 1), (2, 20, 'completed', 0, 1), (3, 7, 'completed', 0, 2)")
+    )
+    await db.execute(text("INSERT INTO returns VALUES (1, 3, 1)"))
+
+
+async def _column_id(db: AsyncSession, table_id: int, name: str) -> int:
+    return (await _column(db, table_id, name)).id
+
+
+@pytest.mark.asyncio
+async def test_multiple_plans_align_shared_grain_without_multiplying_rows(async_session: AsyncSession) -> None:
+    db_id, metric_ids, category_id, _, is_test_id = await _seed_same_fact_plan_bundle(async_session)
+    query = SemanticQuerySpec(
+        metric_ids=metric_ids,
+        dimensions=[DimensionSelection(column_id=category_id)],
+        filters=[SemanticQueryFilter(column_id=is_test_id, operator="eq", value=0)],
+        order_by="metric_desc",
+        order_metric_id=metric_ids[0],
+    )
+    compiled = await SemanticQueryCompiler(async_session).compile(db_id, query)
+    rows = await async_session.execute(text(compiled.sql), compiled.parameters)
+    assert rows.all() == [("A", 30.0, None), (None, 5.0, 2.0), ("B", None, 7.0)]
+
+
+@pytest.mark.asyncio
+async def test_multi_plan_parameters_and_metadata_are_namespaced(async_session: AsyncSession) -> None:
+    db_id, metric_ids, category_id, _, _ = await _seed_same_fact_plan_bundle(async_session)
+    compiled = await SemanticQueryCompiler(async_session).compile(
+        db_id, SemanticQuerySpec(metric_ids=metric_ids, dimensions=[DimensionSelection(column_id=category_id)])
+    )
+    assert {name.split("_plan_", maxsplit=1)[0] for name in compiled.parameters} == {
+        f"metric_{metric_id}" for metric_id in metric_ids
+    }
+    assert compiled.metadata["metrics"] == {
+        f"metric_{metric_ids[0]}": "completed_amount",
+        f"metric_{metric_ids[1]}": "cancelled_amount",
+    }
+
+
+@pytest.mark.asyncio
+async def test_multi_plan_metric_order_requires_a_selected_order_metric(async_session: AsyncSession) -> None:
+    db_id, metric_ids, category_id, _, _ = await _seed_same_fact_plan_bundle(async_session)
+    common = {
+        "metric_ids": metric_ids,
+        "dimensions": [DimensionSelection(column_id=category_id)],
+        "order_by": "metric_desc",
+    }
+    with pytest.raises(SemanticCompileError) as missing:
+        await SemanticQueryCompiler(async_session).compile(db_id, SemanticQuerySpec(**common))
+    assert missing.value.code == "SORT_METRIC_REQUIRED"
+    with pytest.raises(SemanticCompileError) as invalid:
+        await SemanticQueryCompiler(async_session).compile(db_id, SemanticQuerySpec(**common, order_metric_id=999))
+    assert invalid.value.code == "INVALID_SORT_METRIC"
+
+
+@pytest.mark.asyncio
+async def test_plan_grain_mismatch_has_typed_diagnostic(async_session: AsyncSession) -> None:
+    db_id, metric_ids, category_id, status_id, _ = await _seed_same_fact_plan_bundle(async_session)
+    metric = await async_session.get(SemanticMetricModel, metric_ids[1])
+    assert metric is not None
+    definition = deepcopy(metric.definition)
+    definition["metric"]["query_plan"]["stages"][0]["group_by"] = [
+        {"name": "status", "expression": "orders.status", "column_id": status_id}
+    ]
+    metric.definition = definition
+    await async_session.commit()
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(
+            db_id, SemanticQuerySpec(metric_ids=metric_ids, dimensions=[DimensionSelection(column_id=category_id)])
+        )
+    assert error.value.code == "INCOMPATIBLE_GRAIN"
+
+
+@pytest.mark.asyncio
+async def test_non_time_dimension_rejects_time_grain_for_plan_bundle(async_session: AsyncSession) -> None:
+    db_id, metric_ids, category_id, _, _ = await _seed_same_fact_plan_bundle(async_session)
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(
+            db_id,
+            SemanticQuerySpec(
+                metric_ids=metric_ids,
+                dimensions=[DimensionSelection(column_id=category_id, time_grain="month")],
+            ),
+        )
+    assert error.value.code == "INVALID_TIME_GRAIN"
+
+
+@pytest.mark.asyncio
+async def test_plan_bundle_allows_distinct_safe_fact_lineages(async_session: AsyncSession) -> None:
+    db_id, metric_ids, region_id, _ = await _seed_distinct_fact_bundle(async_session)
+    compiled = await SemanticQueryCompiler(async_session).compile(
+        db_id, SemanticQuerySpec(metric_ids=metric_ids, dimensions=[DimensionSelection(column_id=region_id)])
+    )
+    rows = await async_session.execute(text(compiled.sql), compiled.parameters)
+    assert set(rows.all()) == {("north", 30, 3), ("south", 7, None)}
+
+
+@pytest.mark.asyncio
+async def test_runtime_filter_missing_from_later_plan_rejects_whole_bundle(async_session: AsyncSession) -> None:
+    db_id, metric_ids, region_id, status_id = await _seed_distinct_fact_bundle(async_session)
+    query = SemanticQuerySpec(
+        metric_ids=metric_ids,
+        dimensions=[DimensionSelection(column_id=region_id)],
+        filters=[SemanticQueryFilter(column_id=status_id, operator="eq", value="completed")],
+    )
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(db_id, query)
+    assert error.value.code == "UNSUPPORTED_PLAN_FILTER"
+    assert error.value.context["reason"] == "not_in_plan"
+
+
+@pytest.mark.asyncio
+async def test_plan_and_simple_metric_remain_incompatible(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    orders = await _table(async_session, db_id, "orders")
+    category = SemanticColumnModel(
+        table_id=orders.id, column_name="category", data_type="TEXT", business_name="Category"
+    )
+    async_session.add(category)
+    await async_session.flush()
+    metric = await async_session.get(SemanticMetricModel, metric_ids[0])
+    assert metric is not None
+    metric.definition = _grouped_sales_plan(category.id)
+    await async_session.commit()
+
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(
+            db_id,
+            SemanticQuerySpec(metric_ids=metric_ids, dimensions=[DimensionSelection(column_id=category.id)]),
+        )
+    assert error.value.code == "INCOMPATIBLE_QUERY_PLAN"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_plan_selection_keeps_duplicate_diagnostic(async_session: AsyncSession) -> None:
+    db_id, metric_ids = await _seed_filtered_metrics(async_session)
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(db_id, SemanticQuerySpec(metric_ids=[metric_ids[0]] * 2))
+    assert error.value.code == "DUPLICATE_SELECTION"
 
 
 @pytest.mark.asyncio

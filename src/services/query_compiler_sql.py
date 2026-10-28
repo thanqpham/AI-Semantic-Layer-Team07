@@ -88,6 +88,7 @@ def _assemble_sql(
     limit: int,
     fixed: list[str],
     order_by: str | None = None,
+    sort_metric_position: int | None = None,
 ) -> str:
     columns_clause = ",\n  ".join(selections)
     parts = [f"SELECT\n  {columns_clause}", f"FROM {_table_sql(base, dialect)}"]
@@ -101,11 +102,14 @@ def _assemble_sql(
         groups_clause = ", ".join(groups)
         parts.append(f"GROUP BY {groups_clause}")
     if order_by:
-        if not groups or len(selections) != 2:
+        if not groups or len(selections) < 2:
             raise ValueError("Ordered dashboard queries require one metric and one dimension")
         if order_by == "metric_desc":
-            metric_expression = selections[1].rsplit(" AS ", 1)[0]
-            parts.append(f"ORDER BY ({metric_expression}) IS NULL, 2 DESC, 1 ASC")
+            metric_position = sort_metric_position or 2
+            if metric_position < 2 or metric_position > len(selections):
+                raise ValueError("Sort metric position must select a metric output")
+            metric_expression = selections[metric_position - 1].rsplit(" AS ", 1)[0]
+            parts.append(f"ORDER BY ({metric_expression}) IS NULL, {metric_position} DESC, 1 ASC")
         else:
             dimension_expression = selections[0].rsplit(" AS ", 1)[0]
             parts.append(f"ORDER BY ({dimension_expression}) IS NULL, 1 DESC")

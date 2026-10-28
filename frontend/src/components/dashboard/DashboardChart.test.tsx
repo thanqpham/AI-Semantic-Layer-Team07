@@ -249,6 +249,30 @@ describe('DashboardChart rendering', () => {
     expect(screen.getByText(/\+2 mục khác/)).toBeInTheDocument();
   });
 
+  it('renders named line series and accessible values for each selected metric', () => {
+    render(
+      <DashboardChart
+        widget={makeWidget({ chart_type: 'line', dimension_col_id: 3, metric_ids: [5, 7] })}
+        title="Metrics by region"
+        metricName="Revenue"
+        metricNames={['Revenue', 'Orders']}
+        dimensionLabel="Region"
+        data={makeData({
+          points: [{
+            label: 'North', rawLabel: 'North', value: 12, rawValue: 12,
+            seriesValues: { 5: 12, 7: null }, seriesRawValues: { 5: 12, 7: null },
+          }],
+        })}
+      />,
+    );
+
+    expect(recharts.Line).toHaveBeenCalledTimes(2);
+    const summary = screen.getByRole('table', { hidden: true });
+    expect(summary).toHaveTextContent('Revenue');
+    expect(summary).toHaveTextContent('Orders');
+    expect(summary).toHaveTextContent('—');
+  });
+
   it('keeps a visually hidden textual fallback for categorical charts', () => {
     const { container } = renderChart(
       makeWidget({ chart_type: 'bar', dimension_col_id: 3 }),
