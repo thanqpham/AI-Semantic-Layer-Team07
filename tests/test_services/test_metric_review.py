@@ -367,6 +367,33 @@ def test_oversize_context_is_rejected_without_truncation():
             prepare_proposal_context({"user_message": "Tính doanh thu", "enriched_schema": schema()})
 
 
+def test_server_selected_variant_is_revalidated_and_added_to_curated_context():
+    selection = {
+        "knowledge_id": "net_sales",
+        "variant_id": "merchandise_net_including_vat",
+        "criteria": {"tax_basis": "includes_vat", "refund_policy": "subtract_sales_reversals"},
+    }
+    context_result = prepare_proposal_context({
+        "user_message": "Doanh thu trước hay sau thuế?",
+        "enriched_schema": schema(),
+        "selected_metric_variant": selection,
+    })
+    assert context_result["selected_metric_variant"] == selection
+    assert any(item["id"] == "net_sales" for item in context_result["knowledge"]["metrics"])
+
+
+def test_selected_variant_rejects_forged_criteria():
+    selection = {
+        "knowledge_id": "net_sales", "variant_id": "merchandise_net_sales",
+        "criteria": {"tax_basis": "includes_vat"},
+    }
+    with pytest.raises(ValueError, match="không còn hợp lệ"):
+        prepare_proposal_context({
+            "user_message": "Doanh thu", "enriched_schema": schema(),
+            "selected_metric_variant": selection,
+        })
+
+
 @pytest.mark.parametrize(
     "raw",
     [

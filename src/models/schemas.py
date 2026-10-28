@@ -342,6 +342,9 @@ class MetricSuggestionItem(BaseModel):
     yaml_preview: str
     conflict: MetricConflictInfo | None = None
     proposal_id: str | None = None
+    candidate_id: str | None = None
+    group_id: str | None = None
+    group_name: str | None = None
     review: MetricReview | None = None
     variant_id: str | None = None
     criteria: dict[str, str] = Field(default_factory=dict)
@@ -929,6 +932,7 @@ class ChatClarificationOption(BaseModel):
     description: str | None = None
     spec: SemanticQuerySpec | None = None
     action: str | None = None
+    action_payload: dict[str, Any] | None = None
 
 
 class ChatClarificationSelection(BaseModel):

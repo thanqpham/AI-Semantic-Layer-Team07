@@ -12,6 +12,7 @@ from src.agents.nodes.schema.save_node import _selected_review_evidence
 from src.agents.roles.metric_designer_agent import generate_metric_drafts
 from src.agents.workflows.metric_proposal_workflow import _graph
 from src.models.metric_review import MetricBuildBatch, MetricReview
+from src.services.metric_knowledge import load_metric_knowledge
 from tests.metric_review_helpers import context, definition, reviewer_mock, schema
 
 
@@ -81,14 +82,26 @@ def test_discovery_caps_results_and_preserves_blocked_reports():
     assert all(i["review"]["status"] == "pass" for i in result["suggested_metrics"])
 
 
-def test_passing_variant_does_not_pause_for_another_variant_clarification():
+def test_mixed_variant_results_keep_passing_candidate_and_offer_curated_choices():
+    family = {
+        "id": "net_sales", "name": "Net sales", "variants": [
+            {"id": "before_tax", "name": "Before tax", "criteria": {"tax_basis": "excludes_tax"}, "required_data": ["Before tax amount"]},
+            {"id": "after_tax", "name": "After tax", "criteria": {"tax_basis": "includes_vat"}, "required_data": ["After tax amount"]},
+        ],
+    }
     passed = {
         "name": "Giá trị đơn hàng trước thuế",
+        "group_id": "net_sales",
         "final_definition": definition(),
-        "review": MetricReview(status="pass", summary="Đạt").model_dump(mode="json"),
+        "context": {"candidate": {"id": "candidate-pass", "knowledge_id": "net_sales", "variant_id": "before_tax"}},
+        "review": MetricReview(
+            status="pass", summary="Đạt", variant_id="before_tax", criteria={"tax_basis": "excludes_tax"}
+        ).model_dump(mode="json"),
     }
     blocked = {
         "name": "Giá trị đơn hàng sau thuế",
+        "group_id": "net_sales",
+        "context": {"requirement": "Revenue before or after tax", "knowledge": {"metrics": [family]}, "schema": {}},
         "final_definition": None,
         "review": MetricReview(
             status="needs_clarification",
@@ -99,7 +112,33 @@ def test_passing_variant_does_not_pause_for_another_variant_clarification():
     result = reviewed_state([passed, blocked], {})
     assert len(result["suggested_metrics"]) == 1
     assert result["blocked_candidates"][0]["review"]["status"] == "needs_clarification"
-    assert "clarification" not in result
+    assert [item["action_payload"]["variant_id"] for item in result["clarification"]["options"]] == ["before_tax"]
+    all_blocked = reviewed_state([blocked], {})
+    assert all_blocked["clarification"]["options"] == []
+
+
+def test_all_blocked_variants_offer_no_choices_without_reviewed_sibling_evidence():
+    family = next(item for item in load_metric_knowledge()["metrics"] if item["id"] == "net_sales")
+    proposal = {
+        "name": "Net sales", "group_id": "net_sales", "final_definition": None,
+        "context": {"requirement": "Net sales", "knowledge": {"metrics": [family]}},
+        "review": MetricReview(status="needs_clarification", summary="Need tax basis").model_dump(mode="json"),
+    }
+
+    def options(schema: dict) -> list[dict]:
+        proposal["context"]["schema"] = schema
+        return reviewed_state([proposal], {})["clarification"]["options"]
+
+    assert options({"tables": []}) == []
+    incomplete = {"tables": [{"table_name": "orders", "columns": [{"column_name": "vat"}]}]}
+    assert options(incomplete) == []
+    compatible = {
+        "tables": [{"table_name": "orders", "columns": [
+            {"column_name": "net_amount", "business_name": "net merchandise amount before VAT"},
+            {"column_name": "vat_amount", "business_name": "VAT amount after reversals on the same grain"},
+        ]}],
+    }
+    assert options(compatible) == []
 
 
 def test_projection_cannot_replace_a_reviewed_metric_without_duplicate_evidence():

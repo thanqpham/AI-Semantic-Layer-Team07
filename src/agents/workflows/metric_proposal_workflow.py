@@ -29,6 +29,22 @@ from src.services.metric_review import (
 )
 from src.services.metric_runtime import MetricCallError, execution_failure, invalid_output, validation_failure
 
+_STATUSES = ("pass", "needs_revision", "needs_clarification", "rejected", "unsupported", "error")
+_REASON_FIELDS = {
+    "UNRESOLVED_ASSUMPTION": "reason_unresolved_assumption_count",
+    "MISSING_GRAIN": "reason_missing_grain_count",
+    "VARIANT_CONFLICT": "reason_variant_conflict_count",
+    "MISSING_RATIO": "reason_missing_ratio_count",
+    "TECHNICAL_VALIDATION": "reason_technical_validation_count",
+    "REVIEWER_FINDING": "reason_reviewer_finding_count",
+    "BUILDER_CLARIFICATION": "reason_builder_clarification_count",
+    "BUILDER_UNSUPPORTED": "reason_builder_unsupported_count",
+    "BUILDER_REJECTED": "reason_builder_rejected_count",
+    "INVALID_AGENT_OUTPUT": "reason_invalid_agent_output_count",
+    "PROVIDER_FAILURE": "reason_provider_failure_count",
+    "OTHER": "reason_other_count",
+}
+
 
 class MetricWorkflowState(TypedDict):
     context: dict[str, Any]
@@ -40,9 +56,18 @@ class MetricWorkflowState(TypedDict):
 
 
 async def run_metric_workflow(
-    context: dict[str, Any], drafts: list[dict[str, Any]] | None = None, allow_repair: bool = True
+    context: dict[str, Any], drafts: list[dict[str, Any]] | None = None, allow_repair: bool = True,
+    candidate_ids: list[str | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Run the same bounded coordinator for chat, API generation and re-review."""
+    state = _workflow_state(context, drafts, allow_repair, candidate_ids)
+    return await _run_observed(state)
+
+
+def _workflow_state(
+    context: dict[str, Any], drafts: list[dict[str, Any]] | None, allow_repair: bool,
+    candidate_ids: list[str | None] | None,
+) -> MetricWorkflowState:
     context = {key: value for key, value in context.items() if key not in {"task_id", "candidate", "handoffs", "audit"}}
     state: MetricWorkflowState = {
         "context": context,
@@ -52,8 +77,16 @@ async def run_metric_workflow(
         "preset": drafts is not None,
         "allow_repair": allow_repair,
     }
-    state["items"] = [_item(raw) for raw in drafts or []]
+    state["items"] = [
+        _item(raw, candidate_ids[index] if candidate_ids and index < len(candidate_ids) else None)
+        for index, raw in enumerate(drafts or [])
+    ]
+    return state
+
+
+async def _run_observed(state: MetricWorkflowState) -> list[dict[str, Any]]:
     with observation("metric_workflow", agent=True) as span:
+        context = state["context"]
         if span is not None:
             span.update(input=trace_summary(mode=context.get("proposal_mode"), proposal_count=len(state["items"])))
         result = await _graph().ainvoke(state)
@@ -61,12 +94,42 @@ async def run_metric_workflow(
         if span is not None:
             span.update(
                 output=trace_summary(
-                    proposal_count=len(evidence),
-                    pass_count=sum(item["review"]["status"] == "pass" for item in evidence),
+                    **_candidate_trace_summary(evidence),
+                    family_count=len({item.get("group_id") for item in evidence if item.get("group_id")}),
                     repair_count=sum(bool(item["review"].get("repair_reason")) for item in evidence),
                 )
             )
         return evidence
+
+
+def _candidate_trace_summary(evidence: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {
+        "proposal_count": len(evidence),
+        "candidate_count": len({item.get("candidate_id") for item in evidence}),
+    }
+    summary.update({f"{status}_count": 0 for status in _STATUSES})
+    summary.update({field: 0 for field in _REASON_FIELDS.values()})
+    for item in evidence:
+        review = item["review"]
+        summary[f"{review['status']}_count"] += 1
+        reason = _reason_code(review)
+        if reason:
+            summary[_REASON_FIELDS[reason]] += 1
+    return summary
+
+
+def _reason_code(review: dict[str, Any]) -> str | None:
+    code = review.get("reason_code")
+    if code in _REASON_FIELDS:
+        return code
+    error = review.get("execution_error") or {}
+    if error:
+        return "INVALID_AGENT_OUTPUT" if error.get("code") == "INVALID_AGENT_OUTPUT" else "PROVIDER_FAILURE"
+    if review.get("issues"):
+        return "REVIEWER_FINDING"
+    if review.get("status") in {"needs_revision", "needs_clarification", "rejected", "unsupported"}:
+        return "REVIEWER_FINDING"
+    return "OTHER" if review.get("status") == "error" else None
 
 
 def _graph() -> Any:
@@ -91,9 +154,9 @@ def _graph() -> Any:
     return graph.compile()
 
 
-def _item(raw: dict[str, Any]) -> dict[str, Any]:
+def _item(raw: dict[str, Any], candidate_id: str | None = None) -> dict[str, Any]:
     return {
-        "id": str(uuid4()),
+        "id": candidate_id or str(uuid4()),
         "raw": raw,
         "original": raw.get("definition"),
         "name": str(raw.get("name") or "Metric theo yêu cầu"),
@@ -218,7 +281,9 @@ def _apply_decision(state: MetricWorkflowState, item: dict[str, Any], record: di
             field = "issues" if decision.issues else "clarification"
             raise ValueError(f"{field}:contradictory_pass")
         report = MetricReview(**decision.model_dump(exclude={"candidate_id"}))
-        item["report"] = _enforce_review(report, None, state["context"])
+        if report.status != "pass":
+            report.reason_code = "REVIEWER_FINDING"
+        item["report"] = _enforce_review(report, None, state["context"], item["raw"])
         item["phase"] = "done"
     except ValidationError as exc:
         record_failure(item, validation_failure("reviewer", exc))
@@ -258,6 +323,11 @@ async def _coordinate(state: MetricWorkflowState) -> dict[str, Any]:
 
 
 def _evidence(state: MetricWorkflowState, item: dict[str, Any]) -> dict[str, Any]:
+    report = _review_evidence(state, item)
+    return _serialize_evidence(state, item, report)
+
+
+def _review_evidence(state: MetricWorkflowState, item: dict[str, Any]) -> MetricReview:
     report = item["report"] or MetricReview(
         status="error",
         summary="Chưa nhận được kết quả thẩm định.",
@@ -275,7 +345,13 @@ def _evidence(state: MetricWorkflowState, item: dict[str, Any]) -> dict[str, Any
     if item["initial_report"]:
         report.repair_reason = item["initial_report"].summary
         report.repair_feedback = item["initial_report"].issues
+    if report.reason_code is None:
+        report.reason_code = _reason_code(report.model_dump(mode="json"))
     _record_review_result(report)
+    return report
+
+
+def _serialize_evidence(state: MetricWorkflowState, item: dict[str, Any], report: MetricReview) -> dict[str, Any]:
     context = {
         **state["context"],
         "task_id": state["task_id"],
@@ -283,12 +359,15 @@ def _evidence(state: MetricWorkflowState, item: dict[str, Any]) -> dict[str, Any
             "id": item["id"],
             "name": item["name"],
             "knowledge_id": item["raw"].get("knowledge_id"),
+            "group_id": item["raw"].get("knowledge_id"),
             "variant_id": item["raw"].get("variant_id"),
             "criteria": item["raw"].get("criteria", {}),
         },
     }
     return {
         "name": item["name"],
+        "candidate_id": item["id"],
+        "group_id": item["raw"].get("knowledge_id"),
         "context": context,
         "original_definition": item["original"],
         "final_definition": item["definition"].model_dump(mode="json")

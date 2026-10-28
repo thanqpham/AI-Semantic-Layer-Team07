@@ -42,6 +42,7 @@ _ENUMS = {
 }
 _NUMBERS = {
     "proposal_count",
+    "candidate_count",
     "reviewed_count",
     "pass_count",
     "needs_revision_count",
@@ -51,10 +52,23 @@ _NUMBERS = {
     "error_count",
     "repair_count",
     "table_count",
+    "family_count",
     "catalog_metrics",
     "sql_length",
     "attempt",
     "duration_ms",
+    "reason_unresolved_assumption_count",
+    "reason_missing_grain_count",
+    "reason_variant_conflict_count",
+    "reason_missing_ratio_count",
+    "reason_technical_validation_count",
+    "reason_reviewer_finding_count",
+    "reason_builder_clarification_count",
+    "reason_builder_unsupported_count",
+    "reason_builder_rejected_count",
+    "reason_invalid_agent_output_count",
+    "reason_provider_failure_count",
+    "reason_other_count",
 }
 
 
