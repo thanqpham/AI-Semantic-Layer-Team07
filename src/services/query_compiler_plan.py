@@ -8,13 +8,21 @@ import sqlglot
 from sqlglot import exp
 
 from src.models.metric_definition import MetricPlanStage
+from src.services.query_compiler_dialect import time_bucket_sql
+from src.services.query_compiler_parameters import (
+    bind_coerced_parameter,
+    bind_coerced_sequence,
+    coerce_filter_value,
+    validate_null_filter_value,
+)
 from src.services.query_compiler_sql import (
-    _normalize_value,
     _quoted,
     _table_name,
     _validated_join_condition,
 )
 from src.services.semantic_compile_error import SemanticCompileError
+
+__all__ = ["coerce_filter_value", "compile_plan_sql", "resolve_scoped_filter_stages"]
 
 
 def compile_plan_sql(
@@ -130,6 +138,7 @@ def _stage_sql(
 ) -> str:
     if stage.source_stage:
         source = stage_map[stage.source_stage]
+        _reject_nonadditive_rollup(stage, source)
         from_sql = _quoted(source.name, dialect)
         available = {field.name for field in source.group_by} | {item.name for item in source.aggregates}
         source_table = None
@@ -158,8 +167,9 @@ def _stage_sql(
     group_expressions = []
     for item in stage.group_by:
         expression = _plan_expression(item.expression, stage, source_table, tables, columns, available, dialect)
-        if item.column_id in dimension_grains:
-            expression = _time_bucket(expression, dimension_grains[item.column_id], dialect)
+        if source_table is not None and item.column_id in dimension_grains:
+            col_type = _column_data_type_by_id(item.column_id, columns)
+            expression = time_bucket_sql(expression, dimension_grains[item.column_id], dialect, col_type)
         group_expressions.append(expression)
     selected = [
         f"{expression} AS {_quoted(item.name, dialect)}"
@@ -167,7 +177,17 @@ def _stage_sql(
     ]
     where = [
         _plan_filter(
-            item, stage, source_table, tables, columns, available, dialect, parameters, "plan", parameter_namespace
+            item,
+            stage,
+            source_table,
+            tables,
+            columns,
+            available,
+            dialect,
+            parameters,
+            "plan",
+            parameter_namespace,
+            stage_map,
         )
         for item in stage.filters
     ]
@@ -189,6 +209,7 @@ def _stage_sql(
                 parameters,
                 aggregate.name,
                 parameter_namespace,
+                stage_map,
             )
             for item in aggregate.filters
         ]
@@ -209,6 +230,25 @@ def _stage_sql(
     if group:
         sql += " GROUP BY " + ", ".join(group)
     return f"{_quoted(stage.name, dialect)} AS ({sql})"
+
+
+def _reject_nonadditive_rollup(stage: MetricPlanStage, source: MetricPlanStage) -> None:
+    nonadditive = {item.name.casefold() for item in source.aggregates if item.function in {"AVG", "COUNT_DISTINCT"}}
+    for field in stage.group_by:
+        columns = sqlglot.parse_one(field.expression).find_all(exp.Column)
+        if any(column.name.casefold() in nonadditive for column in columns):
+            raise SemanticCompileError(
+                "INCOMPATIBLE_GRAIN", "Cannot group by an intermediate average or distinct count"
+            )
+    for aggregate in stage.aggregates:
+        if aggregate.expression == "*":
+            continue
+        expression = sqlglot.parse_one(aggregate.expression)
+        columns = list(expression.find_all(exp.Column))
+        source_aggregates = {item.name.casefold() for item in source.aggregates}
+        ratio = expression.find(exp.Div) and any(column.name.casefold() in source_aggregates for column in columns)
+        if ratio or any(column.name.casefold() in nonadditive for column in columns):
+            raise SemanticCompileError("INCOMPATIBLE_GRAIN", "Cannot aggregate an average, distinct count, or ratio")
 
 
 def _plan_expression(
@@ -262,38 +302,80 @@ def _plan_filter(
     parameters: dict[str, Any],
     prefix: str,
     parameter_namespace: str = "",
+    stage_map: dict[str, MetricPlanStage] | None = None,
 ) -> str:
-    field = item.field
+    column, data_type = _resolve_plan_filter_target(
+        item.field, stage, source_table, tables, columns, available, dialect, stage_map or {}
+    )
+    param_prefix = f"{parameter_namespace}{prefix}"
+    if item.operator in {"is_null", "is_not_null"}:
+        validate_null_filter_value(item.value, data_type, dialect)
+        return f"{column} {'IS NOT NULL' if item.operator == 'is_not_null' else 'IS NULL'}"
+    if item.operator in {"in", "not_in"}:
+        names = bind_coerced_sequence(item.value, data_type, dialect, parameters, param_prefix)
+        return f"{column} {'NOT IN' if item.operator == 'not_in' else 'IN'} ({', '.join(names)})"
+    if item.operator == "between":
+        names = bind_coerced_sequence(item.value, data_type, dialect, parameters, param_prefix, expected_length=2)
+        return f"{column} BETWEEN {names[0]} AND {names[1]}"
+    placeholder = bind_coerced_parameter(item.value, data_type, dialect, parameters, param_prefix)
+    symbol = {"eq": "=", "neq": "<>", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[item.operator]
+    return f"{column} {symbol} {placeholder}"
+
+
+def _resolve_plan_filter_target(
+    field: str,
+    stage: MetricPlanStage,
+    source_table: str | None,
+    tables: dict[str, Any],
+    columns: dict[str, dict[str, tuple[str, int, str]]],
+    available: set[str],
+    dialect: str,
+    stage_map: dict[str, MetricPlanStage],
+) -> tuple[str, str]:
     if source_table is None:
         stage_name, name = field.split(".", 1) if "." in field else (None, field)
         if (stage_name and stage_name.casefold() != (stage.source_stage or "").casefold()) or name not in available:
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage filter references an unknown previous output")
-        column = f"{_quoted(name, dialect)}"
-    else:
-        table, name = field.rsplit(".", 1) if "." in field else (source_table, field)
-        table_key = _resolve_plan_table_key(table, {source_table, *stage.joins}, tables)
-        record = columns.get(table_key or "", {}).get(name)
-        if table_key is None or record is None:
-            raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage filter references an unknown table or column")
-        table_model = tables[table_key]
-        column = exp.column(record[0], table=table_model.table_name, db=table_model.physical_schema, quoted=True).sql(
-            dialect=dialect
-        )
-    if item.operator == "is_null":
-        return column + " IS NULL"
-    if item.operator == "is_not_null":
-        return column + " IS NOT NULL"
-    if item.operator in {"in", "not_in"}:
-        names = []
-        for value in item.value:
-            key = f"{parameter_namespace}{prefix}_{len(parameters)}"
-            parameters[key] = _normalize_value(value)
-            names.append(":" + key)
-        return f"{column} {'NOT IN' if item.operator == 'not_in' else 'IN'} ({', '.join(names)})"
-    key = f"{parameter_namespace}{prefix}_{len(parameters)}"
-    parameters[key] = _normalize_value(item.value)
-    symbol = {"eq": "=", "neq": "<>", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[item.operator]
-    return f"{column} {symbol} :{key}"
+        data_type = _resolve_stage_output_type(stage.source_stage or "", name, stage_map, tables, columns)
+        return f"{_quoted(name, dialect)}", data_type
+    table, name = field.rsplit(".", 1) if "." in field else (source_table, field)
+    table_key = _resolve_plan_table_key(table, {source_table, *stage.joins}, tables)
+    record = columns.get(table_key or "", {}).get(name)
+    if table_key is None or record is None:
+        raise SemanticCompileError("UNKNOWN_REFERENCE", "Stage filter references an unknown table or column")
+    table_model = tables[table_key]
+    column = exp.column(record[0], table=table_model.table_name, db=table_model.physical_schema, quoted=True).sql(
+        dialect=dialect
+    )
+    return column, record[2] or ""
+
+
+def _resolve_stage_output_type(
+    stage_name: str,
+    field_name: str,
+    stage_map: dict[str, MetricPlanStage],
+    tables: dict[str, Any],
+    columns: dict[str, dict[str, tuple[str, int, str]]],
+) -> str:
+    source = stage_map.get(stage_name)
+    if source is None:
+        return ""
+    for agg in source.aggregates:
+        if agg.name == field_name:
+            if agg.function in {"COUNT", "COUNT_DISTINCT"}:
+                return "INTEGER"
+            return "FLOAT" if agg.function == "AVG" else "NUMERIC"
+    for grp in source.group_by:
+        if grp.name == field_name:
+            if source.source_stage:
+                target_name = grp.expression.split(".", 1)[-1]
+                return _resolve_stage_output_type(source.source_stage, target_name, stage_map, tables, columns)
+            base_table = source.base_entity or ""
+            tbl, col = grp.expression.rsplit(".", 1) if "." in grp.expression else (base_table, grp.expression)
+            t_key = _resolve_plan_table_key(tbl, {base_table, *source.joins}, tables)
+            record = columns.get(t_key or "", {}).get(col)
+            return (record[2] or "") if record is not None else ""
+    return ""
 
 
 def _resolve_plan_table_key(name: str, candidates: set[str], tables: dict[str, Any]) -> str | None:
@@ -343,22 +425,22 @@ def _output_expression(expression: str, stages: list[str], dialect: str) -> str:
     return parsed.sql(dialect=dialect)
 
 
-def _time_bucket(column: str, grain: str, dialect: str) -> str:
-    if dialect == "sqlite":
-        formats = {"day": "%Y-%m-%d", "week": "%Y-%W", "month": "%Y-%m", "year": "%Y"}
-        if grain == "quarter":
-            return f"strftime('%Y', {column}) || '-Q' || ((cast(strftime('%m', {column}) as integer) + 2) / 3)"
-        return f"strftime('{formats[grain]}', {column})"
-    if dialect == "mysql":
-        formats = {"day": "%Y-%m-%d", "week": "%x-%v", "month": "%Y-%m", "year": "%Y"}
-        if grain == "quarter":
-            return f"CONCAT(YEAR({column}), '-Q', QUARTER({column}))"
-        return f"DATE_FORMAT({column}, '{formats[grain]}')"
-    return f"DATE_TRUNC('{grain}', {column})"
+def _column_data_type_by_id(column_id: int | None, columns: dict[str, dict[str, tuple[str, int, str]]]) -> str:
+    if column_id is None:
+        return ""
+    for table_cols in columns.values():
+        for _, col_id, data_type in table_cols.values():
+            if col_id == column_id:
+                return data_type or ""
+    return ""
+
+
+def _time_bucket(column: str, grain: str, dialect: str, data_type: str = "") -> str:
+    return time_bucket_sql(column, grain, dialect, data_type)
 
 
 def _cast_dividend(value: exp.Expression, dialect: str) -> exp.Cast:
-    type_name = "REAL" if dialect == "sqlite" else "NUMERIC"
+    type_name = {"sqlite": "REAL", "mysql": "DECIMAL(65, 30)"}.get(dialect, "NUMERIC")
     return exp.Cast(this=value.copy(), to=exp.DataType.build(type_name))
 
 

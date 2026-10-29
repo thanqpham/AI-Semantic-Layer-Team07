@@ -5,11 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import sqlglot
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlglot import exp
 
 from src.models.db import SemanticMetricModel, SemanticTableModel
 from src.models.metric_definition import MetricDefinition, MetricQueryPlan
 from src.models.schemas import SemanticQuerySpec
+from src.services.query_compiler_lowering import lower_simple_metric
 from src.services.query_compiler_metadata import QueryCompilerMetadata
 from src.services.query_compiler_plan import compile_plan_sql
 from src.services.query_compiler_plan_bundle import compile_plan_bundle_sql
@@ -44,6 +47,7 @@ class SimpleMetricCompileContext:
     dimensions: list[dict[str, Any]]
     joins: list[dict[str, Any]]
     runtime_filters: list[dict[str, Any]]
+    exists_filters: list[dict[str, Any]]
     limit: int
     order_by: str | None
     order_metric_id: int | None
@@ -95,20 +99,16 @@ class QueryCompileOrchestrator:
         definitions = canonical_definitions(metrics)
         record_loaded_trace(trace, metrics, definitions, spec.limit)
         _validate_sort_metric(spec, metrics)
-        if any(item.metric.query_plan is not None for item in definitions):
-            if any(item.metric.query_plan is None for item in definitions):
-                raise SemanticCompileError(
-                    "INCOMPATIBLE_QUERY_PLAN", "Query plans cannot be combined with simple metrics"
-                )
-            if len(definitions) == 1:
-                trace.record(plan_type="metric_plan")
-                plan_context = await self._prepare_metric_plan(
-                    connection_id, spec, metrics[0], definitions[0], dialect, trace
-                )
-                return self._render_metric_plan(plan_context, trace)
+        if len(definitions) > 1:
             trace.record(plan_type="metric_plan_bundle")
             bundle = await self._prepare_metric_plan_bundle(connection_id, spec, metrics, definitions, dialect, trace)
             return self._render_metric_plan_bundle(bundle, trace)
+        if any(item.metric.query_plan is not None for item in definitions):
+            trace.record(plan_type="metric_plan")
+            plan_context = await self._prepare_metric_plan(
+                connection_id, spec, metrics[0], definitions[0], dialect, trace
+            )
+            return self._render_metric_plan(plan_context, trace)
         trace.record(plan_type="single_table")
         context = await self._prepare_simple_metric(connection_id, spec, metrics, definitions, dialect, trace)
         return self._render_simple_metric(context, trace)
@@ -125,7 +125,9 @@ class QueryCompileOrchestrator:
         base, table_by_id, base_columns, dimensions = await self._load_simple_metric_context(
             connection_id, spec, metrics, definitions
         )
-        dimensions, joins, runtime_filters = await self._prepare_simple_metric_selections(
+        trace.record(base_entity={"table_name": base.table_name, "table_id": base.id})
+        trace.step("validate_references")
+        dimensions, joins, runtime_filters, exists_filters = await self._prepare_simple_metric_selections(
             connection_id, spec, dimensions, base, table_by_id
         )
         _record_simple_metric_trace(trace, base, dimensions, joins, definitions, runtime_filters)
@@ -138,6 +140,7 @@ class QueryCompileOrchestrator:
             dimensions=dimensions,
             joins=joins,
             runtime_filters=runtime_filters,
+            exists_filters=exists_filters,
             limit=spec.limit,
             order_by=spec.order_by,
             order_metric_id=spec.order_metric_id,
@@ -191,10 +194,13 @@ class QueryCompileOrchestrator:
         dimensions: list[dict[str, Any]],
         base: SemanticTableModel,
         table_by_id: dict[int, SemanticTableModel],
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-        runtime_filters = await self._metadata.load_runtime_filters(connection_id, spec.filters)
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        loaded_filters = await self._metadata.load_runtime_filters(connection_id, spec.filters)
+        runtime_filters, exists_filters = await self._metadata.resolve_runtime_filters(
+            connection_id, base, loaded_filters
+        )
         joins = await self._metadata.resolve_joins(connection_id, base, dimensions + runtime_filters, table_by_id)
-        return dimensions, joins, runtime_filters
+        return dimensions, joins, runtime_filters, exists_filters
 
     def _render_simple_metric(self, context: SimpleMetricCompileContext, trace: CompileTraceBuilder) -> CompiledQuery:
         parameters: dict[str, Any] = {}
@@ -203,7 +209,9 @@ class QueryCompileOrchestrator:
         dimensions_sql, group_sql = _dimension_expressions(context.dimensions, context.dialect)
         shared = _shared_filters(context.definitions)
         residuals = [_residual_filters(item, shared) for item in context.definitions]
-        fixed = _fixed_predicates(shared, names, types, context.base.table_name, context.dialect, parameters)
+        fixed = _fixed_predicates(
+            shared, names, types, (context.base.physical_schema, context.base.table_name), context.dialect, parameters
+        )
         metrics_sql = _metric_expressions(
             context.metrics, context.definitions, context.base, names, types, context.dialect, parameters, residuals
         )
@@ -212,6 +220,7 @@ class QueryCompileOrchestrator:
             context.base,
             context.joins,
             context.runtime_filters,
+            context.exists_filters,
             group_sql,
             context.dialect,
             parameters,
@@ -221,7 +230,7 @@ class QueryCompileOrchestrator:
             sort_metric_position=_metric_sort_position(context.metrics, context.order_by, context.order_metric_id),
         )
         trace.step("render_sql")
-        validate_read_only(sql)
+        validate_read_only(sql, context.dialect)
         trace.step("validate_guardrails")
         metadata = _compiled_metadata(context.base, context.metrics, context.dimensions, context.joins)
         metadata["trace"] = trace.snapshot()
@@ -239,7 +248,7 @@ class QueryCompileOrchestrator:
         plan = _require_metric_plan(definition)
         metadata, dimensions, runtime_filters = await self._load_single_plan_context(connection_id, spec, plan)
         self._metadata.resolve_plan_stages(plan, metadata, metric, definition)
-        self._metadata.apply_plan_filters(plan, definition, runtime_filters, metadata)
+        self._metadata.apply_plan_filters(plan, definition, runtime_filters, metadata, dialect)
         _record_single_plan_trace(trace, plan, metadata, dimensions, definition, runtime_filters)
         return MetricPlanCompileContext(
             plan=plan,
@@ -273,12 +282,18 @@ class QueryCompileOrchestrator:
         dialect: str,
         trace: CompileTraceBuilder,
     ) -> MetricPlanBundleCompileContext:
+        for metric, definition in zip(metrics, definitions, strict=True):
+            if definition.metric.query_plan is None:
+                base, _ = await self._load_base_tables(
+                    connection_id, definition.metric.base_entity, [metric], [definition]
+                )
+                validate_definition_asts([definition], await self._metadata.load_base_columns(base.id))
         metadata = await self._metadata.load_metric_plan_metadata(connection_id)
         dimensions = await self._metadata.load_dimensions(connection_id, [item.column_id for item in spec.dimensions])
         apply_time_grains(dimensions, spec.dimensions)
         runtime_filters = await self._metadata.load_runtime_filters(connection_id, spec.filters)
         plans: list[tuple[int, MetricQueryPlan]] = _resolve_metric_plan_bundle(
-            self._metadata, metrics, definitions, runtime_filters, metadata
+            self._metadata, metrics, definitions, runtime_filters, metadata, dialect, spec
         )
         _record_metric_plan_bundle_trace(trace, plans, metadata, dimensions, definitions, runtime_filters)
         return MetricPlanBundleCompileContext(
@@ -372,8 +387,6 @@ def _record_simple_metric_trace(
     definitions: list[MetricDefinition],
     runtime_filters: list[dict[str, Any]],
 ) -> None:
-    trace.record(base_entity={"table_name": base.table_name, "table_id": base.id})
-    trace.step("validate_references")
     trace.record(join_path=trace_join_path(base.table_name, joins))
     trace.step("resolve_joins")
     trace.record(
@@ -416,16 +429,39 @@ def _resolve_metric_plan_bundle(
     definitions: list[MetricDefinition],
     runtime_filters: list[dict[str, Any]],
     metadata: Any,
+    dialect: str = "postgres",
+    spec: SemanticQuerySpec | None = None,
 ) -> list[tuple[int, MetricQueryPlan]]:
     plans: list[tuple[int, MetricQueryPlan]] = []
+    requested_ids = {item.column_id for item in spec.dimensions} if spec else set()
     for metric, definition in zip(metrics, definitions, strict=True):
         plan = definition.metric.query_plan
         if plan is None:
-            raise SemanticCompileError("INCOMPATIBLE_QUERY_PLAN", "Query plans cannot be combined with simple metrics")
+            plan = lower_simple_metric(
+                definition,
+                SemanticQuerySpec(metric_ids=[metric.id], dimensions=spec.dimensions),
+            )
+        plan = plan.model_copy(deep=True)
         metadata_loader.resolve_plan_stages(plan, metadata, metric, definition)
-        metadata_loader.apply_plan_filters(plan, definition, runtime_filters, metadata)
+        _validate_bundle_grain(plan, requested_ids)
+        metadata_loader.apply_plan_filters(plan, definition, runtime_filters, metadata, dialect)
         plans.append((metric.id, plan))
     return plans
+
+
+def _validate_bundle_grain(plan: MetricQueryPlan, dimension_ids: set[int]) -> None:
+    terminals = _terminal_stages(plan)
+    for stage in terminals:
+        if {field.column_id for field in stage.group_by} != dimension_ids:
+            raise SemanticCompileError("INCOMPATIBLE_GRAIN", "Selected dimensions must match every metric plan grain")
+
+
+def _terminal_stages(plan: MetricQueryPlan) -> list[Any]:
+    stage_map = {stage.name: stage for stage in plan.stages}
+    refs = {column.table for column in sqlglot.parse_one(plan.output_expression).find_all(exp.Column)}
+    if not refs or not refs.issubset(stage_map):
+        raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan output has invalid stage references")
+    return [stage_map[name] for name in refs]
 
 
 def _metric_plan_bundle_metadata(context: MetricPlanBundleCompileContext) -> dict[str, Any]:

@@ -25,9 +25,14 @@ from src.models.metric_definition import (
     MetricQueryPlan,
 )
 from src.models.schemas import SemanticQueryFilter
+from src.services.query_compiler_parameters import (
+    coerce_filter_value,
+    coerce_sequence_filter_values,
+    validate_null_filter_value,
+)
 from src.services.query_compiler_plan import resolve_scoped_filter_stages
-from src.services.query_compiler_sql import _coerce_literal, _column_info
-from src.services.relationship_runtime import RelationshipStep, active_relationship_filters, valid_pairs
+from src.services.query_compiler_sql import _column_info
+from src.services.relationship_runtime import RelationshipStep, active_relationship_filters, filter_path, valid_pairs
 from src.services.relationship_runtime import safe_join_path as _safe_join_path
 from src.services.semantic_compile_error import SemanticCompileError
 
@@ -107,32 +112,49 @@ class QueryCompilerMetadata:
         dimensions: list[dict[str, Any]],
         tables: dict[int, SemanticTableModel],
     ) -> list[dict[str, Any]]:
+        stmt = select(CanonicalRelationshipModel).where(
+            CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters()
+        )
+        relationships = list((await self._db.execute(stmt)).scalars().all())
+        column_names = await self._relationship_columns(relationships)
+        joins: list[dict[str, Any]] = []
+        joined = {base.id}
+        for table_id in {item["table_id"] for item in dimensions} - joined:
+            for rel in _safe_join_path(relationships, base.id, table_id):
+                if rel.to_entity_id not in joined:
+                    target = tables[rel.to_entity_id]
+                    if any(tables[item].table_name.casefold() == target.table_name.casefold() for item in joined):
+                        raise SemanticCompileError("UNSAFE_JOIN", "Join endpoints have ambiguous table names")
+                    joins.append(
+                        {
+                            "relationship_id": rel.id,
+                            "table_name": target.table_name,
+                            "physical_schema": target.physical_schema,
+                            "condition": _relationship_condition(rel, column_names),
+                        }
+                    )
+                    joined.add(rel.to_entity_id)
+        return joins
+
+    async def resolve_runtime_filters(
+        self, db_id: int, base: SemanticTableModel, filters: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Partition filters into safe WHERE predicates and fanout EXISTS paths."""
         result = await self._db.execute(
             select(CanonicalRelationshipModel).where(
                 CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters()
             )
         )
         relationships = list(result.scalars().all())
-        column_names = await self._relationship_columns(relationships)
-        joins: list[dict[str, Any]] = []
-        joined = {base.id}
-        for table_id in {item["table_id"] for item in dimensions} - joined:
-            for relationship in _safe_join_path(relationships, base.id, table_id):
-                target_id = relationship.to_entity_id
-                if target_id not in joined:
-                    target = tables[target_id]
-                    if any(tables[item].table_name.casefold() == target.table_name.casefold() for item in joined):
-                        raise SemanticCompileError("UNSAFE_JOIN", "Join endpoints have ambiguous table names")
-                    joins.append(
-                        {
-                            "relationship_id": relationship.id,
-                            "table_name": tables[target_id].table_name,
-                            "physical_schema": tables[target_id].physical_schema,
-                            "condition": _relationship_condition(relationship, column_names),
-                        }
-                    )
-                    joined.add(target_id)
-        return joins
+        columns = await self._relationship_columns(relationships)
+        direct, exists = [], []
+        for item in filters:
+            path = filter_path(relationships, base.id, item["table_id"])
+            if _contains_fanout(path, relationships):
+                exists.append(_exists_filter_record(item, path, columns))
+            else:
+                direct.append(item)
+        return direct, exists
 
     async def _relationship_columns(
         self, relationships: list[CanonicalRelationshipModel]
@@ -252,8 +274,24 @@ class QueryCompilerMetadata:
         stage.base_entity = next(key for key, table in metadata.tables.items() if table.id == base.id)
         metadata.stage_tables[stage.name] = {stage.base_entity}
         stage.joins = self._resolve_plan_joins(stage, base, metadata)
+        self._resolve_group_dimension_joins(stage, base, metadata)
         self._resolve_plan_group_fields(stage, metadata)
         self._resolve_plan_stage_filters(stage, metadata)
+
+    def _resolve_group_dimension_joins(
+        self, stage: MetricPlanStage, base: SemanticTableModel, metadata: MetricPlanMetadata
+    ) -> None:
+        for field in stage.group_by:
+            resolved = metadata.columns_by_id.get(field.column_id) if field.column_id is not None else None
+            if resolved is None or resolved[0] in metadata.stage_tables[stage.name]:
+                continue
+            target = metadata.tables[resolved[0]]
+            target_key = resolved[0]
+            if target.id == base.id:
+                continue
+            path = _safe_join_path(metadata.relationships, base.id, target.id)
+            metadata.join_paths[(stage.base_entity, target_key)] = self._plan_join_records(stage, path, metadata)
+            stage.joins.append(target_key)
 
     def _resolve_plan_joins(
         self, stage: MetricPlanStage, base: SemanticTableModel, metadata: MetricPlanMetadata
@@ -310,13 +348,8 @@ class QueryCompilerMetadata:
         if not isinstance(parsed, exp.Column):
             raise SemanticCompileError("UNKNOWN_REFERENCE", "Metric plan grouping key must be a column")
         source_name = f"{parsed.db}.{parsed.table}" if parsed.db else (parsed.table or stage.base_entity)
-        if parsed.db:
-            table = metadata.tables_folded.get(source_name.casefold())
-            if table is not None:
-                source_name = next(
-                    (key for key, item in metadata.tables.items() if item.id == table.id),
-                    source_name,
-                )
+        if parsed.db and (table := metadata.tables_folded.get(source_name.casefold())) is not None:
+            source_name = next((k for k, v in metadata.tables.items() if v.id == table.id), source_name)
         matches = [
             key
             for key in metadata.stage_tables[stage.name]
@@ -356,6 +389,7 @@ class QueryCompilerMetadata:
         definition: MetricDefinition,
         runtime_filters: list[dict[str, Any]],
         metadata: MetricPlanMetadata,
+        dialect: str = "postgres",
     ) -> None:
         scoped_filters = [
             {"column_id": item.column_id, "operator": item.operator, "value": item.value}
@@ -366,20 +400,31 @@ class QueryCompilerMetadata:
                 item["column_id"], plan.stages, metadata.stage_tables, metadata.columns_by_id
             )
             for stage in stages:
-                self._append_plan_filter(stage, item, resolved)
+                self._append_plan_filter(stage, item, resolved, dialect)
 
     @staticmethod
-    def _append_plan_filter(stage: MetricPlanStage, item: dict[str, Any], resolved: tuple[str, str, int, str]) -> None:
-        value = item["value"]
-        value = (
-            [_coerce_literal(member, resolved[3]) for member in value]
-            if item["operator"] in {"in", "not_in"}
-            else _coerce_literal(value, resolved[3])
-        )
+    def _append_plan_filter(
+        stage: MetricPlanStage,
+        item: dict[str, Any],
+        resolved: tuple[str, str, int, str],
+        dialect: str = "postgres",
+    ) -> None:
+        operator = item["operator"]
+        raw_value = item["value"]
+        data_type = resolved[3]
+        if operator in {"is_null", "is_not_null"}:
+            validate_null_filter_value(raw_value, data_type, dialect)
+            value = None
+        elif operator in {"in", "not_in"}:
+            value = coerce_sequence_filter_values(raw_value, data_type, dialect)
+        elif operator == "between":
+            value = coerce_sequence_filter_values(raw_value, data_type, dialect, expected_length=2)
+        else:
+            value = coerce_filter_value(raw_value, data_type, dialect)
         stage.filters.append(
-            MetricPlanFilter(
+            MetricPlanFilter.model_construct(
                 field=f"{resolved[0]}.{resolved[1]}",
-                operator=item["operator"],
+                operator=operator,
                 value=value,
                 column_id=item["column_id"],
             )
@@ -399,6 +444,40 @@ class MetricPlanMetadata:
     relationship_columns: dict[int, tuple[str | None, str, str]]
     join_paths: dict[tuple[str, str], list[dict[str, str]]]
     stage_tables: dict[str, set[str]]
+
+
+def _contains_fanout(path: list[RelationshipStep], relationships: list[CanonicalRelationshipModel]) -> bool:
+    kinds = {item.id: item.relationship_type.replace("-", "_").lower() for item in relationships}
+    return any(kinds[step.id] in {"one_to_many", "1:n"} for step in path)
+
+
+def _exists_filter_record(
+    item: dict[str, Any], path: list[RelationshipStep], columns: dict[int, tuple[str | None, str, str]]
+) -> dict[str, Any]:
+    return {
+        "filter": item,
+        "path": [
+            {
+                "relationship_id": step.id,
+                "from_table_id": step.from_entity_id,
+                "to_table_id": step.to_entity_id,
+                "pairs": [
+                    (
+                        _relationship_column_data(pair["from_column_id"], columns),
+                        _relationship_column_data(pair["to_column_id"], columns),
+                    )
+                    for pair in step.column_pairs
+                ],
+            }
+            for step in path
+        ],
+    }
+
+
+def _relationship_column_data(
+    column_id: int, columns: dict[int, tuple[str | None, str, str]]
+) -> tuple[str | None, str, str]:
+    return columns[column_id]
 
 
 def _relationship_condition(

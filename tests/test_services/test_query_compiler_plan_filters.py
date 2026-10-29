@@ -259,9 +259,9 @@ async def _compile_ratio_by_region(
 def _assert_status_filter_only_in_sales_cte(compiled: CompiledQuery) -> None:
     """Assert the status predicate exists only inside the sales CTE as a bound parameter."""
     assert compiled.sql.count("WHERE") == 1  # chỉ sales CTE
-    sales_cte = compiled.sql.split('"refunds" AS')[0]  # phần CTE sales đứng trước
+    sales_cte = compiled.sql.split('refunds" AS')[0]  # phần CTE sales đứng trước
     assert '"orders"."status"' in sales_cte and "WHERE" in sales_cte
-    refunds_part = compiled.sql.split('"refunds" AS')[1]
+    refunds_part = compiled.sql.split('refunds" AS')[1]
     assert "WHERE" not in refunds_part
     assert "completed" not in compiled.sql  # bound parameter
 

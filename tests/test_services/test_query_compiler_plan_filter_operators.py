@@ -13,6 +13,7 @@ from src.models.metric_definition import MetricDefinition
 from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQuerySpec
 from src.services.query_compiler import CompiledQuery, SemanticQueryCompiler, validate_read_only
 from src.services.query_compiler_plan import compile_plan_sql
+from src.services.query_execution import _normalize_parameters
 from src.services.semantic_compile_error import SemanticCompileError
 from tests.test_services.test_query_compiler_plan_filters import _runtime, _seed_multi_fact_plan
 
@@ -44,7 +45,7 @@ async def _compile_with_filter(db: AsyncSession, column_key: str, operator: str,
 
 async def _rows(db: AsyncSession, compiled: CompiledQuery) -> list[tuple[Any, ...]]:
     """Execute a compiled plan query with its bound parameters and return all rows."""
-    result = await db.execute(text(compiled.sql), compiled.parameters)
+    result = await db.execute(text(compiled.sql), _normalize_parameters(compiled.parameters, "sqlite"))
     return list(result.all())
 
 
