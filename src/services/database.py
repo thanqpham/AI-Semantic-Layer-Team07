@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from cryptography.fernet import Fernet
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config import get_settings
@@ -88,3 +89,16 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     factory = get_session_factory()
     async with factory() as session:
         yield session
+
+
+async def lock_semantic_database(db: AsyncSession, db_id: int) -> None:
+    """Serialize publication and graph changes until transaction commit or rollback."""
+    from src.models.db import SemanticDatabaseModel
+
+    # SQLite ignores SELECT FOR UPDATE; a no-op write preserves transaction serialization.
+    await db.execute(
+        update(SemanticDatabaseModel)
+        .where(SemanticDatabaseModel.id == db_id)
+        .values(id=SemanticDatabaseModel.id, updated_at=SemanticDatabaseModel.updated_at)
+        .execution_options(synchronize_session=False)
+    )

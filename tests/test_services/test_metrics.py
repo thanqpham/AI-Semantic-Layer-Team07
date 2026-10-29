@@ -10,7 +10,7 @@ from src.services.metrics import _format_columns, build_metric_system_prompt
 
 
 def test_format_columns_with_sample_values() -> None:
-    """Columns with sample_values should include values in output."""
+    """Unreviewed samples must not be sent to the metric model."""
     columns = [
         {
             "column_name": "status",
@@ -21,7 +21,7 @@ def test_format_columns_with_sample_values() -> None:
     ]
     result = _format_columns(columns)
     assert len(result) == 1
-    assert "values: ['active', 'inactive']" in result[0]
+    assert "values:" not in result[0]
     assert "status" in result[0]
 
 
@@ -55,7 +55,7 @@ def test_format_columns_with_empty_sample_values() -> None:
 
 
 def test_format_columns_with_default_value() -> None:
-    """Columns with default_value should include default in output."""
+    """Raw defaults are not needed in the prompt and may contain PII."""
     columns = [
         {
             "column_name": "created_at",
@@ -66,11 +66,11 @@ def test_format_columns_with_default_value() -> None:
     ]
     result = _format_columns(columns)
     assert len(result) == 1
-    assert "default: CURRENT_TIMESTAMP" in result[0]
+    assert "default:" not in result[0]
 
 
 def test_format_columns_with_default_and_sample_values() -> None:
-    """Columns with both default_value and sample_values should show both."""
+    """Neither raw defaults nor samples may reach the prompt."""
     columns = [
         {
             "column_name": "status",
@@ -82,8 +82,8 @@ def test_format_columns_with_default_and_sample_values() -> None:
     ]
     result = _format_columns(columns)
     assert len(result) == 1
-    assert "default: active" in result[0]
-    assert "values: ['active', 'inactive', 'pending']" in result[0]
+    assert "default:" not in result[0]
+    assert "values:" not in result[0]
 
 
 def test_format_columns_with_none_default_value() -> None:
@@ -124,9 +124,19 @@ def test_format_columns_multiple_columns_mixed() -> None:
     ]
     result = _format_columns(columns)
     assert len(result) == 3
-    assert "values: ['active', 'inactive']" in result[0]
+    assert "values:" not in result[0]
     assert "values:" not in result[1]
-    assert "values: ['electronics', 'clothing']" in result[2]
+    assert "values:" not in result[2]
+
+
+def test_format_columns_only_includes_approved_allowed_values() -> None:
+    """Do not disclose pending values to the model."""
+    pending = {"column_name": "status", "allowed_values": ["pending-secret"], "review_status": "pending_review"}
+    approved = {"column_name": "status", "allowed_values": ["completed"], "review_status": "approved"}
+    assert "pending-secret" not in _format_columns([pending])[0]
+    assert "completed" in _format_columns([approved])[0]
+    approved["allowed_values"] = ["private@example.test"]
+    assert "private@example.test" not in _format_columns([approved])[0]
 
 
 # ---------------------------------------------------------------------------

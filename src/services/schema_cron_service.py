@@ -49,6 +49,9 @@ async def _sync_databases_with_session(session: AsyncSession, results: dict[str,
     for sem_db_id in db_ids:
         try:
             log = await _sync_with_owner_llm(session, sem_db_id)
+            from src.services.categorical_proposals import queue_discovery
+
+            queue_discovery(sem_db_id)
             if log.status == "healed":
                 results["healed"] += 1
             else:

@@ -33,12 +33,18 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.db_base import Base, utc_now
+from src.models.db_categorical_proposals import (
+    ColumnValueProposalModel,  # noqa: F401 - registers the table in Base.metadata
+)
 from src.models.db_chat import ChatMessageModel, ChatSessionModel
 from src.models.db_metric_proposals import MetricProposalModel
+from src.models.db_relationships import RelationshipCandidateModel
 from src.models.llm_settings import UserLLMSettingsModel
 from src.models.review_mixin import REVIEW_STATUS_CHECK, ReviewStateMixin
 
@@ -58,6 +64,7 @@ __all__ = [
     "OrganizationInvitationModel",
     "OrganizationMemberModel",
     "OrganizationModel",
+    "RelationshipCandidateModel",
     "SchemaSyncLogModel",
     "SemanticColumnModel",
     "SemanticDatabaseModel",
@@ -274,6 +281,9 @@ class LiveTargetDbModel(Base):
     dialect: Mapped[str] = mapped_column(String(50), nullable=False)
     conn_url_enc: Mapped[str] = mapped_column(Text, nullable=False)
     schema_metadata: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    categorical_discovery_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     semantic_db_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("semantic_databases.id", ondelete="SET NULL"), nullable=True
     )
@@ -375,7 +385,6 @@ class SemanticTableModel(ReviewStateMixin, Base):
 
     __tablename__ = "semantic_tables"
     __table_args__ = (
-        UniqueConstraint("db_id", "table_name", name="uq_semantic_tables_db_table"),
         CheckConstraint(REVIEW_STATUS_CHECK, name="ck_semantic_tables_review_status"),
         Index("idx_semantic_tables_db_review", "db_id", "review_status"),
     )
@@ -387,6 +396,8 @@ class SemanticTableModel(ReviewStateMixin, Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     row_count_approx: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     physical_schema: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    physical_schema_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    table_name_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     primary_key_column: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
@@ -428,6 +439,7 @@ class SemanticColumnModel(ReviewStateMixin, Base):
     is_nullable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_time_dimension: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     allowed_values: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    allowed_values_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
@@ -495,7 +507,15 @@ class CanonicalRelationshipModel(Base):
     """Represents a canonical relationship between two semantic tables."""
 
     __tablename__ = "canonical_relationships"
-    __table_args__ = (UniqueConstraint("connection_id", "relationship_key", name="uq_canonical_rel_key"),)
+    __table_args__ = (
+        UniqueConstraint("connection_id", "relationship_key", name="uq_canonical_rel_key"),
+        CheckConstraint("source IN ('fk', 'ai', 'manual')", name="ck_canonical_relationships_source"),
+        CheckConstraint(
+            "review_status IN ('approved', 'disabled', 'needs_review')", name="ck_canonical_relationships_review_status"
+        ),
+        CheckConstraint("revision >= 1", name="ck_canonical_relationships_revision"),
+        Index("idx_canonical_relationships_connection_review", "connection_id", "review_status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     connection_id: Mapped[int] = mapped_column(
@@ -513,6 +533,15 @@ class CanonicalRelationshipModel(Base):
     constraint_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     column_pairs: Mapped[list[dict[str, int]]] = mapped_column(JSON, nullable=False, default=list)
     validation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="valid")
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="fk", server_default="fk")
+    review_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="approved", server_default="approved"
+    )
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    human_modified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     database: Mapped["SemanticDatabaseModel"] = relationship("SemanticDatabaseModel", back_populates="relationships")
@@ -635,3 +664,12 @@ class NotificationModel(Base):
 
     recipient: Mapped["UserModel"] = relationship("UserModel", back_populates="notifications")
     metric_request: Mapped["MetricRequestModel | None"] = relationship("MetricRequestModel")
+
+
+Index(
+    "uq_semantic_tables_db_schema_table",
+    SemanticTableModel.db_id,
+    func.coalesce(SemanticTableModel.physical_schema_key, SemanticTableModel.physical_schema, ""),
+    func.coalesce(SemanticTableModel.table_name_key, SemanticTableModel.table_name),
+    unique=True,
+)

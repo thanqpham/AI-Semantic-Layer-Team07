@@ -138,6 +138,39 @@ async def test_scope_selection_continues_metric_generation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_metric_variant_selection_reuses_stored_requirement_and_reviewed_choice() -> None:
+    from src.api.routes import _handle_clarification_selection
+    from src.models.schemas import ChatClarificationSelection, ChatRequest
+
+    option = {
+        "id": "metric-variant-opaque",
+        "action": "generate_metric_variant",
+        "action_payload": {
+            "requirement": "Net sales for completed orders",
+            "knowledge_id": "net_sales",
+            "variant_id": "merchandise_net_sales",
+            "criteria": {"tax_basis": "excludes_tax"},
+        },
+    }
+    previous = SimpleNamespace(metadata_json={"clarification": {"options": [option]}})
+    selection = ChatClarificationSelection(assistant_message_id="a-1", option_id=option["id"])
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes._process_standard_chat", new_callable=AsyncMock) as process,
+    ):
+        await _handle_clarification_selection(
+            None, SimpleNamespace(id="sess-1"), SimpleNamespace(id=1), 101, selection,
+            ChatRequest(message="Client label", clarification_selection=selection), True,
+        )
+    request = process.call_args.args[4].message
+    assert "Net sales for completed orders" in request
+    assert "merchandise_net_sales" in request
+    assert "tax_basis: excludes_tax" in request
+    assert process.call_args.kwargs["intent_override"] == "metric_query"
+    assert process.call_args.kwargs["selected_metric_variant"] == option["action_payload"]
+
+
+@pytest.mark.asyncio
 @patch("src.api.routes.load_existing_for_dedupe", new_callable=AsyncMock)
 @patch("src.agents.graphs.chat_graph.chat_agent", new_callable=AsyncMock)
 async def test_chat_returns_duplicates(

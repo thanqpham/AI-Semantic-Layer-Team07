@@ -62,6 +62,7 @@ from src.models.schemas import (
     MetricFilterColumnsResponse,
     MetricHistoryResponse,
     MetricListItem,
+    MetricPromptSuggestionsResponse,
     MetricRequestCreate,
     MetricRequestResponse,
     MetricRequestReview,
@@ -129,7 +130,8 @@ from src.services.metric_context import (
     build_discovery_context,
     build_metric_context,
 )
-from src.services.metric_dedupe import load_existing_for_dedupe
+from src.services.metric_dedupe import dedupe_reviewed_suggestions, load_existing_for_dedupe
+from src.services.metric_prompt_suggestions import get_metric_prompt_suggestions
 from src.services.metric_proposals import (
     generate_reviewed_metrics,
     metric_version_review,
@@ -165,10 +167,12 @@ from src.services.organization_service import (
 )
 from src.services.query_compiler import SemanticQueryCompiler
 from src.services.query_execution import execute_compiled_query
+from src.services.relationship_runtime import active_relationship_filters
 from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 from src.services.schema_ingestion import parse_sql_dump_preview
 from src.services.schema_review_service import (
     SchemaRowNotFoundError,
+    SchemaTableAmbiguousError,
     update_column_review,
     update_table_review,
 )
@@ -693,6 +697,7 @@ async def update_table(
     db_id: str,
     table_name: str,
     body: SemanticTableUpdate,
+    table_id: int | None = Query(default=None),
     org_id: int | None = Header(default=None, alias="X-Organization-ID"),
     user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -705,7 +710,11 @@ async def update_table(
         return {"message": "Table updated successfully"}
 
     try:
-        table = await update_table_review(db, int_id, table_name, body.business_name, body.description, user.id)
+        table = await update_table_review(
+            db, int_id, table_name, body.business_name, body.description, user.id, table_id
+        )
+    except SchemaTableAmbiguousError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found") from exc
     await db.commit()
@@ -718,6 +727,7 @@ async def update_column(
     table_name: str,
     column_name: str,
     body: SemanticColumnUpdate,
+    table_id: int | None = Query(default=None),
     org_id: int | None = Header(default=None, alias="X-Organization-ID"),
     user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -731,8 +741,13 @@ async def update_column(
 
     try:
         column = await update_column_review(
-            db, int_id, table_name, column_name, body.business_name, body.description, user.id
+            db, int_id, table_name, column_name, body.business_name, body.description, user.id, table_id
         )
+        if "allowed_values" in body.model_fields_set:
+            column.allowed_values = body.allowed_values
+            column.allowed_values_complete = True
+    except SchemaTableAmbiguousError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:
         detail = "Table not found" if "Table" in str(exc) else "Column not found"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
@@ -1064,8 +1079,11 @@ async def review_edited_metric_proposal(
         await db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     definition = MetricDefinition.model_validate(proposal.final_definition) if proposal.final_definition else None
+    candidate = proposal.context.get("candidate") or {}
     return MetricProposalReviewResponse(
         proposal_id=proposal.id,
+        candidate_id=candidate.get("id"),
+        group_id=candidate.get("group_id") or candidate.get("knowledge_id"),
         definition=definition,
         yaml_preview=definition.to_yaml() if definition else "",
         review=MetricReview.model_validate(proposal.review),
@@ -1185,6 +1203,26 @@ async def get_semantic_catalog(
     )
 
 
+@router.get(
+    "/semantic/{db_id}/metric-prompt-suggestions",
+    response_model=MetricPromptSuggestionsResponse,
+)
+async def get_semantic_metric_prompt_suggestions(
+    db_id: int,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> MetricPromptSuggestionsResponse:
+    """Return eligible metric prompts for an authorized semantic database."""
+    semantic_db = await _owned_semantic_database(db, db_id, current_user.id, org_id)
+    if semantic_db is None:
+        raise HTTPException(status_code=404, detail="Semantic database not found")
+    source_type = await _catalog_source_type(db, db_id)
+    query_supported = source_type == "live"
+    items = await get_metric_prompt_suggestions(db, db_id, query_supported)
+    return MetricPromptSuggestionsResponse(items=items)
+
+
 async def _owned_semantic_database(
     db: AsyncSession, db_id: int, user_id: int, org_id: int | None = None
 ) -> SemanticDatabaseModel | None:
@@ -1290,7 +1328,7 @@ async def _catalog_relationships(db: AsyncSession, db_id: int) -> list[Canonical
     """Load canonical relationships for a semantic database."""
     stmt = (
         select(CanonicalRelationshipModel)
-        .where(CanonicalRelationshipModel.connection_id == db_id)
+        .where(CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters())
         .order_by(CanonicalRelationshipModel.id)
     )
     records = (await db.execute(stmt)).scalars().all()
@@ -2228,6 +2266,34 @@ async def _handle_clarification_selection(
             intent_override="metric_query",
         )
 
+    if matched_option.get("action") == "generate_metric_variant":
+        payload = matched_option.get("action_payload") or {}
+        requirement = str(payload.get("requirement") or "").strip()
+        variant_id = str(payload.get("variant_id") or "").strip()
+        criteria = payload.get("criteria") if isinstance(payload.get("criteria"), dict) else {}
+        if not requirement or not variant_id or not payload.get("knowledge_id"):
+            raise HTTPException(status_code=400, detail="Invalid metric variant clarification")
+        choice = ", ".join(f"{key}: {value}" for key, value in criteria.items())
+        body_copy = body.model_copy(
+            update={
+                "message": f"{requirement}\n\nĐã xác nhận biến thể {variant_id} thuộc nhóm "
+                f"{payload['knowledge_id']} ({choice}). "
+                "Hãy tạo lại đề xuất theo lựa chọn này và vẫn kiểm tra đầy đủ metadata schema.",
+                "clarification_selection": None,
+            }
+        )
+        return await _process_standard_chat(
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body_copy,
+            can_generate_metrics,
+            org_id,
+            intent_override="metric_query",
+            selected_metric_variant=payload,
+        )
+
     # Other non-query options delegate to the standard chat flow.
     body_copy = body.model_copy(update={"clarification_selection": None})
     return await _process_standard_chat(
@@ -2284,11 +2350,20 @@ async def _process_standard_chat(
     can_generate_metrics: bool,
     org_id: int | None = None,
     intent_override: str | None = None,
+    selected_metric_variant: dict[str, Any] | None = None,
 ) -> ChatResponse:
     """Trace one chat agent run independently of its HTTP request."""
     with observation("chat_agent", session_id=session.id, agent=True) as span:
         response = await _process_standard_chat_inner(
-            db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id, intent_override
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body,
+            can_generate_metrics,
+            org_id,
+            intent_override,
+            selected_metric_variant,
         )
         if span is not None:
             span.update(
@@ -2310,6 +2385,7 @@ async def _process_standard_chat_inner(
     can_generate_metrics: bool,
     org_id: int | None = None,
     intent_override: str | None = None,
+    selected_metric_variant: dict[str, Any] | None = None,
 ) -> ChatResponse:
     """Process a standard chat query through the graph and execution layer."""
     from src.agents.graphs.chat_graph import chat_agent
@@ -2391,7 +2467,9 @@ async def _process_standard_chat_inner(
         chat_response=preclassified_chat_response,
         proposal_mode=body.proposal_mode,
         user_message_id=user_message.id,
+        selected_metric_variant=selected_metric_variant,
     )
+    await dedupe_reviewed_suggestions(db, numeric_db_id, final_state)
     await persist_reviewed_state(db, numeric_db_id, current_user.id, final_state)
     return await _build_and_save_chat_response(
         db,
@@ -2580,6 +2658,7 @@ async def _chat_state_for_context(
     chat_response: str | None = None,
     proposal_mode: str = "requested",
     user_message_id: str | None = None,
+    selected_metric_variant: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the graph only after consented context preparation succeeds."""
     if context.diagnostic["status"] != "ready":
@@ -2605,6 +2684,7 @@ async def _chat_state_for_context(
             "dedupe_performed": dedupe_performed,
             "parser_catalog": parser_catalog or {},
             "chat_response": chat_response,
+            "selected_metric_variant": selected_metric_variant,
         }
     )
 

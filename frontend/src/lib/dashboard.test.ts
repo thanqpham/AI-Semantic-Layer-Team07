@@ -225,6 +225,32 @@ describe('parseDashboardLayoutPayload', () => {
     expect(state.layout).toEqual({ widgets: [validLine] });
   });
 
+  it('parses a multi-metric widget while keeping legacy single-metric layouts canonical', () => {
+    const widget = parseDashboardLayoutPayload({
+      db_id: 5,
+      version: 1,
+      updated_at: null,
+      updated_by: null,
+      layout: { widgets: [{ ...validLine, metric_ids: [2, 3], order_metric_id: 3 }] },
+    }).layout?.widgets[0];
+
+    expect(widget).toMatchObject({ metric_id: 2, metric_ids: [2, 3], order_metric_id: 3 });
+    expect(parseDashboardLayoutPayload({
+      db_id: 5, version: 1, updated_at: null, updated_by: null,
+      layout: { widgets: [validLine] },
+    }).layout?.widgets[0]).toEqual(validLine);
+  });
+
+  it('rejects duplicate metrics and a sort metric outside the selection', () => {
+    const wrap = (widget: Record<string, unknown>) => ({
+      db_id: 5, version: 1, updated_at: null, updated_by: null, layout: { widgets: [widget] },
+    });
+    expect(() => parseDashboardLayoutPayload(wrap({ ...validLine, metric_ids: [2, 2] })))
+      .toThrow(DashboardLayoutParseError);
+    expect(() => parseDashboardLayoutPayload(wrap({ ...validLine, metric_ids: [2, 3], order_metric_id: 4 })))
+      .toThrow(DashboardLayoutParseError);
+  });
+
   it('rejects payloads that are not objects', () => {
     expect(() => parseDashboardLayoutPayload(null)).toThrow(DashboardLayoutParseError);
     expect(() => parseDashboardLayoutPayload('nope')).toThrow(DashboardLayoutParseError);

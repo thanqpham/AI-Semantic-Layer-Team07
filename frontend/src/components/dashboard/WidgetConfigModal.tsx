@@ -16,7 +16,6 @@ import {
   TimeGrain,
 } from '@/lib/api';
 import { DashboardChartType, DashboardWidgetConfig } from '@/lib/dashboard';
-import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -26,20 +25,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-
 import { DashboardChart } from './DashboardChart';
+import {
+  DateFilterField,
+  DimensionField,
+  FormField,
+  LayoutFields,
+  MetricComparePicker,
+  MetricPicker,
+} from './WidgetConfigFields';
 import { useDashboardWidgetData, DashboardWidgetData } from './useDashboardWidgetData';
 import { useWidgetConfigMeta } from './useWidgetConfigMeta';
 import {
   buildWidgetDraft,
   CHART_LABELS,
   createWidgetId,
-  filterMetricsByName,
   GRAIN_LABELS,
-  HEIGHT_LABELS,
   initFormState,
+  planMetricOptions,
   PREVIEW_PLACEHOLDER_WIDGET,
   recommendChartForDimensionItem,
   selectExecutableMetrics,
@@ -48,7 +51,6 @@ import {
   validateForm,
   WidgetFormState,
   WidgetMeta,
-  WIDTH_LABELS,
 } from './widgetConfigForm';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
@@ -123,7 +125,16 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
 
   const handleMetricChange = useCallback((value: string) => {
     const metricId = value === '' ? null : Number(value);
-    setForm((prev) => ({ ...prev, metricId, dimensionColId: null, dateFilterColumnId: null, timeGrain: null }));
+    setForm((prev) => ({
+      ...prev,
+      metricId,
+      additionalMetricIds: [],
+      orderMetricId: metricId,
+      dimensionColId: null,
+      dateFilterColumnId: null,
+      timeGrain: null,
+    }));
+    setPreviewWidget(null);
   }, []);
 
   const handleChartChange = useCallback(
@@ -136,6 +147,7 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
 
   const patchForm = useCallback((patch: Partial<WidgetFormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));
+    setPreviewWidget(null);
   }, []);
 
   const runPreview = useCallback(() => {
@@ -150,6 +162,11 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
 
   const selectedMetric =
     eligibleMetrics.find((metric) => metric.metric_id === form.metricId) ?? null;
+  const selectedMetricIds = form.metricId === null ? [] : [form.metricId, ...form.additionalMetricIds];
+  const selectedMetricNames = selectedMetricIds.map(
+    (id) => eligibleMetrics.find((metric) => metric.metric_id === id)?.name ?? `Metric ${id}`,
+  );
+  const compareOptions = planMetricOptions(eligibleMetrics, form.metricId);
 
   return (
     <Dialog open onOpenChange={(next) => { if (!next) props.onCancel(); }}>
@@ -165,6 +182,22 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
 
         <div className="flex flex-col gap-4">
           <MetricPicker metrics={eligibleMetrics} value={form.metricId} onChange={handleMetricChange} />
+          {form.chartType !== 'kpi' && form.chartType !== 'pie' && form.metricId !== null && (
+            <MetricComparePicker
+              metrics={compareOptions}
+              value={form.additionalMetricIds}
+              disabled={!selectedMetric?.definition?.metric.query_plan}
+              onChange={(ids) => {
+                const selected = ids.filter((id) => compareOptions.some((metric) => metric.metric_id === id)).slice(0, 4);
+                setForm((prev) => ({
+                  ...prev,
+                  additionalMetricIds: selected,
+                  orderMetricId: selected.includes(prev.orderMetricId ?? -1) ? prev.orderMetricId : prev.metricId,
+                }));
+                setPreviewWidget(null);
+              }}
+            />
+          )}
           <FormField label="Loại biểu đồ" id="widget-chart">
             <select
               id="widget-chart"
@@ -200,6 +233,20 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
               </select>
             </FormField>
           )}
+          {selectedMetricIds.length > 1 && (form.chartType === 'bar' || form.chartType === 'table') && (
+            <FormField label="Sắp xếp theo metric" id="widget-order-metric">
+              <select
+                id="widget-order-metric"
+                className={SELECT_CLASS}
+                value={form.orderMetricId ?? ''}
+                onChange={(event) => patchForm({ orderMetricId: event.target.value ? Number(event.target.value) : null })}
+              >
+                {selectedMetricIds.map((id, index) => (
+                  <option key={id} value={id}>{selectedMetricNames[index]}</option>
+                ))}
+              </select>
+            </FormField>
+          )}
           <DateFilterField
             timeColumns={timeColumns}
             value={form.dateFilterColumnId}
@@ -212,6 +259,7 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
             canPreview={canSave && props.querySupported}
             previewWidget={previewWidget}
             metricName={selectedMetric?.name ?? null}
+            metricNames={selectedMetricNames}
             dimensionLabel={resolveDimensionLabel(form, currentMeta, timeColumns)}
             data={previewData}
             onPreview={runPreview}
@@ -255,185 +303,12 @@ function resolveDimensionLabel(
   return time?.business_name ?? null;
 }
 
-function FormField({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Label htmlFor={id} className="text-xs font-medium text-muted-foreground"><Translated text={label} /></Label>
-      {children}
-    </div>
-  );
-}
-
-function MetricPicker({
-  metrics,
-  value,
-  onChange,
-}: {
-  metrics: MetricRecord[];
-  value: number | null;
-  onChange: (value: string) => void;
-}) {
-  const { translate } = useLanguage();
-  const [search, setSearch] = useState('');
-  const filtered = filterMetricsByName(metrics, search);
-  return (
-    <div className="flex flex-col gap-3">
-      <FormField label="Tìm metric" id="widget-metric-search">
-        <Input
-          id="widget-metric-search"
-          type="text"
-          placeholder={translate("Tìm metric đã duyệt…")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </FormField>
-      <FormField label="Metric" id="widget-metric">
-        <select
-          id="widget-metric"
-          className={SELECT_CLASS}
-          value={value === null ? '' : String(value)}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {filtered.map((metric) => (
-            <option key={metric.metric_id} value={String(metric.metric_id)}>{metric.name}</option>
-          ))}
-        </select>
-      </FormField>
-      {filtered.length === 0 && (
-        <p className="text-xs text-muted-foreground"><Translated text={"Không có metric đã duyệt nào."} /></p>
-      )}
-    </div>
-  );
-}
-
-function DimensionField({
-  form,
-  dimensions,
-  timeColumns,
-  recommendation,
-  onSelect,
-}: {
-  form: WidgetFormState;
-  dimensions: RecommendedDimensionItem[];
-  timeColumns: FilterColumnItem[];
-  recommendation: DashboardChartType | null;
-  onSelect: (columnId: number | null) => void;
-}) {
-  const { translate } = useLanguage();
-  const isTimeSeries = form.chartType === 'line' || form.chartType === 'area';
-  const label = isTimeSeries ? 'Cột thời gian' : 'Chiều dữ liệu';
-  const options = isTimeSeries
-    ? timeColumns.map((column) => ({ id: column.column_id, name: column.business_name }))
-    : dimensions.map((item) => ({ id: item.column_id, name: item.business_name }));
-  return (
-    <FormField label={label} id="widget-dimension">
-      <div className="flex items-center gap-2">
-        <select
-          id="widget-dimension"
-          className={cn(SELECT_CLASS, 'flex-1')}
-          value={form.dimensionColId === null ? '' : String(form.dimensionColId)}
-          onChange={(event) => onSelect(event.target.value === '' ? null : Number(event.target.value))}
-        >
-          <option value="">{translate('— Chọn —')}</option>
-          {options.map((option) => (
-            <option key={option.id} value={String(option.id)}>{option.name}</option>
-          ))}
-        </select>
-        {recommendation && (
-          <span className="whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-            <Translated text={"Đề xuất:"} after />{translate(CHART_LABELS[recommendation])}
-          </span>
-        )}
-      </div>
-    </FormField>
-  );
-}
-
-function DateFilterField({
-  timeColumns,
-  value,
-  required,
-  onChange,
-}: {
-  timeColumns: FilterColumnItem[];
-  value: number | null;
-  required: boolean;
-  onChange: (columnId: number | null) => void;
-}) {
-  const { translate } = useLanguage();
-  return (
-    <FormField label="Cột lọc ngày" id="widget-date-filter">
-      <select
-        id="widget-date-filter"
-        className={SELECT_CLASS}
-        aria-required={required}
-        value={value === null ? '' : String(value)}
-        onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
-      >
-        {!required && <option value="">{translate('Không áp dụng')}</option>}
-        {timeColumns.map((column) => (
-          <option key={column.column_id} value={String(column.column_id)}>{column.business_name}</option>
-        ))}
-      </select>
-    </FormField>
-  );
-}
-
-function LayoutFields({
-  form,
-  onPatch,
-}: {
-  form: WidgetFormState;
-  onPatch: (patch: Partial<WidgetFormState>) => void;
-}) {
-  const { translate } = useLanguage();
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <FormField label="Độ rộng" id="widget-width">
-        <select
-          id="widget-width"
-          className={SELECT_CLASS}
-          value={form.width}
-          onChange={(event) => onPatch({ width: event.target.value as typeof form.width })}
-        >
-          {(Object.keys(WIDTH_LABELS) as (keyof typeof WIDTH_LABELS)[]).map((width) => (
-            <option key={width} value={width}>{translate(WIDTH_LABELS[width])}</option>
-          ))}
-        </select>
-      </FormField>
-      <FormField label="Chiều cao" id="widget-height">
-        <select
-          id="widget-height"
-          className={SELECT_CLASS}
-          value={form.height}
-          onChange={(event) => onPatch({ height: event.target.value as typeof form.height })}
-        >
-          {(Object.keys(HEIGHT_LABELS) as (keyof typeof HEIGHT_LABELS)[]).map((height) => (
-            <option key={height} value={height}>{translate(HEIGHT_LABELS[height])}</option>
-          ))}
-        </select>
-      </FormField>
-      <div className="sm:col-span-2">
-        <FormField label="Tiêu đề widget" id="widget-title">
-          <Input
-            id="widget-title"
-            type="text"
-            maxLength={200}
-            placeholder={translate("Bỏ trống để dùng tên metric")}
-            value={form.title}
-            onChange={(event) => onPatch({ title: event.target.value })}
-          />
-        </FormField>
-      </div>
-    </div>
-  );
-}
-
 function PreviewPanel({
   querySupported,
   canPreview,
   previewWidget,
   metricName,
+  metricNames,
   dimensionLabel,
   data,
   onPreview,
@@ -442,6 +317,7 @@ function PreviewPanel({
   canPreview: boolean;
   previewWidget: DashboardWidgetConfig | null;
   metricName: string | null;
+  metricNames: string[];
   dimensionLabel: string | null;
   data: DashboardWidgetData;
   onPreview: () => void;
@@ -471,6 +347,7 @@ function PreviewPanel({
               widget={previewWidget}
               title={previewWidget.custom_title ?? metricName ?? 'Widget'}
               metricName={metricName ?? ''}
+              metricNames={metricNames}
               dimensionLabel={dimensionLabel}
               data={data}
             />

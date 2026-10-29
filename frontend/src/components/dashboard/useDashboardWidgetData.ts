@@ -13,6 +13,7 @@ import {
   DashboardChartType,
   DashboardDatePreset,
   DashboardWidgetConfig,
+  getWidgetMetricIds,
 } from '@/lib/dashboard';
 
 import {
@@ -21,6 +22,7 @@ import {
   DashboardWidgetConfigError,
   extractTotalValue,
   runWidgetExecution,
+  WIDGET_ROW_LIMIT,
 } from './dashboardQuery';
 import {
   DashboardPoint,
@@ -34,6 +36,7 @@ export interface DashboardWidgetData {
   status: DashboardWidgetStatus;
   points: DashboardPoint[];
   hiddenCount: number;
+  hasMore?: boolean;
   totalValue: number | null;
   trendPoints: DashboardPoint[];
   errorMessage: string | null;
@@ -53,6 +56,7 @@ export interface UseDashboardWidgetDataArgs {
 interface WidgetPayload {
   points: DashboardPoint[];
   hiddenCount: number;
+  hasMore?: boolean;
   totalValue: number | null;
   trendPoints: DashboardPoint[];
 }
@@ -91,9 +95,10 @@ async function loadKpiPayload(
   return {
     points: [],
     hiddenCount: 0,
+    hasMore: trendResult.rows.length > WIDGET_ROW_LIMIT,
     totalValue: extractTotalValue(totalResult, widget.metric_id),
     trendPoints: buildWidgetPoints({
-      result: trendResult,
+      result: { ...trendResult, rows: trendResult.rows.slice(0, WIDGET_ROW_LIMIT) },
       metricId: widget.metric_id,
       dimensionId: widget.date_filter_column_id,
       sortByTime: true,
@@ -107,21 +112,27 @@ async function loadSeriesPayload(
   request: SemanticQueryRequest,
 ): Promise<WidgetPayload> {
   const result = await runWidgetExecution(dbId, request);
+  const hasMore = result.rows.length > WIDGET_ROW_LIMIT;
   const points = buildWidgetPoints({
-    result,
+    result: { ...result, rows: result.rows.slice(0, WIDGET_ROW_LIMIT) },
     metricId: widget.metric_id,
+    metricIds: getWidgetMetricIds(widget),
     dimensionId: widget.dimension_col_id,
     sortByTime: isTimeSeriesChart(widget.chart_type),
   });
   if (widget.chart_type === 'pie') {
-    const sliced = truncatePieSlices(points);
-    return { ...EMPTY_PAYLOAD, points: sliced, hiddenCount: points.length - sliced.length };
+    const sliced = hasMore ? points.slice(0, 8) : truncatePieSlices(points);
+    return { ...EMPTY_PAYLOAD, points: sliced, hiddenCount: hasMore ? 0 : points.length - sliced.length, hasMore };
   }
   if (widget.chart_type === 'table') {
-    const ranked = truncateRankingRows(points);
-    return { ...EMPTY_PAYLOAD, points: ranked.rows, hiddenCount: ranked.hiddenCount };
+    const ranked = truncateRankingRows(
+      points,
+      undefined,
+      getWidgetMetricIds(widget).length > 1 ? widget.order_metric_id ?? undefined : undefined,
+    );
+    return { ...EMPTY_PAYLOAD, points: ranked.rows, hiddenCount: ranked.hiddenCount, hasMore };
   }
-  return { ...EMPTY_PAYLOAD, points };
+  return { ...EMPTY_PAYLOAD, points, hasMore };
 }
 
 async function loadWidgetPayload(
@@ -161,6 +172,8 @@ export function useDashboardWidgetData(args: UseDashboardWidgetDataArgs): Dashbo
       JSON.stringify([
         dbId,
         widget.metric_id,
+        widget.metric_ids,
+        widget.order_metric_id,
         widget.dimension_col_id,
         widget.date_filter_column_id,
         widget.time_grain,
@@ -173,6 +186,8 @@ export function useDashboardWidgetData(args: UseDashboardWidgetDataArgs): Dashbo
     [
       dbId,
       widget.metric_id,
+      widget.metric_ids,
+      widget.order_metric_id,
       widget.dimension_col_id,
       widget.date_filter_column_id,
       widget.time_grain,
@@ -238,6 +253,8 @@ export function useDashboardWidgetData(args: UseDashboardWidgetDataArgs): Dashbo
     enabled,
     dbId,
     widget.metric_id,
+    widget.metric_ids,
+    widget.order_metric_id,
     widget.dimension_col_id,
     widget.date_filter_column_id,
     widget.time_grain,

@@ -337,3 +337,15 @@ def get_llm(role: str | None = None, *, max_retries: int | None = None) -> BaseC
     client = _CLIENT_BUILDERS[config.protocol](config)
     _client_cache[config] = client
     return client
+
+
+def has_configured_llm(role: str | None = None) -> bool:
+    """Return True if an account or server environment LLM is usable."""
+    if account_llm_config.get() is not None and role != "judge":
+        return True
+    settings = _settings_with_hot_reload()
+    try:
+        _resolve_llm_config(settings, role=role)
+        return True
+    except ValueError:
+        return False

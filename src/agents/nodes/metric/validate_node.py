@@ -30,6 +30,7 @@ async def validate_node(state: dict[str, Any]) -> dict[str, Any]:
                 status=artifact.status,
                 summary=artifact.reason,
                 clarification=artifact.reason if artifact.status == "needs_clarification" else None,
+                reason_code=_blocked_reason_code(artifact.status),
             )
             item["phase"] = "done"
             continue
@@ -49,6 +50,7 @@ def _parse_artifact(
             raise ValueError("Invalid variant criteria")
         _resolve_aov_identity(raw, context)
         _resolve_knowledge_variant(raw, context)
+        _enforce_selected_variant(raw, context)
         item["raw"] = raw
         if raw.get("status") in {"needs_clarification", "unsupported", "rejected"}:
             return BlockedMetricArtifact.model_validate(raw)
@@ -98,6 +100,14 @@ def _normalize_artifact(raw: dict[str, Any]) -> dict[str, Any]:
     return raw
 
 
+def _blocked_reason_code(status: str) -> str:
+    return {
+        "needs_clarification": "BUILDER_CLARIFICATION",
+        "unsupported": "BUILDER_UNSUPPORTED",
+        "rejected": "BUILDER_REJECTED",
+    }[status]
+
+
 def _resolve_knowledge_variant(raw: dict[str, Any], context: dict[str, Any]) -> None:
     if not get_settings().metric_knowledge_enabled:
         raw.update(knowledge_id=None, variant_id=None)
@@ -124,6 +134,15 @@ def _resolve_knowledge_variant(raw: dict[str, Any], context: dict[str, Any]) -> 
         raw["criteria"] = {**variant["criteria"], **raw.get("criteria", {})}
     elif raw.get("variant_id"):
         raise ValueError("Variant without knowledge family")
+
+
+def _enforce_selected_variant(raw: dict[str, Any], context: dict[str, Any]) -> None:
+    """Reject builder output that does not match the user's server-stored choice."""
+    selection = context.get("selected_metric_variant")
+    if not selection:
+        return
+    if any(raw.get(key) != selection.get(key) for key in ("knowledge_id", "variant_id", "criteria")):
+        raise ValueError("Generated candidate does not match the selected metric variant")
 
 
 def _canonicalize_knowledge_identity(raw: dict[str, Any], knowledge: dict[str, Any]) -> None:
@@ -203,6 +222,7 @@ def _validate_artifact(state: dict[str, Any], item: dict[str, Any], artifact: Me
         item["report"] = MetricReview(
             status="needs_revision",
             summary=conflict,
+            reason_code="VARIANT_CONFLICT",
             issues=[
                 ReviewIssue(
                     code="VARIANT_CONFLICT",
@@ -249,11 +269,15 @@ def _tax_conflict(question: str, criteria: dict[str, str], name: str) -> str | N
     asked = normalized_text(question)
     named = normalized_text(name)
     basis = criteria.get("tax_basis")
-    if basis in {"includes_vat", "includes_tax"} and any(
-        term in asked for term in ("truoc thue", "chua thue", "khong gom vat", "khong gom thue")
-    ):
+    before_terms = ("truoc thue", "chua thue", "khong gom vat", "khong gom thue")
+    after_terms = ("sau thue", "gom vat", "bao gom vat", "da gom vat")
+    before = any(term in asked for term in before_terms)
+    after = any(term in asked for term in after_terms)
+    if before and after:
+        before = after = False
+    if basis in {"includes_vat", "includes_tax"} and before:
         return "Biến thể sau thuế trái với yêu cầu trước thuế."
-    if basis == "excludes_tax" and any(term in asked for term in ("gom vat", "bao gom vat", "da gom vat")):
+    if basis == "excludes_tax" and after:
         return "Biến thể trước thuế trái với yêu cầu gồm VAT."
     if basis == "includes_vat" and "vat" not in named:
         return "Tên metric phải nêu rõ biến thể gồm VAT."

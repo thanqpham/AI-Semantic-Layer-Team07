@@ -9,21 +9,12 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('thinking and agent flow', () => {
   it('scrolls only the chat pane as agent nodes update', () => {
-    const scrollIntoView = vi.fn();
-    const scrollTo = vi.fn();
-    const previous = HTMLElement.prototype.scrollIntoView;
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     const props = { messages: [{ id: 'a', sender: 'assistant' as const, text: '', timestamp: '10:00', executionTrace: traceFixture }], onSendMessage: vi.fn(), isLoading: true, tableNames: [] };
-    try {
-      const { container, rerender } = render(<StudioChatStream {...props} />);
-      const pane = container.querySelector('.overflow-y-auto') as HTMLElement;
-      pane.scrollTo = scrollTo;
-      rerender(<StudioChatStream {...props} messages={[{ ...props.messages[0], executionTrace: { ...traceFixture, elapsed_ms: 3000 } }]} />);
-      expect(scrollIntoView).not.toHaveBeenCalled();
-      expect(scrollTo).toHaveBeenCalledWith({ top: pane.scrollHeight, behavior: 'smooth' });
-    } finally {
-      HTMLElement.prototype.scrollIntoView = previous;
-    }
+    const { container, rerender } = render(<StudioChatStream {...props} />);
+    const pane = container.querySelector('.overflow-y-auto') as HTMLElement;
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 600 });
+    rerender(<StudioChatStream {...props} messages={[{ ...props.messages[0], executionTrace: { ...traceFixture, elapsed_ms: 3000 } }]} />);
+    expect(pane.scrollTop).toBe(600);
   });
 
   it('starts closed, ticks when closed, and preserves expansion on completion', () => {
@@ -89,7 +80,8 @@ describe('thinking and agent flow', () => {
     expect(screen.queryByRole('button', { name: /Metric Designer Agent/ })).not.toBeInTheDocument();
     const edge = container.querySelector('[data-edge="orchestrator-data_assistant"]');
     expect(edge).toBeInTheDocument();
-    expect(edge).toHaveAttribute('stroke-dasharray', '5 5');
+    expect(edge).toHaveAttribute('data-edge-status', 'running');
+    expect(edge).not.toHaveAttribute('stroke-dasharray');
     expect(screen.getByRole('button', { name: /Orchestrator/ })).toHaveClass('rounded-full');
 
     const nodePositions = [...container.querySelectorAll<HTMLButtonElement>('[aria-pressed]')]
@@ -103,15 +95,21 @@ describe('thinking and agent flow', () => {
     const completedTrace = {
       ...trace,
       status: 'completed' as const,
-      events: [...trace.events, {
-        seq: 5, kind: 'transition' as const, step_id: 'edge-response', node: 'response',
-        source: 'data_assistant', target: 'response', at: '', elapsed_ms: 2000,
-        status: 'finished' as const, summary: '',
-      }],
+      events: [
+        ...trace.events,
+        { seq: 5, kind: 'step' as const, step_id: 'step-2', node: 'data_assistant', action: 'data_assistant',
+          at: '', elapsed_ms: 2000, status: 'finished' as const, summary: 'Tra cứu dữ liệu' },
+        { seq: 6, kind: 'transition' as const, step_id: 'edge-response', node: 'response',
+          source: 'data_assistant', target: 'response', at: '', elapsed_ms: 2000,
+          status: 'finished' as const, summary: '' },
+      ],
     };
     rerender(<AgentFlowPanel trace={completedTrace} title="Doanh thu tháng này" onClose={vi.fn()} trigger={null} />);
     expect(screen.getByRole('button', { name: /Phản hồi.*Hoàn tất/ })).toBeInTheDocument();
     expect(container.querySelector('[data-edge="data_assistant-response"]')).toBeInTheDocument();
+    const completedEdge = container.querySelector('[data-edge="orchestrator-data_assistant"]');
+    expect(completedEdge).toHaveAttribute('data-edge-status', 'completed');
+    expect(completedEdge).toHaveAttribute('stroke-dasharray', '5 5');
     const xPosition = (name: RegExp) => Number.parseFloat(
       screen.getByRole('button', { name }).parentElement?.style.left || screen.getByRole('button', { name }).style.left,
     );
@@ -174,12 +172,10 @@ describe('thinking and agent flow', () => {
       const graph = container.querySelector('[aria-label="Sơ đồ thực thi agent"]')!;
 
       act(() => resize([{ target: graph, contentRect: { width: 280, height: 500 } } as ResizeObserverEntry], {} as ResizeObserver));
-      expect(graph).toHaveAttribute('data-layout-columns', '3');
-      expect(graph).toHaveAttribute('data-layout-bands', '2');
+      expect(graph.querySelector('svg')).toHaveAttribute('viewBox', '0 0 528 500');
 
       act(() => resize([{ target: graph, contentRect: { width: 660, height: 500 } } as ResizeObserverEntry], {} as ResizeObserver));
-      expect(graph).toHaveAttribute('data-layout-columns', '4');
-      expect(graph).toHaveAttribute('data-layout-bands', '1');
+      expect(graph.querySelector('svg')).toHaveAttribute('viewBox', '0 0 660 500');
     } finally {
       cleanup();
       window.matchMedia = originalMatchMedia;

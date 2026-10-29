@@ -51,7 +51,7 @@ export interface MetricRatio {
 }
 
 export interface MetricDefinition {
-  schema_version?: 1 | 2;
+  schema_version?: 1 | 2 | 3;
   metric: {
     name: string;
     formula: { function: MetricFunction; expression: string; ratio?: MetricRatio | null };
@@ -62,8 +62,22 @@ export interface MetricDefinition {
     status: MetricStatus;
     confidence?: MetricConfidence | null;
     excluded_notes: string;
+    query_plan?: MetricQueryPlan | null;
   };
   diagnostics?: Array<{ code: string; message: string }>;
+}
+
+export interface MetricQueryPlan {
+  stages: {
+    name: string;
+    base_entity?: string | null;
+    source_stage?: string | null;
+    joins: string[];
+    group_by: { name: string; expression: string; column_id?: number | null }[];
+    aggregates: { name: string; function: MetricFunction; expression: string; filters: MetricFilter[] }[];
+    filters: MetricFilter[];
+  }[];
+  output_expression: string;
 }
 
 export interface MetricRecord {
@@ -151,12 +165,18 @@ export interface MetricSuggestion {
   yaml_preview: string;
   conflict?: MetricConflictInfo | null;
   proposal_id?: string | null;
+  candidate_id?: string | null;
+  group_id?: string | null;
+  group_name?: string | null;
   review?: MetricReview | null;
   variant_id?: string | null;
   criteria?: Record<string, string>;
 }
 
 export interface MetricReview {
+  reason_code?: 'UNRESOLVED_ASSUMPTION' | 'MISSING_GRAIN' | 'VARIANT_CONFLICT' | 'MISSING_RATIO'
+    | 'TECHNICAL_VALIDATION' | 'REVIEWER_FINDING' | 'BUILDER_CLARIFICATION' | 'BUILDER_UNSUPPORTED'
+    | 'BUILDER_REJECTED' | 'INVALID_AGENT_OUTPUT' | 'PROVIDER_FAILURE' | 'OTHER' | null;
   variant_id?: string | null;
   criteria?: Record<string, string>;
   execution_error?: {
@@ -184,11 +204,16 @@ export interface MetricReview {
 export interface MetricCandidateReport {
   name: string;
   proposal_id?: string | null;
+  candidate_id?: string | null;
+  group_id?: string | null;
+  group_name?: string | null;
   review: MetricReview;
 }
 
 export interface ReviewedMetricProposal {
   proposal_id: string;
+  candidate_id?: string | null;
+  group_id?: string | null;
   definition: MetricDefinition | null;
   yaml_preview: string;
   review: MetricReview;
@@ -256,10 +281,12 @@ export interface SemanticQueryFilter {
 
 export interface SemanticQueryRequest {
   metric_ids: number[];
+  order_metric_id?: number | null;
   dimensions?: DimensionSelection[];
   dimension_ids?: number[];
   filters: SemanticQueryFilter[];
   limit: number;
+  order_by?: 'metric_desc' | 'dimension_desc';
 }
 
 export type TimeGrain = 'day' | 'week' | 'month' | 'quarter' | 'year';
@@ -754,6 +781,7 @@ export interface ChatClarificationOption {
     limit?: number;
   } | null;
   action?: string | null;
+  action_payload?: { requirement?: string; knowledge_id?: string; variant_id?: string; criteria?: Record<string, string> } | null;
 }
 
 export interface ChatClarificationSelection {
@@ -937,6 +965,23 @@ export interface MetricRequest {
   reviewed_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MetricPromptSuggestion {
+  id: string;
+  title: string;
+  prompt: string;
+  icon?: string;
+}
+
+export interface MetricPromptSuggestionsResponse {
+  items: MetricPromptSuggestion[];
+}
+
+export async function listMetricPromptSuggestionsApi(dbId: string): Promise<MetricPromptSuggestionsResponse> {
+  return chatRequest<MetricPromptSuggestionsResponse>(
+    `${API_BASE}/api/v1/semantic/${dbId}/metric-prompt-suggestions`,
+  );
 }
 
 export interface AppNotification {
@@ -1187,6 +1232,7 @@ export async function approveSingleMetricApi(
 
 /** One column in the HITL schema-review queue. */
 export interface SchemaReviewColumn {
+  column_id: number;
   column_name: string;
   business_name: string;
   description: string;
@@ -1196,6 +1242,7 @@ export interface SchemaReviewColumn {
   review_status: 'pending_review' | 'approved';
   is_primary_key: boolean;
   is_time_dimension: boolean;
+  allowed_values?: (string | number | boolean)[] | null;
   reviewed_by?: number | null;
   reviewed_at?: string | null;
 }
@@ -1220,6 +1267,7 @@ export interface SchemaReview {
   status: 'pending_review' | 'approved';
   pending_tables: number;
   pending_columns: number;
+  pending_relationships: number;
   tables: SchemaReviewTable[];
 }
 
@@ -1229,6 +1277,7 @@ export interface SchemaApproveResult {
   approved_columns: number;
   pending_tables: number;
   pending_columns: number;
+  pending_relationships: number;
   status: 'pending_review' | 'approved';
 }
 
@@ -1237,14 +1286,51 @@ export async function getSchemaReviewApi(dbId: string): Promise<SchemaReview> {
   return semanticRequest<SchemaReview>(`/api/v1/semantic/${dbId}/schema/review`);
 }
 
+export interface ColumnValueProposal {
+  id: number;
+  column_id: number;
+  table_name: string;
+  physical_schema: string | null;
+  column_name: string;
+  source: 'declared' | 'observed';
+  status: string;
+  values: (string | number | boolean)[] | null;
+  observed_at: string | null;
+}
+
+export async function getColumnValueProposalsApi(dbId: string): Promise<{
+  items: ColumnValueProposal[]; enabled: boolean; available: boolean;
+}> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals`);
+}
+
+export async function setColumnValueDiscoveryApi(dbId: string, enabled: boolean): Promise<{ enabled: boolean }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals/settings`, {
+    method: 'PUT', body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function scanColumnValueProposalsApi(dbId: string): Promise<{ status: string }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals/scan`, { method: 'POST' });
+}
+
+export async function reviewColumnValueProposalsApi(
+  dbId: string, proposalIds: number[], action: 'approve' | 'dismiss',
+): Promise<{ updated: number }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/column-value-proposals/review`, {
+    method: 'POST', body: JSON.stringify({ proposal_ids: proposalIds, action }),
+  });
+}
+
 /** Save a reviewer's inline edit of a table; the row stays pending until approved. */
 export async function updateTableReviewApi(
   dbId: string,
   tableName: string,
   businessName: string,
   description: string,
+  tableId?: number,
 ): Promise<{ message: string; review_status: string }> {
-  return semanticRequest(`/api/v1/semantic/${dbId}/table/${encodeURIComponent(tableName)}`, {
+  return semanticRequest(`/api/v1/semantic/${dbId}/table/${encodeURIComponent(tableName)}${tableId === undefined ? "" : `?table_id=${tableId}`}`, {
     method: 'PUT',
     body: JSON.stringify({ business_name: businessName, description }),
   });
@@ -1257,11 +1343,13 @@ export async function updateColumnReviewApi(
   columnName: string,
   businessName: string,
   description: string,
+  tableId?: number,
+  allowedValues?: (string | number | boolean)[] | null,
 ): Promise<{ message: string; review_status: string }> {
-  const path = `/api/v1/semantic/${dbId}/column/${encodeURIComponent(tableName)}/${encodeURIComponent(columnName)}`;
+  const path = `/api/v1/semantic/${dbId}/column/${encodeURIComponent(tableName)}/${encodeURIComponent(columnName)}${tableId === undefined ? "" : `?table_id=${tableId}`}`;
   return semanticRequest(path, {
     method: 'PUT',
-    body: JSON.stringify({ business_name: businessName, description }),
+    body: JSON.stringify({ business_name: businessName, description, ...(allowedValues === undefined ? {} : { allowed_values: allowedValues }) }),
   });
 }
 
@@ -1269,10 +1357,11 @@ export async function updateColumnReviewApi(
 export async function approveSchemaReviewApi(
   dbId: string,
   tableNames?: string[],
+  tableIds?: number[],
 ): Promise<SchemaApproveResult> {
   return semanticRequest<SchemaApproveResult>(`/api/v1/semantic/${dbId}/schema/approve`, {
     method: 'POST',
-    body: JSON.stringify({ table_names: tableNames ?? null }),
+    body: JSON.stringify({ table_names: tableNames ?? null, table_ids: tableIds ?? null }),
   });
 }
 

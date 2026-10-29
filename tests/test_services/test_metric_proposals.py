@@ -12,12 +12,18 @@ from src.services.metric_context import load_review_schema
 from src.services.metric_knowledge import metric_knowledge
 from src.services.metric_proposals import (
     link_saved_proposal,
+    persist_reviewed_state,
     re_review_proposal,
     require_passing_proposal,
     review_schema_fingerprint,
 )
 from src.services.metric_service import create_metric
 from tests.metric_review_helpers import definition, reviewer_mock, schema, seed_proposal
+
+
+@pytest.fixture(autouse=True)
+def enable_metric_knowledge(monkeypatch):
+    monkeypatch.setattr(get_settings(), "metric_knowledge_enabled", True)
 
 
 @pytest.fixture
@@ -71,6 +77,10 @@ async def test_metadata_semantics_and_constraints_invalidate_review(async_sessio
     column = await async_session.scalar(select(SemanticColumnModel).where(SemanticColumnModel.column_name == "amount"))
     if attribute == "is_nullable":
         column.is_nullable = False
+        proposal.context = {**proposal.context, "schema": await load_review_schema(async_session, proposal.db_id)}
+        proposal.schema_fingerprint = review_schema_fingerprint(proposal.context["schema"])
+    elif attribute == "allowed_values":
+        column.review_status = "approved"
         proposal.context = {**proposal.context, "schema": await load_review_schema(async_session, proposal.db_id)}
         proposal.schema_fingerprint = review_schema_fingerprint(proposal.context["schema"])
     setattr(column, attribute, value)
@@ -132,6 +142,7 @@ async def test_re_review_preserves_variant_identity_and_its_source(async_session
             "knowledge_id": "net_sales",
             "variant_id": "merchandise_net_sales",
             "criteria": {"order_status": "all_statuses"},
+            "group_id": "net_sales",
         },
     }
     with patch("src.agents.workflows.metric_proposal_workflow.review_metric_batch", reviewer_mock()):
@@ -139,7 +150,39 @@ async def test_re_review_preserves_variant_identity_and_its_source(async_session
     assert updated.parent_id == proposal.id
     assert updated.review["variant_id"] == "merchandise_net_sales"
     assert updated.review["criteria"]["order_status"] == "all_statuses"
+    assert updated.context["candidate"]["id"] == "original"
+    assert updated.context["candidate"]["group_id"] == "net_sales"
+    assert updated.context["candidate"]["id"] != updated.id
     assert [source["id"] for source in updated.review["sources"]] == ["woocommerce_analytics"]
+
+
+async def test_persist_reviewed_state_matches_duplicate_names_by_candidate_id(async_session):
+    database = SemanticDatabaseModel(created_by=1, display_name="Review DB", db_type="sqlite", conn_url_enc="enc")
+    async_session.add(database)
+    await async_session.flush()
+    base = await seed_proposal(async_session, database.id, 1)
+    evidence = []
+    for key, expression in (("candidate-a", "amount"), ("candidate-b", "amount * 2")):
+        evidence.append({
+            "name": "Same", "context": {**base.context, "candidate": {"id": key}},
+            "original_definition": base.original_definition,
+            "final_definition": definition(expression, "Same"), "review": base.review,
+        })
+    state = {
+        "reviewed_proposals": evidence,
+        "suggested_metrics": [
+            {"candidate_id": "candidate-b", "definition": evidence[1]["final_definition"]},
+            {"candidate_id": "candidate-a", "definition": evidence[0]["final_definition"]},
+        ],
+        "blocked_candidates": [],
+    }
+    await persist_reviewed_state(async_session, database.id, 1, state)
+    assert state["suggested_metrics"][0]["proposal_id"] != state["suggested_metrics"][1]["proposal_id"]
+    by_id = {item["candidate_id"]: item["proposal_id"] for item in state["suggested_metrics"]}
+    proposals = (await async_session.scalars(select(MetricProposalModel))).all()
+    assert {row.id: row.context["candidate"].get("id") for row in proposals if row.id in by_id.values()} == {
+        by_id["candidate-a"]: "candidate-a", by_id["candidate-b"]: "candidate-b"
+    }
 
 
 async def test_re_review_with_knowledge_disabled_keeps_the_original_snapshot(async_session, proposal):

@@ -13,6 +13,7 @@ from src.models.db import (
     SemanticTableModel,
 )
 from src.models.schemas import FilterColumnItem, RecommendedDimensionItem
+from src.services.relationship_runtime import active_relationship_filters, relationship_paths
 
 JUNK_KEYWORDS = {
     "note",
@@ -127,17 +128,12 @@ def _collect_outgoing_rel_dims(
 ) -> list[tuple[int, RecommendedDimensionItem]]:
     """Collect Tier B or C dimensions via outgoing N:1 or 1:1 relations."""
     results = []
-    for rel in relationships:
-        r_type = (rel.relationship_type or "").lower()
-        is_n1 = r_type in ("many_to_one", "n:1", "one_to_one", "1:1")
-        if rel.from_entity_id == source_table_id and is_n1:
-            target_table = tables_map.get(rel.to_entity_id)
-            if not target_table:
-                continue
+    for target_id in _collect_safe_outgoing_table_ids(relationships, source_table_id):
+        target_table = tables_map.get(target_id)
+        if target_table:
             for col in target_table.columns:
                 if is_valid_dimension_column(col, include_time=True):
-                    item = _make_dimension_item(col, target_table, tier, True, False)
-                    results.append((rel.to_entity_id, item))
+                    results.append((target_id, _make_dimension_item(col, target_table, tier, True, False)))
     return results
 
 
@@ -169,7 +165,9 @@ async def get_dimensions_for_metric(
     if not base_table:
         return []
 
-    stmt_rels = select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id)
+    stmt_rels = select(CanonicalRelationshipModel).where(
+        CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters()
+    )
     relationships = (await db.execute(stmt_rels)).scalars().all()
 
     # 1. Tier A (Core - same base table)
@@ -195,6 +193,11 @@ async def get_dimensions_for_metric(
             seen_col_ids.add(item.column_id)
             all_candidates.append(item)
 
+    all_candidates = [
+        item
+        for item in all_candidates
+        if item.table_id == base_table.id or len(relationship_paths(relationships, base_table.id, item.table_id)) == 1
+    ]
     all_candidates.sort(key=lambda x: (x.tier, x.cardinality_hint or 999))
     return all_candidates[:limit]
 
@@ -233,12 +236,12 @@ def _collect_safe_outgoing_table_ids(
     source_id: int,
 ) -> set[int]:
     """Find target table IDs reachable via outgoing safe N:1 / 1:1 relations."""
-    target_ids = set()
-    for rel in relationships:
-        r_type = (rel.relationship_type or "").lower()
-        if rel.from_entity_id == source_id and r_type in ("many_to_one", "n:1", "one_to_one", "1:1"):
-            target_ids.add(rel.to_entity_id)
-    return target_ids
+    candidates = {rel.from_entity_id for rel in relationships} | {rel.to_entity_id for rel in relationships}
+    return {
+        target
+        for target in candidates - {source_id}
+        if len(paths := relationship_paths(relationships, source_id, target)) == 1 and len(paths[0]) == 1
+    }
 
 
 def _collect_related_filter_items(
@@ -285,7 +288,9 @@ async def get_filter_columns_for_metric(
     if not base_table:
         return []
 
-    stmt_rels = select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id)
+    stmt_rels = select(CanonicalRelationshipModel).where(
+        CanonicalRelationshipModel.connection_id == db_id, *active_relationship_filters()
+    )
     relationships = (await db.execute(stmt_rels)).scalars().all()
 
     base_items = [
@@ -297,7 +302,11 @@ async def get_filter_columns_for_metric(
     hop2 = set()
     for t_id in hop1:
         hop2.update(_collect_safe_outgoing_table_ids(relationships, t_id))
-    all_targets = (hop1 | hop2) - {base_table.id}
+    all_targets = {
+        target
+        for target in (hop1 | hop2) - {base_table.id}
+        if len(relationship_paths(relationships, base_table.id, target)) == 1
+    }
 
     related_items = _collect_related_filter_items(tables_map, all_targets, seen_col_ids)
     return base_items + related_items

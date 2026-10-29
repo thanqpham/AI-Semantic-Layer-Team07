@@ -27,6 +27,7 @@ from src.services.metric_service import reject_metric_update
 from src.services.metric_versioning import latest_open_version
 from src.services.schema_review_service import (
     SchemaRowNotFoundError,
+    SchemaTableAmbiguousError,
     approve_schema,
     load_review_tables,
     pending_review_counts,
@@ -54,6 +55,7 @@ async def get_schema_review(
         status="pending_review" if pending else "approved",
         pending_tables=counts["pending_tables"],
         pending_columns=counts["pending_columns"],
+        pending_relationships=counts["pending_relationships"],
         tables=[ReviewTableItem.model_validate(table) for table in tables],
     )
 
@@ -70,7 +72,9 @@ async def approve_schema_review(
     await _require_resource_permission(db, current_user.id, db_id, org_id, "can_approve_metrics")
     table_names = body.table_names if body else None
     try:
-        result = await approve_schema(db, db_id, current_user.id, table_names)
+        result = await approve_schema(db, db_id, current_user.id, table_names, body.table_ids if body else None)
+    except SchemaTableAmbiguousError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     await db.commit()
@@ -81,6 +85,7 @@ async def approve_schema_review(
         approved_columns=result["approved_columns"],
         pending_tables=result["pending_tables"],
         pending_columns=result["pending_columns"],
+        pending_relationships=result["pending_relationships"],
         status="pending_review" if pending else "approved",
     )
 

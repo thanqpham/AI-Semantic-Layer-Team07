@@ -50,6 +50,9 @@ class AgentState(TypedDict, total=False):
     existing_metrics: list[dict[str, Any]]
     """Tóm tắt các metric đã lưu (từ Metadata Store) dùng để đối chiếu trùng lặp."""
 
+    selected_metric_variant: dict[str, Any]
+    """Server-validated variant selected from this session's clarification metadata."""
+
     dedupe_performed: bool
     """True nếu dedupe đã chạy; False khi không tải được existing metrics (lỗi DB)."""
 

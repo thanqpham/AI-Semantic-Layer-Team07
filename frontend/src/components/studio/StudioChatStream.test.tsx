@@ -1,12 +1,64 @@
 import { reviewedSuggestionFields } from '@/test/metricReviewFixture';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { StudioChatStream } from '@/components/studio/StudioChatStream';
+import { metricRequestKey, StudioChatStream } from '@/components/studio/StudioChatStream';
+
+const metricPromptSuggestions = [{
+  id: 'net-sales',
+  title: 'Tạo metric doanh thu thuần',
+  prompt: 'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
+}];
 
 describe('StudioChatStream', () => {
   beforeEach(() => {
     cleanup();
+  });
+
+  it('renders only the backend metric prompts instead of canned or table-derived prompts', () => {
+    const props = {
+      messages: [],
+      onSendMessage: vi.fn(),
+      isLoading: false,
+      tableNames: ['orders', 'products'],
+      mode: 'metric_studio' as const,
+      metricPromptSuggestions: [
+        { id: 'net-sales', title: 'Doanh thu lũy kế', prompt: 'Tính doanh thu lũy kế', icon: '📈' },
+      ],
+    };
+    const { rerender } = render(<StudioChatStream {...props} />);
+
+    expect(screen.getByRole('button', { name: /Doanh thu lũy kế/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Tạo metric doanh thu thuần|Tỷ lệ hủy đơn hàng|Số lượng sản phẩm bán/ })).not.toBeInTheDocument();
+
+    rerender(<StudioChatStream {...props} metricPromptSuggestions={[]} />);
+    expect(screen.queryByRole('button', { name: /Doanh thu lũy kế/ })).not.toBeInTheDocument();
+  });
+
+  it('does not render metric prompt chips in Data Assistant mode', () => {
+    render(
+      <StudioChatStream messages={[]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]}
+        mode="data_assistant" metricPromptSuggestions={[]} />,
+    );
+
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
+  });
+
+  it('grows the composer with typed content and shrinks it after sending', async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
+    render(<StudioChatStream messages={[]} onSendMessage={onSendMessage} isLoading={false} tableNames={[]} />);
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
+
+    const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 132 });
+    fireEvent.change(textarea, { target: { value: 'Đề xuất metric doanh thu thuần kèm giả định chi tiết' } });
+    expect(textarea.style.height).toBe('132px');
+
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 34 });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+    expect(textarea.value).toBe('');
+    expect(textarea.style.height).toBe('34px');
   });
 
   it('opens loaded conversation history at the newest message without scrolling from the top', () => {
@@ -75,6 +127,70 @@ describe('StudioChatStream', () => {
     fireEvent.click(toggleYamlBtn);
     expect(screen.getByText(/name: Doanh thu/)).toBeInTheDocument();
     expect(screen.queryByText(/SQL Compiled/)).not.toBeInTheDocument();
+  });
+
+  it('groups passing and blocked variants together under their curated family', () => {
+    render(
+      <StudioChatStream
+        messages={[{
+          id: 'family', sender: 'assistant', text: 'Net sales variants', timestamp: '10:00',
+          suggestions: [{
+            ...reviewedSuggestionFields,
+            candidate_id: 'candidate-pass', group_id: 'net_sales', group_name: 'Doanh số thuần',
+            definition: {
+              metric: {
+                name: 'Doanh thu trước thuế', formula: { function: 'SUM', expression: 'amount' },
+                base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high',
+              },
+            } as never,
+            yaml_preview: '',
+          }],
+          blockedCandidates: [{
+            name: 'Doanh thu sau thuế', candidate_id: 'candidate-blocked', group_id: 'net_sales',
+            group_name: 'Doanh số thuần',
+            review: { ...reviewedSuggestionFields.review!, status: 'needs_clarification', summary: 'Thiếu cột VAT' },
+          }],
+        }]}
+        onSendMessage={vi.fn()}
+        isLoading={false}
+        tableNames={[]}
+      />,
+    );
+    const family = screen.getByRole('heading', { name: 'Doanh số thuần' }).closest('section');
+    expect(family).toContainElement(screen.getByText('Doanh thu trước thuế'));
+    expect(family).toContainElement(screen.getByText('Doanh thu sau thuế'));
+  });
+
+  it('tracks saved state by proposal id when candidate names match', async () => {
+    const addMetric = vi.fn().mockResolvedValue(undefined);
+    const suggestion = {
+      ...reviewedSuggestionFields,
+      definition: {
+        metric: {
+          name: 'Same name', formula: { function: 'SUM', expression: 'amount' },
+          base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high',
+        },
+      } as never,
+      yaml_preview: '',
+    };
+    render(
+      <StudioChatStream
+        messages={[{
+          id: 'same-name', sender: 'assistant', text: 'Two variants', timestamp: '10:00', suggestionAction: 'save_metric',
+          suggestions: [
+            { ...suggestion, proposal_id: 'proposal-first', candidate_id: 'candidate-first' },
+            { ...suggestion, proposal_id: 'proposal-second', candidate_id: 'candidate-second' },
+          ],
+        }]}
+        onSendMessage={vi.fn()}
+        onAddMetric={addMetric}
+        isLoading={false}
+        tableNames={[]}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Lưu vào Semantic Layer' })[0]);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Đã lưu — mở catalog' })).toHaveLength(1));
+    expect(screen.getAllByRole('button', { name: 'Lưu vào Semantic Layer' })).toHaveLength(1);
   });
 
   it('shows unresolved business assumptions on a low-confidence proposal', () => {
@@ -187,7 +303,7 @@ describe('StudioChatStream', () => {
         isLoading={false}
         tableNames={[]}
         mode="data_assistant"
-        submittedRequestKeys={new Set(['assistant-message:0'])}
+        submittedRequestKeys={new Set([metricRequestKey('assistant-message', 0, reviewedSuggestionFields.proposal_id)])}
       />,
     );
 
@@ -208,7 +324,7 @@ describe('StudioChatStream', () => {
         isLoading={false}
         tableNames={[]}
         mode="data_assistant"
-        approvedRequestKeys={new Set(['assistant-message:0'])}
+        approvedRequestKeys={new Set([metricRequestKey('assistant-message', 0, reviewedSuggestionFields.proposal_id)])}
       />,
     );
 
@@ -349,7 +465,7 @@ describe('StudioChatStream', () => {
     expect(onAddMetric).toHaveBeenCalled();
   });
 
-  it('restores saved state from the catalog after returning to AI Studio', () => {
+  it('warns when the catalog contains a metric with the same name', () => {
     render(
       <StudioChatStream
         messages={[{
@@ -363,27 +479,86 @@ describe('StudioChatStream', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: /Đã lưu/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Lưu vào Semantic Layer/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Tên này đã có trong catalog/)).toBeInTheDocument();
   });
 
-  it('grows the composer with typed content and shrinks it back after sending', () => {
+  it('prefills the input with a suggested prompt when clicked', () => {
     const onSendMessage = vi.fn().mockResolvedValue(undefined);
     render(
-      <StudioChatStream messages={[]} onSendMessage={onSendMessage} isLoading={false} tableNames={[]} />,
+      <StudioChatStream
+        messages={[]}
+        onSendMessage={onSendMessage}
+        isLoading={false}
+        tableNames={['orders', 'customers']}
+        metricPromptSuggestions={metricPromptSuggestions}
+      />
     );
-    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
+
+    const strip = screen.getByTestId('prompt-suggestion-strip');
+    expect(strip).toHaveClass('overflow-x-auto');
+    expect(strip).toHaveClass('whitespace-nowrap');
+    const suggestionChip = screen.getByText('Tạo metric doanh thu thuần');
+    expect(suggestionChip).toBeInTheDocument();
+    expect(strip.querySelectorAll('button')).toHaveLength(1);
+    expect(strip.closest('.shrink-0')).not.toHaveClass('border-t');
+    expect(strip.closest('.shrink-0')?.nextElementSibling).not.toHaveClass('border-t');
+
+    fireEvent.click(suggestionChip);
 
     const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
-    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 132 });
-    fireEvent.change(textarea, { target: { value: 'Đề xuất metric doanh thu thuần kèm giả định chi tiết' } });
-    expect(textarea.style.height).toBe('132px');
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(textarea.value).toBe(
+      'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
+    );
+  });
 
-    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 34 });
-    fireEvent.keyDown(textarea, { key: 'Enter' });
-    expect(onSendMessage).toHaveBeenCalledTimes(1);
-    expect(textarea.value).toBe('');
-    expect(textarea.style.height).toBe('34px');
+  it('prefills the input when a click has slight pointer movement', () => {
+    render(
+      <StudioChatStream
+        messages={[]}
+        onSendMessage={vi.fn()}
+        isLoading={false}
+        tableNames={['orders']}
+        metricPromptSuggestions={metricPromptSuggestions}
+      />,
+    );
+
+    const strip = screen.getByTestId('prompt-suggestion-strip');
+    fireEvent.pointerDown(strip, { pointerId: 1, clientX: 100, isPrimary: true });
+    fireEvent.pointerMove(strip, { pointerId: 1, clientX: 106, isPrimary: true });
+    fireEvent.pointerUp(strip, { pointerId: 1, clientX: 106, isPrimary: true });
+    fireEvent.click(screen.getByText('Tạo metric doanh thu thuần'));
+
+    const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
+    expect(textarea.value).toContain('Đề xuất metric doanh thu thuần');
+  });
+
+  it('allows selecting a prompt after dragging the suggestion strip', async () => {
+    render(
+      <StudioChatStream
+        messages={[{ id: 'user-1', sender: 'user', text: 'Xin chào', timestamp: '10:00' }]}
+        onSendMessage={vi.fn()}
+        isLoading={false}
+        tableNames={['orders']}
+        metricPromptSuggestions={metricPromptSuggestions}
+      />
+    );
+
+    const strip = screen.getByTestId('prompt-suggestion-strip');
+    Object.defineProperty(strip, 'clientWidth', { configurable: true, value: 240 });
+    Object.defineProperty(strip, 'scrollWidth', { configurable: true, value: 720 });
+    fireEvent.pointerDown(strip, { pointerId: 1, clientX: 200, isPrimary: true });
+    fireEvent.pointerMove(strip, { pointerId: 1, clientX: 80, isPrimary: true });
+    fireEvent.pointerUp(strip, { pointerId: 1, clientX: 80, isPrimary: true });
+
+    expect(strip.scrollLeft).toBe(120);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    fireEvent.click(screen.getByText('Tạo metric doanh thu thuần'));
+
+    const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
+    expect(textarea.value).toBe(
+      'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
+    );
   });
 
   it('renders formula display with function and expression parts', () => {

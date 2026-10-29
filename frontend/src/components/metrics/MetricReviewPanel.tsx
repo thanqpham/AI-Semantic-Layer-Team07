@@ -20,6 +20,20 @@ const CRITERIA: Record<string, string> = { tax_basis: 'Cơ sở thuế', refund_
   numerator: 'Tử số', denominator: 'Mẫu số', formula_basis: 'Cơ sở công thức' };
 const VALUES: Record<string, string> = { excludes_tax: 'Trước thuế', includes_vat: 'Gồm VAT',
   subtract_sales_reversals: 'Trừ điều chỉnh giảm', confirmed_completed: 'Đơn hoàn tất đã xác nhận' };
+const REASONS: Record<NonNullable<MetricReview['reason_code']>, string> = {
+  UNRESOLVED_ASSUMPTION: 'Còn giả định nghiệp vụ chưa xác nhận',
+  MISSING_GRAIN: 'Chưa xác định được grain của dữ liệu',
+  VARIANT_CONFLICT: 'Biến thể không khớp yêu cầu',
+  MISSING_RATIO: 'Thiếu công thức tỷ lệ',
+  TECHNICAL_VALIDATION: 'Không đạt kiểm tra kỹ thuật',
+  REVIEWER_FINDING: 'Cần xử lý nhận xét thẩm định',
+  BUILDER_CLARIFICATION: 'Agent cần thêm thông tin',
+  BUILDER_UNSUPPORTED: 'Agent không thể hỗ trợ từ schema hiện có',
+  BUILDER_REJECTED: 'Agent không đề xuất metric này',
+  INVALID_AGENT_OUTPUT: 'Phản hồi của agent không hợp lệ',
+  PROVIDER_FAILURE: 'Không thể hoàn tất lời gọi LLM',
+  OTHER: 'Lý do chưa được phân loại',
+};
 
 export function MetricReviewPanel({ review, definition }: { review: MetricReview; definition?: MetricDefinition | null }) {
   const error = review.execution_error;
@@ -32,6 +46,7 @@ export function MetricReviewPanel({ review, definition }: { review: MetricReview
   return <details className="my-2 rounded-md border border-border bg-secondary/20 p-3 text-xs">
     <summary className="cursor-pointer font-semibold">{heading}</summary>
     <p className="mt-2 whitespace-pre-wrap">{review.summary}</p>
+    {review.reason_code && <p className="mt-2"><strong>Nhóm lý do:</strong> {REASONS[review.reason_code]}</p>}
     {error && <p className="mt-2">{error.message}
       {error.retry_after_seconds != null && ` Có thể thử lại sau khoảng ${Math.ceil(error.retry_after_seconds)} giây.`}
     </p>}

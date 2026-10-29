@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -28,6 +27,11 @@ from src.models.raw_schema import (
     SchemaExtractionRequest,
     SchemaExtractionResult,
     TableMetadata,
+)
+from src.services.categorical_discovery_policy import (
+    declared_check_values,
+    inspect_declared_checks,
+    safe_declared_values,
 )
 from src.services.database import decrypt_conn_url
 from src.services.introspection_errors import (
@@ -60,108 +64,12 @@ ASYNC_DRIVERS: dict[DatabaseType, str] = {
     "sqlite": "sqlite+aiosqlite",
 }
 
-_SAMPLE_LIMIT = 20
-
-_CATEGORICAL_PATTERNS = (
-    "status",
-    "type",
-    "flag",
-    "is_",
-    "has_",
-    "category",
-    "state",
-    "level",
-    "role",
-    "gender",
-    "priority",
-)
-
-_PII_BLACKLIST = (
-    "password",
-    "secret",
-    "token",
-    "hash",
-    "note",
-    "comment",
-    "description",
-    "email",
-    "phone",
-    "address",
-    "ip_",
-    "user_agent",
-)
-
 
 @dataclass(frozen=True)
 class _LiveContext:
     inspector: Inspector
     schema_name: str | None
     request: LiveSchemaRequest
-    connection: Connection
-
-
-def _should_sample(column_name: str, data_type: str) -> bool:
-    """Heuristic: only sample categorical columns, block PII and long text."""
-    name_lower = column_name.lower()
-
-    if any(p in name_lower for p in _PII_BLACKLIST):
-        return False
-
-    type_upper = data_type.upper()
-
-    if "BOOLEAN" in type_upper or "BOOL" in type_upper:
-        return True
-
-    if "ENUM" in type_upper:
-        return True
-
-    if "VARCHAR" in type_upper or "CHAR" in type_upper:
-        match = re.search(r"\((\d+)\)", type_upper)
-        if match:
-            length = int(match.group(1))
-            if length > 50:
-                return False
-        return any(pat in name_lower for pat in _CATEGORICAL_PATTERNS)
-
-    if any(t in type_upper for t in ("SMALLINT", "INTEGER", "INT", "TINYINT")):
-        return any(pat in name_lower for pat in _CATEGORICAL_PATTERNS)
-
-    return False
-
-
-def _sample_column_values(
-    connection: Connection,
-    table_name: str,
-    column_name: str,
-    schema_name: str | None,
-    db_type: DatabaseType,
-) -> list[str] | None:
-    """Sample distinct values for a categorical column. Returns None on failure."""
-    try:
-        safe_col = column_name.replace('"', '""')
-        safe_tbl = table_name.replace('"', '""')
-        safe_schema = schema_name.replace('"', '""') if schema_name else None
-
-        if db_type == "postgresql":
-            col_ref = f'"{safe_col}"'
-            tbl_ref = f'"{safe_schema}"."{safe_tbl}"' if safe_schema else f'"{safe_tbl}"'
-        elif db_type == "mysql":
-            safe_col_mysql = column_name.replace("`", "``")
-            safe_tbl_mysql = table_name.replace("`", "``")
-            col_ref = f"`{safe_col_mysql}`"
-            tbl_ref = f"`{safe_tbl_mysql}`"
-        else:  # sqlite
-            col_ref = f'"{safe_col}"'
-            tbl_ref = f'"{safe_tbl}"'
-
-        sql = f"SELECT DISTINCT {col_ref} FROM {tbl_ref} WHERE {col_ref} IS NOT NULL LIMIT {_SAMPLE_LIMIT}"  # noqa: S608
-        result = connection.exec_driver_sql(sql)
-        rows = result.fetchall()
-        if not rows:
-            return None
-        return [str(row[0]) for row in rows]
-    except Exception:
-        return None
 
 
 @dataclass
@@ -236,7 +144,7 @@ def _normalize_url(plain_url: str, db_type: DatabaseType) -> URL:
 def _read_live_schema(connection: Connection, request: LiveSchemaRequest) -> SchemaExtractionResult:
     inspector = inspect(connection)
     schema_name = _schema_name(inspector, connection, request["db_type"])
-    context = _LiveContext(inspector=inspector, schema_name=schema_name, request=request, connection=connection)
+    context = _LiveContext(inspector=inspector, schema_name=schema_name, request=request)
     table_names = _table_names(context)
     output = _read_live_tables(context, table_names)
     if table_names and not output.tables:
@@ -296,7 +204,11 @@ def _table_metadata(
     parts: _LiveTableParts,
 ) -> TableMetadata:
     primary_keys = set(parts.primary_keys)
-    columns = [_column(item, primary_keys, parts.references, table_name, context) for item in parts.columns]
+    checks = inspect_declared_checks(context.inspector, table_name, context.schema_name)
+    columns = [_column(item, primary_keys, parts.references) for item in parts.columns]
+    for column in columns:
+        if not column["sample_values"]:
+            column["sample_values"] = declared_check_values(checks, column["column_name"])
     return {
         "table_name": table_name,
         "schema_name": context.schema_name,
@@ -327,18 +239,13 @@ def _column(
     column: ReflectedColumn,
     primary_keys: set[str],
     references: dict[str, ColumnReference],
-    table_name: str,
-    context: _LiveContext,
 ) -> ColumnMetadata:
     name = str(column["name"])
     default_value = column.get("default")
     data_type = normalize_data_type(column["type"])
 
-    sample_values = None
-    if _should_sample(name, data_type):
-        sample_values = _sample_column_values(
-            context.connection, table_name, name, context.schema_name, context.request["db_type"]
-        )
+    enum_values = getattr(column["type"], "enums", None)
+    sample_values = safe_declared_values(list(enum_values)) if enum_values else None
 
     return {
         "column_name": name,

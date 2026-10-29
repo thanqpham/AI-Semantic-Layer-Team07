@@ -170,6 +170,7 @@ class SemanticColumnUpdate(BaseModel):
 
     business_name: str = Field(..., min_length=1, max_length=200, description="Tên nghiệp vụ tiếng Việt")
     description: str = Field(default="", max_length=1000, description="Mô tả chi tiết")
+    allowed_values: list[str | int | float | bool] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -342,6 +343,9 @@ class MetricSuggestionItem(BaseModel):
     yaml_preview: str
     conflict: MetricConflictInfo | None = None
     proposal_id: str | None = None
+    candidate_id: str | None = None
+    group_id: str | None = None
+    group_name: str | None = None
     review: MetricReview | None = None
     variant_id: str | None = None
     criteria: dict[str, str] = Field(default_factory=dict)
@@ -529,6 +533,7 @@ class SemanticQueryFilter(BaseModel):
 
 
 TimeGrain = Literal["day", "week", "month", "quarter", "year"]
+QueryOrder = Literal["metric_desc", "dimension_desc"]
 
 
 class DimensionSelection(BaseModel):
@@ -541,6 +546,8 @@ class SemanticQuerySpec(BaseModel):
     dimensions: list[DimensionSelection] = Field(default_factory=list)
     filters: list[SemanticQueryFilter] = Field(default_factory=list)
     limit: int = Field(default=100, ge=1, le=1000)
+    order_by: QueryOrder | None = None
+    order_metric_id: int | None = Field(default=None, gt=0)
 
 
 class SemanticQueryRequest(BaseModel):
@@ -551,6 +558,8 @@ class SemanticQueryRequest(BaseModel):
     dimension_ids: list[int] = Field(default_factory=list, description="Deprecated raw dimension IDs")
     filters: list[SemanticQueryFilter] = Field(default_factory=list)
     limit: int = Field(default=100, ge=1, le=1000, description="Max rows to return (default 100, max 1000)")
+    order_by: QueryOrder | None = None
+    order_metric_id: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def reject_mixed_dimension_contracts(self) -> SemanticQueryRequest:
@@ -567,6 +576,8 @@ class SemanticQueryRequest(BaseModel):
             dimensions=dimensions,
             filters=self.filters,
             limit=self.limit,
+            order_by=self.order_by,
+            order_metric_id=self.order_metric_id,
         )
 
 
@@ -603,7 +614,11 @@ class DashboardWidgetConfig(BaseModel):
     """One persisted dashboard widget referencing approved semantic metadata."""
 
     id: str = Field(..., min_length=1, max_length=64, description="Stable client widget key")
-    metric_id: int = Field(..., gt=0, description="Exactly one approved metric per widget")
+    metric_id: int = Field(..., gt=0, description="Primary metric; retained for legacy layouts")
+    metric_ids: list[int] | None = Field(
+        default=None, min_length=2, max_length=5, exclude_if=lambda value: value is None
+    )
+    order_metric_id: int | None = Field(default=None, gt=0, exclude_if=lambda value: value is None)
     dimension_col_id: int | None = Field(default=None, gt=0)
     date_filter_column_id: int | None = Field(default=None, gt=0)
     time_grain: TimeGrain | None = None
@@ -626,6 +641,18 @@ class DashboardWidgetConfig(BaseModel):
     @model_validator(mode="after")
     def validate_chart_compatibility(self) -> DashboardWidgetConfig:
         """Enforce per-chart reference requirements from the canonical contract."""
+        selected = self.metric_ids or [self.metric_id]
+        if any(metric_id <= 0 for metric_id in selected):
+            raise ValueError("metric_ids must contain positive IDs")
+        if len(selected) != len(set(selected)) or selected[0] != self.metric_id:
+            raise ValueError("metric_ids must be unique and start with metric_id")
+        if self.order_metric_id is not None and self.order_metric_id not in selected:
+            raise ValueError("order_metric_id must reference a selected metric")
+        if len(selected) > 1:
+            if self.chart_type in ("kpi", "pie"):
+                raise ValueError("KPI and pie widgets support one metric only")
+            if self.chart_type in ("bar", "table") and self.order_metric_id is None:
+                raise ValueError("Bar and table widgets require a sort metric")
         if self.chart_type == "kpi":
             if self.date_filter_column_id is None:
                 raise ValueError("KPI widgets require date_filter_column_id")
@@ -729,6 +756,21 @@ class SemanticCatalogResponse(BaseModel):
     query_supported: bool
     tables: list[SemanticCatalogTable] = Field(default_factory=list)
     relationships: list[CanonicalRelationshipResponse] = Field(default_factory=list)
+
+
+class MetricPromptSuggestionItem(BaseModel):
+    """Expose one eligible metric prompt without schema diagnostics."""
+
+    id: str
+    title: str
+    prompt: str
+    icon: str | None = None
+
+
+class MetricPromptSuggestionsResponse(BaseModel):
+    """Return eligible metric prompt suggestions."""
+
+    items: list[MetricPromptSuggestionItem] = Field(default_factory=list)
 
 
 class RecommendedDimensionItem(BaseModel):
@@ -906,6 +948,7 @@ class ChatClarificationOption(BaseModel):
     description: str | None = None
     spec: SemanticQuerySpec | None = None
     action: str | None = None
+    action_payload: dict[str, Any] | None = None
 
 
 class ChatClarificationSelection(BaseModel):

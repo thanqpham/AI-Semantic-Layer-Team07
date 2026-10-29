@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.models.metric_definition import FilterOperator, MetricConfidence, MetricFunction
+from src.models.metric_definition import FilterOperator, MetricConfidence, MetricFunction, MetricQueryPlan
 
 FilterLiteral = str | int | float | bool | None
 
@@ -52,11 +52,12 @@ class AgentMetricSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
     base_entity: str
-    formula: AgentFormula
+    formula: AgentFormula | None = None
     filters: list[AgentFilter] = Field(default_factory=list)
     status: Literal["pending_approval"] = "pending_approval"
     confidence: MetricConfidence | None = None
     excluded_notes: str = ""
+    query_plan: MetricQueryPlan | None = None
 
 
 class AgentDefinition(BaseModel):

@@ -32,6 +32,12 @@ describe('metric review evidence and gates', () => {
     expect(screen.getByText('merchandise_net_including_vat')).toBeInTheDocument();
     expect(screen.getByText('Cơ sở thuế: Gồm VAT')).toBeInTheDocument();
   });
+  it('shows a structured reason category when one is available', () => {
+    render(<MetricReviewPanel review={{ ...passingReview, status: 'needs_clarification',
+      reason_code: 'UNRESOLVED_ASSUMPTION' }} />);
+    fireEvent.click(screen.getByText('Cần xác nhận nghiệp vụ'));
+    expect(screen.getByText('Nhóm lý do: Còn giả định nghiệp vụ chưa xác nhận')).toBeInTheDocument();
+  });
   it.each([
     ['INVALID_AGENT_OUTPUT', 'AI chưa tạo được định nghĩa hợp lệ'],
     ['RATE_LIMITED', 'Đang bị giới hạn API'],

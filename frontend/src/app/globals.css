@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -132,6 +133,19 @@
 
   html {
     scroll-behavior: smooth;
+  }
+
+  /* ─── Desktop Density Scaling (Professional Compact Proportions) ─── */
+  @media (min-width: 1024px) {
+    html {
+      font-size: 13.5px;
+    }
+  }
+
+  @media (min-width: 1680px) {
+    html {
+      font-size: 14.5px;
+    }
   }
 }
 
@@ -791,3 +805,40 @@
     transform: rotate(180deg);
   }
 }
+
+/* ─── Relationship Diagram & Detail Drawer ─── */
+@keyframes rel-edge-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.rel-edge-flow {
+  animation: rel-edge-dash 0.8s linear infinite;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Ensure ERD table cards always render on top of passing relationship lines and unselected labels */
+.react-flow__node {
+  z-index: 10 !important;
+}
+
+.react-flow__node:hover {
+  z-index: 25 !important;
+}
+
+

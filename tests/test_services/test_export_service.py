@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import (
@@ -447,3 +448,14 @@ async def test_export_nonexistent_database_raises(async_session: AsyncSession):
     """Raises ValueError when database ID does not exist."""
     with pytest.raises(ValueError, match="not found"):
         await build_semantic_layer_dict(async_session, 9999)
+
+
+@pytest.mark.asyncio
+async def test_export_omits_sync_invalidated_relationship(async_session, seeded_db):
+    row = await async_session.scalar(
+        select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == seeded_db)
+    )
+    row.review_status, row.validation_status = "needs_review", "invalid"
+    await async_session.flush()
+    result = await build_semantic_layer_dict(async_session, seeded_db)
+    assert result["canonical_relationships"] == []

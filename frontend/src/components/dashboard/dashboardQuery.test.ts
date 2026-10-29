@@ -62,7 +62,8 @@ describe('buildWidgetQueryRequests', () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].metric_ids).toEqual([5]);
     expect(requests[0].dimensions).toEqual([{ column_id: 12, time_grain: 'month' }]);
-    expect(requests[0].limit).toBe(100);
+    expect(requests[0].limit).toBe(WIDGET_ROW_LIMIT + 1);
+    expect(requests[0].order_by).toBe('dimension_desc');
     expect(requests[0].filters).toEqual(
       buildDateRangeFilters(12, resolveDatePresetBounds('last_30_days', NOW)),
     );
@@ -106,7 +107,8 @@ describe('buildWidgetQueryRequests', () => {
     expect(requests[0].filters.length).toBe(2);
     expect(requests[1].metric_ids).toEqual([5]);
     expect(requests[1].dimensions).toEqual([{ column_id: 9, time_grain: 'week' }]);
-    expect(requests[1].limit).toBe(WIDGET_ROW_LIMIT);
+    expect(requests[1].limit).toBe(WIDGET_ROW_LIMIT + 1);
+    expect(requests[1].order_by).toBe('dimension_desc');
   });
 
   it('falls back to the default grain for KPI trends without a global grain', () => {
@@ -135,6 +137,16 @@ describe('buildWidgetQueryRequests', () => {
     });
 
     expect(requests[0].dimensions?.[0]?.time_grain).toBe('quarter');
+  });
+
+  it('queries each selected metric and carries the chosen sort metric', () => {
+    const requests = buildWidgetQueryRequests({
+      widget: widget({ chart_type: 'bar', dimension_col_id: 12, metric_ids: [5, 8], order_metric_id: 8 }),
+      globalGrain: null,
+      datePreset: null,
+    });
+
+    expect(requests[0]).toMatchObject({ metric_ids: [5, 8], order_metric_id: 8, order_by: 'metric_desc' });
   });
 
   it('requests categorical dimensions without a time grain', () => {
@@ -166,7 +178,7 @@ describe('buildWidgetQueryRequests', () => {
       });
       for (const request of requests) {
         expect(request.limit).toBeGreaterThanOrEqual(1);
-        expect(request.limit).toBeLessThanOrEqual(100);
+        expect(request.limit).toBeLessThanOrEqual(WIDGET_ROW_LIMIT + 1);
       }
     }
   });
@@ -197,6 +209,22 @@ describe('buildWidgetQueryRequests', () => {
 });
 
 describe('result to points mapping', () => {
+  it('preserves missing metric cells in each multi-metric point', () => {
+    const points = buildWidgetPoints({
+      result: makeResult(['metric_8', 'dimension_12', 'metric_5'], [[null, '2026-01', 4]]),
+      metricId: 5,
+      metricIds: [5, 8],
+      dimensionId: 12,
+      sortByTime: false,
+    });
+
+    expect(points[0]).toMatchObject({
+      value: 4,
+      seriesValues: { 5: 4, 8: null },
+      seriesRawValues: { 5: 4, 8: null },
+    });
+  });
+
   it('maps alias columns into formatted points with null safety', () => {
     const points = buildWidgetPoints({
       result: makeResult(
@@ -214,7 +242,7 @@ describe('result to points mapping', () => {
 
     expect(points).toEqual([
       { label: 'pending', rawLabel: 'pending', value: 3, rawValue: 3 },
-      { label: '(Trống)', rawLabel: '', value: 0, rawValue: null },
+      { label: '(Trống)', rawLabel: '', value: null, rawValue: null },
       { label: 'done', rawLabel: 'done', value: 7, rawValue: '7' },
     ]);
   });

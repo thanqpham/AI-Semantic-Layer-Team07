@@ -178,6 +178,7 @@ def test_extract_schema_summary_includes_column_description_and_allowed_values()
                     "description": "Cờ hoàn thành (1: Thành công, 0: Chưa)",
                     "data_type": "VARCHAR(1)",
                     "allowed_values": ["0", "1"],
+                    "review_status": "approved",
                 },
                 {
                     "column_name": "price",
