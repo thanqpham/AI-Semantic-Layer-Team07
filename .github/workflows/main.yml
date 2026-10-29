@@ -2,9 +2,10 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+  workflow_dispatch: # Cho phép bấm nút "Run workflow" test thủ công trên GitHub
 
 permissions:
   contents: read
@@ -17,15 +18,15 @@ jobs:
 #     uses: ./.github/workflows/security.yml
 #     secrets: inherit
 
-#   # 2. Chạy kiểm thử chất lượng code
+  # 2. Chạy kiểm thử chất lượng code
 #   test:
 #     name: Quality & Test
 #     uses: ./.github/workflows/test.yml
 
-  # 3. Build & Scan Image (chỉ chạy khi cả Security & Test pass, và chỉ trên nhánh main)
+  # 3. Build & Scan Image (chạy trên cả main hoặc dev)
   build:
     name: Build & Push
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && github.event_name == 'push'
     uses: ./.github/workflows/build.yml
     secrets: inherit
 
