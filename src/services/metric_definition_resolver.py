@@ -110,7 +110,9 @@ async def _resolve_plan_column_ids(
             raise ValueError(f"Unknown metric plan source: {stage.base_entity}")
         allowed = {base.table_name.casefold(), *(name.casefold() for name in stage.joins)}
 
-        def resolve(expression: str, base: SemanticTableModel = base, allowed: set[str] = allowed) -> tuple[str, SemanticColumnModel]:
+        def resolve(
+            expression: str, base: SemanticTableModel = base, allowed: set[str] = allowed
+        ) -> tuple[str, SemanticColumnModel]:
             parsed = sqlglot.parse_one(expression)
             if not isinstance(parsed, exp.Column):
                 raise ValueError(f"Metric plan field must be a column: {expression}")
@@ -118,9 +120,13 @@ async def _resolve_plan_column_ids(
             if table_name not in allowed:
                 raise ValueError(f"Metric plan field uses an undeclared joined table: {expression}")
             table = tables.get(table_name)
-            column = next(
-                (item for item in columns[table.id] if item.column_name.casefold() == parsed.name.casefold()), None
-            ) if table else None
+            column = (
+                next(
+                    (item for item in columns[table.id] if item.column_name.casefold() == parsed.name.casefold()), None
+                )
+                if table
+                else None
+            )
             if table is None or column is None:
                 raise ValueError(f"Unknown metric plan column: {expression}")
             return table.table_name, column
@@ -133,7 +139,10 @@ async def _resolve_plan_column_ids(
             **{field.name: field.column_id for field in stage.group_by},
             **{item.name: None for item in stage.aggregates},
         }
-        for item in [*stage.filters, *(filter_item for aggregate in stage.aggregates for filter_item in aggregate.filters)]:
+        for item in [
+            *stage.filters,
+            *(filter_item for aggregate in stage.aggregates for filter_item in aggregate.filters),
+        ]:
             try:
                 table_name, column = resolve(item.field)
             except ValueError:
@@ -153,7 +162,9 @@ async def _resolve_plan_column_ids(
             for item in hygiene_flag_filters(
                 [(column.column_name, column.data_type) for column in table_columns], existing_names
             ):
-                column = next(column for column in table_columns if column.column_name.casefold() == item.field.casefold())
+                column = next(
+                    column for column in table_columns if column.column_name.casefold() == item.field.casefold()
+                )
                 stage.filters.append(
                     MetricPlanFilter(
                         field=f"{joined_table.table_name}.{column.column_name}",

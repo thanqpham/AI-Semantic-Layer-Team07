@@ -32,23 +32,38 @@ class DiscoverySettings(BaseModel):
 
 
 @categorical_router.get("/semantic/{db_id}/column-value-proposals")
-async def list_proposals(db_id: int, org_id: int | None = Header(default=None, alias="X-Organization-ID"),
-                         user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_db_session)) -> dict:
+async def list_proposals(
+    db_id: int,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
     """List non-stale pending proposals for one authorized database."""
     await _require_resource_permission(db, user.id, db_id, org_id, "can_manage_schema")
     database = await db.get(SemanticDatabaseModel, db_id)
     rows = await _proposal_rows(db, db_id)
     live = await _live_connection(db, db_id)
-    return {"enabled": bool(live and live.categorical_discovery_enabled),
-            "available": bool(live and live.dialect in {"postgres", "postgresql"} and get_settings().categorical_discovery_enabled),
-            "items": [_proposal_payload(p, t, c) for p, t, c in rows
-                      if p.status == "pending" and p.schema_fingerprint == proposal_fingerprint(database, t, c)]}
+    return {
+        "enabled": bool(live and live.categorical_discovery_enabled),
+        "available": bool(
+            live and live.dialect in {"postgres", "postgresql"} and get_settings().categorical_discovery_enabled
+        ),
+        "items": [
+            _proposal_payload(p, t, c)
+            for p, t, c in rows
+            if p.status == "pending" and p.schema_fingerprint == proposal_fingerprint(database, t, c)
+        ],
+    }
 
 
 @categorical_router.put("/semantic/{db_id}/column-value-proposals/settings")
-async def update_settings(db_id: int, body: DiscoverySettings,
-                          org_id: int | None = Header(default=None, alias="X-Organization-ID"),
-                          user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_db_session)) -> dict:
+async def update_settings(
+    db_id: int,
+    body: DiscoverySettings,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
     """Enable or disable observation for one authorized Live DB."""
     await _require_resource_permission(db, user.id, db_id, org_id, "can_manage_schema")
     live = await _live_connection(db, db_id)
@@ -60,8 +75,12 @@ async def update_settings(db_id: int, body: DiscoverySettings,
 
 
 @categorical_router.post("/semantic/{db_id}/column-value-proposals/scan")
-async def start_scan(db_id: int, org_id: int | None = Header(default=None, alias="X-Organization-ID"),
-                     user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_db_session)) -> dict:
+async def start_scan(
+    db_id: int,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
     """Queue a bounded scan if the administrator has enabled discovery."""
     await _require_resource_permission(db, user.id, db_id, org_id, "can_manage_schema")
     live = await _live_connection(db, db_id)
@@ -73,9 +92,13 @@ async def start_scan(db_id: int, org_id: int | None = Header(default=None, alias
 
 
 @categorical_router.post("/semantic/{db_id}/column-value-proposals/review")
-async def review_proposals(db_id: int, body: ProposalDecision,
-                           org_id: int | None = Header(default=None, alias="X-Organization-ID"),
-                           user: UserModel = Depends(get_current_user), db: AsyncSession = Depends(get_db_session)) -> dict:
+async def review_proposals(
+    db_id: int,
+    body: ProposalDecision,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
     """Approve or dismiss pending proposals atomically after checking freshness."""
     await _require_resource_permission(db, user.id, db_id, org_id, "can_approve_metrics")
     await lock_semantic_database(db, db_id)
@@ -96,10 +119,12 @@ async def review_proposals(db_id: int, body: ProposalDecision,
 
 
 async def _proposal_rows(db: AsyncSession, db_id: int) -> list:
-    stmt = (select(ColumnValueProposalModel, SemanticTableModel, SemanticColumnModel)
-            .join(SemanticColumnModel, ColumnValueProposalModel.column_id == SemanticColumnModel.id)
-            .join(SemanticTableModel, SemanticColumnModel.table_id == SemanticTableModel.id)
-            .where(SemanticTableModel.db_id == db_id))
+    stmt = (
+        select(ColumnValueProposalModel, SemanticTableModel, SemanticColumnModel)
+        .join(SemanticColumnModel, ColumnValueProposalModel.column_id == SemanticColumnModel.id)
+        .join(SemanticTableModel, SemanticColumnModel.table_id == SemanticTableModel.id)
+        .where(SemanticTableModel.db_id == db_id)
+    )
     return list((await db.execute(stmt)).all())
 
 
@@ -107,8 +132,17 @@ async def _live_connection(db: AsyncSession, db_id: int) -> LiveTargetDbModel | 
     return await db.scalar(select(LiveTargetDbModel).where(LiveTargetDbModel.semantic_db_id == db_id))
 
 
-def _proposal_payload(proposal: ColumnValueProposalModel, table: SemanticTableModel, column: SemanticColumnModel) -> dict:
-    return {"id": proposal.id, "column_id": column.id, "table_name": table.table_name,
-            "physical_schema": table.physical_schema, "column_name": column.column_name,
-            "source": proposal.source, "status": proposal.status, "values": proposal.values,
-            "observed_at": proposal.observed_at}
+def _proposal_payload(
+    proposal: ColumnValueProposalModel, table: SemanticTableModel, column: SemanticColumnModel
+) -> dict:
+    return {
+        "id": proposal.id,
+        "column_id": column.id,
+        "table_name": table.table_name,
+        "physical_schema": table.physical_schema,
+        "column_name": column.column_name,
+        "source": proposal.source,
+        "status": proposal.status,
+        "values": proposal.values,
+        "observed_at": proposal.observed_at,
+    }

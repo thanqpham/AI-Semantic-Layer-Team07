@@ -56,7 +56,9 @@ class MetricWorkflowState(TypedDict):
 
 
 async def run_metric_workflow(
-    context: dict[str, Any], drafts: list[dict[str, Any]] | None = None, allow_repair: bool = True,
+    context: dict[str, Any],
+    drafts: list[dict[str, Any]] | None = None,
+    allow_repair: bool = True,
     candidate_ids: list[str | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Run the same bounded coordinator for chat, API generation and re-review."""
@@ -65,7 +67,9 @@ async def run_metric_workflow(
 
 
 def _workflow_state(
-    context: dict[str, Any], drafts: list[dict[str, Any]] | None, allow_repair: bool,
+    context: dict[str, Any],
+    drafts: list[dict[str, Any]] | None,
+    allow_repair: bool,
     candidate_ids: list[str | None] | None,
 ) -> MetricWorkflowState:
     context = {key: value for key, value in context.items() if key not in {"task_id", "candidate", "handoffs", "audit"}}
@@ -232,7 +236,10 @@ def _filter_scope(definition: MetricDefinition) -> dict[str, Any]:
         scopes["query_plan"] = [
             item
             for stage in definition.metric.query_plan.stages
-            for item in [*stage.filters, *(filter_item for aggregate in stage.aggregates for filter_item in aggregate.filters)]
+            for item in [
+                *stage.filters,
+                *(filter_item for aggregate in stage.aggregates for filter_item in aggregate.filters),
+            ]
         ]
     ratio = definition.metric.formula.ratio
     if ratio is not None:

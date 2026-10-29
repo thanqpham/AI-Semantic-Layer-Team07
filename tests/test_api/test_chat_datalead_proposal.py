@@ -1,6 +1,6 @@
 """End-to-end regression test for Data Lead metric context and stored allowed_values."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

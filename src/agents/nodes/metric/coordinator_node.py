@@ -6,9 +6,9 @@ from typing import Any
 
 from src.agents.nodes.metric.metric_review_node import reviewed_state
 from src.agents.state import AgentState
+from src.agents.workflows.metric_proposal_workflow import run_metric_workflow
 from src.observability import trace_node
 from src.services.metric_proposal_context import prepare_proposal_context
-from src.agents.workflows.metric_proposal_workflow import run_metric_workflow
 
 
 @trace_node("metric_coordinator")

@@ -225,7 +225,8 @@ def _validate_query_plan(definition: MetricDefinition, schema: dict[str, Any]) -
                     existing_names,
                 ):
                     column = next(
-                        column for column in table.get("columns", [])
+                        column
+                        for column in table.get("columns", [])
                         if column["column_name"].casefold() == generated.field.casefold()
                     )
                     stage.filters.append(
@@ -250,7 +251,9 @@ def _validate_query_plan(definition: MetricDefinition, schema: dict[str, Any]) -
             if len(matches) != 1:
                 raise ValueError(f"Metric plan scope filter must map to one common source column: {item.field}")
             table_name, column = matches[0]
-            _validate_plan_filter(item.model_copy(update={"field": f"{table_name}.{column['column_name']}"}), shared_tables, tables)
+            _validate_plan_filter(
+                item.model_copy(update={"field": f"{table_name}.{column['column_name']}"}), shared_tables, tables
+            )
             item.column_id = column.get("id")
     if first_source is None:
         raise ValueError("Metric plan must include a source table")
@@ -314,7 +317,14 @@ def _plan_column(reference: str, allowed_tables: set[str], tables: dict[str, Any
         raise ValueError(f"Metric plan column must name its table: {reference}")
     table_name = parsed.table.casefold() if parsed.table else next(iter(allowed_tables))
     table = tables.get(table_name)
-    column = next((item for item in table.get("columns", []) if item["column_name"].casefold() == parsed.name.casefold()), None) if table else None
+    column = (
+        next(
+            (item for item in table.get("columns", []) if item["column_name"].casefold() == parsed.name.casefold()),
+            None,
+        )
+        if table
+        else None
+    )
     if column is None:
         raise ValueError(f"Metric plan column does not exist: {reference}")
     return column
@@ -326,10 +336,18 @@ def _validate_plan_filter(item: Any, allowed_tables: set[str], tables: dict[str,
         return
     values = item.value if item.operator in {"in", "not_in"} else [item.value]
     for value in values:
-        _validate_filter_value(SimpleNamespace(**{
-            "column_name": column["column_name"], "data_type": column.get("data_type", ""),
-            "allowed_values": column.get("allowed_values"), "allowed_values_complete": column.get("allowed_values_complete", True), "is_nullable": column.get("is_nullable", True),
-        }), value)
+        _validate_filter_value(
+            SimpleNamespace(
+                **{
+                    "column_name": column["column_name"],
+                    "data_type": column.get("data_type", ""),
+                    "allowed_values": column.get("allowed_values"),
+                    "allowed_values_complete": column.get("allowed_values_complete", True),
+                    "is_nullable": column.get("is_nullable", True),
+                }
+            ),
+            value,
+        )
 
 
 def _resolve_metadata(definition: MetricDefinition, table: dict[str, Any], columns: dict[str, Any]) -> None:
@@ -423,7 +441,11 @@ def _validate_filter_value(column: Any, value: Any) -> None:
     dtype = column.data_type.upper()
     if value is None or isinstance(value, (dict, list)):
         raise ValueError(f"Filter {column.column_name} cần literal khác NULL.")
-    if column.allowed_values and getattr(column, "allowed_values_complete", True) and value not in column.allowed_values:
+    if (
+        column.allowed_values
+        and getattr(column, "allowed_values_complete", True)
+        and value not in column.allowed_values
+    ):
         raise ValueError(f"Giá trị filter {column.column_name} không có trong metadata khai báo.")
     if "BOOL" in dtype and not isinstance(value, bool):
         raise ValueError(f"Filter {column.column_name} cần true/false.")
