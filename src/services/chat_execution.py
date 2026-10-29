@@ -141,25 +141,26 @@ class ChatExecution:
             summary=LABELS.get(target, ""),
         )
 
-    def start(self, node: str, action: str) -> str:
+    def start(self, node: str, action: str, summary: str | None = None) -> str:
         """Start one uniquely identified invocation, retaining repeated invocations."""
         flow_node = "sql" if action == "sql_compile" else node
         self.transition(self.last_node, flow_node)
         self.last_node = flow_node
         step_id = str(uuid.uuid4())
         event = self.emit(
-            kind="step", node=node, action=action, step_id=step_id, status="started", summary=LABELS[action]
+            kind="step", node=node, action=action, step_id=step_id, status="started", summary=summary or LABELS[action]
         )
         self.steps[step_id] = event
         self.active.setdefault((node, action), []).append(step_id)
         return step_id
 
-    def end(self, step_id: str, status: str) -> None:
+    def end(self, step_id: str, status: str, outcome: str | None = None) -> None:
         """Finish a particular invocation using monotonic elapsed time."""
         event = self.steps.pop(step_id, None)
         if event is None:
             return
         self.active[(event["node"], event["action"])].remove(step_id)
+        fields = {"outcome_summary": outcome} if outcome else {}
         self.emit(
             kind="step",
             node=event["node"],
@@ -168,6 +169,7 @@ class ChatExecution:
             status=status,
             summary=event["summary"],
             duration_ms=self.elapsed() - event["elapsed_ms"],
+            **fields,
         )
 
     def record(self, kind: str, payload: Mapping[str, Any]) -> None:
@@ -182,17 +184,27 @@ class ChatExecution:
         action = node if kind.startswith("node_") else payload.get("action")
         if kind.startswith("action_") and action == node:
             return
-        if node == "orchestrator" and payload.get("state_before", {}).get("intent"):
-            return  # A preclassified graph entry performs no second classification.
+        preclassified = node == "orchestrator" and bool(payload.get("state_before", {}).get("intent"))
+        if (
+            preclassified
+            and kind.endswith("_started")
+            and any(
+                event.get("kind") == "step" and event.get("node") == "orchestrator" for event in self.trace["events"]
+            )
+        ):
+            return
         if action not in LABELS or not kind.startswith(("node_", "action_")):
             return
         safe_node = node if node in AGENTS else action
         if kind.endswith("_started"):
-            self.start(safe_node, action)
+            self.start(safe_node, action, "Điều phối yêu cầu đã phân loại" if preclassified else None)
         elif kind.endswith(("_finished", "_failed")):
             pending = self.active.get((safe_node, action), [])
             if pending:
-                self.end(pending[-1], "failed" if kind.endswith("_failed") else "finished")
+                outcome = (
+                    _safe_outcome(safe_node, payload.get("state_delta", {})) if kind.endswith("_finished") else None
+                )
+                self.end(pending[-1], "failed" if kind.endswith("_failed") else "finished", outcome)
 
     def _metric_output_error(self, payload: Mapping[str, Any]) -> None:
         issues = [MetricOutputIssue.model_validate(item) for item in payload.get("validation_errors", [])]
@@ -248,6 +260,45 @@ class ChatExecution:
         self.trace.update(status=status, finished_at=self.now(), elapsed_ms=self.elapsed())
         self.changed.set()
         return self.snapshot()
+
+
+def _safe_outcome(node: str, output: Any) -> str | None:
+    """Return bounded, user-facing explanations and approved output facts."""
+    if not isinstance(output, Mapping):
+        return None
+    if node == "orchestrator":
+        intent = output.get("intent")
+        if not isinstance(intent, str):
+            return None
+        return {
+            "semantic_query": "Truy vấn dữ liệu theo metric",
+            "metric_query": "Đề xuất hoặc định nghĩa metric",
+            "data_question": "Tìm hiểu cấu trúc dữ liệu và metric",
+            "chitchat": "Trả lời hội thoại",
+            "out_of_scope": "Yêu cầu ngoài phạm vi hỗ trợ",
+        }.get(intent)
+    if node == "semantic_parse":
+        interpretation = output.get("interpretation")
+        if isinstance(interpretation, Mapping):
+            rationale = interpretation.get("rationale")
+            if isinstance(rationale, str) and rationale.strip():
+                return _bounded(rationale.strip())
+            status = interpretation.get("status")
+            if isinstance(status, str):
+                return {"resolved": "Đã phân tích yêu cầu", "needs_clarification": "Cần làm rõ yêu cầu"}.get(status)
+    if node == "metric_review" and isinstance(output.get("items"), list):
+        summaries = [getattr(item.get("report"), "summary", None) for item in output["items"] if isinstance(item, dict)]
+        text = "; ".join(summary.strip() for summary in summaries[:5] if isinstance(summary, str) and summary.strip())
+        if text:
+            return _bounded(text)
+    metrics = output.get("suggested_metrics")
+    if isinstance(metrics, list):
+        return _bounded(f"Đề xuất {len(metrics)} metric")
+    return None
+
+
+def _bounded(value: str) -> str:
+    return value[:500]
 
 
 def sse(event: str, payload: Any) -> str:
