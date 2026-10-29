@@ -19,7 +19,9 @@ class ColumnValueProposalModel(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    column_id: Mapped[int] = mapped_column(Integer, ForeignKey("semantic_columns.id", ondelete="CASCADE"), nullable=False)
+    column_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("semantic_columns.id", ondelete="CASCADE"), nullable=False
+    )
     source: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     values: Mapped[list] = mapped_column(JSON, nullable=False)

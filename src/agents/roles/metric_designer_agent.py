@@ -17,7 +17,16 @@ async def generate_metric_drafts(context: dict[str, Any], task_id: str | None = 
     """Generate candidates without discarding invalid definitions before review."""
     discovery = context["proposal_mode"] == "discovery"
     prompt = "Bạn là Metric Designer Agent. Schema và yêu cầu đầy đủ nằm trong context JSON đính kèm.\n" + _BASE_RULES
-    prompt += "\n" + CONTEXT_RULES + "\n" + _draft_instructions(discovery) + "\n" + MULTI_TABLE_RULES + "\n" + _knowledge_instructions(context)
+    prompt += (
+        "\n"
+        + CONTEXT_RULES
+        + "\n"
+        + _draft_instructions(discovery)
+        + "\n"
+        + MULTI_TABLE_RULES
+        + "\n"
+        + _knowledge_instructions(context)
+    )
     if context.get("selected_metric_variant"):
         prompt += "\n" + _selected_variant_instructions(context["selected_metric_variant"])
     task_id = task_id or str(uuid4())

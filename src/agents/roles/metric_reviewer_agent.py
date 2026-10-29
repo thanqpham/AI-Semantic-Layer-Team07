@@ -12,7 +12,8 @@ from src.services.metric_runtime import MetricCallError, invalid_output, invoke_
 
 _REVIEW_PROMPT = (
     CONTEXT_RULES
-    + "\n" + MULTI_TABLE_RULES
+    + "\n"
+    + MULTI_TABLE_RULES
     + """
 Bạn là Metric Reviewer Agent. Thẩm định riêng từng definition đã qua kiểm tra kỹ thuật.
 Mọi summary, message, evidence, action và clarification hiển thị phải bằng tiếng Việt; giữ nguyên tên bảng/cột.

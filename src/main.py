@@ -10,13 +10,13 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from src.api.auth import auth_router
+from src.api.categorical_routes import categorical_router
 from src.api.dashboard_routes import router as dashboard_router
 from src.api.llm_settings_routes import router as llm_settings_router
 from src.api.llm_settings_routes import use_account_llm
 from src.api.organization_routes import router as organization_router
 from src.api.relationship_review_routes import relationship_router
 from src.api.review_routes import review_router
-from src.api.categorical_routes import categorical_router
 from src.api.routes import router
 from src.api.sync_routes import sync_router
 from src.config import get_settings

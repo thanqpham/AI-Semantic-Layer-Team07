@@ -116,9 +116,7 @@ def _family_options(proposal: dict[str, Any], proposals: list[dict[str, Any]]) -
     return options
 
 
-def _has_reviewed_sibling(
-    proposals: list[dict[str, Any]], family_id: str, variant: dict[str, Any]
-) -> bool:
+def _has_reviewed_sibling(proposals: list[dict[str, Any]], family_id: str, variant: dict[str, Any]) -> bool:
     for candidate in proposals:
         identity = candidate.get("context", {}).get("candidate", {})
         review = candidate.get("review", {})

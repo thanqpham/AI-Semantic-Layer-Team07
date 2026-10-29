@@ -281,7 +281,9 @@ class LiveTargetDbModel(Base):
     dialect: Mapped[str] = mapped_column(String(50), nullable=False)
     conn_url_enc: Mapped[str] = mapped_column(Text, nullable=False)
     schema_metadata: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    categorical_discovery_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    categorical_discovery_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     semantic_db_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("semantic_databases.id", ondelete="SET NULL"), nullable=True
     )

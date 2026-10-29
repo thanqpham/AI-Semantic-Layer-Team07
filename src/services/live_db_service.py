@@ -50,6 +50,7 @@ _SYNC_INSPECTION_DRIVERS = {
     "sqlite+aiosqlite": "sqlite",
 }
 
+
 def _sync_introspection_url(conn_url: str) -> str:
     """Return an Inspector-safe URL while preserving credentials and options."""
     url = make_url(conn_url)
@@ -125,7 +126,9 @@ def _build_columns(
         col_ident = Identifier.from_raw(col_name, dialect)
         is_pk = col_name in pk_cols
         enum_values = getattr(col["type"], "enums", None)
-        values = safe_declared_values(list(enum_values)) if enum_values else declared_check_values(checks or [], col_name)
+        values = (
+            safe_declared_values(list(enum_values)) if enum_values else declared_check_values(checks or [], col_name)
+        )
         sample_vals = tuple(values) if values else None
         columns.append(
             ColumnMetadata(

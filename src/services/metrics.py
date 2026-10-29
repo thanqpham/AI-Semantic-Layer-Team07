@@ -307,9 +307,7 @@ def _references_schema(definition: MetricDefinition, valid: dict[str, set[str]])
                 expressions.append(aggregate.expression)
                 filters.extend(aggregate.filters)
         referenced = {
-            col.name.lower()
-            for expression in expressions
-            for col in sqlglot.parse_one(expression).find_all(exp.Column)
+            col.name.lower() for expression in expressions for col in sqlglot.parse_one(expression).find_all(exp.Column)
         }
         referenced.update(item.field.lower() for item in filters)
         return referenced.issubset(set(col_lower.keys()))

@@ -23,11 +23,25 @@ logger = logging.getLogger(__name__)
 _tasks: set[asyncio.Task] = set()
 
 
-def proposal_fingerprint(database: SemanticDatabaseModel, table: SemanticTableModel, column: SemanticColumnModel) -> str:
+def proposal_fingerprint(
+    database: SemanticDatabaseModel, table: SemanticTableModel, column: SemanticColumnModel
+) -> str:
     """Bind proposals to their physical identity and current semantic state."""
-    data = [database.id, database.schema_fingerprint, table.id, table.physical_schema, table.table_name,
-            column.id, column.column_name, column.data_type, column.is_primary_key, column.is_foreign_key,
-            column.fk_target_table, column.fk_target_column, column.allowed_values]
+    data = [
+        database.id,
+        database.schema_fingerprint,
+        table.id,
+        table.physical_schema,
+        table.table_name,
+        column.id,
+        column.column_name,
+        column.data_type,
+        column.is_primary_key,
+        column.is_foreign_key,
+        column.fk_target_table,
+        column.fk_target_column,
+        column.allowed_values,
+    ]
     return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -53,18 +67,26 @@ async def discover_values(db: AsyncSession, db_id: int, refresh_dismissed: bool 
     """Scan one Live DB while holding its metadata row lock across the batch."""
     if db.bind is None or db.bind.dialect.name != "postgresql":
         return
-    database = await db.scalar(select(SemanticDatabaseModel).where(SemanticDatabaseModel.id == db_id)
-                               .with_for_update(skip_locked=True))
+    database = await db.scalar(
+        select(SemanticDatabaseModel).where(SemanticDatabaseModel.id == db_id).with_for_update(skip_locked=True)
+    )
     if database is None:
         return
     live = await db.scalar(select(LiveTargetDbModel).where(LiveTargetDbModel.semantic_db_id == db_id))
     if live is None or not live.categorical_discovery_enabled or live.dialect not in {"postgres", "postgresql"}:
         await db.rollback()
         return
-    tables = (await db.scalars(select(SemanticTableModel).options(selectinload(SemanticTableModel.columns))
-                               .where(SemanticTableModel.db_id == db_id).order_by(SemanticTableModel.id))).all()
-    candidates = [(table, col) for table in tables for col in table.columns
-                  if not col.allowed_values and eligible_column(col)]
+    tables = (
+        await db.scalars(
+            select(SemanticTableModel)
+            .options(selectinload(SemanticTableModel.columns))
+            .where(SemanticTableModel.db_id == db_id)
+            .order_by(SemanticTableModel.id)
+        )
+    ).all()
+    candidates = [
+        (table, col) for table in tables for col in table.columns if not col.allowed_values and eligible_column(col)
+    ]
     candidates = select_batch(candidates, datetime.now(UTC).date().toordinal())
     results = await _probe_candidates(live, candidates)
     await _save_proposals(db, database, results, refresh_dismissed)
@@ -93,7 +115,9 @@ async def _probe_candidates(
                     await connection.execute(text("SET TRANSACTION READ ONLY"))
                     await connection.execute(text("SET LOCAL statement_timeout = 3000"))
                     for table, col in candidates:
-                        rows = await connection.execute(build_probe_statement(table.physical_schema, table.table_name, col.column_name))
+                        rows = await connection.execute(
+                            build_probe_statement(table.physical_schema, table.table_name, col.column_name)
+                        )
                         values = safe_observed_values(list(rows.scalars().all()))
                         results.append((table, col, values))
     finally:
@@ -101,9 +125,12 @@ async def _probe_candidates(
     return results
 
 
-async def _save_proposals(db: AsyncSession, database: SemanticDatabaseModel,
-                          results: list[tuple[Any, Any, list | None]],
-                          refresh_dismissed: bool = False) -> None:
+async def _save_proposals(
+    db: AsyncSession,
+    database: SemanticDatabaseModel,
+    results: list[tuple[Any, Any, list | None]],
+    refresh_dismissed: bool = False,
+) -> None:
     for table, col, values in results:
         proposal = await db.scalar(select(ColumnValueProposalModel).where(ColumnValueProposalModel.column_id == col.id))
         if values is None:
@@ -116,8 +143,13 @@ async def _save_proposals(db: AsyncSession, database: SemanticDatabaseModel,
             proposal.status = "pending"
             proposal.reviewed_by = None
         if proposal is None:
-            proposal = ColumnValueProposalModel(column_id=col.id, source="observed", status="pending", values=values,
-                                                schema_fingerprint=proposal_fingerprint(database, table, col))
+            proposal = ColumnValueProposalModel(
+                column_id=col.id,
+                source="observed",
+                status="pending",
+                values=values,
+                schema_fingerprint=proposal_fingerprint(database, table, col),
+            )
             db.add(proposal)
         else:
             proposal.values = values

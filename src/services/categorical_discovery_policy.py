@@ -10,7 +10,8 @@ from sqlglot import exp
 _CATEGORY = re.compile(r"(?:^|_)(?:status|state|type|category|method|channel|stage|region|zone)(?:_|$)", re.I)
 _SENSITIVE_COLUMN = re.compile(
     r"(?:^|_)(?:id|key|email|phone|address|name|note|comment|description|password|secret|token|hash|"
-    r"medical|health|diagnosis|disease|patient|salary|income|ip|url)(?:_|$)", re.I
+    r"medical|health|diagnosis|disease|patient|salary|income|ip|url)(?:_|$)",
+    re.I,
 )
 _VALUE = re.compile(r"^[A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9 _-]{0,63}$")
 _SENSITIVE_VALUE = re.compile(
@@ -23,8 +24,11 @@ def eligible_column(column: Any) -> bool:
     """Select only named categorical text columns without known sensitive roles."""
     name, dtype = column.column_name, column.data_type.upper()
     return bool(
-        not column.is_primary_key and not column.is_foreign_key and _CATEGORY.search(name)
-        and not _SENSITIVE_COLUMN.search(name) and any(t in dtype for t in ("CHAR", "TEXT", "ENUM"))
+        not column.is_primary_key
+        and not column.is_foreign_key
+        and _CATEGORY.search(name)
+        and not _SENSITIVE_COLUMN.search(name)
+        and any(t in dtype for t in ("CHAR", "TEXT", "ENUM"))
     )
 
 
@@ -53,8 +57,12 @@ def _safe_value(value: Any) -> bool:
         return False
     if value.isascii() and value.isdigit():
         return len(value) <= 3
-    return bool(_VALUE.fullmatch(value) and not _SENSITIVE_VALUE.search(value)
-                and not _UUID.fullmatch(value) and not _looks_like_person_name(value))
+    return bool(
+        _VALUE.fullmatch(value)
+        and not _SENSITIVE_VALUE.search(value)
+        and not _UUID.fullmatch(value)
+        and not _looks_like_person_name(value)
+    )
 
 
 def _looks_like_person_name(value: str) -> bool:

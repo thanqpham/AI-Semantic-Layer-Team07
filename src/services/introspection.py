@@ -64,6 +64,7 @@ ASYNC_DRIVERS: dict[DatabaseType, str] = {
     "sqlite": "sqlite+aiosqlite",
 }
 
+
 @dataclass(frozen=True)
 class _LiveContext:
     inspector: Inspector

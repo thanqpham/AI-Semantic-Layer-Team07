@@ -266,7 +266,11 @@ def _unambiguous_legacy_table_keys(
         by_name.setdefault(raw_table.table_name.raw_name, []).append(raw_table)
     qualified = []
     for table in existing_tables:
-        if table.physical_schema is not None or table.physical_schema_key is not None or table.table_name_key is not None:
+        if (
+            table.physical_schema is not None
+            or table.physical_schema_key is not None
+            or table.table_name_key is not None
+        ):
             continue
         matches = by_name.get(table.table_name, [])
         if len(matches) == 1:
@@ -700,9 +704,7 @@ async def execute_self_healing(
         existing_tables = list(
             (await db.scalars(select(SemanticTableModel).where(SemanticTableModel.db_id == semantic_db_id))).all()
         )
-        await _qualify_legacy_tables(
-            db, semantic_db_id, _unambiguous_legacy_table_keys(existing_tables, raw_schema)
-        )
+        await _qualify_legacy_tables(db, semantic_db_id, _unambiguous_legacy_table_keys(existing_tables, raw_schema))
         relationship_changes = await reconcile_relationships(db, semantic_db_id, raw_schema)
         live_db.schema_metadata = raw_schema.model_dump(mode="json")
         sem_db.last_synced_at = utc_now()

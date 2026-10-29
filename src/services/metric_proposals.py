@@ -130,9 +130,7 @@ async def re_review_proposal(
         "variant_id": candidate.get("variant_id"),
         "criteria": candidate.get("criteria", {}),
     }
-    evidence = await review_metric_draft(
-        context, draft, allow_repair=False, candidate_id=candidate.get("id")
-    )
+    evidence = await review_metric_draft(context, draft, allow_repair=False, candidate_id=candidate.get("id"))
     result = await persist_proposal(db, proposal.db_id, user_id, evidence, proposal.id)
     result.request_id = proposal.request_id
     return result
