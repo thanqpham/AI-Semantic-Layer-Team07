@@ -21,6 +21,11 @@ from src.services.metric_service import create_metric
 from tests.metric_review_helpers import definition, reviewer_mock, schema, seed_proposal
 
 
+@pytest.fixture(autouse=True)
+def enable_metric_knowledge(monkeypatch):
+    monkeypatch.setattr(get_settings(), "metric_knowledge_enabled", True)
+
+
 @pytest.fixture
 async def proposal(async_session):
     database = SemanticDatabaseModel(created_by=1, display_name="Review DB", db_type="sqlite", conn_url_enc="enc")

@@ -130,7 +130,7 @@ from src.services.metric_context import (
     build_discovery_context,
     build_metric_context,
 )
-from src.services.metric_dedupe import load_existing_for_dedupe
+from src.services.metric_dedupe import dedupe_reviewed_suggestions, load_existing_for_dedupe
 from src.services.metric_prompt_suggestions import get_metric_prompt_suggestions
 from src.services.metric_proposals import (
     generate_reviewed_metrics,
@@ -710,7 +710,9 @@ async def update_table(
         return {"message": "Table updated successfully"}
 
     try:
-        table = await update_table_review(db, int_id, table_name, body.business_name, body.description, user.id, table_id)
+        table = await update_table_review(
+            db, int_id, table_name, body.business_name, body.description, user.id, table_id
+        )
     except SchemaTableAmbiguousError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:
@@ -2272,15 +2274,24 @@ async def _handle_clarification_selection(
         if not requirement or not variant_id or not payload.get("knowledge_id"):
             raise HTTPException(status_code=400, detail="Invalid metric variant clarification")
         choice = ", ".join(f"{key}: {value}" for key, value in criteria.items())
-        body_copy = body.model_copy(update={
-            "message": f"{requirement}\n\nĐã xác nhận biến thể {variant_id} thuộc nhóm "
-                       f"{payload['knowledge_id']} ({choice}). "
-                       "Hãy tạo lại đề xuất theo lựa chọn này và vẫn kiểm tra đầy đủ metadata schema.",
-            "clarification_selection": None,
-        })
+        body_copy = body.model_copy(
+            update={
+                "message": f"{requirement}\n\nĐã xác nhận biến thể {variant_id} thuộc nhóm "
+                f"{payload['knowledge_id']} ({choice}). "
+                "Hãy tạo lại đề xuất theo lựa chọn này và vẫn kiểm tra đầy đủ metadata schema.",
+                "clarification_selection": None,
+            }
+        )
         return await _process_standard_chat(
-            db, session, current_user, numeric_db_id, body_copy, can_generate_metrics, org_id,
-            intent_override="metric_query", selected_metric_variant=payload,
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body_copy,
+            can_generate_metrics,
+            org_id,
+            intent_override="metric_query",
+            selected_metric_variant=payload,
         )
 
     # Other non-query options delegate to the standard chat flow.
@@ -2344,7 +2355,14 @@ async def _process_standard_chat(
     """Trace one chat agent run independently of its HTTP request."""
     with observation("chat_agent", session_id=session.id, agent=True) as span:
         response = await _process_standard_chat_inner(
-            db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id, intent_override,
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body,
+            can_generate_metrics,
+            org_id,
+            intent_override,
             selected_metric_variant,
         )
         if span is not None:
@@ -2451,6 +2469,7 @@ async def _process_standard_chat_inner(
         user_message_id=user_message.id,
         selected_metric_variant=selected_metric_variant,
     )
+    await dedupe_reviewed_suggestions(db, numeric_db_id, final_state)
     await persist_reviewed_state(db, numeric_db_id, current_user.id, final_state)
     return await _build_and_save_chat_response(
         db,
