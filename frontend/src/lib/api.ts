@@ -967,6 +967,23 @@ export interface MetricRequest {
   updated_at: string;
 }
 
+export interface MetricPromptSuggestion {
+  id: string;
+  title: string;
+  prompt: string;
+  icon?: string;
+}
+
+export interface MetricPromptSuggestionsResponse {
+  items: MetricPromptSuggestion[];
+}
+
+export async function listMetricPromptSuggestionsApi(dbId: string): Promise<MetricPromptSuggestionsResponse> {
+  return chatRequest<MetricPromptSuggestionsResponse>(
+    `${API_BASE}/api/v1/semantic/${dbId}/metric-prompt-suggestions`,
+  );
+}
+
 export interface AppNotification {
   id: number;
   type: string;

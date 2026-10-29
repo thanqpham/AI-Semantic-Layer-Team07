@@ -10,6 +10,7 @@ import {
   ChatSessionItem,
   createMetricApi,
   getChatSessionDetailApi,
+  MetricPromptSuggestion,
   MetricSuggestion,
   MetricRequest,
   METRIC_WRITE_PERMISSION_MESSAGE,
@@ -17,6 +18,7 @@ import {
   isPermissionDenied,
   sendChatOrchestratorApi,
   listMetricRequestsApi,
+  listMetricPromptSuggestionsApi,
   submitMetricRequestApi,
   reviewMetricProposalApi,
 } from '@/lib/api';
@@ -68,6 +70,10 @@ export function AIStudioView({
   const [loading, setLoading] = useState(false);
   const [activePrompt, setActivePrompt] = useState('');
   const [metricRequests, setMetricRequests] = useState<MetricRequest[]>([]);
+  const [promptSuggestions, setPromptSuggestions] = useState<{ dbId: string; items: MetricPromptSuggestion[] }>({
+    dbId: '',
+    items: [],
+  });
   const semanticDbId = layer.semantic_db_id;
   const canGenerateMetrics = mode === 'metric_studio';
   const requestVersion = useRef(0);
@@ -302,6 +308,17 @@ export function AIStudioView({
     void listMetricRequestsApi(String(semanticDbId)).then(setMetricRequests).catch(() => setMetricRequests([]));
   }, [canGenerateMetrics, semanticDbId, refreshKey]);
 
+  useEffect(() => {
+    const dbId = semanticDbId ? String(semanticDbId) : '';
+    setPromptSuggestions({ dbId, items: [] });
+    if (!dbId || !canGenerateMetrics) return;
+    let active = true;
+    void listMetricPromptSuggestionsApi(dbId)
+      .then(({ items }) => { if (active) setPromptSuggestions({ dbId, items }); })
+      .catch(() => { if (active) setPromptSuggestions({ dbId, items: [] }); });
+    return () => { active = false; };
+  }, [canGenerateMetrics, semanticDbId]);
+
   const handleSelectClarification = (assistantMessageId: string, optionId: string, label: string) =>
     send(label, [], undefined, { assistant_message_id: assistantMessageId, option_id: optionId });
 
@@ -493,6 +510,11 @@ export function AIStudioView({
           activePromptText={activePrompt}
           theme={theme}
           mode={mode}
+          metricPromptSuggestions={
+            canGenerateMetrics && promptSuggestions.dbId === String(semanticDbId)
+              ? promptSuggestions.items
+              : []
+          }
           onOpenCatalog={onOpenCatalog}
           onRenameSuggestion={renameSuggestion}
           onUseExistingSuggestion={useExistingSuggestion}

@@ -62,6 +62,7 @@ from src.models.schemas import (
     MetricFilterColumnsResponse,
     MetricHistoryResponse,
     MetricListItem,
+    MetricPromptSuggestionsResponse,
     MetricRequestCreate,
     MetricRequestResponse,
     MetricRequestReview,
@@ -130,6 +131,7 @@ from src.services.metric_context import (
     build_metric_context,
 )
 from src.services.metric_dedupe import load_existing_for_dedupe
+from src.services.metric_prompt_suggestions import get_metric_prompt_suggestions
 from src.services.metric_proposals import (
     generate_reviewed_metrics,
     metric_version_review,
@@ -1197,6 +1199,26 @@ async def get_semantic_catalog(
         tables=await _catalog_tables(db, db_id),
         relationships=await _catalog_relationships(db, db_id),
     )
+
+
+@router.get(
+    "/semantic/{db_id}/metric-prompt-suggestions",
+    response_model=MetricPromptSuggestionsResponse,
+)
+async def get_semantic_metric_prompt_suggestions(
+    db_id: int,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> MetricPromptSuggestionsResponse:
+    """Return eligible metric prompts for an authorized semantic database."""
+    semantic_db = await _owned_semantic_database(db, db_id, current_user.id, org_id)
+    if semantic_db is None:
+        raise HTTPException(status_code=404, detail="Semantic database not found")
+    source_type = await _catalog_source_type(db, db_id)
+    query_supported = source_type == "live"
+    items = await get_metric_prompt_suggestions(db, db_id, query_supported)
+    return MetricPromptSuggestionsResponse(items=items)
 
 
 async def _owned_semantic_database(

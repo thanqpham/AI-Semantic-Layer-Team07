@@ -6,6 +6,13 @@ import * as api from '@/lib/api';
 import { pendingChatKey, storePendingChat } from '@/lib/pendingChat';
 import { traceFixture } from '@/test/chatTraceFixture';
 
+type PromptSuggestionsResponse = { items: { id: string; title: string; prompt: string; icon?: string }[] };
+const listMetricPromptSuggestionsApi = vi.mocked(
+  (api as unknown as {
+    listMetricPromptSuggestionsApi: (dbId: string) => Promise<PromptSuggestionsResponse>;
+  }).listMetricPromptSuggestionsApi,
+);
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
@@ -13,6 +20,7 @@ vi.mock('@/lib/api', async () => {
     sendChatOrchestratorApi: vi.fn(),
     getChatSessionDetailApi: vi.fn(),
     listMetricRequestsApi: vi.fn().mockResolvedValue([]),
+    listMetricPromptSuggestionsApi: vi.fn().mockResolvedValue({ items: [] }),
     createMetricApi: vi.fn(),
     reviewMetricProposalApi: vi.fn(),
   };
@@ -23,6 +31,7 @@ describe('AIStudioView', () => {
     cleanup();
     vi.resetAllMocks();
     vi.mocked(api.listMetricRequestsApi).mockResolvedValue([]);
+    listMetricPromptSuggestionsApi.mockResolvedValue({ items: [] });
     sessionStorage.clear();
   });
 
@@ -37,6 +46,101 @@ describe('AIStudioView', () => {
     tables: [{ table_name: 'orders', business_name: 'Đơn hàng', description: '', columns: [] }],
     metrics: [],
   };
+
+  it('loads prompt suggestions for the active semantic database and renders backend prompts', async () => {
+    listMetricPromptSuggestionsApi.mockResolvedValue({
+      items: [{ id: 'net-sales', title: 'Doanh thu lũy kế', prompt: 'Tính doanh thu lũy kế', icon: '📈' }],
+    });
+
+    render(<AIStudioView layer={mockLayer} theme="light" onMetricsChanged={vi.fn()} />);
+
+    expect(listMetricPromptSuggestionsApi).toHaveBeenCalledWith('101');
+    const chip = await screen.findByRole('button', { name: /Doanh thu lũy kế/ });
+    expect(screen.queryByText('Tạo metric doanh thu thuần')).not.toBeInTheDocument();
+    fireEvent.click(chip);
+    expect(screen.getByRole('textbox')).toHaveValue('Tính doanh thu lũy kế');
+  });
+
+  it('clears prior database prompts immediately and ignores a late response', async () => {
+    let resolveFirst!: (response: PromptSuggestionsResponse) => void;
+    listMetricPromptSuggestionsApi
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValueOnce({ items: [{ id: 'new', title: 'Metric DB mới', prompt: 'Prompt DB mới' }] });
+    const { rerender } = render(<AIStudioView layer={mockLayer} theme="light" onMetricsChanged={vi.fn()} />);
+
+    const otherLayer = { ...mockLayer, semantic_db_id: 202 };
+    rerender(<AIStudioView layer={otherLayer} theme="light" onMetricsChanged={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /Tạo metric doanh thu thuần/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Metric DB mới' })).toBeInTheDocument();
+
+    await act(async () => resolveFirst({
+      items: [{ id: 'old', title: 'Metric DB cũ', prompt: 'Prompt DB cũ' }],
+    }));
+    expect(screen.queryByRole('button', { name: 'Metric DB cũ' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Metric DB mới' })).toBeInTheDocument();
+  });
+
+  it('removes loaded prompts immediately while the next database is loading', async () => {
+    let resolveNext!: (response: PromptSuggestionsResponse) => void;
+    listMetricPromptSuggestionsApi
+      .mockResolvedValueOnce({ items: [{ id: 'old', title: 'Old DB prompt', prompt: 'Old prompt text' }] })
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve; }));
+    const props = { layer: mockLayer, theme: 'light' as const, onMetricsChanged: vi.fn() };
+    const { rerender } = render(<AIStudioView {...props} />);
+    expect(await screen.findByRole('button', { name: 'Old DB prompt' })).toBeInTheDocument();
+
+    rerender(<AIStudioView {...props} layer={{ ...mockLayer, semantic_db_id: 202 }} />);
+
+    expect(screen.queryByRole('button', { name: 'Old DB prompt' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toBeEnabled();
+    await act(async () => resolveNext({ items: [{ id: 'new', title: 'New DB prompt', prompt: 'New prompt text' }] }));
+    expect(screen.getByRole('button', { name: 'New DB prompt' })).toBeInTheDocument();
+  });
+
+  it('clears metric prompts and does not fetch them in Data Assistant mode', async () => {
+    listMetricPromptSuggestionsApi.mockResolvedValue({
+      items: [{ id: 'metric', title: 'Metric riêng', prompt: 'Metric prompt' }],
+    });
+    const props = { layer: mockLayer, theme: 'light' as const, onMetricsChanged: vi.fn() };
+    const { rerender } = render(<AIStudioView {...props} />);
+    expect(await screen.findByRole('button', { name: 'Metric riêng' })).toBeInTheDocument();
+
+    rerender(<AIStudioView {...props} mode="data_assistant" />);
+
+    expect(screen.queryByRole('button', { name: 'Metric riêng' })).not.toBeInTheDocument();
+    expect(listMetricPromptSuggestionsApi).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /Doanh thu theo khách hàng/ })).toBeInTheDocument();
+  });
+
+  it('ignores a metric suggestions response that arrives after switching modes', async () => {
+    let resolveSuggestions!: (response: PromptSuggestionsResponse) => void;
+    listMetricPromptSuggestionsApi.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveSuggestions = resolve; }),
+    );
+    const props = { layer: mockLayer, theme: 'light' as const, onMetricsChanged: vi.fn() };
+    const { rerender } = render(<AIStudioView {...props} />);
+    rerender(<AIStudioView {...props} mode="data_assistant" />);
+
+    await act(async () => resolveSuggestions({
+      items: [{ id: 'late', title: 'Metric đến muộn', prompt: 'Prompt đến muộn' }],
+    }));
+
+    expect(screen.queryByRole('button', { name: 'Metric đến muộn' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Doanh thu theo khách hàng/ })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['empty', async () => ({ items: [] })],
+    ['error', async () => { throw new Error('unavailable'); }],
+  ])('keeps chat available without metric chips when suggestions are %s', async (_result, getSuggestions) => {
+    listMetricPromptSuggestionsApi.mockImplementation(getSuggestions);
+
+    render(<AIStudioView layer={mockLayer} theme="light" onMetricsChanged={vi.fn()} />);
+
+    await waitFor(() => expect(listMetricPromptSuggestionsApi).toHaveBeenCalledWith('101'));
+    expect(screen.queryByRole('button', { name: /Tạo metric doanh thu thuần/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toBeEnabled();
+  });
 
   it('sends discovery mode explicitly from the schema discovery button', async () => {
     vi.mocked(api.sendChatOrchestratorApi).mockResolvedValue({ intent: 'metric_query', suggestions: [],

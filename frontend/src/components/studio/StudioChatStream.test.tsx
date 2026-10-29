@@ -2,11 +2,47 @@ import { reviewedSuggestionFields } from '@/test/metricReviewFixture';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { StudioChatStream } from '@/components/studio/StudioChatStream';
+import { metricRequestKey, StudioChatStream } from '@/components/studio/StudioChatStream';
+
+const metricPromptSuggestions = [{
+  id: 'net-sales',
+  title: 'Tạo metric doanh thu thuần',
+  prompt: 'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
+}];
 
 describe('StudioChatStream', () => {
   beforeEach(() => {
     cleanup();
+  });
+
+  it('renders only the backend metric prompts instead of canned or table-derived prompts', () => {
+    const props = {
+      messages: [],
+      onSendMessage: vi.fn(),
+      isLoading: false,
+      tableNames: ['orders', 'products'],
+      mode: 'metric_studio' as const,
+      metricPromptSuggestions: [
+        { id: 'net-sales', title: 'Doanh thu lũy kế', prompt: 'Tính doanh thu lũy kế', icon: '📈' },
+      ],
+    };
+    const { rerender } = render(<StudioChatStream {...props} />);
+
+    expect(screen.getByRole('button', { name: /Doanh thu lũy kế/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Tạo metric doanh thu thuần|Tỷ lệ hủy đơn hàng|Số lượng sản phẩm bán/ })).not.toBeInTheDocument();
+
+    rerender(<StudioChatStream {...props} metricPromptSuggestions={[]} />);
+    expect(screen.queryByRole('button', { name: /Doanh thu lũy kế/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the existing Data Assistant prompt chips', () => {
+    render(
+      <StudioChatStream messages={[]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]}
+        mode="data_assistant" metricPromptSuggestions={[]} />,
+    );
+
+    expect(screen.getByRole('button', { name: /Doanh thu theo khách hàng/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Tìm metric doanh thu đã duyệt/ })).toBeInTheDocument();
   });
 
   it('opens loaded conversation history at the newest message without scrolling from the top', () => {
@@ -252,7 +288,7 @@ describe('StudioChatStream', () => {
         isLoading={false}
         tableNames={[]}
         mode="data_assistant"
-        submittedRequestKeys={new Set(['assistant-message:0'])}
+        submittedRequestKeys={new Set([metricRequestKey('assistant-message', 0, reviewedSuggestionFields.proposal_id)])}
       />,
     );
 
@@ -273,7 +309,7 @@ describe('StudioChatStream', () => {
         isLoading={false}
         tableNames={[]}
         mode="data_assistant"
-        approvedRequestKeys={new Set(['assistant-message:0'])}
+        approvedRequestKeys={new Set([metricRequestKey('assistant-message', 0, reviewedSuggestionFields.proposal_id)])}
       />,
     );
 
@@ -414,7 +450,7 @@ describe('StudioChatStream', () => {
     expect(onAddMetric).toHaveBeenCalled();
   });
 
-  it('restores saved state from the catalog after returning to AI Studio', () => {
+  it('warns when the catalog contains a metric with the same name', () => {
     render(
       <StudioChatStream
         messages={[{
@@ -428,8 +464,7 @@ describe('StudioChatStream', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: /Đã lưu/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Lưu vào Semantic Layer/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Tên này đã có trong catalog/)).toBeInTheDocument();
   });
 
   it('prefills the input with a suggested prompt when clicked', () => {
@@ -440,6 +475,7 @@ describe('StudioChatStream', () => {
         onSendMessage={onSendMessage}
         isLoading={false}
         tableNames={['orders', 'customers']}
+        metricPromptSuggestions={metricPromptSuggestions}
       />
     );
 
@@ -448,7 +484,7 @@ describe('StudioChatStream', () => {
     expect(strip).toHaveClass('whitespace-nowrap');
     const suggestionChip = screen.getByText('Tạo metric doanh thu thuần');
     expect(suggestionChip).toBeInTheDocument();
-    expect(strip.querySelectorAll('button')).toHaveLength(7);
+    expect(strip.querySelectorAll('button')).toHaveLength(1);
     expect(strip.closest('.shrink-0')).not.toHaveClass('border-t');
     expect(strip.closest('.shrink-0')?.nextElementSibling).not.toHaveClass('border-t');
 
@@ -468,6 +504,7 @@ describe('StudioChatStream', () => {
         onSendMessage={vi.fn()}
         isLoading={false}
         tableNames={['orders']}
+        metricPromptSuggestions={metricPromptSuggestions}
       />,
     );
 
@@ -488,6 +525,7 @@ describe('StudioChatStream', () => {
         onSendMessage={vi.fn()}
         isLoading={false}
         tableNames={['orders']}
+        metricPromptSuggestions={metricPromptSuggestions}
       />
     );
 
