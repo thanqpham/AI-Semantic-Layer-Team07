@@ -758,6 +758,21 @@ class SemanticCatalogResponse(BaseModel):
     relationships: list[CanonicalRelationshipResponse] = Field(default_factory=list)
 
 
+class MetricPromptSuggestionItem(BaseModel):
+    """Expose one eligible metric prompt without schema diagnostics."""
+
+    id: str
+    title: str
+    prompt: str
+    icon: str | None = None
+
+
+class MetricPromptSuggestionsResponse(BaseModel):
+    """Return eligible metric prompt suggestions."""
+
+    items: list[MetricPromptSuggestionItem] = Field(default_factory=list)
+
+
 class RecommendedDimensionItem(BaseModel):
     """Describe one recommended dimension item for a metric."""
 

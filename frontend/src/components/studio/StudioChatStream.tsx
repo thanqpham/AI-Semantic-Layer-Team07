@@ -18,7 +18,7 @@ import remarkGfm from 'remark-gfm';
 
 import { Button } from '@/components/ui/button';
 import { BotMessageSquareIcon } from '@/components/ui/BotMessageSquareIcon';
-import { MetricSuggestion, MetricCandidateReport } from '@/lib/api';
+import { MetricSuggestion, MetricCandidateReport, MetricPromptSuggestion } from '@/lib/api';
 import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { cn } from '@/lib/utils';
 import { StatusPill } from '@/components/workspace/shared';
@@ -71,6 +71,7 @@ interface StudioChatStreamProps {
   theme?: 'light' | 'dark';
   onOpenCatalog?: () => void;
   mode?: 'data_assistant' | 'metric_studio';
+  metricPromptSuggestions?: MetricPromptSuggestion[];
   savedMetricNames?: string[];
   submittedRequestKeys?: ReadonlySet<string>;
   approvedRequestKeys?: ReadonlySet<string>;
@@ -86,46 +87,7 @@ export function metricRequestKey(messageId: string, suggestionIndex: number, pro
   return proposalId ? `proposal:${proposalId}` : `${messageId}:${suggestionIndex}`;
 }
 
-interface PromptSuggestionItem {
-  icon: string;
-  title: string;
-  prompt: string;
-}
-
-const DEFAULT_SUGGESTIONS: PromptSuggestionItem[] = [
-  {
-    icon: '💰',
-    title: 'Tạo metric doanh thu thuần',
-    prompt: 'Đề xuất metric doanh thu thuần: xác định bảng gốc, cột tiền, trạng thái giao dịch được tính và cách trừ giảm giá, hoàn tiền. Nêu rõ các giả định chưa xác nhận từ schema.',
-  },
-  {
-    icon: '📦',
-    title: 'Số đơn hoàn tất',
-    prompt: 'Đề xuất metric số đơn hoàn tất: đếm mã đơn duy nhất, xác định trạng thái hợp lệ và mốc thời gian ghi nhận. Kiểm tra nguy cơ đếm trùng khi nối bảng chi tiết.',
-  },
-  {
-    icon: '🎫',
-    title: 'Giá trị đơn hàng trung bình (AOV)',
-    prompt: 'Đề xuất metric AOV = doanh thu thuần / số đơn hoàn tất trong cùng kỳ. Làm rõ cách xử lý đơn hủy, hoàn tiền và mẫu số bằng 0.',
-  },
-  {
-    icon: '👥',
-    title: 'Khách hàng mua hàng',
-    prompt: 'Đề xuất metric số khách hàng mua hàng: đếm mã khách hàng duy nhất có giao dịch hợp lệ trong kỳ. Nêu cách xử lý đơn khách vãng lai và giao dịch bị hủy.',
-  },
-  {
-    icon: '🔁',
-    title: 'Tỷ lệ khách hàng quay lại',
-    prompt: 'Đề xuất metric tỷ lệ khách hàng quay lại: xác định khách hàng có ít nhất hai đơn hợp lệ, mẫu số là khách hàng mua hàng trong kỳ. Làm rõ thời điểm xét đơn trước kỳ và công thức phần trăm.',
-  },
-  {
-    icon: '📈',
-    title: 'Tăng trưởng doanh thu MoM',
-    prompt: 'Đề xuất metric tăng trưởng doanh thu thuần theo tháng = (doanh thu tháng này - tháng trước) / doanh thu tháng trước. Nêu cách xử lý tháng trước bằng 0 và múi giờ của ngày giao dịch.',
-  },
-];
-
-const DATA_ASSISTANT_SUGGESTIONS: PromptSuggestionItem[] = [
+const DATA_ASSISTANT_SUGGESTIONS: Array<{ icon: string; title: string; prompt: string }> = [
   {
     icon: '📊',
     title: 'Doanh thu theo khách hàng',
@@ -247,27 +209,9 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     setShowSuggestions((prev) => !prev);
   };
 
-  const contextualSuggestions = useMemo(() => {
-    const list = [
-      ...(canGenerateMetrics ? DEFAULT_SUGGESTIONS : DATA_ASSISTANT_SUGGESTIONS),
-    ];
-    const tableStr = props.tableNames.join(' ').toLowerCase();
-    if (canGenerateMetrics && (tableStr.includes('order') || tableStr.includes('don_hang'))) {
-      list.unshift({
-        icon: '📈',
-        title: 'Tỷ lệ hủy đơn hàng',
-        prompt: 'Đề xuất metric tỷ lệ hủy đơn = số đơn hủy / tổng số đơn được tạo trong cùng kỳ. Đếm mã đơn duy nhất, xác định trạng thái hủy và ngày tạo đơn.',
-      });
-    }
-    if (canGenerateMetrics && (tableStr.includes('product') || tableStr.includes('san_pham'))) {
-      list.push({
-        icon: '🏷️',
-        title: 'Số lượng sản phẩm bán',
-        prompt: 'Đề xuất metric số lượng sản phẩm bán từ chi tiết đơn hợp lệ: cộng số lượng sau hoàn trả, nêu đơn vị tính và cách nối sản phẩm mà không nhân bản dòng.',
-      });
-    }
-    return list;
-  }, [canGenerateMetrics, props.tableNames]);
+  const contextualSuggestions = canGenerateMetrics
+    ? props.metricPromptSuggestions || []
+    : DATA_ASSISTANT_SUGGESTIONS;
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -378,7 +322,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                     onClick={() => handleSelectSuggestion(translate(item.prompt))}
                     className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary/60 px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-secondary hover:text-foreground cursor-pointer"
                   >
-                    <span>{item.icon}</span>
+                    {item.icon && <span>{item.icon}</span>}
                     <span><Translated text={item.title} /></span>
                   </button>
                 ))}
