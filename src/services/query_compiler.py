@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.schemas import DimensionSelection, SemanticQueryFilter, SemanticQuerySpec
 from src.observability import trace_action
 from src.services.query_compiler_orchestration import QueryCompileOrchestrator
+from src.services.query_compiler_parameters import coerce_filter_value
 from src.services.query_compiler_sql import validate_read_only
 from src.services.query_compiler_trace import CompileTraceBuilder
 from src.services.query_compiler_types import CompiledQuery
 from src.services.semantic_compile_error import SemanticCompileError
 
-__all__ = ["CompiledQuery", "SemanticQueryCompiler", "validate_read_only"]
+__all__ = ["CompiledQuery", "SemanticQueryCompiler", "coerce_filter_value", "validate_read_only"]
 
 
 def _query_spec(

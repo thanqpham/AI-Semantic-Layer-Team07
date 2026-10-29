@@ -116,17 +116,38 @@ def relationship_paths(
     first = _find_path(graph, start, target, eligible)
     if first is None:
         return []
-    if not allow_fanout:
-        # Any distinct simple path omits at least one directed edge of the first path.
-        for step in first:
-            alternative = _find_path(graph, start, target, eligible, step)
-            if alternative is not None:
-                return [first, alternative]
+    # Any distinct simple path omits at least one directed edge of the first path.
+    for step in first:
+        alternative = _find_path(graph, start, target, eligible, step)
+        if alternative is not None:
+            return [first, alternative]
     return [first]
+
+
+def filter_path(relationships: list[CanonicalRelationshipModel], start: int, target: int) -> list[RelationshipStep]:
+    """Resolve a unique path suitable for a correlated filter EXISTS subquery."""
+    if start == target:
+        return []
+    context = {"table_id": target, "base_table_id": start}
+    paths = relationship_paths(relationships, start, target, allow_fanout=True)
+    if len(paths) > 1:
+        context["paths"] = [[step.id for step in path] for path in paths]
+        raise SemanticCompileError("AMBIGUOUS_JOIN_PATH", "Multiple filter paths exist", context)
+    if paths:
+        return paths[0]
+    raise SemanticCompileError(
+        "UNREACHABLE_FILTER", "Filter is not reachable through an approved relationship", context
+    )
 
 
 def safe_join_path(relationships: list[CanonicalRelationshipModel], start: int, target: int) -> list[RelationshipStep]:
     """Resolve a unique safe path or expose actionable canonical edge diagnostics."""
+    if start == target:
+        raise SemanticCompileError(
+            "UNSAFE_JOIN",
+            "Self-join without explicit role is not supported",
+            {"table_id": target, "base_table_id": start},
+        )
     paths = relationship_paths(relationships, start, target)
     context = {"table_id": target, "base_table_id": start}
     if len(paths) > 1:
