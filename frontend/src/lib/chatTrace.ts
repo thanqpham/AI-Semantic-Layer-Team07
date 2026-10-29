@@ -10,6 +10,7 @@ export interface TraceEvent {
   action?: string;
   status: 'started' | 'finished' | 'failed';
   summary: string;
+  outcome_summary?: string;
   duration_ms?: number;
   source?: string;
   target?: string;
@@ -38,6 +39,27 @@ export function traceSteps(trace: ExecutionTrace): TraceEvent[] {
     if (event.kind === 'step') steps.set(event.step_id, { ...steps.get(event.step_id), ...event });
   }
   return [...steps.values()];
+}
+
+const AGENT_IDS = new Set(['orchestrator', 'chitchat', 'data_assistant', 'metric_suggest', 'metric_review', 'semantic_parse']);
+
+export function agentId(node: string | undefined): string | undefined {
+  const id = node === 'metric_repair' ? 'metric_suggest' : node;
+  return id && AGENT_IDS.has(id) ? id : undefined;
+}
+
+export function traceAgents(trace: ExecutionTrace): TraceEvent[] {
+  const agents = new Map<string, TraceEvent[]>();
+  for (const step of traceSteps(trace)) {
+    const id = agentId(step.node);
+    if (id) agents.set(id, [...(agents.get(id) || []), step]);
+  }
+  return [...agents].map(([id, steps]) => {
+    const main = steps.filter((step) => agentId(step.action) === id && step.action === step.node);
+    const latest = (main.length ? main : steps).at(-1)!;
+    const outcome = [...steps].reverse().find((step) => step.outcome_summary?.trim())?.outcome_summary;
+    return { ...latest, node: id, step_id: id, outcome_summary: outcome };
+  });
 }
 
 /** Parse SSE across arbitrary UTF-8 chunks, including CRLF and multiline data. */

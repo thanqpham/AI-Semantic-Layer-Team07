@@ -1,10 +1,11 @@
 'use client';
 
 import { ChevronDown, ChevronRight, GitBranch, Loader2, CheckCircle2, CircleAlert } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
-import { ExecutionTrace, TraceEvent, traceSteps } from '@/lib/chatTrace';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ExecutionTrace, TraceEvent, traceAgents, traceSteps } from '@/lib/chatTrace';
 import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
+import { AgentFlowCanvas } from './AgentFlowCanvas';
 
 const AGENT_NAMES: Record<string, string> = {
   orchestrator: 'Orchestrator Agent', chitchat: 'Conversation Agent', data_assistant: 'Data Assistant Agent',
@@ -34,16 +35,17 @@ export function StepStatus({ status }: { status: TraceEvent['status'] }) {
 }
 
 export function ThinkingSteps({ trace, node }: { trace: ExecutionTrace; node?: string }) {
-  const { t, translate } = useLanguage();
+  const { t } = useLanguage();
   const steps = traceSteps(trace).filter((step) => !node || step.node === node || (
     node === 'sql' && step.action?.startsWith('sql_')
   ));
   return <ol className="space-y-3 text-xs">
-    {steps.map((step) => <li key={step.step_id} className="flex items-start gap-2">
+    {steps.map((step, index) => <li key={step.step_id} className="relative flex items-start gap-2">
+      {index < steps.length - 1 && <span aria-hidden className="absolute left-[7px] top-4 h-[calc(100%+0.75rem)] border-l border-border" />}
       <StepStatus status={step.status} />
       <div className="min-w-0 flex-1">
         <div className="font-medium">{AGENT_NAMES[step.node] || t('System', 'Hệ thống')}</div>
-        <p className="mt-0.5 text-muted-foreground">{translate(step.summary)}</p>
+        {step.summary?.trim() && <p className="mt-1 break-words text-muted-foreground">{step.summary}</p>}
         <span className="sr-only">{step.status === 'started' ? t('Running', 'Đang chạy') : step.status === 'failed' ? t('Error', 'Có lỗi') : t('Completed', 'Hoàn tất')}</span>
       </div>
       <TraceDuration key={`${step.step_id}:${step.status}:${trace.elapsed_ms}`}
@@ -54,31 +56,176 @@ export function ThinkingSteps({ trace, node }: { trace: ExecutionTrace; node?: s
   </ol>;
 }
 
-export function AgentThinking({ trace, reconnecting, onOpenGraph }: {
-  trace: ExecutionTrace; reconnecting?: boolean; onOpenGraph: (trigger: HTMLButtonElement) => void;
+function AgentTimelineItem({
+  event,
+  t,
+}: {
+  event: TraceEvent;
+  t: (en: string, vi: string) => string;
+}) {
+  return (
+    <li key={event.step_id} className="flex items-start gap-2">
+      <StepStatus status={event.status} />
+      <div className="min-w-0 flex-1">
+        <details className="group">
+          <summary
+            aria-label={`${t('View explanation', 'Xem giải thích')}: ${AGENT_NAMES[event.node] || t('System', 'Hệ thống')}`}
+            className="flex w-fit cursor-pointer list-none items-center gap-1 rounded font-medium hover:text-primary focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden"
+          >
+            {AGENT_NAMES[event.node] || t('System', 'Hệ thống')}
+            <ChevronDown
+              aria-hidden
+              className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+            />
+          </summary>
+          <p className="mt-1 whitespace-pre-wrap break-words text-foreground">
+            {event.outcome_summary?.trim() || t('No explanation available', 'Chưa có giải thích')}
+          </p>
+        </details>
+        <span className="sr-only">
+          {event.status === 'started'
+            ? t('Running', 'Đang chạy')
+            : event.status === 'failed'
+              ? t('Error', 'Có lỗi')
+              : t('Completed', 'Hoàn tất')}
+        </span>
+      </div>
+      {event.duration_ms !== undefined && <TraceDuration milliseconds={event.duration_ms} />}
+    </li>
+  );
+}
+
+function AgentAnswerSection({
+  answer,
+  renderAnswer,
+  t,
+}: {
+  answer: string;
+  renderAnswer?: (answer: string) => React.ReactNode;
+  t: (en: string, vi: string) => string;
+}) {
+  return (
+    <section
+      data-thinking-answer
+      aria-label={t('Final answer', 'Câu trả lời')}
+      className="border-t border-border pt-3"
+    >
+      <h3 className="mb-2 font-semibold">{t('Final answer', 'Câu trả lời')}</h3>
+      {renderAnswer ? renderAnswer(answer) : <p className="whitespace-pre-wrap break-words">{answer}</p>}
+    </section>
+  );
+}
+
+export function AgentThinking({
+  trace,
+  reconnecting,
+  answer,
+  answerStreaming,
+  renderAnswer,
+  onOpenGraph,
+}: {
+  trace: ExecutionTrace;
+  reconnecting?: boolean;
+  answer?: string;
+  answerStreaming?: boolean;
+  renderAnswer?: (answer: string) => React.ReactNode;
+  onOpenGraph?: (trigger: HTMLButtonElement) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [showFlow, setShowFlow] = useState(false);
   const contentId = useId();
+  const flowId = useId();
+  const timelineRef = useRef<HTMLOListElement>(null);
+  const shouldFollowRef = useRef(true);
+  const lastSeqRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const lastSeq = trace.events.at(-1)?.seq;
+    if (lastSeq === lastSeqRef.current) return;
+    lastSeqRef.current = lastSeq;
+    const container = timelineRef.current;
+    if (container && shouldFollowRef.current) container.scrollTop = container.scrollHeight;
+  }, [trace.events]);
+
   const { t } = useLanguage();
-  const status = reconnecting ? t('Reconnecting', 'Đang kết nối lại') : {
-    running: t('Processing', 'Đang xử lý'), completed: t('Completed', 'Hoàn tất'),
-    needs_clarification: t('Needs clarification', 'Cần làm rõ'), error: t('Error', 'Có lỗi'),
-    partial: t('Partially completed', 'Hoàn tất một phần'),
-  }[trace.status];
-  return <div className="w-full rounded-lg border border-border bg-card/60 text-xs">
-    <div className="flex flex-wrap items-center justify-between gap-1 px-2 py-1">
-      <button type="button" aria-expanded={open} aria-controls={contentId}
-        onClick={() => setOpen(!open)} className="flex min-h-9 items-center gap-1.5 rounded px-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span>Thinking · <span aria-live="polite">{status}</span> · </span>
-        <TraceDuration key={`${trace.run_id}:${trace.elapsed_ms}:${trace.status}`}
-          milliseconds={trace.elapsed_ms} running={trace.status === 'running' && !reconnecting} />
-      </button>
-      <Button type="button" variant="ghost" size="sm" className="gap-1.5 text-xs"
-        onClick={(event) => onOpenGraph(event.currentTarget)}>
-        <GitBranch className="h-3.5 w-3.5" />{t('Agent flow', 'Luồng agent')}
-      </Button>
+  const events = traceAgents(trace);
+  const status = reconnecting
+    ? t('Reconnecting', 'Đang kết nối lại')
+    : {
+        running: t('Processing', 'Đang xử lý'),
+        completed: t('Completed', 'Hoàn tất'),
+        needs_clarification: t('Needs clarification', 'Cần làm rõ'),
+        error: t('Error', 'Có lỗi'),
+        partial: t('Partially completed', 'Hoàn tất một phần'),
+      }[trace.status];
+
+  const handleToggleFlow = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!open) {
+      setOpen(true);
+      setShowFlow(true);
+    } else {
+      setShowFlow((prev) => !prev);
+    }
+    onOpenGraph?.(event.currentTarget);
+  };
+
+  return (
+    <div className="w-full rounded-lg border border-border bg-card/60 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-1 px-2 py-1">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={contentId}
+          onClick={() => setOpen(!open)}
+          className="flex min-h-8 items-center gap-1.5 rounded px-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          <span>Thinking · <span aria-live="polite">{status}</span> · </span>
+          <TraceDuration
+            key={`${trace.run_id}:${trace.elapsed_ms}:${trace.status}`}
+            milliseconds={trace.elapsed_ms}
+            running={trace.status === 'running' && !reconnecting}
+          />
+        </button>
+        <Button
+          type="button"
+          variant={open && showFlow ? 'secondary' : 'ghost'}
+          size="sm"
+          className="gap-1.5 text-xs"
+          aria-expanded={open && showFlow}
+          aria-controls={open && showFlow ? flowId : undefined}
+          onClick={handleToggleFlow}
+        >
+          <GitBranch className="h-3.5 w-3.5" />
+          {t('Agent flow', 'Luồng agent')}
+        </Button>
+      </div>
+      {open && (
+        <div id={contentId} className="max-h-96 space-y-3 overflow-y-auto border-t border-border p-3">
+          {showFlow && (
+            <div id={flowId} className="w-full">
+              <h4 className="sr-only">{t('Agent flow', 'Luồng agent')}</h4>
+              <AgentFlowCanvas trace={trace} reconnecting={reconnecting} />
+            </div>
+          )}
+          <ol
+            ref={timelineRef}
+            aria-label={t('Live activity', 'Hoạt động trực tiếp')}
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              shouldFollowRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+            }}
+            className="max-h-48 space-y-3 overflow-y-auto text-xs"
+          >
+            {events.map((event) => (
+              <AgentTimelineItem key={event.step_id} event={event} t={t} />
+            ))}
+          </ol>
+          {answerStreaming && answer?.trim() && (
+            <AgentAnswerSection answer={answer} renderAnswer={renderAnswer} t={t} />
+          )}
+        </div>
+      )}
     </div>
-    {open && <div id={contentId} className="border-t border-border p-3"><ThinkingSteps trace={trace} /></div>}
-  </div>;
+  );
 }
