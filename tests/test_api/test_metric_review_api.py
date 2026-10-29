@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import func, select
 
 from src.api.auth import create_access_token
+from src.config import get_settings
 from src.models.db import (
     MetricProposalModel,
     SemanticColumnModel,
@@ -17,6 +18,11 @@ from src.models.db import (
 from src.models.metric_review import MetricDraft, MetricDraftBatch
 from src.services.metric_context import MetricContextResult, load_review_schema
 from tests.metric_review_helpers import definition, reviewer_mock, scope_mock, seed_proposal
+
+
+@pytest.fixture(autouse=True)
+def enable_metric_knowledge(monkeypatch):
+    monkeypatch.setattr(get_settings(), "metric_knowledge_enabled", True)
 
 
 @pytest.fixture
