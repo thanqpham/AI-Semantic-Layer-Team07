@@ -1,0 +1,30 @@
+name: Security Scan
+on:
+  workflow_call:
+jobs:
+  gitleaks:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+  sast-and-audit:
+    name: Code & Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Run Bandit & Pip-audit
+        run: |
+          pip install --upgrade pip
+          pip install bandit pip-audit -r requirements.txt
+          python -m bandit -r src/ -ll -ii
+          python -m pip-audit -r requirements.txt

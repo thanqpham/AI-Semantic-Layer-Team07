@@ -1,0 +1,27 @@
+name: Lint & Unit Tests
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    name: Run Lint and Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Lint with Ruff
+        run: python -m ruff check src/ tests/
+      - name: Run Pytest
+        run: python -m pytest tests/ -v --tb=short
+        env:
+          APP_ENV: test
+          OPENAI_API_KEY: test-key
+          PYTHONPATH: .
