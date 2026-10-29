@@ -1,62 +1,62 @@
 {
-  "Ph?n lo?i y?u c?u": {
-    "vi": "Ph?n lo?i y?u c?u",
+  "Phân loại yêu cầu": {
+    "vi": "Phân loại yêu cầu",
     "en": "Classify the request"
   },
-  "So?n ph?n h?i h?i tho?i": {
-    "vi": "So?n ph?n h?i h?i tho?i",
+  "Soạn phản hồi hội thoại": {
+    "vi": "Soạn phản hồi hội thoại",
     "en": "Compose the conversational reply"
   },
-  "Tra c?u semantic layer v? metric ?? duy?t": {
-    "vi": "Tra c?u semantic layer v? metric ?? duy?t",
+  "Tra cứu semantic layer về metric đã duyệt": {
+    "vi": "Tra cứu semantic layer về metric đã duyệt",
     "en": "Look up the semantic layer and approved metrics"
   },
-  "?? xu?t ??nh ngh?a metric": {
-    "vi": "?? xu?t ??nh ngh?a metric",
+  "Đề xuất định nghĩa metric": {
+    "vi": "Đề xuất định nghĩa metric",
     "en": "Propose a metric definition"
   },
-  "Ph?n t?ch c?u h?i theo danh m?c metric": {
-    "vi": "Ph?n t?ch c?u h?i theo danh m?c metric",
+  "Phân tích câu hỏi theo danh mục metric": {
+    "vi": "Phân tích câu hỏi theo danh mục metric",
     "en": "Interpret the question using the metric catalog"
   },
-  "Chu?n b? ng? c?nh d? li?u": {
-    "vi": "Chu?n b? ng? c?nh d? li?u",
+  "Chuẩn bị ngữ cảnh dữ liệu": {
+    "vi": "Chuẩn bị ngữ cảnh dữ liệu",
     "en": "Prepare the data context"
   },
-  "Ki?m tra metric tr?ng l?p": {
-    "vi": "Ki?m tra metric tr?ng l?p",
+  "Kiểm tra metric trùng lặp": {
+    "vi": "Kiểm tra metric trùng lặp",
     "en": "Check for duplicate metrics"
   },
-  "Sinh ??nh ngh?a metric": {
-    "vi": "Sinh ??nh ngh?a metric",
+  "Sinh định nghĩa metric": {
+    "vi": "Sinh định nghĩa metric",
     "en": "Generate the metric definition"
   },
-  "Th? l?i v?i c?c c?t h?p l?": {
-    "vi": "Th? l?i v?i c?c c?t h?p l?",
+  "Thử lại với các cột hợp lệ": {
+    "vi": "Thử lại với các cột hợp lệ",
     "en": "Retry using valid columns"
   },
-  "Bi?n d?ch v? ki?m tra truy v?n": {
-    "vi": "Bi?n d?ch v? ki?m tra truy v?n",
+  "Biên dịch và kiểm tra truy vấn": {
+    "vi": "Biên dịch và kiểm tra truy vấn",
     "en": "Compile and validate the query"
   },
-  "Th?c thi truy v?n ch? ??c": {
-    "vi": "Th?c thi truy v?n ch? ??c",
+  "Thực thi truy vấn chỉ đọc": {
+    "vi": "Thực thi truy vấn chỉ đọc",
     "en": "Execute the read-only query"
   },
-  "Y?u c?u ngo?i ph?m vi h? tr?": {
-    "vi": "Y?u c?u ngo?i ph?m vi h? tr?",
+  "Yêu cầu ngoài phạm vi hỗ trợ": {
+    "vi": "Yêu cầu ngoài phạm vi hỗ trợ",
     "en": "The request is outside the supported scope"
   },
-  "Y?u c?u l?m r? c?u h?i": {
-    "vi": "Y?u c?u l?m r? c?u h?i",
+  "Yêu cầu làm rõ câu hỏi": {
+    "vi": "Yêu cầu làm rõ câu hỏi",
     "en": "Ask for clarification"
   },
-  "Ho?n t?t ph?n h?i": {
-    "vi": "Ho?n t?t ph?n h?i",
+  "Hoàn tất phản hồi": {
+    "vi": "Hoàn tất phản hồi",
     "en": "Complete the reply"
   },
-  "?ang k?t n?i l?i": {
-    "vi": "?ang k?t n?i l?i",
+  "Đang kết nối lại": {
+    "vi": "Đang kết nối lại",
     "en": "Reconnecting"
   },
   "Invitation": {
@@ -68,7 +68,7 @@
     "en": "Checking the invitation link..."
   },
   "Workspace access": {
-    "vi": "Quyền truy cập không gian làm việc",
+    "vi": "Quyền truy cập Workspace",
     "en": "Workspace access"
   },
   "Tham gia Workspace.": {
@@ -124,7 +124,7 @@
     "en": "The metric is awaiting approval for official use."
   },
   "Review Schema (": {
-    "vi": "Xem lại lược đồ (",
+    "vi": "Duyệt Schema (",
     "en": "Review Schema ("
   },
   "Duyệt": {
@@ -180,7 +180,7 @@
     "en": "Full Name"
   },
   "Email": {
-    "vi": "E-mail",
+    "vi": "Email",
     "en": "Email"
   },
   "Mật khẩu": {
@@ -428,7 +428,7 @@
     "en": "SemanticLayer"
   },
   "Beta": {
-    "vi": "bản thử nghiệm",
+    "vi": "Beta",
     "en": "Beta"
   },
   "Sẵn sàng": {
@@ -496,7 +496,7 @@
     "en": "Analyzing Catalog..."
   },
   "metric": {
-    "vi": "thước đo",
+    "vi": "chỉ số",
     "en": "metric"
   },
   "Cùng công thức lõi, khác bộ lọc nghiệp vụ. Hãy xác nhận các filter này có thực sự là định nghĩa riêng.": {
@@ -516,7 +516,7 @@
     "en": "Handmade"
   },
   "AI": {
-    "vi": "trí tuệ nhân tạo",
+    "vi": "AI",
     "en": "AI"
   },
   "Đã xóa": {
@@ -676,11 +676,11 @@
     "en": "Connect a data source"
   },
   "Point Optimus at a live database or upload a SQL dump. Credentials are read-only.": {
-    "vi": "Trỏ Optimus vào cơ sở dữ liệu trực tiếp hoặc tải lên kết xuất SQL. Thông tin xác thực chỉ đọc.",
+    "vi": "Trỏ Optimus tới Live Database hoặc tải lên SQL Dump. Tài khoản kết nối chỉ có quyền đọc.",
     "en": "Point Optimus at a live database or upload a SQL dump. Credentials are read-only."
   },
   "Engine": {
-    "vi": "Động cơ",
+    "vi": "Engine",
     "en": "Engine"
   },
   "Connection name": {
@@ -688,7 +688,7 @@
     "en": "Connection name"
   },
   "Host / connection string": {
-    "vi": "Chuỗi máy chủ/kết nối",
+    "vi": "Host / chuỗi kết nối",
     "en": "Host / connection string"
   },
   "Tệp SQL Dump (.sql)": {
@@ -736,7 +736,7 @@
     "en": "Metric name"
   },
   "Base entity": {
-    "vi": "Thực thể gốc",
+    "vi": "Bảng gốc",
     "en": "Base entity"
   },
   "Hàm tổng hợp": {
@@ -780,7 +780,7 @@
     "en": "No version history yet."
   },
   "current": {
-    "vi": "hiện hành",
+    "vi": "hiện tại",
     "en": "current"
   },
   "Bộ lọc cố định": {
@@ -804,7 +804,7 @@
     "en": "· Workspace member"
   },
   "Appearance": {
-    "vi": "Vẻ bề ngoài",
+    "vi": "Giao diện",
     "en": "Appearance"
   },
   "Daily 02:00 AM": {
@@ -816,15 +816,15 @@
     "en": "View sync history (Audit Logs)"
   },
   "Query guardrails": {
-    "vi": "Lan can truy vấn",
+    "vi": "Hàng rào an toàn truy vấn",
     "en": "Query guardrails"
   },
   "Active": {
-    "vi": "Tích cực",
+    "vi": "Đang hoạt động",
     "en": "Active"
   },
   "Read-only enforcement": {
-    "vi": "Thực thi chỉ đọc",
+    "vi": "Chỉ cho phép đọc",
     "en": "Read-only enforcement"
   },
   "Enabled": {
@@ -836,7 +836,7 @@
     "en": "Row limit (default / max)"
   },
   "Statement timeout": {
-    "vi": "Hết thời gian chờ báo cáo",
+    "vi": "Thời gian chờ câu lệnh",
     "en": "Statement timeout"
   },
   "15s": {
@@ -852,15 +852,15 @@
     "en": "Metrics"
   },
   "Engine:": {
-    "vi": "Động cơ:",
+    "vi": "Engine:",
     "en": "Engine:"
   },
   "LangGraph + SemanticQueryCompiler": {
-    "vi": "LangGraph + Trình biên dịch ngữ nghĩa",
+    "vi": "LangGraph + SemanticQueryCompiler",
     "en": "LangGraph + SemanticQueryCompiler"
   },
   "Token:": {
-    "vi": "Mã thông báo:",
+    "vi": "Token:",
     "en": "Token:"
   },
   "Daily Cron 02:00 AM": {
@@ -1016,7 +1016,7 @@
     "en": "Member"
   },
   "Data Lead": {
-    "vi": "Dẫn dữ liệu",
+    "vi": "Data Lead",
     "en": "Data Lead"
   },
   "Link mời vừa tạo": {
@@ -1260,7 +1260,7 @@
     "en": "Loading export..."
   },
   "semantic_layer.": {
-    "vi": "ngữ nghĩa_layer.",
+    "vi": "semantic_layer.",
     "en": "semantic_layer."
   },
   "Đang tải semantic catalog...": {
@@ -1296,7 +1296,7 @@
     "en": "1. METRICS ("
   },
   "Measures": {
-    "vi": "Đo",
+    "vi": "Biện pháp đo",
     "en": "Measures"
   },
   "Chưa có metric nào được phê duyệt. Hãy duyệt trong Catalog trước.": {
@@ -1308,7 +1308,7 @@
     "en": "2. DIMENSIONS OF ANALYSIS ("
   },
   "Dimensions": {
-    "vi": "Kích thước",
+    "vi": "Chiều dữ liệu",
     "en": "Dimensions"
   },
   "Đang chọn (": {
@@ -1380,11 +1380,11 @@
     "en": "SQL preview is ready"
   },
   "COMPILED SQL (READ-ONLY)": {
-    "vi": "SQL được biên dịch (CHỈ ĐỌC)",
+    "vi": "SQL ĐÃ BIÊN DỊCH (CHỈ ĐỌC)",
     "en": "COMPILED SQL (READ-ONLY)"
   },
   "Dialect-aware AST compiled": {
-    "vi": "AST nhận biết phương ngữ được biên dịch",
+    "vi": "Biên dịch AST theo từng hệ CSDL",
     "en": "Dialect-aware AST compiled"
   },
   "Tổng": {
@@ -1652,7 +1652,7 @@
     "en": "Update now"
   },
   "Auto-Sync": {
-    "vi": "Tự động đồng bộ hóa",
+    "vi": "Tự động đồng bộ",
     "en": "Auto-Sync"
   },
   "Quản lý": {
@@ -1668,7 +1668,7 @@
     "en": "Data Sources"
   },
   "tables": {
-    "vi": "b?ng",
+    "vi": "bảng",
     "en": "tables"
   },
   "Metric": {
@@ -1716,7 +1716,7 @@
     "en": "Automatically read schema metadata via SQLAlchemy Inspector. Live DB and SQL Dump support (only ingest metadata, not query data)."
   },
   "HITL Workflow": {
-    "vi": "Quy trình làm việc HITL",
+    "vi": "Quy trình HITL",
     "en": "HITL Workflow"
   },
   "Con người duyệt và phê duyệt tên nghiệp vụ do AI đề xuất trước khi lưu vào semantic layer.": {
@@ -1732,7 +1732,7 @@
     "en": "SemanticQueryCompiler converts metrics and dimensions into accurate SQL on Live DB. Do not use Text-to-SQL freely."
   },
   "Read-Only Guardrails": {
-    "vi": "Lan can chỉ đọc",
+    "vi": "Hàng rào chỉ đọc",
     "en": "Read-Only Guardrails"
   },
   "Chỉ cho phép SELECT. AST validation, auto-append LIMIT 100, statement timeout 15 giây.": {
@@ -1740,7 +1740,7 @@
     "en": "Only SELECT is allowed. AST validation, auto-append LIMIT 100, statement timeout 15 seconds."
   },
   "Business Metrics": {
-    "vi": "Số liệu kinh doanh",
+    "vi": "Chỉ số nghiệp vụ",
     "en": "Business Metrics"
   },
   "Định nghĩa chỉ số thống nhất: revenue, churn rate, conversion. AI gợi ý tên tiếng Việt chuẩn nghiệp vụ.": {
@@ -1748,7 +1748,7 @@
     "en": "Define consistent metrics such as revenue, churn rate, and conversion. AI suggests business names in Vietnamese."
   },
   "Export Semantic": {
-    "vi": "Xuất ngữ nghĩa",
+    "vi": "Xuất Semantic Layer",
     "en": "Export Semantic"
   },
   "Xuất semantic layer definitions sang JSON và YAML.": {
@@ -1776,7 +1776,7 @@
     "en": "Type hints đầy đủ, async/await support."
   },
   "Zero config": {
-    "vi": "Không có cấu hình",
+    "vi": "Không cần cấu hình",
     "en": "Zero config"
   },
   "Kết nối và introspect ngay lập tức.": {
@@ -1832,7 +1832,7 @@
     "en": "Provide connection string (Live DB) or upload SQL Dump. The system automatically encrypts and stores securely."
   },
   "AI Introspect Schema": {
-    "vi": "Lược đồ hướng nội AI",
+    "vi": "AI quét cấu trúc schema",
     "en": "AI Introspect Schema"
   },
   "AI Agent đọc metadata schema, phân tích bảng, cột, quan hệ. Đề xuất tên nghiệp vụ bằng tiếng Việt.": {
@@ -1840,7 +1840,7 @@
     "en": "AI Agent reads schema metadata, analyzes tables, columns, and relationships. Propose business name in Vietnamese."
   },
   "HITL Review & Approve": {
-    "vi": "HITL Xem xét & Phê duyệt",
+    "vi": "HITL: Xem xét & Phê duyệt",
     "en": "HITL Review & Approve"
   },
   "Data steward xem xét, chỉnh sửa và phê duyệt tên nghiệp vụ. Mỗi thay đổi đều có audit log.": {
@@ -1848,7 +1848,7 @@
     "en": "Data steward reviews, edits and approves business names. Every change has an audit log."
   },
   "Define Metrics & Query": {
-    "vi": "Xác định số liệu & truy vấn",
+    "vi": "Định nghĩa chỉ số & Truy vấn",
     "en": "Define Metrics & Query"
   },
   "Định nghĩa business metrics và dimensions. SemanticQueryCompiler biên dịch thành SQL chính xác trên Live DB. SQL Dump chỉ dùng để ingest schema metadata.": {
@@ -1856,7 +1856,7 @@
     "en": "Define business metrics and dimensions. SemanticQueryCompiler compiles to correct SQL on Live DB. SQL Dump is only used to ingest schema metadata."
   },
   "Schema Introspection": {
-    "vi": "Lược đồ nội tâm",
+    "vi": "Quét cấu trúc schema",
     "en": "Schema Introspection"
   },
   "Query Compilation": {
@@ -1864,7 +1864,7 @@
     "en": "Query Compilation"
   },
   "Export & Integration": {
-    "vi": "Xuất khẩu & Tích hợp",
+    "vi": "Xuất dữ liệu & Tích hợp",
     "en": "Export & Integration"
   },
   "PostgreSQL": {
@@ -1880,7 +1880,7 @@
     "en": "SQLite"
   },
   "SQL Dump": {
-    "vi": "Kết xuất SQL",
+    "vi": "SQL Dump",
     "en": "SQL Dump"
   },
   "JSON Export": {
@@ -1892,7 +1892,7 @@
     "en": "YAML Export"
   },
   "AI Enrichment": {
-    "vi": "Làm giàu AI",
+    "vi": "Làm giàu bằng AI",
     "en": "AI Enrichment"
   },
   "Làm giàu schema metadata": {
@@ -1900,15 +1900,15 @@
     "en": "Enrich schema metadata"
   },
   "Only": {
-    "vi": "Chỉ một",
+    "vi": "duy nhất",
     "en": "Only"
   },
   "Deterministic compiler": {
-    "vi": "Trình biên dịch xác định",
+    "vi": "Trình biên dịch tất định",
     "en": "Deterministic compiler"
   },
   "Query timeout": {
-    "vi": "Hết thời gian truy vấn",
+    "vi": "Thời gian chờ truy vấn",
     "en": "Query timeout"
   },
   "Bảo vệ hiệu năng": {
@@ -1936,7 +1936,7 @@
     "en": "Connection string is AES-256 encrypted using Fernet. Do not save plaintext."
   },
   "Read-Only Enforcement": {
-    "vi": "Thực thi chỉ đọc",
+    "vi": "Chỉ cho phép đọc",
     "en": "Read-Only Enforcement"
   },
   "Guardrails ngăn chặn INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE. Auto-append LIMIT 100.": {
@@ -1944,7 +1944,7 @@
     "en": "Guardrails ngăn chặn INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE. Auto-append LIMIT 100."
   },
   "Audit Log": {
-    "vi": "Nhật ký kiểm tra",
+    "vi": "Nhật ký kiểm toán",
     "en": "Audit Log"
   },
   "Mỗi thay đổi semantic layer đều được ghi log. Truy vết đầy đủ cho compliance.": {
@@ -2000,7 +2000,7 @@
     "en": "Reason for refusal (required when refusing)"
   },
   "e.g. E-Commerce Production DB": {
-    "vi": "Ví dụ: CSDL thương mại điện tử",
+    "vi": "VD: CSDL bán hàng (Production)",
     "en": "e.g. E-Commerce Production DB"
   },
   "Mô tả mục đích hoặc nội dung của nguồn dữ liệu này": {
@@ -2052,7 +2052,7 @@
     "en": "Definition"
   },
   "quantity * unit_price": {
-    "vi": "số lượng*đơn_giá",
+    "vi": "quantity * unit_price",
     "en": "quantity * unit_price"
   },
   "Ví dụ: Chưa trừ hoàn tiền, chỉ tính đơn completed": {
@@ -2176,7 +2176,7 @@
     "en": "Close"
   },
   "Approved metrics": {
-    "vi": "Số liệu được phê duyệt",
+    "vi": "Chỉ số đã duyệt",
     "en": "Approved metrics"
   },
   "Source tables": {
@@ -2264,7 +2264,7 @@
     "en": "Metrics Catalog"
   },
   "Definition metric request": {
-    "vi": "Yêu cầu chỉ số định nghĩa",
+    "vi": "Yêu cầu định nghĩa chỉ số",
     "en": "Definition metric request"
   },
   "Tìm kiếm metric…": {
@@ -2304,7 +2304,7 @@
     "en": "Business description"
   },
   "Schema Review": {
-    "vi": "Duyệt cấu trúc",
+    "vi": "Schema Review",
     "en": "Schema Review"
   },
   "Tìm đoạn chat...": {
@@ -2340,7 +2340,7 @@
     "en": "Synchronization history & self-healing schema"
   },
   "Workspace": {
-    "vi": "Không gian làm việc",
+    "vi": "Workspace",
     "en": "Workspace"
   },
   "AI Studio": {
@@ -2348,7 +2348,7 @@
     "en": "AI Studio"
   },
   "Metrics Dashboard": {
-    "vi": "Bảng điều khiển",
+    "vi": "Bảng điều khiển chỉ số",
     "en": "Metrics Dashboard"
   },
   "Expand sidebar": {
@@ -2360,7 +2360,7 @@
     "en": "Workspace & Member Management"
   },
   "Manage workspace": {
-    "vi": "Quản lý không gian làm việc",
+    "vi": "Quản lý Workspace",
     "en": "Manage workspace"
   },
   "Mở lịch sử trò chuyện": {
@@ -2368,7 +2368,7 @@
     "en": "Open chat history"
   },
   "Toggle theme": {
-    "vi": "Chuyển đổi chủ đề",
+    "vi": "Đổi giao diện sáng/tối",
     "en": "Toggle theme"
   },
   "Collapse sidebar": {
@@ -2400,7 +2400,7 @@
     "en": "administration"
   },
   "GUARDRAIL": {
-    "vi": "RÀO CẢNH",
+    "vi": "AN TOÀN",
     "en": "GUARDRAIL"
   },
   "TIMEOUT": {
@@ -2408,11 +2408,11 @@
     "en": "TIMEOUT"
   },
   "LLM ENRICH": {
-    "vi": "LLM làm phong phú",
+    "vi": "LLM LÀM GIÀU",
     "en": "LLM ENRICH"
   },
   "ZERO HALLUCINATION": {
-    "vi": "KHÔNG GÂY Ảo Giác",
+    "vi": "KHÔNG ẢO GIÁC",
     "en": "ZERO HALLUCINATION"
   },
   "Kết nối PostgreSQL, MySQL, SQLite": {
@@ -2420,7 +2420,7 @@
     "en": "Kết nối PostgreSQL, MySQL, SQLite"
   },
   "Ingest SQL Dump schema metadata": {
-    "vi": "Nhập siêu dữ liệu lược đồ kết xuất SQL",
+    "vi": "Đọc metadata schema từ SQL Dump",
     "en": "Ingest SQL Dump schema metadata"
   },
   "2-Pass AI enrichment với HITL review": {
@@ -2428,7 +2428,7 @@
     "en": "2-Pass AI enrichment with HITL review"
   },
   "Deterministic SemanticQueryCompiler": {
-    "vi": "Trình biên dịch ngữ nghĩa xác định",
+    "vi": "SemanticQueryCompiler tất định",
     "en": "Deterministic SemanticQueryCompiler"
   },
   "SELECT-only guardrails, LIMIT 100": {
@@ -2444,7 +2444,7 @@
     "en": "Export JSON / YAML"
   },
   "Versioning & audit trail": {
-    "vi": "Quá trình kiểm tra và lập phiên bản",
+    "vi": "Phiên bản & nhật ký kiểm toán",
     "en": "Versioning & audit trail"
   },
   "AI Agent tự động introspect schema metadata, đề xuất tên nghiệp vụ tiếng Việt và business metrics. HITL review giúp con người kiểm soát trước khi lưu.": {
@@ -2452,11 +2452,11 @@
     "en": "AI Agent automatically introspects schema metadata, suggests Vietnamese business names and business metrics. HITL review helps humans control before saving."
   },
   "Semantic Layer Agent": {
-    "vi": "Tác nhân lớp ngữ nghĩa",
+    "vi": "Semantic Layer Agent",
     "en": "Semantic Layer Agent"
   },
   "2-Pass AI Enrichment": {
-    "vi": "Làm giàu AI 2-Pass",
+    "vi": "Làm giàu schema bằng AI 2 lượt",
     "en": "2-Pass AI Enrichment"
   },
   "Flow 1": {
@@ -2464,7 +2464,7 @@
     "en": "Flow 1"
   },
   "Schema introspection": {
-    "vi": "Lược đồ nội tâm",
+    "vi": "Quét cấu trúc schema",
     "en": "Schema introspection"
   },
   "SemanticQueryCompiler biên dịch metrics và dimensions thành câu SELECT. sqlglot AST validation đảm bảo chỉ cho phép read-only, auto-append LIMIT 100.": {
@@ -2472,11 +2472,11 @@
     "en": "SemanticQueryCompiler compiles metrics and dimensions into SELECT statements. sqlglot AST validation ensures read-only, auto-append LIMIT 100."
   },
   "Deterministic Compiler": {
-    "vi": "Trình biên dịch xác định",
+    "vi": "Trình biên dịch tất định",
     "en": "Deterministic Compiler"
   },
   "SELECT-only Guardrail": {
-    "vi": "Lan can chỉ dành cho CHỌN",
+    "vi": "Chỉ cho phép SELECT",
     "en": "SELECT-only Guardrail"
   },
   "Flow 2": {
@@ -2500,7 +2500,7 @@
     "en": "Infrastructure"
   },
   "Zero plaintext": {
-    "vi": "Không có bản rõ",
+    "vi": "Không lưu plaintext",
     "en": "Zero plaintext"
   },
   "Xuất semantic layer definitions sang JSON hoặc YAML. Versioning và HITL review giúp duy trì tính nhất quán qua các thay đổi.": {
@@ -2520,7 +2520,7 @@
     "en": "Integration"
   },
   "Portable definitions": {
-    "vi": "Định nghĩa có thể chuyển đổi",
+    "vi": "Định nghĩa chuẩn, dùng được mọi nơi",
     "en": "Portable definitions"
   },
   "Sản phẩm": {
@@ -2644,11 +2644,11 @@
     "en": "AI proposed business names enter the Metadata Store only after BA/DA edits and approval."
   },
   "Metric Studio": {
-    "vi": "Studio chỉ số",
+    "vi": "Metric Studio",
     "en": "Metric Studio"
   },
   "Data Assistant": {
-    "vi": "Trợ lý dữ liệu",
+    "vi": "Data Assistant",
     "en": "Data Assistant"
   },
   "Generate": {

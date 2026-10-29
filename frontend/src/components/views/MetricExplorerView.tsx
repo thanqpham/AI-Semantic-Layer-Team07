@@ -126,6 +126,13 @@ const PIE_COLORS = [
   '#84cc16', // lime
 ];
 
+/** Vietnamese prefixes for SQL aggregate functions. */
+const AGG_PREFIX: Record<string, string> = {
+  SUM: 'Tổng',
+  AVG: 'Trung bình',
+  COUNT: 'Số lượng',
+};
+
 /**
  * Format raw column aliases / keys into friendly Vietnamese business names.
  */
@@ -180,15 +187,12 @@ function formatColumnTitle(
     if (found) return found.name;
   }
 
-  // 5. Clean up SQL aggregation names
-  if (/^SUM\((.+)\)$/i.test(colKey)) {
-    return `Tổng ${colKey.replace(/^SUM\((.+)\)$/i, '$1')}`;
-  }
-  if (/^AVG\((.+)\)$/i.test(colKey)) {
-    return `Trung bình ${colKey.replace(/^AVG\((.+)\)$/i, '$1')}`;
-  }
-  if (/^COUNT\((.+)\)$/i.test(colKey)) {
-    return `Số lượng ${colKey.replace(/^COUNT\((.+)\)$/i, '$1')}`;
+  // 5. Clean up SQL aggregation names, resolving the inner column recursively
+  const aggMatch = colKey.match(/^(SUM|AVG|COUNT)\((.+)\)$/i);
+  if (aggMatch) {
+    const prefix = AGG_PREFIX[aggMatch[1].toUpperCase()];
+    const inner = formatColumnTitle(aggMatch[2], metadata, catalog, metrics);
+    return `${prefix} ${inner}`;
   }
 
   return colKey;
@@ -253,6 +257,36 @@ function formatShortNumber(num: number): string {
     return `${(num / 1_000).toFixed(1).replace(/\.0$/, '')} K`;
   }
   return num.toLocaleString();
+}
+
+/** Column indices whose alias appears in a compiler metadata map (dimension_/metric_). */
+function aliasColIndices(
+  columns: string[],
+  aliases: Record<string, unknown> | null | undefined,
+): number[] {
+  if (!aliases) return [];
+  return columns.reduce<number[]>(
+    (acc, col, idx) => (aliases[col] != null ? [...acc, idx] : acc),
+    [],
+  );
+}
+
+/**
+ * Column indices matching the compiled SQL alias pattern. The execute endpoint
+ * omits compiler metadata, but its columns keep dimension_{id}/metric_{id}
+ * aliases, so the pattern is the reliable signal there.
+ */
+function patternColIndices(columns: string[], pattern: RegExp): number[] {
+  return columns.reduce<number[]>(
+    (acc, col, idx) => (pattern.test(col) ? [...acc, idx] : acc),
+    [],
+  );
+}
+
+/** Shorten long category labels on the x-axis; tooltips keep the full text. */
+function truncateAxisLabel(value: unknown, max = 14): string {
+  const str = String(value ?? '');
+  return str.length > max ? `${str.slice(0, max - 1)}…` : str;
 }
 
 export function MetricExplorerView({
@@ -1313,12 +1347,29 @@ function RechartsInteractiveStudio({
     return indices;
   }, [rows, columns]);
 
+  // Compiler metadata separates dimension vs metric columns exactly; alias
+  // patterns cover the execute endpoint (which omits metadata); the numeric
+  // heuristic stays only as a last-resort fallback.
+  const dimensionColIndices = useMemo(() => {
+    const byMeta = aliasColIndices(columns, metadata?.dimensions);
+    return byMeta.length ? byMeta : patternColIndices(columns, /^dimension_\d+$/i);
+  }, [columns, metadata]);
+
+  const metricColIndices = useMemo(() => {
+    const byMeta = aliasColIndices(columns, metadata?.metrics);
+    return byMeta.length ? byMeta : patternColIndices(columns, /^metric_\d+$/i);
+  }, [columns, metadata]);
+
   const labelColIdx = useMemo(() => {
+    if (dimensionColIndices.length) return dimensionColIndices[0];
     const nonNumeric = columns.findIndex((_, idx) => !numericColIndices.includes(idx));
     return nonNumeric >= 0 ? nonNumeric : 0;
-  }, [columns, numericColIndices]);
+  }, [columns, numericColIndices, dimensionColIndices]);
 
-  const primaryNumericIdx = numericColIndices[0] ?? (columns.length > 1 ? 1 : 0);
+  const primaryNumericIdx = useMemo(() => {
+    if (metricColIndices.length) return metricColIndices[0];
+    return numericColIndices[0] ?? (columns.length > 1 ? 1 : 0);
+  }, [columns, numericColIndices, metricColIndices]);
 
   // Formatted names for dimension and metric
   const primaryMetricRaw = columns[primaryNumericIdx] || 'Chỉ số';
@@ -1337,15 +1388,16 @@ function RechartsInteractiveStudio({
   // Format data for Recharts with smart dimension values
   const chartData = useMemo(() => {
     return rows.slice(0, 30).map((r, i) => {
-      const rawLabel = r[labelColIdx];
-      const formattedLabel = formatDimensionValue(rawLabel) || `Mục ${i + 1}`;
+      const labelIndices = dimensionColIndices.length ? dimensionColIndices : [labelColIdx];
+      const labels = labelIndices.map((idx) => formatDimensionValue(r[idx]));
+      const formattedLabel = labels.join(' · ') || `Mục ${i + 1}`;
       return {
         name: formattedLabel,
-        rawName: String(rawLabel ?? ''),
+        rawName: labels.join(' · '),
         value: Number(r[primaryNumericIdx]) || 0,
       };
     });
-  }, [rows, labelColIdx, primaryNumericIdx]);
+  }, [rows, labelColIdx, primaryNumericIdx, dimensionColIndices]);
 
   const values = useMemo(() => chartData.map((d) => d.value), [chartData]);
   const totalSum = useMemo(() => values.reduce((a, b) => a + b, 0), [values]);
@@ -1439,6 +1491,7 @@ function RechartsInteractiveStudio({
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
                 <XAxis
                   dataKey="name"
+                  tickFormatter={(v) => truncateAxisLabel(v)}
                   tickLine={false}
                   axisLine={false}
                   className="text-[11px] fill-muted-foreground font-medium"
@@ -1477,6 +1530,7 @@ function RechartsInteractiveStudio({
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
                 <XAxis
                   dataKey="name"
+                  tickFormatter={(v) => truncateAxisLabel(v)}
                   tickLine={false}
                   axisLine={false}
                   className="text-[11px] fill-muted-foreground font-medium"
@@ -1528,6 +1582,7 @@ function RechartsInteractiveStudio({
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
                 <XAxis
                   dataKey="name"
+                  tickFormatter={(v) => truncateAxisLabel(v)}
                   tickLine={false}
                   axisLine={false}
                   className="text-[11px] fill-muted-foreground font-medium"

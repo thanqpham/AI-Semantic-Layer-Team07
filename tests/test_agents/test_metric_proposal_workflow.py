@@ -8,6 +8,7 @@ import pytest
 from src.agents.nodes.metric.metric_review_node import reviewed_state
 from src.agents.roles.metric_designer_agent import generate_metric_drafts
 from src.agents.workflows.metric_proposal_workflow import run_metric_workflow
+from src.config import get_settings
 from src.models.metric_review import MetricBuildBatch, ReviewIssue
 from src.services.chat_execution import ChatExecution, execution_context
 from src.services.metric_correlation import correlate
@@ -15,6 +16,11 @@ from src.services.metric_knowledge import metric_knowledge
 from src.services.metric_review_validation import technical_review
 from src.services.metric_runtime import MetricCallError, execution_failure
 from tests.metric_review_helpers import context, definition, reviewer_mock
+
+
+@pytest.fixture(autouse=True)
+def enable_metric_knowledge(monkeypatch):
+    monkeypatch.setattr(get_settings(), "metric_knowledge_enabled", True)
 
 
 def draft(expression="amount", name="Doanh thu trước thuế"):

@@ -1,0 +1,33 @@
+name: GitOps Sync
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        required: true
+        type: string
+
+jobs:
+  sync:
+    name: Update cloud-infra
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cloud-infra
+        uses: actions/checkout@v4
+        with:
+          repository: QuanAnh280605/cloud-infra
+          token: ${{ secrets.GITOPS_TOKEN }}
+          ref: main
+
+      - name: Update deployment.yaml tag
+        run: |
+          sed -i -E "s|(image: ghcr.io/.*/ai-semantic-layer-backend:).*|\1${{ inputs.image_tag }}|" apps/semantic-layer/deployment.yaml
+          git diff apps/semantic-layer/deployment.yaml
+
+      - name: Commit and Push to cloud-infra
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/semantic-layer/deployment.yaml
+          git commit -m "chore(gitops): update semantic-layer image to ${{ inputs.image_tag }} [skip ci]"
+          git push origin main

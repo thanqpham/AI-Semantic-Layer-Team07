@@ -97,7 +97,7 @@ describe('AIStudioView', () => {
     expect(screen.getByRole('button', { name: 'New DB prompt' })).toBeInTheDocument();
   });
 
-  it('clears metric prompts and does not fetch them in Data Assistant mode', async () => {
+  it('clears metric prompts and shows no canned suggestions in Data Assistant mode', async () => {
     listMetricPromptSuggestionsApi.mockResolvedValue({
       items: [{ id: 'metric', title: 'Metric riêng', prompt: 'Metric prompt' }],
     });
@@ -109,7 +109,7 @@ describe('AIStudioView', () => {
 
     expect(screen.queryByRole('button', { name: 'Metric riêng' })).not.toBeInTheDocument();
     expect(listMetricPromptSuggestionsApi).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: /Doanh thu theo khách hàng/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
   });
 
   it('ignores a metric suggestions response that arrives after switching modes', async () => {
@@ -126,7 +126,7 @@ describe('AIStudioView', () => {
     }));
 
     expect(screen.queryByRole('button', { name: 'Metric đến muộn' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Doanh thu theo khách hàng/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
   });
 
   it.each([
@@ -249,7 +249,7 @@ describe('AIStudioView', () => {
       />
     );
 
-    expect(screen.getByText('Trợ lý dữ liệu')).toBeInTheDocument();
+    expect(screen.getByText('Data Assistant')).toBeInTheDocument();
     expect(screen.getByText(/Hỏi về cấu trúc, chỉ số đã duyệt/i)).toBeInTheDocument();
   });
 
