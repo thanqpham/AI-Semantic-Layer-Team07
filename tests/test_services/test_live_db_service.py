@@ -386,3 +386,9 @@ def test_plain_postgresql_url_uses_installed_sync_driver():
 
     url = "postgresql://user:p%40ss@localhost:5432/example?sslmode=require"
     assert _sync_introspection_url(url) == url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+
+def test_introspection_rejects_partial_table_snapshot(temp_sqlite_db):
+    with patch("src.services.live_db_service._introspect_table", return_value=None):
+        with pytest.raises(ValueError, match="Incomplete introspection"):
+            introspect_live_database(f"sqlite:///{temp_sqlite_db}", "auto")

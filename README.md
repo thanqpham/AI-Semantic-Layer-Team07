@@ -323,6 +323,8 @@ alembic upgrade head
 
 Dự án cung cấp sẵn nhiều phương thức nạp dữ liệu thử nghiệm phục vụ kiểm thử và demo:
 
+Muốn thử Metrics Dashboard với dữ liệu ecommerce và chỉ số tài chính theo ngày/tháng, xem [Ecommerce Dashboard Seed](docs/ECOMMERCE_DASHBOARD_SEED.md). Bộ này dùng database riêng và không thay thế Golden Retail.
+
 #### 🔹 Phương án A: Seed Golden Retail Benchmark Database (36 Bảng, 5.000 Orders) — *Khuyên dùng*
 
 Script tự động khởi tạo database `golden_retail_db` trên PostgreSQL, import 36 bảng chuẩn Enterprise Retail (`order_header`, `order_line`, `products`, `customers`, `stores`, `sales_channels`, `inventory`, `payments`...) kèm 8.5MB dữ liệu seed thực tế:

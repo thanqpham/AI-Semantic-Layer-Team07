@@ -18,10 +18,10 @@ jobs:
 #     uses: ./.github/workflows/security.yml
 #     secrets: inherit
 
-  # 2. Chạy kiểm thử chất lượng code
-#   test:
-#     name: Quality & Test
-#     uses: ./.github/workflows/test.yml
+  # 2. Chạy kiểm thử chất lượng code trên push và pull request.
+  test:
+    name: Quality & Test
+    uses: ./.github/workflows/test.yml
 
   # 3. Build & Scan Image (chạy trên cả main hoặc dev)
   build:

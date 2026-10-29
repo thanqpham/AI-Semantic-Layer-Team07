@@ -84,6 +84,7 @@ def metric_identity(definition: MetricDefinition) -> tuple[Any, ...]:
         spec.formula.function,
         _normalize_expression(spec.formula.expression),
         ratio_key,
+        spec.query_plan.model_dump(mode="json") if spec.query_plan else None,
         spec.base_entity_id or spec.base_entity.casefold(),
         tuple(sorted(spec.grain.column_ids)),
         tuple(sorted(filters)),

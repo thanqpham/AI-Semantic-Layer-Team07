@@ -28,8 +28,9 @@ from src.models.db import (
 )
 from src.models.review_mixin import REVIEW_STATUS_PENDING
 from src.models.schema_metadata import RawSchemaMetadata, SchemaDialect
-from src.services.database import decrypt_conn_url
+from src.services.database import decrypt_conn_url, lock_semantic_database
 from src.services.live_db_service import introspect_live_database, resolve_and_validate_dialect
+from src.services.relationship_sync import invalidate_relationship_columns, reconcile_relationships
 from src.services.schema_fingerprint import compute_schema_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -112,7 +113,11 @@ def _match_renamed_tables(
         best_match = None
         best_score = 0.0
         for r_tbl in raw_tables:
-            r_name = r_tbl.table_name.raw_name
+            r_name = (r_tbl.schema_name.normalized_name, r_tbl.table_name.normalized_name)
+            if r_tbl.schema_name.normalized_name != (
+                d_tbl.physical_schema_key if d_tbl.physical_schema_key is not None else d_tbl.physical_schema or ""
+            ):
+                continue
             if r_name in matched_raw:
                 continue
             r_cols = {c.column_name.raw_name.lower() for c in r_tbl.columns}
@@ -124,35 +129,49 @@ def _match_renamed_tables(
                 best_match = r_tbl
         if best_match is not None:
             pairs.append((d_tbl, best_match))
-            matched_raw.add(best_match.table_name.raw_name)
+            matched_raw.add((best_match.schema_name.normalized_name, best_match.table_name.normalized_name))
     return pairs
 
 
 def detect_drift_details(existing_tables: list[SemanticTableModel], raw_schema: RawSchemaMetadata) -> dict[str, Any]:
     """Compare database tables/columns against raw schema metadata to classify changes."""
-    raw_tbl_map = {t.table_name.raw_name.lower(): t for t in raw_schema.tables}
-    exist_tbl_map = {t.table_name.lower(): t for t in existing_tables}
 
-    unmatched_added_tbls = [t for t in raw_schema.tables if t.table_name.raw_name.lower() not in exist_tbl_map]
-    unmatched_dropped_tbls = [t for t in existing_tables if t.table_name.lower() not in raw_tbl_map]
+    def raw_key(t: Any) -> tuple[str, str]:
+        return (t.schema_name.normalized_name, t.table_name.normalized_name)
+
+    raw_tbl_map = {raw_key(t): t for t in raw_schema.tables}
+    legacy_keys = _unambiguous_legacy_table_keys(existing_tables, raw_schema)
+    legacy_by_id = {item["table_id"]: (item["schema_key"], item["table_key"]) for item in legacy_keys}
+
+    def stored_key(t: SemanticTableModel) -> tuple[str, str]:
+        if t.id in legacy_by_id:
+            return legacy_by_id[t.id]
+        return (
+            t.physical_schema_key if t.physical_schema_key is not None else t.physical_schema or "",
+            t.table_name_key if t.table_name_key is not None else t.table_name,
+        )
+
+    exist_tbl_map = {stored_key(t): t for t in existing_tables}
+
+    unmatched_added_tbls = [t for t in raw_schema.tables if raw_key(t) not in exist_tbl_map]
+    unmatched_dropped_tbls = [t for t in existing_tables if stored_key(t) not in raw_tbl_map]
 
     # Detect renamed tables
     renamed_tbl_pairs = _match_renamed_tables(unmatched_dropped_tbls, unmatched_added_tbls)
     matched_dropped_tbl_ids = {p[0].id for p in renamed_tbl_pairs}
-    matched_added_tbl_names = {p[1].table_name.raw_name for p in renamed_tbl_pairs}
+    matched_added_tbl_names = {raw_key(p[1]) for p in renamed_tbl_pairs}
 
     renamed_tables = [
         {
             "table_id": old_t.id,
             "old_name": old_t.table_name,
             "new_name": new_t.table_name.raw_name,
+            "new_name_key": new_t.table_name.normalized_name,
         }
         for old_t, new_t in renamed_tbl_pairs
     ]
 
-    added_tables = [
-        t.table_name.raw_name for t in unmatched_added_tbls if t.table_name.raw_name not in matched_added_tbl_names
-    ]
+    added_tables = [t.table_name.raw_name for t in unmatched_added_tbls if raw_key(t) not in matched_added_tbl_names]
     dropped_tables = [t.table_name for t in unmatched_dropped_tbls if t.id not in matched_dropped_tbl_ids]
 
     renamed_cols = []
@@ -198,26 +217,82 @@ def detect_drift_details(existing_tables: list[SemanticTableModel], raw_schema: 
                     "old_name": old_c.column_name,
                     "new_name": new_c.column_name.raw_name,
                     "new_type": new_c.data_type,
+                    "old_type": old_c.data_type,
                 }
             )
         for c in unmatched_exist:
             if c.id not in matched_exist_ids:
-                dropped_cols.append({"table_name": exist_tbl.table_name, "col_id": c.id, "name": c.column_name})
+                dropped_cols.append(
+                    {
+                        "table_name": exist_tbl.table_name,
+                        "table_id": exist_tbl.id,
+                        "col_id": c.id,
+                        "name": c.column_name,
+                    }
+                )
         for c in unmatched_raw:
             if c.column_name.raw_name not in matched_raw_names:
                 added_cols.append(
-                    {"table_name": exist_tbl.table_name, "name": c.column_name.raw_name, "type": c.data_type}
+                    {
+                        "table_name": exist_tbl.table_name,
+                        "table_id": exist_tbl.id,
+                        "name": c.column_name.raw_name,
+                        "type": c.data_type,
+                    }
                 )
 
     return {
+        "qualified_legacy_tables": legacy_keys,
         "renamed_tables": renamed_tables,
         "added_tables": added_tables,
+        "added_table_keys": [
+            list(raw_key(t)) for t in unmatched_added_tbls if raw_key(t) not in matched_added_tbl_names
+        ],
+        "dropped_table_ids": [t.id for t in unmatched_dropped_tbls if t.id not in matched_dropped_tbl_ids],
         "dropped_tables": dropped_tables,
         "renamed_columns": renamed_cols,
         "added_columns": added_cols,
         "dropped_columns": dropped_cols,
         "type_changes": type_changes,
     }
+
+
+def _unambiguous_legacy_table_keys(
+    existing_tables: list[SemanticTableModel], raw_schema: RawSchemaMetadata
+) -> list[dict[str, Any]]:
+    """Resolve old NULL-schema rows only when one exact table name matches."""
+    by_name: dict[str, list[Any]] = {}
+    for raw_table in raw_schema.tables:
+        by_name.setdefault(raw_table.table_name.raw_name, []).append(raw_table)
+    qualified = []
+    for table in existing_tables:
+        if (
+            table.physical_schema is not None
+            or table.physical_schema_key is not None
+            or table.table_name_key is not None
+        ):
+            continue
+        matches = by_name.get(table.table_name, [])
+        if len(matches) == 1:
+            raw_table = matches[0]
+            qualified.append(
+                {
+                    "table_id": table.id,
+                    "schema": raw_table.schema_name.raw_name,
+                    "schema_key": raw_table.schema_name.normalized_name,
+                    "table_key": raw_table.table_name.normalized_name,
+                }
+            )
+    return qualified
+
+
+async def _qualify_legacy_tables(db: AsyncSession, db_id: int, rows: list[dict[str, Any]]) -> None:
+    for row in rows:
+        table = await db.get(SemanticTableModel, row["table_id"])
+        if table is not None and table.db_id == db_id:
+            table.physical_schema = row["schema"]
+            table.physical_schema_key = row["schema_key"]
+            table.table_name_key = row["table_key"]
 
 
 def _extract_formula_str(metric: SemanticMetricModel) -> str:
@@ -284,17 +359,6 @@ async def _heal_metric_for_rename(
     }
 
 
-async def _heal_relationships_for_rename(
-    db: AsyncSession, semantic_db_id: int, old_col: str, new_col: str, dialect: str
-) -> None:
-    """Rewrite join conditions in canonical relationships for renamed columns."""
-    stmt = select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == semantic_db_id)
-    rels = (await db.execute(stmt)).scalars().all()
-    for rel in rels:
-        if old_col.lower() in rel.join_condition.lower():
-            rel.join_condition = heal_sql_formula_ast(rel.join_condition, old_col, new_col, dialect)
-
-
 async def _apply_renamed_columns(
     db: AsyncSession,
     semantic_db_id: int,
@@ -321,11 +385,12 @@ async def _apply_renamed_columns(
             col.data_type = item.get("new_type", col.data_type)
 
         for m in metrics:
+            if m.base_entity_id != item["table_id"]:
+                continue
             healed = await _heal_metric_for_rename(db, m, item["old_name"], item["new_name"], dialect)
             if healed:
                 healed_metrics.append(healed)
 
-        await _heal_relationships_for_rename(db, semantic_db_id, item["old_name"], item["new_name"], dialect)
     return healed_metrics
 
 
@@ -334,6 +399,7 @@ async def _handle_dropped_items(
     semantic_db_id: int,
     dropped_cols: list[dict[str, Any]],
     dropped_tbls: list[str],
+    dropped_table_ids: list[int] | None = None,
 ) -> None:
     """Mark dropped tables and columns as [Deprecated] and flag dependent metrics."""
     for item in dropped_cols:
@@ -342,10 +408,12 @@ async def _handle_dropped_items(
             col.business_name = f"[Deprecated] {col.business_name}"
             col.review_status = REVIEW_STATUS_PENDING
 
-    for tbl_name in dropped_tbls:
+    for index, tbl_name in enumerate(dropped_tbls):
         stmt = select(SemanticTableModel).where(
             SemanticTableModel.db_id == semantic_db_id,
-            SemanticTableModel.table_name == tbl_name,
+            SemanticTableModel.id == dropped_table_ids[index]
+            if dropped_table_ids is not None
+            else SemanticTableModel.table_name == tbl_name,
         )
         tbl = (await db.execute(stmt)).scalar_one_or_none()
         if tbl:
@@ -374,10 +442,10 @@ async def _handle_dropped_items(
                         )
                     )
 
-            col_stmt = select(SemanticColumnModel).where(SemanticColumnModel.table_id == tbl.id)
-            for col in (await db.execute(col_stmt)).scalars().all():
-                await db.delete(col)
-            await db.delete(tbl)
+            # Keep endpoint IDs and audit history after physical removal.
+            if not tbl.business_name.startswith("[Deprecated]"):
+                tbl.business_name = f"[Deprecated] {tbl.business_name}"
+            tbl.review_status = REVIEW_STATUS_PENDING
 
 
 async def _handle_added_items(
@@ -386,16 +454,25 @@ async def _handle_added_items(
     raw_schema: RawSchemaMetadata,
     added_tbls: list[str],
     added_cols: list[dict[str, Any]],
+    added_table_keys: list[list[str]] | None = None,
 ) -> None:
     """Ingest newly added tables and columns with pending review status."""
-    tbl_by_name = {t.table_name.raw_name: t for t in raw_schema.tables}
-    for t_name in added_tbls:
-        t_meta = tbl_by_name.get(t_name)
+    tbl_by_name = {(t.schema_name.normalized_name, t.table_name.normalized_name): t for t in raw_schema.tables}
+    targets = (
+        [tbl_by_name[tuple(key)] for key in added_table_keys]
+        if added_table_keys is not None
+        else [t for t in raw_schema.tables if t.table_name.raw_name in added_tbls]
+    )
+    for t_meta in targets:
+        t_name = t_meta.table_name.raw_name
         if not t_meta:
             continue
         new_tbl = SemanticTableModel(
             db_id=semantic_db_id,
             table_name=t_name,
+            physical_schema=t_meta.schema_name.raw_name,
+            physical_schema_key=t_meta.schema_name.normalized_name,
+            table_name_key=t_meta.table_name.normalized_name,
             business_name=f"Bảng {t_name}",
             description=f"Bảng dữ liệu mới phát hiện: {t_name}",
             review_status=REVIEW_STATUS_PENDING,
@@ -413,15 +490,6 @@ async def _handle_added_items(
                 target_table = fk.referred_table.raw_name
                 for l_col, r_col in zip(fk.constrained_columns, fk.referred_columns, strict=False):
                     fk_map[l_col.raw_name] = (target_table, r_col.raw_name)
-                    db.add(
-                        CanonicalRelationshipModel(
-                            connection_id=semantic_db_id,
-                            from_entity=t_name,
-                            to_entity=target_table,
-                            join_condition=f"{t_name}.{l_col.raw_name} = {target_table}.{r_col.raw_name}",
-                            relationship_type="many_to_one",
-                        )
-                    )
 
         for c in t_meta.columns:
             c_name = c.column_name.raw_name
@@ -482,9 +550,9 @@ async def _handle_added_items(
         )
 
     exist_tbls_stmt = select(SemanticTableModel).where(SemanticTableModel.db_id == semantic_db_id)
-    existing_tbls = {t.table_name: t for t in (await db.execute(exist_tbls_stmt)).scalars().all()}
+    existing_tbls = {t.id: t for t in (await db.execute(exist_tbls_stmt)).scalars().all()}
     for item in added_cols:
-        tbl = existing_tbls.get(item["table_name"])
+        tbl = existing_tbls.get(item["table_id"])
         if tbl:
             db.add(
                 SemanticColumnModel(
@@ -510,19 +578,8 @@ async def _apply_renamed_tables(
         tbl = await db.get(SemanticTableModel, item["table_id"])
         if tbl:
             tbl.table_name = item["new_name"]
+            tbl.table_name_key = item.get("new_name_key", item["new_name"])
             tbl.business_name = f"Bảng {item['new_name']}"
-
-        old_t = item["old_name"]
-        new_t = item["new_name"]
-        rel_stmt = select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == semantic_db_id)
-        rels = (await db.execute(rel_stmt)).scalars().all()
-        for rel in rels:
-            if rel.from_entity.lower() == old_t.lower():
-                rel.from_entity = new_t
-            if rel.to_entity.lower() == old_t.lower():
-                rel.to_entity = new_t
-            if old_t.lower() in rel.join_condition.lower():
-                rel.join_condition = rel.join_condition.replace(old_t, new_t)
 
         results.append(item)
     return results
@@ -552,6 +609,8 @@ async def _handle_dropped_columns_for_metrics(
         col_name = item["name"]
         tbl_name = item["table_name"]
         for m in metrics:
+            if item.get("table_id") is not None and m.base_entity_id != item["table_id"]:
+                continue
             def_str = str(m.definition or "").lower()
             if col_name.lower() in m.formula.lower() or col_name.lower() in def_str:
                 if m.status != "needs_review":
@@ -592,6 +651,22 @@ async def _apply_type_changes(
     return type_changes
 
 
+async def _relationship_impacts(db: AsyncSession, db_id: int) -> list[dict[str, Any]]:
+    """Expose persisted relationship and metric invalidation reasons in sync logs."""
+    rows = (
+        await db.scalars(select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id))
+    ).all()
+    return [
+        {
+            "relationship_id": r.id,
+            "reason": r.evidence.get("sync_reason"),
+            "metric_ids": r.evidence.get("affected_metric_ids", []),
+        }
+        for r in rows
+        if r.evidence.get("sync_reason")
+    ]
+
+
 async def execute_self_healing(
     db: AsyncSession,
     semantic_db_id: int,
@@ -618,21 +693,34 @@ async def execute_self_healing(
     conn_url = decrypt_conn_url(live_db.conn_url_enc)
     resolved_dialect = resolve_and_validate_dialect(conn_url, live_db.dialect)
     raw_schema = introspect_live_database(conn_url, resolved_dialect)
+    await lock_semantic_database(db, semantic_db_id)
     new_fp = compute_schema_fingerprint(raw_schema)
     old_fp = sem_db.schema_fingerprint
 
+    if not raw_schema.tables:
+        raise ValueError("Empty introspection cannot authorize destructive schema sync")
+
     if old_fp == new_fp:
+        existing_tables = list(
+            (await db.scalars(select(SemanticTableModel).where(SemanticTableModel.db_id == semantic_db_id))).all()
+        )
+        await _qualify_legacy_tables(db, semantic_db_id, _unambiguous_legacy_table_keys(existing_tables, raw_schema))
+        relationship_changes = await reconcile_relationships(db, semantic_db_id, raw_schema)
+        live_db.schema_metadata = raw_schema.model_dump(mode="json")
         sem_db.last_synced_at = utc_now()
         sem_db.sync_status = "synced"
         log = SchemaSyncLogModel(
             semantic_db_id=semantic_db_id,
             live_db_id=live_db.id,
             trigger_type=trigger_type,
-            status="no_change",
+            status="success" if any(relationship_changes[k] for k in ("added", "changed", "missing")) else "no_change",
             old_fingerprint=old_fp,
             new_fingerprint=new_fp,
-            changes_summary={},
-            details="Schema is up to date. No changes detected.",
+            changes_summary={
+                "relationship_changes": relationship_changes,
+                "relationship_impacts": await _relationship_impacts(db, semantic_db_id),
+            },
+            details=f"Schema columns unchanged; relationship reconciliation: {relationship_changes}",
         )
         db.add(log)
         await db.commit()
@@ -644,12 +732,20 @@ async def execute_self_healing(
         await db.refresh(t, ["columns"])
 
     drift = detect_drift_details(existing_tables, raw_schema)
+    await _qualify_legacy_tables(db, semantic_db_id, drift["qualified_legacy_tables"])
     dialect_str = (
         "postgres"
         if resolved_dialect == SchemaDialect.POSTGRESQL
         else ("mysql" if resolved_dialect == SchemaDialect.MYSQL else "sqlite")
     )
 
+    changed_key_ids = {item["col_id"] for item in drift["type_changes"]}
+    changed_key_ids.update(
+        item["col_id"]
+        for item in drift["renamed_columns"]
+        if str(item["old_type"]).lower() != str(item["new_type"]).lower()
+    )
+    await invalidate_relationship_columns(db, semantic_db_id, changed_key_ids)
     healed_metrics = await _apply_renamed_columns(db, semantic_db_id, drift["renamed_columns"], dialect_str)
     renamed_tables_applied = await _apply_renamed_tables(
         db, semantic_db_id, drift.get("renamed_tables", []), dialect_str
@@ -657,17 +753,14 @@ async def execute_self_healing(
     broken_metrics = await _handle_dropped_columns_for_metrics(db, semantic_db_id, drift.get("dropped_columns", []))
     type_changes_applied = await _apply_type_changes(db, drift.get("type_changes", []))
 
-    await _handle_dropped_items(db, semantic_db_id, drift["dropped_columns"], drift["dropped_tables"])
-    await _handle_added_items(db, semantic_db_id, raw_schema, drift["added_tables"], drift["added_columns"])
+    await _handle_dropped_items(
+        db, semantic_db_id, drift["dropped_columns"], drift["dropped_tables"], drift["dropped_table_ids"]
+    )
+    await _handle_added_items(
+        db, semantic_db_id, raw_schema, drift["added_tables"], drift["added_columns"], drift["added_table_keys"]
+    )
 
-    # Clean up any leftover deprecated tables not present in live database
-    live_table_names = {t.table_name.raw_name.lower() for t in raw_schema.tables}
-    for t in existing_tables:
-        if t.table_name.lower() not in live_table_names or t.business_name.startswith("[Deprecated]"):
-            col_stmt = select(SemanticColumnModel).where(SemanticColumnModel.table_id == t.id)
-            for col in (await db.execute(col_stmt)).scalars().all():
-                await db.delete(col)
-            await db.delete(t)
+    relationship_changes = await reconcile_relationships(db, semantic_db_id, raw_schema)
 
     live_db.schema_metadata = raw_schema.model_dump(mode="json")
     sem_db.schema_fingerprint = new_fp
@@ -676,6 +769,8 @@ async def execute_self_healing(
 
     changes_summary = {
         **drift,
+        "relationship_changes": relationship_changes,
+        "relationship_impacts": await _relationship_impacts(db, semantic_db_id),
         "healed_metrics": healed_metrics,
         "renamed_tables": renamed_tables_applied,
         "broken_metrics": broken_metrics,

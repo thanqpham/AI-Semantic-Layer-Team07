@@ -37,12 +37,13 @@ async def persist_reviewed_state(db: AsyncSession, db_id: int, user_id: int, sta
     """Assign durable proposal IDs before suggestions leave the backend."""
     for evidence in state.get("reviewed_proposals", []):
         proposal = await persist_proposal(db, db_id, user_id, evidence)
+        candidate_id = evidence.get("candidate_id") or evidence.get("context", {}).get("candidate", {}).get("id")
         for item in state.get("suggested_metrics", []):
-            if item["definition"] == proposal.final_definition and not item.get("proposal_id"):
+            if item.get("candidate_id") == candidate_id and not item.get("proposal_id"):
                 item["proposal_id"] = proposal.id
                 break
         for item in state.get("blocked_candidates", []):
-            if item["name"] == evidence["name"] and not item.get("proposal_id"):
+            if item.get("candidate_id") == candidate_id and not item.get("proposal_id"):
                 item["proposal_id"] = proposal.id
                 break
     return state
@@ -129,7 +130,7 @@ async def re_review_proposal(
         "variant_id": candidate.get("variant_id"),
         "criteria": candidate.get("criteria", {}),
     }
-    evidence = await review_metric_draft(context, draft, allow_repair=False)
+    evidence = await review_metric_draft(context, draft, allow_repair=False, candidate_id=candidate.get("id"))
     result = await persist_proposal(db, proposal.db_id, user_id, evidence, proposal.id)
     result.request_id = proposal.request_id
     return result

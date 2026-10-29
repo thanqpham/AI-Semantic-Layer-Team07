@@ -105,10 +105,15 @@ def test_sync_action_preserves_result(monkeypatch):
     fake_client(monkeypatch)
     assert trace_value("guardrail", {}, lambda: 123) == 123
     assert tracing._mask_content(data={"secret": "value"}) == "[REDACTED]"
-    assert tracing._mask_content(data={"trace_summary": {"intent": "metric_query", "proposal_count": 2}}) == {
-        "trace_summary": {"intent": "metric_query", "proposal_count": 2}
+    assert tracing._mask_content(
+        data={"trace_summary": {"intent": "metric_query", "proposal_count": 2, "family_count": 1}}
+    ) == {
+        "trace_summary": {"intent": "metric_query", "proposal_count": 2, "family_count": 1}
     }
     assert tracing._mask_content(data={"trace_summary": {"intent": "private", "sql_length": -1}}) == "[REDACTED]"
+    assert tracing._mask_content(
+        data={"trace_summary": {"reason_unresolved_assumption_count": 2, "reason_code": "PRIVATE"}}
+    ) == {"trace_summary": {"reason_unresolved_assumption_count": 2}}
 
 
 def test_api_no_longer_has_langfuse_request_middleware():

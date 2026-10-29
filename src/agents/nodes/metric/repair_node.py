@@ -6,7 +6,6 @@ from typing import Any
 
 from src.agents.nodes.metric.metric_node_helpers import record_failure
 from src.agents.roles.metric_designer_agent import repair_metric_drafts
-from src.models.metric_review import MetricReview
 from src.observability import trace_node
 from src.services.metric_correlation import correlate
 from src.services.metric_runtime import MetricCallError, execution_failure
@@ -59,5 +58,3 @@ def _repair_request(state: dict[str, Any], item: dict[str, Any]) -> dict[str, An
             mode="json", exclude={"handoffs", "original_definition", "sources", "requirement"}
         ),
     }
-
-

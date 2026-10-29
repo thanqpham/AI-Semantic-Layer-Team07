@@ -51,7 +51,7 @@ def build_cluster_prompt(
     Includes:
     - Tables in current cluster from glossary
     - Hub tables that this cluster FKs to from glossary
-    - Detailed table info (columns, FK, sample values)
+    - Detailed table info (columns and FK, without data values)
     - Retry format hint if is_retry
     """
     # 1. Identify hub FK targets (tables outside cluster that cluster FKs to)
@@ -97,9 +97,6 @@ def build_cluster_prompt(
                     col_line += " [PK]"
                 if col.get("is_foreign_key"):
                     col_line += " [FK]"
-                if col.get("sample_values"):
-                    samples = ", ".join(str(v) for v in col["sample_values"][:5])
-                    col_line += f" — mẫu: {samples}"
                 lines.append(col_line)
         fks = t.get("foreign_keys", [])
         if fks:

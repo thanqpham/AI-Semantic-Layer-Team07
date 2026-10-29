@@ -6,6 +6,7 @@ import {
   coerceFilterValue,
   createMetricDefinition,
   getMetricUsedColumns,
+  formatMetricFormula,
   renderMetricYaml,
 } from '@/lib/metrics';
 
@@ -64,6 +65,26 @@ describe('metric definition utilities', () => {
     };
 
     expect(getMetricUsedColumns(definition)).toEqual(['delivered_at', 'created_at']);
+  });
+
+  it('shows the plan expression and lists qualified source columns for a multi-table metric', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.query_plan = {
+      stages: [
+        {
+          name: 'per_customer',
+          base_entity: 'orders',
+          joins: ['customers'],
+          group_by: [{ name: 'customer_id', expression: 'customers.id' }],
+          aggregates: [{ name: 'order_count', function: 'COUNT_DISTINCT', expression: 'orders.id', filters: [] }],
+          filters: [],
+        },
+      ],
+      output_expression: 'per_customer.order_count',
+    };
+
+    expect(formatMetricFormula(definition)).toBe('per_customer.order_count');
+    expect(getMetricUsedColumns(definition)).toEqual(['id']);
   });
 });
 

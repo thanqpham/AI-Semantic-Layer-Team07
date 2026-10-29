@@ -6,14 +6,17 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 
+import src.models.db as db_models
 from src.models.db import (
     Base,
     CanonicalRelationshipModel,
     DashboardLayoutModel,
     MetricVersionModel,
+    RelationshipCandidateModel,
     SemanticColumnModel,
     SemanticDatabaseModel,
     SemanticMetricModel,
@@ -467,6 +470,9 @@ async def test_canonical_relationship_creation(seed_user_and_db):
     fetched = result.scalar_one()
     assert fetched.relationship_type == "one_to_many"
     assert fetched.join_condition == "orders.customer_id = customers.id"
+    assert (fetched.source, fetched.review_status, fetched.revision) == ("fk", "approved", 1)
+    assert fetched.reviewed_by is None and fetched.reviewed_at is None
+    assert fetched.human_modified is False
 
 
 @pytest.mark.asyncio
@@ -532,7 +538,307 @@ async def test_canonical_relationship_database_relationship(seed_user_and_db):
     assert fetched_db.relationships[0].relationship_type == "one_to_one"
 
 
+@pytest.mark.asyncio
+async def test_relationship_candidate_defaults_and_allowed_values(seed_user_and_db):
+    """Relationship candidates default to review and accept supported values."""
+    async_db_session, user, db_rec = seed_user_and_db
+    candidate_model = getattr(db_models, "RelationshipCandidateModel", None)
+    assert candidate_model is not None, "RelationshipCandidateModel is not registered"
+    table_from = SemanticTableModel(db_id=db_rec.id, table_name="orders", business_name="Orders")
+    table_to = SemanticTableModel(db_id=db_rec.id, table_name="customers", business_name="Customers")
+    async_db_session.add_all([table_from, table_to])
+    await async_db_session.flush()
+
+    candidate = candidate_model(
+        connection_id=db_rec.id,
+        from_entity_id=table_from.id,
+        to_entity_id=table_to.id,
+        column_pairs=[{"from_column_id": 11, "to_column_id": 12}],
+        relationship_type="many_to_one",
+        source="fk",
+        fingerprint="relationship-fingerprint",
+        created_by=user.id,
+    )
+    async_db_session.add(candidate)
+    await async_db_session.commit()
+    await async_db_session.refresh(candidate)
+
+    assert candidate.status == "pending_review"
+    assert candidate.revision == 1
+    assert candidate.column_pairs == [{"from_column_id": 11, "to_column_id": 12}]
+    assert candidate.evidence == {}
+    assert candidate.unresolved_questions == []
+
+
+@pytest.mark.asyncio
+async def test_relationship_candidate_persists_review_evidence_and_actor(seed_user_and_db):
+    """Candidate evidence, confidence, questions, and reviewer metadata persist."""
+    async_db_session, user, db_rec = seed_user_and_db
+    candidate_model = getattr(db_models, "RelationshipCandidateModel", None)
+    assert candidate_model is not None, "RelationshipCandidateModel is not registered"
+    table_from = SemanticTableModel(db_id=db_rec.id, table_name="evidence_from", business_name="From")
+    table_to = SemanticTableModel(db_id=db_rec.id, table_name="evidence_to", business_name="To")
+    async_db_session.add_all([table_from, table_to])
+    await async_db_session.flush()
+    target_relationship = CanonicalRelationshipModel(
+        connection_id=db_rec.id,
+        from_entity_id=table_from.id,
+        to_entity_id=table_to.id,
+        relationship_type="one_to_one",
+        join_condition="evidence_from.id = evidence_to.id",
+    )
+    async_db_session.add(target_relationship)
+    await async_db_session.flush()
+    reviewed_at = datetime(2026, 10, 27, tzinfo=UTC)
+    candidate = candidate_model(
+        connection_id=db_rec.id,
+        target_relationship_id=target_relationship.id,
+        from_entity_id=table_from.id,
+        to_entity_id=table_to.id,
+        column_pairs=[],
+        relationship_type="one_to_one",
+        source="ai",
+        status="approved",
+        fingerprint="reviewed-candidate",
+        evidence={"kind": "column_match"},
+        confidence=0.95,
+        unresolved_questions=["Confirm the key relationship"],
+        created_by=user.id,
+        updated_by=user.id,
+        reviewed_by=user.id,
+        updated_at=reviewed_at,
+        reviewed_at=reviewed_at,
+    )
+    async_db_session.add(candidate)
+    await async_db_session.commit()
+    await async_db_session.refresh(candidate)
+
+    assert candidate.evidence == {"kind": "column_match"}
+    assert candidate.confidence == 0.95
+    assert candidate.unresolved_questions == ["Confirm the key relationship"]
+    assert candidate.reviewed_by == user.id
+    assert candidate.updated_by == user.id
+    assert candidate.target_relationship_id == target_relationship.id
+    assert candidate.updated_at.replace(tzinfo=UTC) == reviewed_at
+    assert candidate.reviewed_at.replace(tzinfo=UTC) == reviewed_at
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source", "fk"),
+        ("source", "ai"),
+        ("source", "manual"),
+        ("status", "pending_review"),
+        ("status", "approved"),
+        ("status", "rejected"),
+        ("relationship_type", "many_to_one"),
+        ("relationship_type", "one_to_one"),
+        ("relationship_type", "one_to_many"),
+        ("relationship_type", "many_to_many"),
+    ],
+)
+async def test_relationship_candidate_accepts_each_supported_enum(seed_user_and_db, field, value):
+    """Relationship candidates accept each documented source, status, and type."""
+    async_db_session, user, db_rec = seed_user_and_db
+    candidate_model = getattr(db_models, "RelationshipCandidateModel", None)
+    assert candidate_model is not None, "RelationshipCandidateModel is not registered"
+    table_from = SemanticTableModel(db_id=db_rec.id, table_name=f"from_{field}_{value}", business_name="From")
+    table_to = SemanticTableModel(db_id=db_rec.id, table_name=f"to_{field}_{value}", business_name="To")
+    async_db_session.add_all([table_from, table_to])
+    await async_db_session.flush()
+    values = {
+        "connection_id": db_rec.id,
+        "from_entity_id": table_from.id,
+        "to_entity_id": table_to.id,
+        "column_pairs": [],
+        "relationship_type": "many_to_one",
+        "source": "fk",
+        "fingerprint": f"{field}-{value}",
+        "created_by": user.id,
+    }
+    values[field] = value
+    async_db_session.add(candidate_model(**values))
+    await async_db_session.commit()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source", "unknown"),
+        ("status", "draft"),
+        ("relationship_type", "cross_join"),
+        ("confidence", 1.1),
+        ("revision", 0),
+    ],
+)
+async def test_relationship_candidate_rejects_invalid_constraint_values(seed_user_and_db, field, value):
+    """Candidate constraints reject unsupported lifecycle values and revisions."""
+    from sqlalchemy.exc import IntegrityError
+
+    async_db_session, user, db_rec = seed_user_and_db
+    candidate_model = getattr(db_models, "RelationshipCandidateModel", None)
+    assert candidate_model is not None, "RelationshipCandidateModel is not registered"
+    table_from = SemanticTableModel(db_id=db_rec.id, table_name=f"invalid_from_{field}", business_name="From")
+    table_to = SemanticTableModel(db_id=db_rec.id, table_name=f"invalid_to_{field}", business_name="To")
+    async_db_session.add_all([table_from, table_to])
+    await async_db_session.flush()
+    values = {
+        "connection_id": db_rec.id,
+        "from_entity_id": table_from.id,
+        "to_entity_id": table_to.id,
+        "column_pairs": [],
+        "relationship_type": "many_to_one",
+        "source": "fk",
+        "fingerprint": f"invalid-{field}",
+        "created_by": user.id,
+    }
+    values[field] = value
+    async_db_session.add(candidate_model(**values))
+
+    with pytest.raises(IntegrityError):
+        await async_db_session.flush()
+    await async_db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_relationship_candidate_fingerprint_is_unique_per_connection(seed_user_and_db):
+    """The same candidate fingerprint cannot be recorded twice for one connection."""
+    from sqlalchemy.exc import IntegrityError
+
+    async_db_session, user, db_rec = seed_user_and_db
+    candidate_model = getattr(db_models, "RelationshipCandidateModel", None)
+    assert candidate_model is not None, "RelationshipCandidateModel is not registered"
+    table_from = SemanticTableModel(db_id=db_rec.id, table_name="fingerprint_from", business_name="From")
+    table_to = SemanticTableModel(db_id=db_rec.id, table_name="fingerprint_to", business_name="To")
+    async_db_session.add_all([table_from, table_to])
+    await async_db_session.flush()
+    values = {
+        "connection_id": db_rec.id,
+        "from_entity_id": table_from.id,
+        "to_entity_id": table_to.id,
+        "column_pairs": [],
+        "relationship_type": "many_to_one",
+        "source": "ai",
+        "fingerprint": "duplicate-fingerprint",
+        "created_by": user.id,
+    }
+    async_db_session.add_all([candidate_model(**values), candidate_model(**values)])
+
+    with pytest.raises(IntegrityError):
+        await async_db_session.flush()
+    await async_db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_canonical_relationship_review_defaults(seed_user_and_db):
+    """Existing serving relationships remain approved and carry review metadata."""
+    assert hasattr(CanonicalRelationshipModel, "review_status"), "Canonical review state is missing"
+    async_db_session, _, db_rec = seed_user_and_db
+    table_from = SemanticTableModel(db_id=db_rec.id, table_name="review_from", business_name="From")
+    table_to = SemanticTableModel(db_id=db_rec.id, table_name="review_to", business_name="To")
+    async_db_session.add_all([table_from, table_to])
+    await async_db_session.flush()
+
+    relationship = CanonicalRelationshipModel(
+        connection_id=db_rec.id,
+        from_entity_id=table_from.id,
+        to_entity_id=table_to.id,
+        relationship_type="one_to_one",
+        join_condition="review_from.id = review_to.id",
+    )
+    async_db_session.add(relationship)
+    await async_db_session.commit()
+    await async_db_session.refresh(relationship)
+
+    assert relationship.review_status == "approved"
+    assert relationship.source == "fk"
+    assert relationship.revision == 1
+    assert relationship.evidence == {}
+
+
 # --- Tests for new MetricVersionModel ---
+
+
+@pytest_asyncio.fixture
+async def seeded_relationship_candidate(seed_user_and_db):
+    """Seed a candidate with real endpoint metadata."""
+    session, user, database = seed_user_and_db
+    source = SemanticTableModel(db_id=database.id, table_name="source", business_name="Source")
+    target = SemanticTableModel(db_id=database.id, table_name="target", business_name="Target")
+    session.add_all([source, target])
+    await session.flush()
+    candidate = RelationshipCandidateModel(
+        connection_id=database.id,
+        from_entity_id=source.id,
+        to_entity_id=target.id,
+        column_pairs=[{"from_column_id": 1, "to_column_id": 2}],
+        relationship_type="many_to_one",
+        source="ai",
+        fingerprint="f" * 64,
+        confidence=0.8,
+        created_by=user.id,
+    )
+    session.add(candidate)
+    await session.flush()
+    return session, database, candidate
+
+
+@pytest.mark.asyncio
+async def test_relationship_candidate_storage(seeded_relationship_candidate):
+    """Candidates stay separate and retain rejected fingerprints for deduplication."""
+    session, database, candidate = seeded_relationship_candidate
+    assert candidate.status == "pending_review" and candidate.revision == 1
+    assert candidate.unresolved_questions == [] and candidate.evidence == {}
+    assert candidate.reviewed_by is None and candidate.reviewed_at is None
+    assert list((await session.scalars(select(CanonicalRelationshipModel))).all()) == []
+    candidate.status = "rejected"
+    await session.commit()
+    session.add(
+        RelationshipCandidateModel(
+            connection_id=database.id,
+            from_entity_id=candidate.from_entity_id,
+            to_entity_id=candidate.to_entity_id,
+            column_pairs=[],
+            relationship_type="many_to_one",
+            source="manual",
+            fingerprint="f" * 64,
+        )
+    )
+    with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
+        await session.flush()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("status", "disabled"),
+        ("source", "other"),
+        ("confidence", -0.1),
+        ("confidence", 1.1),
+        ("revision", 0),
+        ("relationship_type", "unknown"),
+    ],
+)
+async def test_relationship_candidate_constraints(seed_user_and_db, field, value):
+    """Reject values outside the candidate storage contract."""
+    session, _, database = seed_user_and_db
+    fields = dict(
+        connection_id=database.id,
+        from_entity_id=1,
+        to_entity_id=2,
+        column_pairs=[],
+        relationship_type="many_to_one",
+        source="manual",
+        fingerprint="f" * 64,
+    )
+    fields[field] = value
+    session.add(RelationshipCandidateModel(**fields))
+    with pytest.raises(IntegrityError, match="CHECK constraint failed"):
+        await session.flush()
 
 
 @pytest.mark.asyncio

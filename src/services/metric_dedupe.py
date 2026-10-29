@@ -99,6 +99,9 @@ def _norm_filters(filters: list[Any] | None) -> list[tuple[str, str, str]]:
 def _same_logic(definition: MetricDefinition, existing: dict[str, Any]) -> bool:
     """True only when aggregate sides, transforms, entity, and all filters match."""
     metric = definition.metric
+    proposed_plan = metric.query_plan.model_dump(mode="json") if metric.query_plan else None
+    if proposed_plan != existing.get("query_plan"):
+        return False
     if (metric.formula.function or "").upper() != (existing.get("function") or "").upper():
         return False
     if _norm_expression(metric.formula.expression or "") != _norm_expression(existing.get("expression") or ""):
@@ -434,6 +437,7 @@ def _summary_from_definition(
         "ratio": metric.formula.ratio.model_dump(mode="json") if metric.formula.ratio else None,
         "base_entity": metric.base_entity,
         "filters": [f.model_dump() for f in (metric.filters or [])],
+        "query_plan": metric.query_plan.model_dump(mode="json") if metric.query_plan else None,
     }
 
 
@@ -447,13 +451,15 @@ def _metric_summary(row: SemanticMetricModel) -> dict[str, Any]:
     definition = row.definition or {}
     metric = definition.get("metric", definition)  # tolerate both shapes, prefer {"metric": ...}
     formula = metric.get("formula", {})
+    query_plan = metric.get("query_plan")
     return {
         "id": row.id,
         "name": row.name or metric.get("name", ""),
         "status": row.status,
-        "function": formula.get("function", ""),
-        "expression": formula.get("expression", ""),
-        "ratio": formula.get("ratio"),
+        "function": "COUNT" if query_plan else formula.get("function", ""),
+        "expression": "*" if query_plan else formula.get("expression", ""),
+        "ratio": None if query_plan else formula.get("ratio"),
+        "query_plan": query_plan,
         "base_entity": metric.get("base_entity", ""),
         "filters": metric.get("filters", []),
         "definition": definition,

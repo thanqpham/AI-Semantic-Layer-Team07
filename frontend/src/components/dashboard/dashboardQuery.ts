@@ -15,6 +15,7 @@ import {
   buildDateRangeFilters,
   DashboardDatePreset,
   DashboardWidgetConfig,
+  getWidgetMetricIds,
   resolveDatePresetBounds,
 } from '@/lib/dashboard';
 
@@ -27,6 +28,7 @@ import {
 } from './dashboardFormatters';
 
 export const WIDGET_ROW_LIMIT = 100;
+const FETCH_ROW_LIMIT = WIDGET_ROW_LIMIT + 1;
 export const MAX_CONCURRENT_WIDGET_QUERIES = 6;
 export const KPI_TREND_DEFAULT_GRAIN: TimeGrain = 'month';
 
@@ -114,6 +116,10 @@ export function buildWidgetQueryRequests(input: BuildWidgetRequestsInput): Seman
 }
 
 function assertWidgetQueryable(widget: DashboardWidgetConfig, globalGrain: TimeGrain | null): void {
+  const metricIds = getWidgetMetricIds(widget);
+  if (metricIds.length > 1 && (widget.chart_type === 'kpi' || widget.chart_type === 'pie')) {
+    throw new DashboardWidgetConfigError(`${widget.chart_type} widgets support one metric only`);
+  }
   if (widget.chart_type === 'kpi') {
     if (widget.date_filter_column_id === null) {
       throw new DashboardWidgetConfigError('KPI widgets require date_filter_column_id');
@@ -147,7 +153,8 @@ function buildKpiRequests(
       metric_ids: [widget.metric_id],
       dimensions: [{ column_id: dateColumnId, time_grain: grain }],
       filters,
-      limit: WIDGET_ROW_LIMIT,
+      limit: FETCH_ROW_LIMIT,
+      order_by: 'dimension_desc',
     },
   ];
 }
@@ -160,25 +167,29 @@ function buildSingleRequest(
   const dimensionId = widget.dimension_col_id ?? -1;
   if (widget.chart_type === 'bar' || widget.chart_type === 'pie' || widget.chart_type === 'table') {
     return {
-      metric_ids: [widget.metric_id],
+      metric_ids: getWidgetMetricIds(widget),
+      ...(widget.order_metric_id != null ? { order_metric_id: widget.order_metric_id } : {}),
       dimensions: [{ column_id: dimensionId }],
       filters,
-      limit: WIDGET_ROW_LIMIT,
+      limit: FETCH_ROW_LIMIT,
+      order_by: 'metric_desc',
     };
   }
   return {
-    metric_ids: [widget.metric_id],
+    metric_ids: getWidgetMetricIds(widget),
     dimensions: [
       { column_id: dimensionId, time_grain: resolveEffectiveGrain(widget.time_grain, globalGrain) },
     ],
     filters,
-    limit: WIDGET_ROW_LIMIT,
+    limit: FETCH_ROW_LIMIT,
+    order_by: 'dimension_desc',
   };
 }
 
 export interface BuildWidgetPointsInput {
   result: SemanticQueryResult;
   metricId: number;
+  metricIds?: number[];
   dimensionId: number | null;
   sortByTime: boolean;
 }
@@ -189,8 +200,28 @@ export function buildWidgetPoints(input: BuildWidgetPointsInput): DashboardPoint
   const rows = Array.isArray(input.result.rows) ? input.result.rows : [];
   const valueIndex = resolveValueColumnIndex(columns, input.metricId);
   const labelIndex = resolveLabelColumnIndex(columns, input.dimensionId, valueIndex);
-  const points = rows.map((row) => toPoint(row, labelIndex, valueIndex));
+  const points = rows.map((row) => toMetricPoint(row, labelIndex, valueIndex, columns, input.metricIds));
   return input.sortByTime ? sortPointsByTimeKey(points) : points;
+}
+
+function toMetricPoint(
+  row: unknown[],
+  labelIndex: number,
+  valueIndex: number,
+  columns: string[],
+  metricIds?: number[],
+): DashboardPoint {
+  const point = toPoint(row, labelIndex, valueIndex);
+  if (!metricIds || metricIds.length < 2) return point;
+  const seriesRawValues = Object.fromEntries(metricIds.map((id) => {
+    const index = columns.indexOf(`metric_${id}`);
+    return [id, index < 0 ? null : row[index] ?? null];
+  }));
+  return {
+    ...point,
+    seriesRawValues,
+    seriesValues: Object.fromEntries(metricIds.map((id) => [id, parseFiniteNumber(seriesRawValues[id])])),
+  };
 }
 
 function sortPointsByTimeKey(points: DashboardPoint[]): DashboardPoint[] {
@@ -225,7 +256,7 @@ function toPoint(
   return {
     label: formatDimensionValue(rawLabel),
     rawLabel: rawLabel === null || rawLabel === undefined ? '' : String(rawLabel),
-    value: parseFiniteNumber(rawValue) ?? 0,
+    value: parseFiniteNumber(rawValue),
     rawValue: rawValue ?? null,
   };
 }

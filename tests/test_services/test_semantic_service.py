@@ -1270,3 +1270,227 @@ async def test_rollback_metric_compile_failure_leaves_state_unchanged(async_sess
     assert refreshed.approved_by is None
     remaining = await _fetch_versions(async_session, metric_id)
     assert [v.version for v in remaining] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_reenrichment_preserves_disabled_relationship(async_session):
+    raw = _make_raw_schema()
+    db_id = await ensure_semantic_database(async_session, "live_target", 99, 1, "Sync", "postgresql")
+    await enrich_and_save_canonical_schema(async_session, 1, db_id, raw, "postgresql", enrichment=_hitl_enrichment())
+    row = await async_session.scalar(
+        select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == db_id)
+    )
+    row.review_status, row.reviewed_by, row.human_modified = "disabled", 1, True
+    await async_session.commit()
+    await enrich_and_save_canonical_schema(async_session, 1, db_id, raw, "postgresql", enrichment=_hitl_enrichment())
+    assert row.review_status == "disabled" and row.reviewed_by == 1 and row.human_modified
+
+
+@pytest.mark.asyncio
+async def test_repeated_import_preserves_qualified_table_ids(async_session):
+    raw = _make_raw_schema()
+    source = raw.tables[0]
+    archive = source.model_copy(update={"schema_name": Identifier.from_raw("archive", SchemaDialect.POSTGRESQL)})
+    target = raw.tables[1]
+    archive_target = target.model_copy(update={"schema_name": Identifier.from_raw("archive", SchemaDialect.POSTGRESQL)})
+    archive = archive.model_copy(
+        update={
+            "foreign_keys": tuple(
+                fk.model_copy(update={"referred_schema": Identifier.from_raw("archive", SchemaDialect.POSTGRESQL)})
+                for fk in source.foreign_keys
+            )
+        }
+    )
+    raw = raw.model_copy(update={"tables": (source, archive, target, archive_target)})
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Qualified", "postgresql")
+    enrichment = {
+        "tables": [
+            {"table_name": source.table_name.raw_name, "physical_schema": "archive", "business_name": "Archive"},
+            {
+                "table_name": source.table_name.raw_name,
+                "physical_schema": source.schema_name.raw_name,
+                "business_name": "Live",
+            },
+        ]
+    }
+    first = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", enrichment)
+    metric = SemanticMetricModel(
+        db_id=database_id,
+        base_entity_id=first["tables"][0]["table_id"],
+        name="Retained",
+        description="",
+        formula="COUNT(*)",
+        sql_template="COUNT(*)",
+        aggregation_type="count",
+        source="manual",
+        status="draft",
+    )
+    async_session.add(metric)
+    await async_session.commit()
+    metric_id = metric.id
+    second = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", enrichment)
+    assert first["tables"] == second["tables"]
+    rows = (
+        await async_session.scalars(select(SemanticTableModel).where(SemanticTableModel.db_id == database_id))
+    ).all()
+    assert len(rows) == 4 and len({t.id for t in rows}) == 4
+    assert {t.business_name for t in rows if t.table_name == source.table_name.raw_name} == {"Archive", "Live"}
+    columns = (
+        await async_session.scalars(
+            select(SemanticColumnModel).where(SemanticColumnModel.table_id.in_([t.id for t in rows]))
+        )
+    ).all()
+    assert {c.table_id for c in columns} == {t.id for t in rows}
+
+    assert (await async_session.get(SemanticMetricModel, metric_id)).base_entity_id == first["tables"][0]["table_id"]
+    relationships = (
+        await async_session.scalars(
+            select(CanonicalRelationshipModel).where(CanonicalRelationshipModel.connection_id == database_id)
+        )
+    ).all()
+    assert len(relationships) == 2
+    by_id = {t.id: t for t in rows}
+    by_column_id = {c.id: c for c in columns}
+    for relationship in relationships:
+        assert by_id[relationship.from_entity_id].physical_schema == by_id[relationship.to_entity_id].physical_schema
+        assert relationship.column_pairs
+        for pair in relationship.column_pairs:
+            assert by_column_id[pair["from_column_id"]].table_id == relationship.from_entity_id
+            assert by_column_id[pair["to_column_id"]].table_id == relationship.to_entity_id
+
+
+@pytest.mark.asyncio
+async def test_quoted_case_tables_keep_distinct_identity(async_session):
+    raw = _make_raw_schema()
+    source, target = raw.tables
+    quoted = source.model_copy(update={"table_name": Identifier.from_raw("Orders", raw.dialect, quoted=True)})
+    raw = raw.model_copy(update={"tables": (source, quoted, target)})
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Quoted", "postgresql")
+    proposals = {
+        "tables": [
+            {"table_name": "Orders", "physical_schema": "public", "business_name": "Quoted"},
+            {"table_name": "orders", "physical_schema": "public", "business_name": "Plain"},
+        ]
+    }
+    first = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", proposals)
+    again = await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", proposals)
+    assert first["tables"] == again["tables"]
+    tables = {t.table_name: t for t in (await async_session.scalars(select(SemanticTableModel))).all()}
+    assert tables["orders"].id != tables["Orders"].id
+    assert tables["orders"].business_name == "Plain" and tables["Orders"].business_name == "Quoted"
+    assert tables["orders"].table_name_key == "orders" and tables["Orders"].table_name_key == "Orders"
+    columns = (await async_session.scalars(select(SemanticColumnModel))).all()
+    relationships = (await async_session.scalars(select(CanonicalRelationshipModel))).all()
+    assert len(relationships) == 2
+    assert {r.from_entity_id for r in relationships} == {tables["orders"].id, tables["Orders"].id}
+    by_id = {c.id: c for c in columns}
+    for relationship in relationships:
+        assert relationship.to_entity_id == tables[target.table_name.raw_name].id
+        assert all(
+            by_id[p["from_column_id"]].table_id == relationship.from_entity_id for p in relationship.column_pairs
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("partial", [True, False])
+async def test_schema_aware_enrichment_never_falls_back_by_position(async_session, partial):
+    raw = _make_raw_schema()
+    source = raw.tables[0].model_copy(update={"foreign_keys": ()})
+    archive = source.model_copy(update={"schema_name": Identifier.from_raw("archive", raw.dialect)})
+    raw = raw.model_copy(update={"tables": (source, archive)})
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Partial", "postgresql")
+    proposals = [{"table_name": "orders", "physical_schema": "archive", "business_name": "Archive"}]
+    if not partial:
+        proposals.append({"table_name": "orders", "physical_schema": "public", "business_name": "Public"})
+    await enrich_and_save_canonical_schema(async_session, 1, database_id, raw, "postgresql", {"tables": proposals})
+    tables = {t.physical_schema: t for t in (await async_session.scalars(select(SemanticTableModel))).all()}
+    assert tables["archive"].business_name == "Archive"
+    assert tables["public"].business_name == ("orders" if partial else "Public")
+
+
+@pytest.mark.asyncio
+async def test_migrated_uppercase_unquoted_identity_preserves_ids(async_session):
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    source = _make_raw_schema().tables[0]
+    source = source.model_copy(
+        update={
+            "schema_name": Identifier.from_raw("PUBLIC", SchemaDialect.POSTGRESQL),
+            "table_name": Identifier.from_raw("ORDERS", SchemaDialect.POSTGRESQL),
+            "foreign_keys": (),
+        }
+    )
+    raw = _make_raw_schema(tables=(source,))
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Legacy", "postgresql")
+    table = SemanticTableModel(db_id=database_id, table_name="ORDERS", physical_schema="PUBLIC", business_name="Legacy")
+    async_session.add(table)
+    await async_session.flush()
+    column = SemanticColumnModel(
+        table_id=table.id,
+        column_name=source.columns[0].column_name.raw_name,
+        data_type=source.columns[0].data_type,
+        business_name="Retained",
+    )
+    metric = SemanticMetricModel(
+        db_id=database_id,
+        base_entity_id=table.id,
+        name="Retained",
+        description="",
+        formula="COUNT(*)",
+        sql_template="COUNT(*)",
+        aggregation_type="count",
+        source="manual",
+        status="draft",
+    )
+    async_session.add_all([column, metric])
+    await async_session.commit()
+    table_id, column_id, metric_id = table.id, column.id, metric.id
+    path = next((Path(__file__).parents[2] / "alembic/versions").glob("*_schema_qualified_tables.py"))
+    spec = importlib.util.spec_from_file_location("qualified_legacy_upgrade", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    def upgrade_existing(session):
+        with patch.object(migration, "op", Operations(MigrationContext.configure(session.connection()))):
+            migration.downgrade()
+            migration.upgrade()
+
+    await async_session.run_sync(upgrade_existing)
+    for _ in range(2):
+        result = await enrich_and_save_canonical_schema(
+            async_session, 1, database_id, raw, "postgresql", {"tables": []}
+        )
+        assert result["tables"][0]["table_id"] == table_id
+    assert (await async_session.get(SemanticColumnModel, column_id)).table_id == table_id
+    assert (await async_session.get(SemanticMetricModel, metric_id)).base_entity_id == table_id
+    assert table.table_name == "ORDERS" and table.physical_schema == "PUBLIC"
+    assert table.table_name_key == "orders" and table.physical_schema_key == "public"
+    assert len((await async_session.scalars(select(SemanticTableModel))).all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_legacy_key_population_rejects_ambiguous_identity(async_session):
+    from src.services.semantic_service import _upsert_semantic_table
+
+    database_id = await ensure_semantic_database(async_session, "live_target", 1, 1, "Ambiguous", "postgresql")
+    legacy = SemanticTableModel(
+        db_id=database_id, table_name="ORDERS", physical_schema="PUBLIC", business_name="Legacy"
+    )
+    canonical = SemanticTableModel(
+        db_id=database_id,
+        table_name="orders",
+        physical_schema="public",
+        table_name_key="orders",
+        physical_schema_key="public",
+        business_name="Canonical",
+    )
+    async_session.add_all([legacy, canonical])
+    await async_session.flush()
+    with pytest.raises(ValueError, match="Ambiguous legacy table identity"):
+        await _upsert_semantic_table(async_session, database_id, "ORDERS", {}, "PUBLIC", None, 1, "public", "orders")
+    assert legacy.table_name_key is None and legacy.physical_schema_key is None
+    assert legacy.business_name == "Legacy" and canonical.business_name == "Canonical"

@@ -13,6 +13,11 @@ from tests.metric_review_helpers import context, definition, reviewer_mock
 from tests.test_services.test_metric_review import cancellation_definition
 
 
+@pytest.fixture(autouse=True)
+def enable_metric_knowledge(monkeypatch):
+    monkeypatch.setattr(get_settings(), "metric_knowledge_enabled", True)
+
+
 def test_backend_rebuilds_agent_supplied_metadata_without_losing_ratio_filters():
     raw = definition()
     spec = raw["metric"]

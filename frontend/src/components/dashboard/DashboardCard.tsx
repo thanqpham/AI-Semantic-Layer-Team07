@@ -26,6 +26,7 @@ export interface DashboardCardProps {
   querySupported: boolean;
   editMode: boolean;
   metricName: string;
+  metricNames?: string[];
   dimensionLabel: string | null;
   isFirst: boolean;
   isLast: boolean;
@@ -137,8 +138,10 @@ export function DashboardCard(props: DashboardCardProps) {
           widget={props.widget}
           title={title}
           metricName={props.metricName}
+          metricNames={props.metricNames}
           dimensionLabel={props.dimensionLabel}
           data={data}
+          dateFilterIgnored={props.datePreset !== null && props.widget.date_filter_column_id === null}
         />
       </div>
 

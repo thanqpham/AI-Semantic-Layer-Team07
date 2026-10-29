@@ -15,6 +15,7 @@ import {
   DashboardWidgetConfig,
   DashboardWidgetHeight,
   DashboardWidgetWidth,
+  getWidgetMetricIds,
   recommendDashboardChartType,
 } from '@/lib/dashboard';
 
@@ -27,6 +28,8 @@ export interface WidgetFormState {
   width: DashboardWidgetWidth;
   height: DashboardWidgetHeight;
   title: string;
+  additionalMetricIds: number[];
+  orderMetricId: number | null;
 }
 
 export interface WidgetMeta {
@@ -88,15 +91,17 @@ const NEW_FORM: WidgetFormState = {
   width: 'third',
   height: 'normal',
   title: '',
+  additionalMetricIds: [],
+  orderMetricId: null,
 };
 
-/** Only approved canonical-v2 metrics without diagnostics are executable. */
+/** Only approved canonical metrics without diagnostics are executable. */
 export function selectExecutableMetrics(metrics: MetricRecord[]): MetricRecord[] {
   return metrics.filter(
     (metric) =>
       metric.status === 'approved' &&
       metric.definition !== null &&
-      metric.definition.schema_version === 2 &&
+      [2, 3].includes(metric.definition.schema_version ?? 0) &&
       !(metric.definition.diagnostics && metric.definition.diagnostics.length > 0),
   );
 }
@@ -128,6 +133,8 @@ export function initFormState(
     width: editing.width,
     height: editing.height,
     title: editing.custom_title ?? '',
+    additionalMetricIds: getWidgetMetricIds(editing).slice(1),
+    orderMetricId: editing.order_metric_id ?? editing.metric_id,
   };
 }
 
@@ -138,7 +145,7 @@ export function stateForChartChange(
   dimensionIsTime: boolean,
 ): WidgetFormState {
   if (nextChart === 'kpi') {
-    return { ...prev, chartType: nextChart, dimensionColId: null, timeGrain: null };
+    return { ...prev, chartType: nextChart, dimensionColId: null, timeGrain: null, additionalMetricIds: [], orderMetricId: null };
   }
   if (nextChart === 'line' || nextChart === 'area') {
     return { ...prev, chartType: nextChart, dimensionColId: dimensionIsTime ? prev.dimensionColId : null };
@@ -146,6 +153,7 @@ export function stateForChartChange(
   return {
     ...prev,
     chartType: nextChart,
+    ...(nextChart === 'pie' ? { additionalMetricIds: [], orderMetricId: null } : {}),
     dimensionColId: dimensionIsTime ? null : prev.dimensionColId,
     timeGrain: null,
   };
@@ -154,6 +162,15 @@ export function stateForChartChange(
 /** Mirror of the persisted-layout compatibility rules used for validation. */
 export function validateForm(form: WidgetFormState): string | null {
   if (form.metricId === null) return 'Hãy chọn một metric đã duyệt.';
+  if (form.additionalMetricIds.length > 4) return 'Mỗi widget hỗ trợ tối đa 5 metric.';
+  if (form.additionalMetricIds.length > 0 && (form.chartType === 'kpi' || form.chartType === 'pie')) {
+    return 'KPI và biểu đồ tròn chỉ hỗ trợ một metric.';
+  }
+  if (
+    form.additionalMetricIds.length > 0 &&
+    (form.chartType === 'bar' || form.chartType === 'table') &&
+    ![form.metricId, ...form.additionalMetricIds].includes(form.orderMetricId ?? -1)
+  ) return 'Hãy chọn metric dùng để sắp xếp.';
   if (form.chartType === 'kpi') {
     if (form.dateFilterColumnId === null) return 'KPI cần một cột thời gian để lọc theo ngày.';
     return null;
@@ -169,9 +186,14 @@ export function validateForm(form: WidgetFormState): string | null {
 
 export function buildWidgetDraft(id: string, form: WidgetFormState): DashboardWidgetConfig {
   const isTimeSeries = form.chartType === 'line' || form.chartType === 'area';
+  const metricIds = form.metricId === null ? [] : [form.metricId, ...form.additionalMetricIds];
   return {
     id,
     metric_id: form.metricId ?? 0,
+    ...(metricIds.length > 1 ? { metric_ids: metricIds } : {}),
+    ...(metricIds.length > 1 && (form.chartType === 'bar' || form.chartType === 'table')
+      ? { order_metric_id: form.orderMetricId ?? metricIds[0] }
+      : {}),
     dimension_col_id: form.dimensionColId,
     date_filter_column_id: form.dateFilterColumnId,
     time_grain: isTimeSeries ? form.timeGrain : null,
@@ -180,6 +202,12 @@ export function buildWidgetDraft(id: string, form: WidgetFormState): DashboardWi
     height: form.height,
     custom_title: normalizeTitle(form.title),
   };
+}
+
+export function planMetricOptions(metrics: MetricRecord[], primaryId: number | null): MetricRecord[] {
+  const primary = metrics.find((metric) => metric.metric_id === primaryId);
+  if (!primary?.definition?.metric.query_plan) return [];
+  return metrics.filter((metric) => metric.metric_id !== primaryId && metric.definition?.metric.query_plan);
 }
 
 function toCatalogColumn(item: RecommendedDimensionItem) {

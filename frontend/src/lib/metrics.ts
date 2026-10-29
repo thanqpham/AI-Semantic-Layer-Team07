@@ -25,6 +25,7 @@ export function createMetricDefinition(baseEntity: string = ''): MetricDefinitio
 }
 
 export function formatMetricFormula(definition: MetricDefinition): string {
+  if (definition.metric.query_plan) return definition.metric.query_plan.output_expression;
   const formula = definition.metric.formula;
   if (!formula.ratio) {
     const prefix = formula.expression.includes('/') ? 'Cần xem xét · ' : '';
@@ -41,7 +42,13 @@ export function formatMetricFormula(definition: MetricDefinition): string {
 
 export function getMetricUsedColumns(definition: MetricDefinition): string[] {
   const { formula, filters } = definition.metric;
-  const expressions = formula.ratio
+  const plan = definition.metric.query_plan;
+  const expressions = plan
+    ? plan.stages.flatMap((stage) => [
+        ...stage.group_by.map((field) => field.expression),
+        ...stage.aggregates.map((aggregate) => aggregate.expression),
+      ])
+    : formula.ratio
     ? [formula.ratio.numerator.expression, formula.ratio.denominator.expression]
     : [formula.expression];
   const names = new Map<string, string>();
@@ -57,6 +64,7 @@ export function getMetricUsedColumns(definition: MetricDefinition): string[] {
       const name = isQuotedIdentifier ? token.slice(1, -1).replace(/(["`])\1/g, '$1') : token;
       const precedingCharacter = expression[match.index - 1];
       if (!isQuotedIdentifier && precedingCharacter && /[A-Za-z0-9_$]/.test(precedingCharacter)) continue;
+      if (!isQuotedIdentifier && expression[tokens.lastIndex] === '.') continue;
       if (!isQuotedIdentifier && /^(true|false|null)$/i.test(name)) continue;
       if (/^\s*\(/.test(expression.slice(tokens.lastIndex))) continue;
       names.set(name.toLowerCase(), names.get(name.toLowerCase()) || name);
@@ -64,8 +72,13 @@ export function getMetricUsedColumns(definition: MetricDefinition): string[] {
   }
 
   const ratio = formula.ratio;
+  const planFilters = plan?.stages.flatMap((stage) => [
+    ...stage.filters,
+    ...stage.aggregates.flatMap((aggregate) => aggregate.filters),
+  ]) || [];
   const allFilters = [
     ...filters,
+    ...planFilters,
     ...(ratio?.numerator.filters || []),
     ...(ratio?.denominator.filters || []),
   ];

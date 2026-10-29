@@ -2,8 +2,12 @@
 
 from datetime import UTC, datetime
 
+import pytest
+from pydantic import ValidationError
+
 from src.models.metric_definition import MetricDefinition
 from src.models.raw_schema import RawSchema
+from src.models.relationship_review import ColumnPair, RelationshipDecision, RelationshipDraft
 from src.models.schemas import (
     CanonicalRelationshipResponse,
     GenerateResponse,
@@ -11,6 +15,51 @@ from src.models.schemas import (
     MetricVersionResponse,
     MetricWithHistoryResponse,
 )
+
+
+def test_relationship_draft_contract_fields_and_defaults() -> None:
+    draft = RelationshipDraft(
+        from_entity_id=10,
+        to_entity_id=20,
+        column_pairs=[ColumnPair(from_column_id=101, to_column_id=201)],
+        relationship_type="many_to_one",
+    )
+
+    assert draft.from_entity_id == 10
+    assert draft.to_entity_id == 20
+    assert draft.column_pairs == [ColumnPair(from_column_id=101, to_column_id=201)]
+    assert draft.relationship_type == "many_to_one"
+    assert draft.cardinality_confirmation is None
+    assert draft.expected_revision is None
+
+
+def test_relationship_draft_rejects_unknown_relationship_type() -> None:
+    with pytest.raises(ValidationError):
+        RelationshipDraft(
+            from_entity_id=10,
+            to_entity_id=20,
+            column_pairs=[],
+            relationship_type="many_to_many-ish",  # type: ignore[arg-type]
+        )
+
+
+def test_relationship_draft_allows_empty_pairs_for_structured_service_validation() -> None:
+    draft = RelationshipDraft(
+        from_entity_id=10,
+        to_entity_id=20,
+        column_pairs=[],
+        relationship_type="many_to_one",
+    )
+
+    assert draft.column_pairs == []
+
+
+def test_relationship_decision_requires_revision_and_defaults_impact_acknowledgement() -> None:
+    decision = RelationshipDecision(expected_revision=3)
+
+    assert decision.expected_revision == 3
+    assert decision.impact_token is None
+    assert decision.acknowledge_impact is False
 
 
 class TestCanonicalRelationshipResponse:

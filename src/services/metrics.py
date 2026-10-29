@@ -17,6 +17,7 @@ from src.models.schemas import (
     MetricSuggestions,
     MetricSuggestionsV2,
 )
+from src.services.categorical_discovery_policy import safe_observed_values
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json, extract_json
 from src.services.metric_dedupe import format_existing_metrics_context, merge_dedupe
@@ -82,11 +83,8 @@ def _format_columns(columns: list[dict[str, Any]]) -> list[str]:
         desc = (column.get("description") or "").strip()
         desc_str = f" — {desc}" if desc and desc.lower() != business.lower() else ""
         suffix = f"; {', '.join(flags)}" if flags else ""
-        default_val = column.get("default_value")
-        if default_val is not None:
-            suffix += f"; default: {default_val}"
-        sample_vals = column.get("sample_values") or column.get("allowed_values")
-        if sample_vals:
+        sample_vals = column.get("allowed_values") if column.get("review_status") == "approved" else None
+        if isinstance(sample_vals, list) and safe_observed_values(sample_vals) is not None:
             suffix += f"; values: {sample_vals}"
         lines.append(f"- `{name}` ({column.get('data_type', 'TEXT')}; {business}{desc_str}{suffix})")
     return lines
@@ -161,7 +159,7 @@ Cả hai mảng "duplicates" và "conflicts" đều được phép rỗng [] n�
 _BASE_RULES = """Quy tắc BẮT BUỘC:
 0. MỌI nội dung hiển thị cho người dùng (metric.name, excluded_notes, diagnostics) PHẢI bằng tiếng Việt; chỉ giữ nguyên tên bảng/cột và mã kỹ thuật trong Schema.
 1. formula.function chỉ dùng: SUM, COUNT, COUNT_DISTINCT, AVG, MIN, MAX. Khi đếm số lượng thực thể (đơn hàng, khách hàng, sản phẩm…): bắt buộc dùng COUNT_DISTINCT trên khóa thực thể tương ứng; COUNT chỉ dùng để đếm dòng hoặc tổng số lượng (ví dụ số lượng bán = SUM(quantity)).
-2. formula.expression và expression của mỗi phía ratio chỉ gồm cột của base_entity, số và các toán tử (+, -, *). Phép chia giữa aggregates phải dùng formula.ratio, không dùng toán tử / trong expression. Với metric thời gian giao hàng, chỉ được phép dùng `TIMESTAMP_DIFF_HOURS(thời_điểm_kết_thúc, thời_điểm_bắt_đầu)` trên đúng hai cột thời gian của base_entity. Không viết SQL, subquery, alias hay function khác.
+2. formula.expression chỉ gồm cột của base_entity, số và các toán tử (+, -, *); expression của mỗi phía ratio tuân theo quy tắc tương tự. Phép chia giữa aggregates phải dùng formula.ratio, không dùng toán tử / trong expression. Với metric thời gian giao hàng, chỉ được phép dùng `TIMESTAMP_DIFF_HOURS(thời_điểm_kết_thúc, thời_điểm_bắt_đầu)` trên đúng hai cột thời gian của base_entity. Không viết SQL, subquery, alias hay function khác.
 3. base_entity và các cột phải tồn tại chính xác trong Schema dưới đây.
 4. Ưu tiên base_entity có PK/grain rõ ràng; không giả định quan hệ hoặc ý nghĩa không có trong schema.
 5. Filter chỉ dùng cột base_entity và literal đúng kiểu. Hệ thống tự thêm hygiene cho cờ test/bot đã nhận diện. Filter nghiệp vụ phải theo yêu cầu đã xác nhận: yêu cầu hoàn tất thì dùng đúng ánh xạ hoàn tất, không thay bằng điều kiện chỉ loại đơn hủy. Không bịa ánh xạ trạng thái, điều kiện join hay coi tên cột là literal.
@@ -309,9 +307,7 @@ def _references_schema(definition: MetricDefinition, valid: dict[str, set[str]])
                 expressions.append(aggregate.expression)
                 filters.extend(aggregate.filters)
         referenced = {
-            col.name.lower()
-            for expression in expressions
-            for col in sqlglot.parse_one(expression).find_all(exp.Column)
+            col.name.lower() for expression in expressions for col in sqlglot.parse_one(expression).find_all(exp.Column)
         }
         referenced.update(item.field.lower() for item in filters)
         return referenced.issubset(set(col_lower.keys()))
