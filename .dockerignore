@@ -10,6 +10,7 @@ scratch/
 docs/
 presentation/
 eval/
+tests/
 *.md
 !requirements.txt
 .dockerignore

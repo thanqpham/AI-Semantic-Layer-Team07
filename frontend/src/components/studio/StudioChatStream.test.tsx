@@ -35,14 +35,30 @@ describe('StudioChatStream', () => {
     expect(screen.queryByRole('button', { name: /Doanh thu lũy kế/ })).not.toBeInTheDocument();
   });
 
-  it('keeps the existing Data Assistant prompt chips', () => {
+  it('does not render metric prompt chips in Data Assistant mode', () => {
     render(
       <StudioChatStream messages={[]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]}
         mode="data_assistant" metricPromptSuggestions={[]} />,
     );
 
-    expect(screen.getByRole('button', { name: /Doanh thu theo khách hàng/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Tìm metric doanh thu đã duyệt/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
+  });
+
+  it('grows the composer with typed content and shrinks it after sending', async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
+    render(<StudioChatStream messages={[]} onSendMessage={onSendMessage} isLoading={false} tableNames={[]} />);
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
+
+    const textarea = screen.getByPlaceholderText(/Mô tả chỉ số bạn muốn tạo/i) as HTMLTextAreaElement;
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 132 });
+    fireEvent.change(textarea, { target: { value: 'Đề xuất metric doanh thu thuần kèm giả định chi tiết' } });
+    expect(textarea.style.height).toBe('132px');
+
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 34 });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+    expect(textarea.value).toBe('');
+    expect(textarea.style.height).toBe('34px');
   });
 
   it('opens loaded conversation history at the newest message without scrolling from the top', () => {
@@ -250,8 +266,7 @@ describe('StudioChatStream', () => {
     );
 
     expect(screen.getByRole('status')).toHaveTextContent(/không có quyền tạo, sửa hoặc lưu metric/i);
-    expect(screen.getByTestId('prompt-suggestion-strip')).toBeInTheDocument();
-    expect(screen.getByText('Tìm metric doanh thu đã duyệt')).toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
   });
 
   it('lets a Member submit a generated metric request instead of saving it', () => {

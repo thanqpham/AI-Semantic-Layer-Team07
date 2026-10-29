@@ -177,7 +177,7 @@ function resolveDimensionLabel(
   if (widget.dimension_col_id === null || !catalog) return null;
   for (const table of catalog.tables) {
     const column = table.columns.find((c) => c.column_id === widget.dimension_col_id);
-    if (column) return column.business_name;
+    if (column) return column.business_name || column.column_name;
   }
   return null;
 }

@@ -87,29 +87,6 @@ export function metricRequestKey(messageId: string, suggestionIndex: number, pro
   return proposalId ? `proposal:${proposalId}` : `${messageId}:${suggestionIndex}`;
 }
 
-const DATA_ASSISTANT_SUGGESTIONS: Array<{ icon: string; title: string; prompt: string }> = [
-  {
-    icon: '📊',
-    title: 'Doanh thu theo khách hàng',
-    prompt: 'Tổng doanh thu theo khách hàng năm 2024',
-  },
-  {
-    icon: '📅',
-    title: 'Doanh thu tháng này',
-    prompt: 'Doanh thu tháng này theo chi nhánh',
-  },
-  {
-    icon: '🔎',
-    title: 'Tìm metric doanh thu đã duyệt',
-    prompt: 'Có những metric doanh thu nào đã được phê duyệt? Giải thích ngắn gọn từng metric.',
-  },
-  {
-    icon: '🧭',
-    title: 'Tìm bảng khách hàng',
-    prompt: 'Bảng hoặc cột nào liên quan đến khách hàng trong semantic layer này?',
-  },
-];
-
 export function StudioChatStream(props: StudioChatStreamProps) {
   const { translate } = useLanguage();
   const mode = props.mode || 'metric_studio';
@@ -127,6 +104,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const [savedProposalIds, setSavedProposalIds] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; scrollLeft: number; isDragging: boolean; moved: boolean }>({
     startX: 0,
@@ -175,6 +153,13 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   }, [props.activePromptText]);
 
   useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [input]);
+
+  useLayoutEffect(() => {
     const pane = messagesRef.current;
     if (pane) pane.scrollTop = pane.scrollHeight;
   }, [props.messages, props.isLoading]);
@@ -209,9 +194,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
     setShowSuggestions((prev) => !prev);
   };
 
-  const contextualSuggestions = canGenerateMetrics
-    ? props.metricPromptSuggestions || []
-    : DATA_ASSISTANT_SUGGESTIONS;
+  const contextualSuggestions = canGenerateMetrics ? props.metricPromptSuggestions || [] : [];
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -276,9 +259,10 @@ export function StudioChatStream(props: StudioChatStreamProps) {
       </div>
 
       {/* 💡 Suggested Prompts Bar */}
-      <div className="shrink-0 px-4 pb-1 sm:px-6">
-        <div className="mx-auto max-w-4xl">
-          <div className="space-y-1 rounded-lg border border-border bg-card px-2.5 py-2">
+      {contextualSuggestions.length > 0 && (
+        <div className="shrink-0 px-4 pb-1 sm:px-6">
+          <div className="mx-auto max-w-4xl">
+            <div className="space-y-1 rounded-lg border border-border bg-card px-2.5 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
@@ -328,15 +312,17 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Composer Input Box */}
       <div className="shrink-0 bg-card/40 px-4 py-2 sm:px-6">
         <div className="mx-auto max-w-4xl space-y-1.5">
           <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-1.5 shadow-xs focus-within:border-foreground/30 focus-within:ring-1 focus-within:ring-ring/20">
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -346,7 +332,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
                   ? 'Mô tả chỉ số bạn muốn tạo hoặc đặt câu hỏi về schema...'
                   : 'Hỏi về schema, metric đã duyệt hoặc cách chọn dữ liệu...'
               )}
-              className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="max-h-40 min-h-8 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <Button
               size="icon"
