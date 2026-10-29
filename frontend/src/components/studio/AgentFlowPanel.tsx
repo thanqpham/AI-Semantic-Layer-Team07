@@ -2,9 +2,9 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
-import { Cog, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { BotMessageSquareIcon } from '@/components/ui/BotMessageSquareIcon';
-import { ExecutionTrace, traceSteps } from '@/lib/chatTrace';
+import { agentId, ExecutionTrace, traceAgents, traceSteps } from '@/lib/chatTrace';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/context/LanguageContext';
 import { TraceDuration } from './AgentThinking';
@@ -41,7 +41,7 @@ function subscribeViewport(listener: () => void) {
 
 function nodeStatus(trace: ExecutionTrace, node: string): string {
   if (node === 'request') return 'completed';
-  const steps = traceSteps(trace).filter((step) => step.node === node || (node === 'sql' && step.action?.startsWith('sql_')));
+  const steps = traceAgents(trace).filter((step) => step.node === node);
   if (steps.some((step) => step.status === 'started')) return 'running';
   if (steps.some((step) => step.status === 'failed')) return 'error';
   if (steps.length || trace.events.some((event) => event.source === node || event.target === node)) return 'completed';
@@ -69,13 +69,12 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
         ? [event.source, event.target]
         : [event.node === 'sql' || event.action?.startsWith('sql_') ? 'sql' : event.node];
       touched.forEach((id) => {
-        if (id && NODES.some((node) => node.id === id) && !firstSeen.has(id)) firstSeen.set(id, index);
+        const agent = agentId(id);
+        if (agent && !firstSeen.has(agent)) firstSeen.set(agent, index);
       });
     });
-    firstSeen.set('request', -1);
-    if (trace.status !== 'running') firstSeen.set('response', trace.events.length);
     return NODES
-      .filter((node) => firstSeen.has(node.id))
+      .filter((node) => node.agent && firstSeen.has(node.id))
       .sort((a, b) => (firstSeen.get(a.id)! - firstSeen.get(b.id)!) || NODES.indexOf(a) - NODES.indexOf(b));
   }, [trace]);
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
@@ -85,11 +84,19 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
   const graphPositions = new Map(visibleNodes.map((node, index) => {
     return [node.id, { x: 60 + index * 136, y: graphHeight / 2 }] as const;
   }));
-  const edges = [...new Map(trace.events
-    .filter((event) => event.kind === 'transition'
-      && visibleNodeIds.has(event.source || '') && visibleNodeIds.has(event.target || ''))
-    .map((event) => [`${event.source}:${event.target}`, [event.source!, event.target!] as const])).values()];
-  const selectedNode = visibleNodeIds.has(selected) ? selected : visibleNodes[0]?.id || 'request';
+  const edgesById = new Map<string, readonly [string, string]>();
+  let lastTarget: string | undefined;
+  let lastAgent: string | undefined;
+  for (const event of trace.events) {
+    if (event.kind !== 'transition' || !event.source || !event.target) continue;
+    if (event.source !== lastTarget) lastAgent = agentId(event.source);
+    const target = agentId(event.target);
+    if (lastAgent && target && lastAgent !== target) edgesById.set(`${lastAgent}:${target}`, [lastAgent, target]);
+    if (target) lastAgent = target;
+    lastTarget = event.target;
+  }
+  const edges = [...edgesById.values()].filter(([source, target]) => visibleNodeIds.has(source) && visibleNodeIds.has(target));
+  const selectedNode = visibleNodeIds.has(selected) ? selected : visibleNodes[0]?.id;
   const resizePanel = (event: ReactPointerEvent<HTMLDivElement>) => {
     const start = resizeStart.current;
     if (!start) return;
@@ -197,7 +204,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
           const position = graphPositions.get(node.id)!;
           const style = { left: `${position.x / graphContentWidth * 100}%`, top: `${position.y / graphHeight * 100}%` };
           const name = t(node.en, node.name);
-          if (node.agent) return <div key={node.id} className="absolute flex w-[84px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[9px] leading-tight" style={style}>
+          return <div key={node.id} className="absolute flex w-[84px] -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center text-[9px] leading-tight" style={style}>
             <button type="button" aria-label={`${name} · ${label}`} aria-pressed={selectedNode === node.id}
               onClick={() => setSelected(node.id)}
               className={cn('flex h-10 w-10 items-center justify-center rounded-full border-2 bg-card shadow-xs focus-visible:outline-2 focus-visible:outline-ring', statusClass, selectedClass)}>
@@ -206,22 +213,11 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
             <span className="mt-1 line-clamp-3 font-medium">{name}</span>
             <span>{status === 'completed' ? '✓' : status === 'error' ? '!' : '◌'} {status === 'running' ? t('Running', 'Đang chạy') : label}</span>
           </div>;
-          return <button type="button" key={node.id} data-node-kind="step" aria-pressed={selectedNode === node.id}
-            aria-label={`${name} · ${label}`} onClick={() => setSelected(node.id)} style={style}
-            className={cn('absolute flex w-[96px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 border border-dashed bg-card px-1.5 py-2 text-center text-[10px] leading-tight shadow-xs focus-visible:outline-2 focus-visible:outline-ring',
-              'rounded', selectedClass,
-              status === 'idle' && 'border-border text-muted-foreground',
-              status === 'running' && 'animate-pulse border-blue-500 text-blue-600 motion-reduce:animate-none dark:text-blue-400',
-              status === 'completed' && 'border-emerald-500 text-emerald-700 dark:text-emerald-400',
-              status === 'error' && 'border-red-500 text-red-600 dark:text-red-400')}>
-            <span className="flex items-center justify-center gap-1 font-medium"><Cog className="h-3 w-3 shrink-0" />{name}</span>
-            <span>{status === 'completed' ? '✓ ' : status === 'error' ? '! ' : status === 'running' ? '◌ ' : '○ '}{label}</span>
-          </button>;
         }) }
         </div>
       </div>
-      <p className="shrink-0 pt-1 text-[10px] text-muted-foreground">{t('Agents: solid border · System steps: dashed border · Active route: solid line · Completed route: dashed line', 'Agent: viền liền · Bước hệ thống: viền nét đứt · Luồng đang chạy: đường liền · Luồng đã chạy: đường gạch')}</p>
-      <div className="max-h-[22vh] shrink-0 overflow-hidden border-t border-border px-3 py-2">
+      <p className="shrink-0 pt-1 text-[10px] text-muted-foreground">{t('Active route: solid line · Completed route: dashed line', 'Luồng đang chạy: đường liền · Luồng đã chạy: đường gạch')}</p>
+      {selectedNode && <div className="max-h-[22vh] shrink-0 overflow-hidden border-t border-border px-3 py-2">
         <h3 className="truncate text-xs font-semibold">{t(NODES.find((node) => node.id === selectedNode)!.en, NODES.find((node) => node.id === selectedNode)!.name)}</h3>
         {traceSteps(trace).filter((step) => step.node === selectedNode || (selectedNode === 'sql' && step.action?.startsWith('sql_'))).slice(-1).map((step) =>
           <div key={step.step_id} className="mt-1 flex items-start gap-2 text-[11px]">
@@ -229,7 +225,7 @@ export function AgentFlowPanel({ trace, title, onClose, trigger, reconnecting }:
             <p className="line-clamp-2 min-w-0 text-muted-foreground">{translate(step.summary)}</p>
           </div>)}
         {nodeStatus(trace, selectedNode) === 'idle' && <p className="mt-1 text-[11px] text-muted-foreground">{t('This step has not run.', 'Bước này chưa chạy.')}</p>}
-      </div>
+      </div>}
     </div>
   </aside>;
 }

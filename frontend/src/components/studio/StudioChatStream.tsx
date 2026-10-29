@@ -12,7 +12,7 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import React, { KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -34,7 +34,6 @@ import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 import { ExecutionTrace } from '@/lib/chatTrace';
 import { AgentThinking } from './AgentThinking';
-import { AgentFlowPanel } from './AgentFlowPanel';
 
 export interface ChatMessage {
   runStatus?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
@@ -91,15 +90,6 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const { translate } = useLanguage();
   const mode = props.mode || 'metric_studio';
   const canGenerateMetrics = mode === 'metric_studio';
-  const [graph, setGraph] = useState<{ runId: string; title: string; trigger: HTMLButtonElement } | null>(null);
-  const [conversationKey, setConversationKey] = useState(props.conversationKey);
-  if (conversationKey !== props.conversationKey) {
-    setConversationKey(props.conversationKey);
-    if (conversationKey) setGraph(null);
-  }
-  const closeGraph = useCallback(() => setGraph(null), []);
-  const graphMessage = props.messages.find((message) => message.executionTrace?.run_id === graph?.runId);
-  const graphTrace = graphMessage?.executionTrace;
   const [input, setInput] = useState(props.activePromptText || '');
   const [savedProposalIds, setSavedProposalIds] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -197,7 +187,6 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   const contextualSuggestions = canGenerateMetrics ? props.metricPromptSuggestions || [] : [];
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       {/* 💬 Messages Stream */}
       <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -207,14 +196,10 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               <Translated text={"Bạn không có quyền tạo, sửa hoặc lưu metric trực tiếp. Bạn có thể tra cứu dữ liệu qua các metric đã duyệt (chỉ áp dụng cho kết nối Live DB) hoặc yêu cầu AI tạo Business Metric mới. Metric sau khi tạo sẽ được lưu vào Semantic Layer ở trạng thái chờ Data Lead phê duyệt."} />
             </div>
           )}
-          {props.messages.map((message, index) => (
+          {props.messages.map((message) => (
             <MessageBubble
               key={message.executionTrace?.run_id || message.id}
               message={message}
-              onOpenGraph={(trigger) => message.executionTrace && setGraph({
-                runId: message.executionTrace.run_id, trigger,
-                title: props.messages.slice(0, index).reverse().find((item) => item.sender === 'user')?.text || message.timestamp,
-              })}
               catalogNames={catalogNames}
               savedProposalIds={new Set(savedProposalIds)}
               onSave={save}
@@ -352,13 +337,10 @@ export function StudioChatStream(props: StudioChatStreamProps) {
         </div>
       </div>
     </div>
-    {graph && graphTrace && <AgentFlowPanel key={graph.runId} trace={graphTrace} reconnecting={graphMessage?.reconnecting} title={graph.title} onClose={closeGraph} trigger={graph.trigger} />}
-    </div>
   );
 }
 
 function MessageBubble({
-  onOpenGraph,
   message,
   catalogNames,
   savedProposalIds,
@@ -376,7 +358,6 @@ function MessageBubble({
   onSelectClarification,
   theme,
 }: {
-  onOpenGraph?: (trigger: HTMLButtonElement) => void;
   message: ChatMessage;
   catalogNames: ReadonlySet<string>;
   savedProposalIds: ReadonlySet<string>;
@@ -420,9 +401,11 @@ function MessageBubble({
         </div>
 
         {!isUser && message.executionTrace && <AgentThinking trace={message.executionTrace}
-          reconnecting={message.reconnecting} onOpenGraph={(trigger) => onOpenGraph?.(trigger)} />}
+          reconnecting={message.reconnecting} answer={message.text}
+          answerStreaming={message.executionTrace.status === 'running' && !message.reconnecting}
+          renderAnswer={(answer) => <AssistantMarkdown content={answer} />} />}
         {/* The description line is hidden once every duplicate notice is settled. */}
-        {message.text && !message.suggestions?.length ? (
+        {message.text && !message.suggestions?.length && !(message.executionTrace?.status === 'running' && !message.reconnecting) ? (
           <div
             className={cn(
               'inline-block break-words rounded-xl px-2.5 py-1.5 text-[13px] leading-5 shadow-2xs',
