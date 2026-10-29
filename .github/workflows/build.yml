@@ -1,42 +1,53 @@
-name: Build & Push Image
+name: Build & Push Images
 
 on:
   workflow_call:
     outputs:
       image_tag:
         description: "Commit short SHA tag"
-        value: ${{ jobs.build.outputs.image_tag }}
+        value: ${{ jobs.build-backend.outputs.image_tag }}
 
 jobs:
-  build:
-    name: Build ARM64 & Trivy Scan
+  # ==============================================================
+  # 1. BUILD & SCAN BACKEND (FastAPI)
+  # ==============================================================
+  build-backend:
+    name: Build & Scan Backend (ARM64)
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.vars.outputs.sha_short }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Get short SHA
         id: vars
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      # Build image local để quét Trivy trước
-      - name: Build local image for Trivy scan
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build bản image local để Trivy quét trước
+      - name: Build local Backend image for scanning
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           load: true
-          tags: local-scan:${{ steps.vars.outputs.sha_short }}
+          tags: backend-scan:${{ steps.vars.outputs.sha_short }}
 
-      - name: Scan Image with Trivy
+      # Quét lỗ hổng hệ điều hành & thư viện trong image Backend
+      - name: Scan Backend Image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: local-scan:${{ steps.vars.outputs.sha_short }}
+          image-ref: backend-scan:${{ steps.vars.outputs.sha_short }}
           format: "table"
-          exit-code: "0"
+          exit-code: "0" # Đổi thành '1' nếu muốn pipeline dừng hẳn khi phát hiện CVE CRITICAL
+          ignore-unfixed: true
+          vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
 
       - name: Log in to GHCR
@@ -47,14 +58,80 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Push image ARM64 chính thức lên GHCR
-      - name: Build & Push ARM64 Image
+      - name: Build & Push Backend ARM64
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           platforms: linux/arm64
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/ai-semantic-layer-backend:${{ steps.vars.outputs.sha_short }}
             ghcr.io/${{ github.repository_owner }}/ai-semantic-layer-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==============================================================
+  # 2. BUILD & SCAN FRONTEND (Next.js)
+  # ==============================================================
+  build-frontend:
+    name: Build & Scan Frontend (ARM64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Get short SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build bản image local để Trivy quét trước
+      - name: Build local Frontend image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://api.140.245.58.162.nip.io
+          load: true
+          tags: frontend-scan:${{ steps.vars.outputs.sha_short }}
+
+      # Quét lỗ hổng hệ điều hành & node modules trong image Frontend
+      - name: Scan Frontend Image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: frontend-scan:${{ steps.vars.outputs.sha_short }}
+          format: "table"
+          exit-code: "0" # Đổi thành '1' nếu muốn chặn deploy khi có lỗi nghiêm trọng
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Push image ARM64 chính thức lên GHCR
+      - name: Build & Push Frontend ARM64
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://api.140.245.58.162.nip.io
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/ai-semantic-layer-frontend:${{ steps.vars.outputs.sha_short }}
+            ghcr.io/${{ github.repository_owner }}/ai-semantic-layer-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
