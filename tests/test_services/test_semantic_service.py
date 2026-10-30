@@ -28,8 +28,8 @@ from src.models.schema_metadata import (
     TableMetadata,
 )
 from src.services.metric_rollback import rollback_metric
+from src.services.semantic_fill import pydantic_tables_to_typeddict as _pydantic_tables_to_typeddict
 from src.services.semantic_service import (
-    _pydantic_tables_to_typeddict,
     approve_metric,
     create_metric,
     delete_semantic_database,
@@ -793,9 +793,9 @@ async def test_two_pass_pipeline_called_when_no_enrichment(async_session: AsyncS
     )
 
     with (
-        patch("src.services.semantic_service.execute_pass1", new_callable=AsyncMock) as mock_pass1,
-        patch("src.services.semantic_service.enrich_clusters_parallel", new_callable=AsyncMock) as mock_pass2,
-        patch("src.services.semantic_service.cluster_tables") as mock_cluster,
+        patch("src.services.semantic_fill.execute_pass1", new_callable=AsyncMock) as mock_pass1,
+        patch("src.services.semantic_fill.enrich_clusters_parallel", new_callable=AsyncMock) as mock_pass2,
+        patch("src.services.semantic_fill.cluster_tables") as mock_cluster,
     ):
         mock_pass1.return_value = {"orders.user_id": "Users table"}
         mock_cluster.return_value = [[t] for t in _pydantic_tables_to_typeddict(raw_schema.tables)]

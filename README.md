@@ -420,7 +420,7 @@ docker compose -f docker-compose.dev.yml down
 
 ### 3. Làm giàu Ngữ nghĩa & Phê duyệt HITL (Flow 1 Enrichment)
 
-- `POST /api/v1/semantic/generate` — Chạy pipeline 2-Pass AI Schema Enrichment (Glossary $\rightarrow$ Clustering $\rightarrow$ Vietnamese Business Names & Metrics)
+- `POST /api/v1/semantic/generate` — Dispatch nền (202 `{"db_id", "status": "started"}`) pipeline 2-Pass AI Schema Enrichment chỉ điền các ô còn trống; theo dõi qua `GET /api/v1/semantic/{db_id}/enrich/status`
 - `POST /api/v1/semantic/approve` — Phê duyệt toàn bộ Draft Metrics cho một Semantic Database
 - `POST /api/v1/semantic/{db_id}/metric/{metric_id}/approve` — Phê duyệt một Business Metric cụ thể
 - `PUT /api/v1/semantic/{db_id}/table/{table_name}` — Chỉnh sửa inline tên/mô tả nghiệp vụ của Bảng
@@ -472,7 +472,7 @@ curl -X POST "http://localhost:8000/api/v1/semantic/db/connect" \
   }'
 ```
 
-**2. Khởi chạy 2-Pass AI Schema Enrichment:**
+**2. Khởi chạy 2-Pass AI Schema Enrichment (chạy nền, chỉ điền ô còn trống):**
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/semantic/generate" \
@@ -481,6 +481,9 @@ curl -X POST "http://localhost:8000/api/v1/semantic/generate" \
   -d '{
     "db_id": 1
   }'
+# → 202 {"db_id": 1, "status": "started"} — theo dõi tiến độ:
+curl "http://localhost:8000/api/v1/semantic/1/enrich/status" \
+  -H "Authorization: Bearer <YOUR_ACCESS_TOKEN>"
 ```
 
 **3. Phê duyệt (HITL Approve) Semantic Layer:**

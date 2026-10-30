@@ -831,15 +831,25 @@ class MetricFilterColumnsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class SemanticGenerateV2Response(BaseModel):
-    """Response after re-running AI enrichment (POST /semantic/generate)."""
+class SemanticGenerateAcceptedResponse(BaseModel):
+    """Acknowledgement that an enrichment run was dispatched in the background."""
 
     db_id: int
-    status: str = "draft"
-    pending_tables: int = 0
-    pending_columns: int = 0
-    tables: list[dict[str, Any]] = Field(default_factory=list)
-    relationships: list[dict[str, Any]] = Field(default_factory=list)
+    status: str = "started"
+
+
+class EnrichStatusResponse(BaseModel):
+    """Snapshot of AI enrichment progress for the Schema Review banner."""
+
+    db_id: int
+    status: Literal["idle", "running", "succeeded", "failed"]
+    phase: str | None = None
+    total_tables: int = 0
+    completed_tables: int = 0
+    current_table: str | None = None
+    error: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
 
 
 class SemanticApproveV2Response(BaseModel):

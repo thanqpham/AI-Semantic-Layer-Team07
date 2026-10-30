@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from src.services.enrichment_config import DEFAULT_CONFIG, EnrichmentConfig
@@ -359,15 +360,23 @@ async def enrich_clusters_parallel(
     dialect: str,
     sem: asyncio.Semaphore,
     config: EnrichmentConfig | None = None,
+    on_progress: Callable[[int, int, str | None], None] | None = None,
 ) -> dict[str, dict]:
     """Enrich all clusters in parallel using semaphore from caller.
 
     Returns flat dict keyed by composite key (schema.table or table_name).
+    *on_progress* (completed_tables, total_tables, current_table) fires as clusters start/finish.
     """
     if config is None:
         config = DEFAULT_CONFIG
 
+    total_tables = sum(len(c) for c in clusters)
+    completed = 0
+
     async def _enrich_one_cluster(cluster: list[dict[str, Any]]) -> dict[str, dict]:
+        nonlocal completed
+        if on_progress is not None and cluster:
+            on_progress(completed, total_tables, cluster[0].get("table_name"))
         # Check for ultra-wide tables in cluster
         result: dict[str, dict] = {}
         normal_tables: list[dict[str, Any]] = []
@@ -391,6 +400,9 @@ async def enrich_clusters_parallel(
             merged = _merge_cluster_result(normal_tables, parsed, global_glossary)
             result.update(merged)
 
+        completed += len(cluster)
+        if on_progress is not None:
+            on_progress(completed, total_tables, None)
         return result
 
     all_results = await asyncio.gather(

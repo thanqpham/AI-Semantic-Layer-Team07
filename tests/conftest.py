@@ -45,6 +45,16 @@ async def async_session():
     await engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def _reset_enrichment_progress():
+    """Isolate the module-global enrichment registry between tests."""
+    from src.services import enrichment_progress
+
+    enrichment_progress.reset_all()
+    yield
+    enrichment_progress.reset_all()
+
+
 @pytest_asyncio.fixture
 async def client(async_session: AsyncSession):
     """Async HTTP client for testing API endpoints with in-memory SQLite DB."""
