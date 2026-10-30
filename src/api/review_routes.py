@@ -25,6 +25,7 @@ from src.models.schemas import MetricVersionResponse
 from src.services.database import get_db_session
 from src.services.metric_service import reject_metric_update
 from src.services.metric_versioning import latest_open_version
+from src.services.review_notifications import sync_schema_review_notifications
 from src.services.schema_review_service import (
     SchemaRowNotFoundError,
     SchemaTableAmbiguousError,
@@ -78,6 +79,7 @@ async def approve_schema_review(
     except SchemaRowNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     await db.commit()
+    await sync_schema_review_notifications(db, db_id)
     pending = result["pending_tables"] or result["pending_columns"]
     return SchemaApproveResponse(
         db_id=db_id,

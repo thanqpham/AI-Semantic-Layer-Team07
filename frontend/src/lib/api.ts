@@ -990,7 +990,9 @@ export interface AppNotification {
   title: string;
   body: string;
   metric_request_id?: number | null;
+  db_id?: number | null;
   read_at?: string | null;
+  handled_at?: string | null;
   created_at: string;
 }
 

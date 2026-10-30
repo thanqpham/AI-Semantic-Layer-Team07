@@ -659,7 +659,11 @@ class NotificationModel(Base):
     metric_request_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("metric_requests.id", ondelete="CASCADE"), nullable=True
     )
+    db_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("semantic_databases.id", ondelete="CASCADE"), nullable=True
+    )
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     recipient: Mapped["UserModel"] = relationship("UserModel", back_populates="notifications")
