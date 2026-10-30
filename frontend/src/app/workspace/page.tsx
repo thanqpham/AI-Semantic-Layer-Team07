@@ -22,6 +22,7 @@ import {
   ChatSessionItem,
   convertRawSchemaToLayer,
   createMetricApi,
+  rejectMetricVersionApi,
   reviewMetricProposalApi,
   deleteChatSessionApi,
   deleteDatabaseApi,
@@ -798,6 +799,13 @@ export default function WorkspacePage() {
     notify('Đã phê duyệt chỉ số thành công.');
   };
 
+  const rejectSingleMetric = async (metricId: number, reason: string) => {
+    if (!activeLayer?.semantic_db_id) return;
+    await rejectMetricVersionApi(String(activeLayer.semantic_db_id), metricId, reason);
+    await refreshSemanticData();
+    notify('Đã từ chối chỉ số. Tên và công thức được giải phóng để lưu lại.');
+  };
+
   const openEditor = (metric?: MetricRecord, suggestion?: MetricSuggestion) => {
     setEditingMetric(metric || null);
     setEditingSuggestion(suggestion || null);
@@ -805,7 +813,9 @@ export default function WorkspacePage() {
   };
 
   const pendingCount = activeLayer
-    ? activeLayer.metrics.filter((m) => !m.is_deleted && m.status !== 'approved').length
+    ? activeLayer.metrics.filter(
+        (m) => !m.is_deleted && m.status !== 'approved' && m.status !== 'rejected',
+      ).length
     : 0;
   const pendingSchemaCount = pendingSchema.tables + pendingSchema.columns + pendingSchema.relationships;
 
@@ -969,6 +979,7 @@ export default function WorkspacePage() {
               onOpenStudio={canUseMetricStudio ? () => setTab('studio') : undefined}
               onApproveAll={canApproveMetrics ? approve : undefined}
               onApproveMetric={canApproveMetrics ? approveSingleMetric : undefined}
+              onRejectMetric={canApproveMetrics ? rejectSingleMetric : undefined}
               onMetricsChanged={refreshSemanticData}
               refreshKey={catalogRefreshKey}
               onOpenSyncLogs={() => setSyncModalOpen(true)}

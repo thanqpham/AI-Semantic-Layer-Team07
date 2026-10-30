@@ -39,6 +39,7 @@ async def _pending_metric_count(db: AsyncSession, db_id: int) -> int:
             SemanticMetricModel.db_id == db_id,
             SemanticMetricModel.is_deleted.is_(False),
             SemanticMetricModel.status != "approved",
+            SemanticMetricModel.status != "rejected",
         )
     )
     return int(await db.scalar(stmt) or 0)

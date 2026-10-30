@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.models.db import MetricVersionModel, SemanticMetricModel
+from src.models.db import MetricProposalModel, MetricVersionModel, SemanticMetricModel
 from src.models.metric_definition import MetricDefinition
 from src.services.database import lock_semantic_database
 from src.services.metric_definition_resolver import MetricDefinitionResolver
@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 METRIC_STATUS_APPROVED = "approved"
 METRIC_STATUS_NEEDS_REVIEW = "needs_review"
+METRIC_STATUS_REJECTED = "rejected"
 METRIC_STATUS_PENDING = "pending_approval"
 APPROVABLE_METRIC_STATUSES = (METRIC_STATUS_PENDING, METRIC_STATUS_NEEDS_REVIEW, "unverified")
 
@@ -52,7 +53,10 @@ class DuplicateMetricError(ValueError):
 
 async def _ensure_unique_metric_name(db: AsyncSession, db_id: int, name: str) -> None:
     """Reject a duplicate metric name before creating a second catalog record."""
-    stmt = select(SemanticMetricModel.name).where(SemanticMetricModel.db_id == db_id)
+    stmt = select(SemanticMetricModel.name).where(
+        SemanticMetricModel.db_id == db_id,
+        SemanticMetricModel.status != METRIC_STATUS_REJECTED,
+    )
     existing_names = (await db.execute(stmt)).scalars().all()
     normalized = name.strip().casefold()
     if any(existing.strip().casefold() == normalized for existing in existing_names):
@@ -370,7 +374,7 @@ async def reject_metric_update(
     reason: str = "",
     version: int | None = None,
 ) -> MetricVersionModel:
-    """Reject a pending edit, leaving the published definition untouched."""
+    """Reject a pending version; a never-published metric is rejected outright."""
     metric = await require_metric(db, metric_id)
     draft = await load_version(db, metric.id, version) if version is not None else None
     if draft is None:
@@ -379,10 +383,22 @@ async def reject_metric_update(
         raise ValueError("Metric has no version awaiting approval")
     record = await reject_version(db, metric.id, draft.version, user_id, reason)
     if metric.version == record.version and metric.status != METRIC_STATUS_APPROVED:
-        metric.status = METRIC_STATUS_NEEDS_REVIEW
+        metric.status = METRIC_STATUS_REJECTED
         metric.approved_by = None
+        record.change_reason = f"[Từ chối] {reason.strip()}"
+        await _release_metric_proposals(db, metric.id, reason)
         await db.flush()
     return record
+
+
+async def _release_metric_proposals(db: AsyncSession, metric_id: int, reason: str) -> None:
+    """Detach proposals from a rejected metric so the same idea can be saved again."""
+    stmt = select(MetricProposalModel).where(MetricProposalModel.metric_id == metric_id)
+    proposals = (await db.execute(stmt)).scalars().all()
+    for proposal in proposals:
+        proposal.metric_id = None
+        proposal.metric_version = None
+        proposal.rejection_reason = reason.strip()
 
 
 async def get_metric_with_history(

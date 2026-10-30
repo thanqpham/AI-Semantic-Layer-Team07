@@ -35,6 +35,7 @@ export const statusMeta: Record<string, { label: string; dot: string }> = {
   approved: { label: 'Đã duyệt', dot: 'bg-emerald-500' },
   needs_review: { label: 'Cần xem xét', dot: 'bg-blue-500' },
   unverified: { label: 'Chưa được xác minh', dot: 'bg-amber-500' },
+  rejected: { label: 'Đã từ chối', dot: 'bg-red-500' },
   review: { label: 'Cần xem xét', dot: 'bg-blue-500' },
   draft: { label: 'Bản nháp', dot: 'bg-muted-foreground/50' },
 };

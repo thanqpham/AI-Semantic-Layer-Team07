@@ -397,12 +397,13 @@ export function AIStudioView({
       return;
     }
     try {
-      await createMetricApi(String(semanticDbId), {
+      const record = await createMetricApi(String(semanticDbId), {
         definition: suggestion.definition,
         source: 'ai',
         proposal_id: suggestion.proposal_id,
       });
       await onMetricsChanged();
+      return record;
     } catch (error) {
       if (isPermissionDenied(error)) onNotify?.(METRIC_WRITE_PERMISSION_MESSAGE);
       appendError(
@@ -524,7 +525,9 @@ export function AIStudioView({
           onSelectClarification={handleSelectClarification}
           submittedRequestKeys={submittedRequestKeys}
           approvedRequestKeys={approvedRequestKeys}
-          savedMetricNames={layer.metrics.map((metric) => metricName(metric))}
+          savedMetricNames={layer.metrics
+            .filter((metric) => metric.status !== 'rejected')
+            .map((metric) => metricName(metric))}
         />
       </div>
     </div>

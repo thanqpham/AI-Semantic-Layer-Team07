@@ -742,4 +742,38 @@ describe('MetricsCatalogView history modal', () => {
       screen.queryByRole('button', { name: 'Khôi phục phiên bản này' }),
     ).not.toBeInTheDocument();
   });
+
+  it('lists rejected metrics in their own tab and keeps them out of All/Pending', () => {
+    const rejectedMetric: MetricRecord = {
+      ...approvedMetric,
+      metric_id: 9,
+      name: 'Tỉ lệ hoàn đơn',
+      status: 'rejected',
+    };
+    render(
+      <MetricsCatalogView
+        dbId={3}
+        canSubmitMetric
+        canManageMetrics
+        canApproveMetrics
+        metrics={[approvedMetric, rejectedMetric]}
+        onDeleteMetric={vi.fn()}
+        onEditMetric={vi.fn()}
+        onOpenStudio={vi.fn()}
+        onApproveAll={vi.fn()}
+        onRejectMetric={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Đã từ chối/ }));
+    expect(screen.getByText('Tỉ lệ hoàn đơn')).toBeInTheDocument();
+    expect(screen.queryByTitle('Phê duyệt chỉ số này')).toBeNull();
+    expect(screen.queryByTitle('Từ chối chỉ số này')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Tất cả/ }));
+    expect(screen.queryByText('Tỉ lệ hoàn đơn')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Chờ phê duyệt/ }));
+    expect(screen.queryByText('Tỉ lệ hoàn đơn')).toBeNull();
+  });
 });
