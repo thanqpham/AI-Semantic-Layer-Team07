@@ -310,8 +310,11 @@ async def test_scanner_diagnostics_are_preserved_outside_domain_schema() -> None
 
 async def test_command_fallback_is_fatal_and_never_logs_raw_ddl(caplog: pytest.LogCaptureFixture) -> None:
     secret_identifier = "private_identifier_xyz"
+    # OWNER TO is real Postgres DDL that sqlglot cannot structurally parse, so it
+    # reliably falls back to exp.Command (the multi-action ALTER previously used here
+    # parses to a real exp.Alter on current sqlglot and no longer reaches this branch).
     statement = ScannedStatement(
-        text=f"ALTER TABLE {secret_identifier} ADD PRIMARY KEY (id), ADD FOREIGN KEY (pid) REFERENCES parent(id)",
+        text=f"ALTER TABLE {secret_identifier} OWNER TO owner_role",
         kind=StatementKind.ALTER_TABLE,
         statement_index=0,
         line=1,
