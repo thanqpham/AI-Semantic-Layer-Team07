@@ -126,9 +126,10 @@ async def approve_metric_request(
     request.status, request.reviewed_by, request.review_note = "approved", reviewer_id, note
     request.metric_id, request.reviewed_at = metric.id, datetime.now(UTC)
     await _notify_requester(db, request, "metric_request_approved", "Metric request đã được duyệt")
+    resolved = await _mark_submitted_handled(db, request)
     await db.commit()
     await db.refresh(request)
-    publish([request.requester_id])
+    publish([request.requester_id, *resolved])
     return request
 
 
@@ -140,9 +141,10 @@ async def reject_metric_request(
     request.status, request.reviewed_by, request.review_note = "rejected", reviewer_id, note
     request.reviewed_at = datetime.now(UTC)
     await _notify_requester(db, request, "metric_request_rejected", "Metric request đã bị từ chối")
+    resolved = await _mark_submitted_handled(db, request)
     await db.commit()
     await db.refresh(request)
-    publish([request.requester_id])
+    publish([request.requester_id, *resolved])
     return request
 
 
@@ -170,6 +172,7 @@ async def _notify_data_leads(db: AsyncSession, db_id: int, request: MetricReques
                 title="Có yêu cầu metric mới",
                 body=_metric_name(request),
                 metric_request_id=request.id,
+                db_id=db_id,
             )
         )
     return recipients
@@ -184,8 +187,31 @@ async def _notify_requester(db: AsyncSession, request: MetricRequestModel, kind:
             title=title,
             body=_metric_name(request),
             metric_request_id=request.id,
+            db_id=request.db_id,
         )
     )
+
+
+async def _mark_submitted_handled(db: AsyncSession, request: MetricRequestModel) -> list[int]:
+    """Gray out every active submitted notification of a resolved request."""
+    rows = (
+        (
+            await db.execute(
+                select(NotificationModel).where(
+                    NotificationModel.type == "metric_request_submitted",
+                    NotificationModel.metric_request_id == request.id,
+                    NotificationModel.handled_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    now = datetime.now(UTC)
+    for row in rows:
+        row.handled_at = now
+        row.read_at = row.read_at or now
+    return [row.recipient_id for row in rows]
 
 
 def _metric_name(request: MetricRequestModel) -> str:

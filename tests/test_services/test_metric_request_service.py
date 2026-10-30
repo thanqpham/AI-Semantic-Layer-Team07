@@ -224,6 +224,44 @@ async def test_reject_notifies_requester_of_rejection(async_session) -> None:
     ).scalar_one()
     assert notification.title == "Metric request đã bị từ chối"
     assert notification.body == "Doanh thu trước thuế"
+    assert notification.db_id == database.id
+
+
+@pytest.mark.asyncio
+async def test_submitted_notification_carries_db_id(async_session) -> None:
+    """Lead-facing submitted notifications name the database they belong to."""
+    org = OrganizationModel(name="Org", slug="org-dbid")
+    async_session.add(org)
+    await async_session.flush()
+    async_session.add(OrganizationMemberModel(org_id=org.id, user_id=99, role="data_lead"))
+    database = SemanticDatabaseModel(
+        created_by=1, display_name="DB", db_type="sqlite", conn_url_enc="enc", org_id=org.id
+    )
+    async_session.add(database)
+    await async_session.flush()
+    session = ChatSessionModel(id="session-dbid", user_id=1, db_id=database.id)
+    message = ChatMessageModel(
+        id="message-dbid",
+        session_id=session.id,
+        sequence_no=1,
+        sender="assistant",
+        content="Proposal",
+        metadata_json=await _suggestion_metadata(async_session, database.id),
+    )
+    async_session.add_all([session, message])
+    await async_session.commit()
+
+    await create_metric_request(async_session, database.id, 1, message.id, 0)
+
+    notification = (
+        await async_session.execute(
+            select(NotificationModel).where(
+                NotificationModel.recipient_id == 99,
+                NotificationModel.type == "metric_request_submitted",
+            )
+        )
+    ).scalar_one()
+    assert notification.db_id == database.id
 
 
 @pytest.mark.asyncio
@@ -331,3 +369,42 @@ async def test_mark_notification_read_rejects_foreign_owner(async_session) -> No
 
     _, unread = await list_notifications(async_session, 2)
     assert unread == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_request_marks_submitted_notifications_handled(async_session) -> None:
+    """Resolving a request grays out every lead's still-active submitted row."""
+    org = OrganizationModel(name="Org", slug="org-handled")
+    async_session.add(org)
+    await async_session.flush()
+    async_session.add(OrganizationMemberModel(org_id=org.id, user_id=99, role="data_lead"))
+    database = SemanticDatabaseModel(
+        created_by=1, display_name="DB", db_type="sqlite", conn_url_enc="enc", org_id=org.id
+    )
+    async_session.add(database)
+    await async_session.flush()
+    session = ChatSessionModel(id="session-handled", user_id=1, db_id=database.id)
+    message = ChatMessageModel(
+        id="message-handled",
+        session_id=session.id,
+        sequence_no=1,
+        sender="assistant",
+        content="Proposal",
+        metadata_json=await _suggestion_metadata(async_session, database.id),
+    )
+    async_session.add_all([session, message])
+    await async_session.commit()
+
+    request = await create_metric_request(async_session, database.id, 1, message.id, 0)
+    await reject_metric_request(async_session, request.id, 99, "Không phù hợp")
+
+    submitted = (
+        await async_session.execute(
+            select(NotificationModel).where(
+                NotificationModel.recipient_id == 99,
+                NotificationModel.type == "metric_request_submitted",
+            )
+        )
+    ).scalar_one()
+    assert submitted.handled_at is not None
+    assert submitted.read_at is not None

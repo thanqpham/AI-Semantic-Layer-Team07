@@ -23,6 +23,7 @@ from src.services.relationship_review_service import (
 )
 from src.services.relationship_suggestions import suggest_relationships
 from src.services.relationship_validation import validate_relationship
+from src.services.review_notifications import sync_schema_review_notifications
 
 relationship_router = APIRouter(prefix="/semantic/{db_id}/relationships", tags=["Relationship Review"])
 
@@ -53,6 +54,7 @@ async def write_result(db: AsyncSession, db_id: int, operation) -> dict:
         item = await operation
         result = {"item": item, "counts": counts(await list_relationship_reviews(db, db_id))}
         await db.commit()
+        await sync_schema_review_notifications(db, db_id)
         return result
     except IntegrityError as exc:
         await db.rollback()

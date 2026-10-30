@@ -13,12 +13,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import (
     ImportedSchemaModel,
     LiveTargetDbModel,
+    NotificationModel,
     SemanticColumnModel,
     SemanticDatabaseModel,
     SemanticTableModel,
@@ -40,6 +41,7 @@ from src.services.metric_service import (
     update_metric,
 )
 from src.services.relationship_sync import invalidate_relationship_columns, reconcile_relationships
+from src.services.review_notifications import sync_schema_review_notifications
 from src.services.schema_review_service import pending_review_counts
 from src.services.semantic_fill import (
     apply_proposal_values as _apply_proposal_values,
@@ -245,6 +247,8 @@ async def enrich_and_save_canonical_schema(
     logger.info("[AI Semantic Agent] Canonical schema enrichment completed for connection_id=%d", connection_id)
 
     review = await pending_review_counts(db, connection_id)
+    # Post-commit: notify data leads that a schema review batch is waiting.
+    await sync_schema_review_notifications(db, connection_id)
     return {
         "tables": [
             {
@@ -455,6 +459,8 @@ async def delete_semantic_database(
     for imp in (await db.execute(imp_stmt)).scalars().all():
         await db.delete(imp)
 
+    # shortcut: prod schema has no FK on notifications.db_id, so delete explicitly
+    await db.execute(delete(NotificationModel).where(NotificationModel.db_id == db_id))
     await db.delete(sem_db)
     await db.commit()
     return True

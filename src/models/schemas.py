@@ -301,7 +301,9 @@ class NotificationResponse(BaseModel):
     title: str
     body: str
     metric_request_id: int | None = None
+    db_id: int | None = None
     read_at: datetime | None = None
+    handled_at: datetime | None = None
     created_at: datetime
 
 

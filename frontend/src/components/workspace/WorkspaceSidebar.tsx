@@ -50,7 +50,8 @@ interface WorkspaceSidebarProps {
   chatMode?: 'data_assistant' | 'metric_studio';
   notifications?: AppNotification[];
   unreadNotifications?: number;
-  onOpenCatalog?: () => void;
+  onOpenCatalog?: (dbId?: number | null) => void;
+  onOpenSchema?: (dbId?: number | null) => void;
   onMarkAllNotificationsRead?: () => Promise<void> | void;
   onMarkNotificationRead?: (item: AppNotification) => Promise<void> | void;
   onSelectView: (view: ViewId) => void;
@@ -105,6 +106,7 @@ export function WorkspaceSidebar({
   notifications = [],
   unreadNotifications = 0,
   onOpenCatalog,
+  onOpenSchema,
   onMarkAllNotificationsRead,
   onMarkNotificationRead,
   onSelectView,
@@ -157,6 +159,7 @@ export function WorkspaceSidebar({
           items={notifications}
           unreadCount={unreadNotifications}
           onOpenCatalog={onOpenCatalog}
+          onOpenSchema={onOpenSchema}
           onMarkAllRead={onMarkAllNotificationsRead}
           onMarkRead={onMarkNotificationRead}
           align="left"
@@ -304,6 +307,7 @@ export function WorkspaceSidebar({
             items={notifications}
             unreadCount={unreadNotifications}
             onOpenCatalog={onOpenCatalog}
+            onOpenSchema={onOpenSchema}
             onMarkAllRead={onMarkAllNotificationsRead}
             onMarkRead={onMarkNotificationRead}
             align="left"

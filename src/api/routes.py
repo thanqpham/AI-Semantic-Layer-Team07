@@ -170,6 +170,7 @@ from src.services.organization_service import (
 from src.services.query_compiler import SemanticQueryCompiler
 from src.services.query_execution import execute_compiled_query
 from src.services.relationship_runtime import active_relationship_filters
+from src.services.review_notifications import sync_metrics_pending_notifications, sync_schema_review_notifications
 from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 from src.services.schema_ingestion import parse_sql_dump_preview
 from src.services.schema_review_service import (
@@ -668,6 +669,7 @@ async def approve_semantic_layer(
 
     sem_db.status = "saved"
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
 
     return SemanticApproveV2Response(
         db_id=db_id,
@@ -698,6 +700,7 @@ async def approve_single_metric_endpoint(
     try:
         approved = await approve_metric(db=db, metric_id=metric_id, user_id=current_user.id)
         await db.commit()
+        await sync_metrics_pending_notifications(db, db_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -742,6 +745,7 @@ async def update_table(
     except SchemaRowNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found") from exc
     await db.commit()
+    await sync_schema_review_notifications(db, int_id)
     return {"message": "Table updated successfully", "review_status": table.review_status}
 
 
@@ -776,6 +780,7 @@ async def update_column(
         detail = "Table not found" if "Table" in str(exc) else "Column not found"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     await db.commit()
+    await sync_schema_review_notifications(db, int_id)
     return {"message": "Column updated successfully", "review_status": column.review_status}
 
 
@@ -984,6 +989,7 @@ async def create_metric_endpoint(
     # Update DB status to 'draft' after metric creation
     db_record.status = "draft"
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
 
     return MetricResponse(
         metric_id=new_metric.id,
@@ -1528,6 +1534,7 @@ async def update_metric(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
     await db.refresh(metric)
     return await _metric_update_response(db, metric)
 
@@ -1561,6 +1568,7 @@ async def rollback_metric(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
     await db.refresh(metric)
     return MetricResponse(
         metric_id=metric.id,
@@ -1593,6 +1601,7 @@ async def delete_metric(
             raise HTTPException(status_code=404, detail=f"Metric {metric_id} not found in database {db_id}")
         await db.delete(metric)
         await db.commit()
+        await sync_metrics_pending_notifications(db, db_id)
         return
 
     scoped_stmt = select(SemanticMetricModel.id).where(
@@ -1609,6 +1618,7 @@ async def delete_metric(
         require_ownership=resource.org_id is None,
     )
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
 
 
 @router.post("/semantic/{db_id}/metric/{metric_id}/restore", response_model=MetricResponse)
@@ -1634,6 +1644,7 @@ async def restore_metric_endpoint(
         require_ownership=resource.org_id is None,
     )
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
     await db.refresh(metric)
     return MetricResponse(
         metric_id=metric.id,

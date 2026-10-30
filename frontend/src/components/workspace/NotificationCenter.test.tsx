@@ -128,3 +128,83 @@ describe('NotificationCenter', () => {
     expect(screen.getByText('Yêu cầu metric và kết quả phê duyệt sẽ xuất hiện tại đây.')).toBeInTheDocument();
   });
 });
+
+describe('NotificationCenter handled state and routing', () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
+  it('renders handled notifications as disabled rows that cannot be opened', () => {
+    const handledNotification: AppNotification = {
+      ...metricRequestNotification,
+      handled_at: '2026-01-02T00:00:00Z',
+    };
+    const onOpenCatalog = vi.fn();
+    render(
+      <NotificationCenter
+        items={[handledNotification]}
+        unreadCount={0}
+        onOpenCatalog={onOpenCatalog}
+        onMarkAllRead={vi.fn().mockResolvedValue(undefined)}
+        onMarkRead={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thông báo' }));
+
+    expect(screen.getByText('Có yêu cầu metric mới')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Có yêu cầu metric mới/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Có yêu cầu metric mới').closest('div')).toHaveClass('opacity-50');
+    expect(onOpenCatalog).not.toHaveBeenCalled();
+  });
+
+  it('routes schema notifications to onOpenSchema with the db id', () => {
+    const schemaNotification: AppNotification = {
+      id: 4,
+      type: 'schema_review_submitted',
+      title: 'Có đề xuất schema chờ duyệt',
+      body: '2 bảng, 3 cột, 1 quan hệ',
+      db_id: 7,
+      read_at: null,
+      created_at: new Date().toISOString(),
+    };
+    const onOpenSchema = vi.fn();
+    const onOpenCatalog = vi.fn();
+    render(
+      <NotificationCenter
+        items={[schemaNotification]}
+        unreadCount={1}
+        onOpenCatalog={onOpenCatalog}
+        onOpenSchema={onOpenSchema}
+        onMarkAllRead={vi.fn().mockResolvedValue(undefined)}
+        onMarkRead={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thông báo' }));
+    fireEvent.click(screen.getByRole('button', { name: /Có đề xuất schema chờ duyệt/ }));
+
+    expect(onOpenSchema).toHaveBeenCalledTimes(1);
+    expect(onOpenSchema).toHaveBeenCalledWith(7);
+    expect(onOpenCatalog).not.toHaveBeenCalled();
+  });
+
+  it('passes the db id when opening the catalog from a metric notification', () => {
+    const dbScopedNotification: AppNotification = { ...metricRequestNotification, db_id: 9 };
+    const onOpenCatalog = vi.fn();
+    render(
+      <NotificationCenter
+        items={[dbScopedNotification]}
+        unreadCount={1}
+        onOpenCatalog={onOpenCatalog}
+        onMarkAllRead={vi.fn().mockResolvedValue(undefined)}
+        onMarkRead={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thông báo' }));
+    fireEvent.click(screen.getByRole('button', { name: /Có yêu cầu metric mới/ }));
+
+    expect(onOpenCatalog).toHaveBeenCalledWith(9);
+  });
+});

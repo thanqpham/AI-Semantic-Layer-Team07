@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, ChevronRight, Inbox, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronRight, ClipboardCheck, Inbox, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState, type ComponentType, type SVGProps } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -22,16 +22,20 @@ const EVENT_STYLES: Record<string, EventStyle> = {
     chip: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   },
   metric_request_rejected: { Icon: XCircle, chip: 'bg-destructive/10 text-destructive' },
+  schema_review_submitted: { Icon: ClipboardCheck, chip: 'bg-primary/10 text-primary' },
+  metrics_pending_approval: { Icon: Inbox, chip: 'bg-primary/10 text-primary' },
 };
 
 const NEUTRAL_STYLE: EventStyle = { Icon: NotificationIcon, chip: 'bg-secondary text-muted-foreground' };
+
+const ACTIONABLE_PREFIXES = ['metric_request', 'schema_review_submitted', 'metrics_pending_approval'];
 
 function eventStyle(type: string): EventStyle {
   return EVENT_STYLES[type] ?? NEUTRAL_STYLE;
 }
 
-function isMetricRequestNotification(item: AppNotification): boolean {
-  return item.type.startsWith('metric_request');
+function isActionable(item: AppNotification): boolean {
+  return !item.handled_at && ACTIONABLE_PREFIXES.some((prefix) => item.type.startsWith(prefix));
 }
 
 function timeAgo(iso: string): string {
@@ -61,7 +65,7 @@ function NotificationRowContent({ item }: { item: AppNotification }) {
       <span className="mt-1 shrink-0 font-mono text-[10px] text-muted-foreground/80">
         {timeAgo(item.created_at)}
       </span>
-      {isMetricRequestNotification(item) && (
+      {isActionable(item) && (
         <ChevronRight className="mt-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
       )}
     </>
@@ -75,7 +79,14 @@ function NotificationRow({
   item: AppNotification;
   onOpen: (item: AppNotification) => void;
 }) {
-  if (!isMetricRequestNotification(item)) {
+  if (item.handled_at) {
+    return (
+      <div className="flex items-start gap-2.5 border-t border-border px-3 py-2.5 opacity-50 grayscale pointer-events-none">
+        <NotificationRowContent item={item} />
+      </div>
+    );
+  }
+  if (!isActionable(item)) {
     return (
       <div className="flex items-start gap-2.5 border-t border-border px-3 py-2.5">
         <NotificationRowContent item={item} />
@@ -97,6 +108,7 @@ export function NotificationCenter({
   items = [],
   unreadCount = 0,
   onOpenCatalog,
+  onOpenSchema,
   onMarkAllRead,
   onMarkRead,
   className,
@@ -104,7 +116,8 @@ export function NotificationCenter({
 }: {
   items?: AppNotification[];
   unreadCount?: number;
-  onOpenCatalog?: () => void;
+  onOpenCatalog?: (dbId?: number | null) => void;
+  onOpenSchema?: (dbId?: number | null) => void;
   onMarkAllRead?: () => Promise<void> | void;
   onMarkRead?: (item: AppNotification) => Promise<void> | void;
   className?: string;
@@ -135,10 +148,14 @@ export function NotificationCenter({
   }, [open]);
 
   const openItem = (item: AppNotification) => {
-    if (!isMetricRequestNotification(item)) return;
+    if (!isActionable(item)) return;
     void onMarkRead?.(item);
     setOpen(false);
-    onOpenCatalog?.();
+    if (item.type.startsWith('schema_review')) {
+      onOpenSchema?.(item.db_id);
+      return;
+    }
+    onOpenCatalog?.(item.db_id);
   };
 
   return (
