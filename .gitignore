@@ -143,6 +143,7 @@ plan_*.md
 /implementation_plan.md
 /Ecommerce_Metric_Dictionary_Ground_Truth.xlsx
 /docs/superpowers/
+.superpowers/
 /eval/harness/*/
 /docs/issue/
 

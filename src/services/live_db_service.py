@@ -29,6 +29,7 @@ from src.models.schema_metadata import (
     default_schema_identifier,
 )
 from src.models.schemas import LiveDbResponse, LiveDbSummaryResponse
+from src.services import enrichment_progress
 from src.services.categorical_discovery_policy import (
     declared_check_values,
     inspect_declared_checks,
@@ -274,6 +275,9 @@ async def create_live_target_db(
             semantic_db_id,
             model.id,
         )
+        if not enrichment_progress.try_start(semantic_db_id):
+            logger.warning("Enrichment already running for db_id=%d; skipping auto-enrichment", semantic_db_id)
+            return _model_to_response(model, raw_schema)
         task = asyncio.create_task(
             _run_enrichment_background(
                 user_id=user_id,
@@ -498,3 +502,4 @@ async def _run_enrichment_background(
             logger.info("Successfully completed AI semantic enrichment for connection_id=%d", connection_id)
     except Exception as exc:
         logger.warning("Background enrichment failed for connection_id=%d: %s", connection_id, exc, exc_info=True)
+        enrichment_progress.fail(connection_id, str(exc))

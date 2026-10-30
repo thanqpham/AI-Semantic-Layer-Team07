@@ -1286,6 +1286,31 @@ export async function getSchemaReviewApi(dbId: string): Promise<SchemaReview> {
   return semanticRequest<SchemaReview>(`/api/v1/semantic/${dbId}/schema/review`);
 }
 
+/** Progress of a fill-missing AI enrichment run, polled by the Schema Review banner. */
+export interface EnrichStatus {
+  db_id: number;
+  status: 'idle' | 'running' | 'succeeded' | 'failed';
+  phase: string;
+  total_tables: number;
+  completed_tables: number;
+  current_table: string | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+/** Dispatch a background fill-missing enrichment; poll getEnrichStatusApi for progress. */
+export async function generateDescriptionsApi(dbId: string): Promise<{ db_id: number; status: string }> {
+  return semanticRequest(`/api/v1/semantic/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ db_id: Number(dbId) }),
+  });
+}
+
+export async function getEnrichStatusApi(dbId: string): Promise<EnrichStatus> {
+  return semanticRequest<EnrichStatus>(`/api/v1/semantic/${dbId}/enrich/status`);
+}
+
 export interface ColumnValueProposal {
   id: number;
   column_id: number;

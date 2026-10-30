@@ -723,9 +723,9 @@ async def test_metric_versioning_create_update_history(
 
 
 @pytest.mark.asyncio
-@patch("src.api.routes.enrich_and_save_canonical_schema")
+@patch("src.api.routes._generate_background", new_callable=AsyncMock)
 async def test_hitl_generate_review_approve_query_approved_only(
-    mock_enrich: AsyncMock,
+    mock_bg: AsyncMock,
     client: Any,
     async_session: AsyncSession,
 ):
@@ -754,26 +754,15 @@ async def test_hitl_generate_review_approve_query_approved_only(
     async_session.add(live_db)
     await async_session.commit()
 
-    # Step 1: Generate (re-run enrichment)
-    mock_enrich.return_value = {
-        "tables": [
-            {"table_name": "orders", "table_id": 1},
-            {"table_name": "order_line", "table_id": 2},
-            {"table_name": "products", "table_id": 3},
-        ],
-        "relationships": [
-            {"from_table": "order_line", "to_table": "orders", "join_condition": "order_line.order_id = orders.id"},
-        ],
-        "status": "draft",
-    }
-
+    # Step 1: Generate (dispatch background enrichment)
     gen_res = await client.post(
         GENERATE_ENDPOINT,
         json={"db_id": sem_db.id},
         headers=_auth_headers(),
     )
     assert gen_res.status_code == 202
-    assert gen_res.json()["status"] == "draft"
+    assert gen_res.json()["status"] == "started"
+    assert mock_bg.await_count == 1
 
     metric_approved = SemanticMetricModel(
         db_id=sem_db.id,

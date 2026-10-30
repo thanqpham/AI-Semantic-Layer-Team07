@@ -49,6 +49,7 @@ from src.models.schemas import (
     ChatSessionUpdateRequest,
     CustomMetricGenerateRequest,
     CustomMetricGenerateResponse,
+    EnrichStatusResponse,
     GenerateRequest,
     ImportedSchemaCreateRequest,
     ImportedSchemaResponse,
@@ -78,7 +79,7 @@ from src.models.schemas import (
     SemanticCatalogResponse,
     SemanticCatalogTable,
     SemanticColumnUpdate,
-    SemanticGenerateV2Response,
+    SemanticGenerateAcceptedResponse,
     SemanticQueryCompileResponse,
     SemanticQueryInterpretation,
     SemanticQueryRequest,
@@ -88,6 +89,7 @@ from src.models.schemas import (
     SqlDumpPreviewResponse,
 )
 from src.observability.langfuse_tracing import observation, trace_summary
+from src.services import enrichment_progress
 from src.services.chat_execution import SAFE_ERROR, ChatExecution, current_execution, execution_step, stream_execution
 from src.services.chat_service import (
     ChatAuthorizationError,
@@ -531,18 +533,21 @@ async def remove_database_unified(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/semantic/generate", response_model=SemanticGenerateV2Response, status_code=status.HTTP_202_ACCEPTED)
+_enrich_tasks: set[asyncio.Task[None]] = set()
+
+
+@router.post(
+    "/semantic/generate",
+    response_model=SemanticGenerateAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def generate_semantic_layer(
     request: GenerateRequest,
     org_id: int | None = Header(default=None, alias="X-Organization-ID"),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> SemanticGenerateV2Response:
-    """Re-run AI Enrichment for an existing semantic database.
-
-    Looks up the source (live DB or imported schema) linked to the semantic db,
-    reconstructs the raw schema metadata, and calls enrich_and_save_canonical_schema.
-    """
+) -> SemanticGenerateAcceptedResponse:
+    """Dispatch a background fill-missing AI enrichment for an existing semantic database."""
     db_id = request.db_id
     logger.info("Received request to re-generate AI semantic layer for db_id=%d (user_id=%d)", db_id, current_user.id)
 
@@ -550,26 +555,45 @@ async def generate_semantic_layer(
 
     raw_schema, dialect = await _find_source_raw_schema(db, db_id, sem_db.db_type)
 
-    try:
-        result = await enrich_and_save_canonical_schema(
-            db=db,
-            user_id=current_user.id,
-            connection_id=db_id,
-            raw_schema=raw_schema,
-            dialect=dialect,
-        )
-    except Exception as exc:
-        logger.error("Enrichment failed for db_id=%d: %s", db_id, exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Enrichment failed: {exc}") from exc
+    # Claim synchronously, before dispatch: the task only registers itself after a DB roundtrip.
+    if not enrichment_progress.try_start(db_id):
+        raise HTTPException(status_code=409, detail="Enrichment is already running")
+    task = asyncio.create_task(_generate_background(current_user.id, db_id, raw_schema, dialect))
+    _enrich_tasks.add(task)  # hold a ref so the loop's weak task set cannot GC it mid-run
+    task.add_done_callback(_enrich_tasks.discard)
+    return SemanticGenerateAcceptedResponse(db_id=db_id, status="started")
 
-    return SemanticGenerateV2Response(
-        db_id=db_id,
-        status=result.get("status", "draft"),
-        pending_tables=result.get("pending_tables", 0),
-        pending_columns=result.get("pending_columns", 0),
-        tables=result.get("tables", []),
-        relationships=result.get("relationships", []),
-    )
+
+async def _generate_background(user_id: int, db_id: int, raw_schema: RawSchemaMetadata, dialect: str) -> None:
+    """Run enrichment in the background with its own DB session; failures land in the registry."""
+    try:
+        async for session in get_db_session():
+            await enrich_and_save_canonical_schema(
+                db=session,
+                user_id=user_id,
+                connection_id=db_id,
+                raw_schema=raw_schema,
+                dialect=dialect,
+            )
+            await session.commit()
+    except asyncio.CancelledError:
+        enrichment_progress.fail(db_id, "Enrichment was cancelled")
+        raise
+    except Exception as exc:
+        logger.error("Background enrichment failed for db_id=%d: %s", db_id, exc, exc_info=True)
+        enrichment_progress.fail(db_id, str(exc))
+
+
+@router.get("/semantic/{db_id}/enrich/status", response_model=EnrichStatusResponse)
+async def get_enrichment_status(
+    db_id: int,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> EnrichStatusResponse:
+    """Return AI enrichment progress for the Schema Review banner."""
+    await _require_resource_permission(db, current_user.id, db_id, org_id, "can_manage_schema")
+    return EnrichStatusResponse(db_id=db_id, **enrichment_progress.get(db_id))
 
 
 async def _find_source_raw_schema(

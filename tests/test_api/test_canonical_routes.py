@@ -157,14 +157,14 @@ async def test_generate_semantic_layer_no_source(client: AsyncClient, async_sess
 
 
 @pytest.mark.asyncio
-@patch("src.api.routes.enrich_and_save_canonical_schema")
+@patch("src.api.routes._generate_background", new_callable=AsyncMock)
 async def test_generate_semantic_layer_from_live_db(
-    mock_enrich: AsyncMock,
+    mock_bg: AsyncMock,
     client: AsyncClient,
     async_session: AsyncSession,
     auth_headers: dict,
 ):
-    """POST /semantic/generate re-runs enrichment from live DB source."""
+    """POST /semantic/generate dispatches background enrichment from live DB source."""
     sem_db = SemanticDatabaseModel(
         id=201,
         created_by=1,
@@ -185,29 +185,23 @@ async def test_generate_semantic_layer_from_live_db(
     async_session.add_all([sem_db, live_db])
     await async_session.commit()
 
-    mock_enrich.return_value = {
-        "tables": [{"table_name": "orders", "table_id": 1}],
-        "relationships": [],
-        "status": "draft",
-    }
-
     res = await client.post("/api/v1/semantic/generate", json={"db_id": 201}, headers=auth_headers)
     assert res.status_code == 202
     data = res.json()
-    assert data["db_id"] == 201
-    assert data["status"] == "draft"
-    assert len(data["tables"]) == 1
+    assert data == {"db_id": 201, "status": "started"}
+    assert mock_bg.await_count == 1
+    assert mock_bg.call_args[0][1] == 201
 
 
 @pytest.mark.asyncio
-@patch("src.api.routes.enrich_and_save_canonical_schema")
+@patch("src.api.routes._generate_background", new_callable=AsyncMock)
 async def test_generate_semantic_layer_from_imported_schema(
-    mock_enrich: AsyncMock,
+    mock_bg: AsyncMock,
     client: AsyncClient,
     async_session: AsyncSession,
     auth_headers: dict,
 ):
-    """POST /semantic/generate re-runs enrichment from imported schema source."""
+    """POST /semantic/generate dispatches background enrichment from imported schema source."""
     sem_db = SemanticDatabaseModel(
         id=202,
         created_by=1,
@@ -227,16 +221,11 @@ async def test_generate_semantic_layer_from_imported_schema(
     async_session.add_all([sem_db, imported])
     await async_session.commit()
 
-    mock_enrich.return_value = {
-        "tables": [{"table_name": "orders", "table_id": 1}],
-        "relationships": [],
-        "status": "draft",
-    }
-
     res = await client.post("/api/v1/semantic/generate", json={"db_id": 202}, headers=auth_headers)
     assert res.status_code == 202
     data = res.json()
-    assert data["status"] == "draft"
+    assert data == {"db_id": 202, "status": "started"}
+    assert mock_bg.await_count == 1
 
 
 # ---------------------------------------------------------------------------

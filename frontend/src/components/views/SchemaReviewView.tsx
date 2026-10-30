@@ -1,23 +1,23 @@
 'use client';
 
-import { AlertCircle, Check, CheckCircle2, ChevronRight, Loader2, Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   approveSchemaReviewApi,
+  generateDescriptionsApi,
+  getEnrichStatusApi,
   getSchemaReviewApi,
-  updateColumnReviewApi,
-  updateTableReviewApi,
+  type EnrichStatus,
   type SchemaReview,
-  type SchemaReviewColumn,
-  type SchemaReviewTable,
 } from '@/lib/api';
-import { cn } from '@/lib/utils';
 import { SectionLabel, type WorkspaceDatabase } from '@/components/workspace/shared';
+import { cn } from '@/lib/utils';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { Translated } from '@/components/ui/translated';
+import { EnrichmentProgressBanner } from '@/components/schema-review/EnrichmentProgressBanner';
+import { TableReviewCard, columnKey, tableKey, type Draft, type DraftMap } from '@/components/schema-review/TableReviewCard';
 import { RelationshipsPanel } from '@/components/schema-review/RelationshipsPanel';
 import { ColumnValueProposals } from '@/components/schema-review/ColumnValueProposals';
 import { useLanguage } from '@/context/LanguageContext';
@@ -30,153 +30,6 @@ interface SchemaReviewViewProps {
   onNotify?: (message: string) => void;
   onReviewChanged?: () => void;
   onRelationshipDirtyChange?: (dirty: boolean) => void;
-}
-
-/** Badge showing whether a metadata row is officially stored or still in review. */
-function ReviewBadge({ status }: { status: 'pending_review' | 'approved' }) {
-  const approved = status === 'approved';
-  return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 font-mono text-[10px]',
-        approved
-          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-          : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-      )}
-    >
-      <span className={cn('h-1.5 w-1.5 rounded-full', approved ? 'bg-emerald-500' : 'bg-amber-500')} />
-      <Translated text={approved ? 'Đã lưu chính thức' : 'Chờ review'} />
-    </span>
-  );
-}
-
-/** Show the AI proposal only when it differs from the value the reviewer sees. */
-function AiSuggestion({
-  suggestion,
-  current,
-  onAccept,
-  disabled,
-}: {
-  suggestion?: string | null;
-  current: string;
-  onAccept: () => void;
-  disabled?: boolean;
-}) {
-  const { translate } = useLanguage();
-  if (!suggestion || suggestion === current) return null;
-  return (
-    <button
-      type="button"
-      onClick={onAccept}
-      disabled={disabled}
-      className="mt-1 inline-flex items-center gap-1.5 text-left font-mono text-[10px] text-muted-foreground transition-colors hover:text-primary disabled:opacity-50"
-      title={translate("Dùng đề xuất của AI")}
-    >
-      <Sparkles className="h-3 w-3 shrink-0" />
-      <span className="truncate"><Translated text={"AI đề xuất:"} after />{suggestion}</span>
-    </button>
-  );
-}
-
-interface RowEditorProps {
-  businessName: string;
-  description: string;
-  allowedValues?: string;
-  aiBusinessName?: string | null;
-  disabled?: boolean;
-  saving?: boolean;
-  dirty?: boolean;
-  onChange: (patch: Partial<Draft>) => void;
-  onSave: () => void;
-}
-
-/** Inline editor for one table or column row. */
-function RowEditor({
-  businessName,
-  description,
-  allowedValues,
-  aiBusinessName,
-  disabled,
-  saving,
-  dirty,
-  onChange,
-  onSave,
-}: RowEditorProps) {
-  const { translate } = useLanguage();
-  return (
-    <div className={cn(
-      'grid flex-1 gap-2',
-      allowedValues === undefined
-        ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]'
-        : 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto]',
-    )}>
-      <div className="min-w-0">
-        <Input
-          value={businessName}
-          disabled={disabled}
-          placeholder={translate("Tên nghiệp vụ")}
-          className="h-8 text-xs"
-          onChange={(event) => onChange({ business_name: event.target.value })}
-        />
-        <AiSuggestion
-          suggestion={aiBusinessName}
-          current={businessName}
-          disabled={disabled}
-          onAccept={() => onChange({ business_name: aiBusinessName || '' })}
-        />
-      </div>
-      <Input
-        value={description}
-        disabled={disabled}
-        placeholder={translate("Mô tả nghiệp vụ")}
-        className="h-8 text-xs"
-        onChange={(event) => onChange({ description: event.target.value })}
-      />
-      {allowedValues !== undefined && (
-        <Input
-          value={allowedValues}
-          disabled={disabled}
-          aria-label={translate("Giá trị cho phép (JSON array)")}
-          placeholder='["completed", "cancelled"]'
-          className="h-8 font-mono text-xs"
-          onChange={(event) => onChange({ allowed_values: event.target.value })}
-        />
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled || saving || !dirty}
-        onClick={onSave}
-        className="h-8 shrink-0 gap-1.5 text-[11px]"
-      >
-        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-        <Translated text={"Lưu"} />
-      </Button>
-    </div>
-  );
-}
-
-type Draft = { business_name: string; description: string; allowed_values?: string };
-type DraftMap = Record<string, Draft>;
-
-function tableKey(table: SchemaReviewTable): string {
-  return `t:${table.table_id}`;
-}
-
-function columnKey(table: SchemaReviewTable, column: SchemaReviewColumn): string {
-  return `c:${table.table_id}:${column.column_id}`;
-}
-
-function parseAllowedValues(value: string): (string | number | boolean)[] | null {
-  const parsed: unknown = JSON.parse(value);
-  if (parsed === null) return null;
-  if (
-    !Array.isArray(parsed) ||
-    parsed.some((item) => !['string', 'number', 'boolean'].includes(typeof item))
-  ) {
-    throw new Error('Giá trị cho phép phải là mảng JSON gồm string, number, boolean hoặc null ở cấp cao nhất.');
-  }
-  return parsed;
 }
 
 function buildDrafts(review: SchemaReview): DraftMap {
@@ -216,6 +69,8 @@ export function SchemaReviewView({
   const [approving, setApproving] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [enrich, setEnrich] = useState<EnrichStatus | null>(null);
+  const [pollTick, setPollTick] = useState(0);
 
   const load = useCallback(async () => {
     if (!dbId || !canManageSchema) return;
@@ -289,6 +144,70 @@ export function SchemaReviewView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [drafts, baseline],
   );
+  const dirtyRef = useRef(dirtyCount);
+  useEffect(() => {
+    dirtyRef.current = dirtyCount;
+  }, [dirtyCount]);
+
+  // Poll fill-missing enrichment progress; refresh the queue as tables complete.
+  const completedRef = useRef(-1);
+  const statusRef = useRef<EnrichStatus | null>(null);
+  const pollEnrich = useCallback(async () => {
+    if (!dbId) return;
+    try {
+      const snapshot = await getEnrichStatusApi(String(dbId));
+      statusRef.current = snapshot;
+      setEnrich(snapshot);
+      if (snapshot.status === 'running' && snapshot.completed_tables > completedRef.current) {
+        completedRef.current = snapshot.completed_tables;
+        if (dirtyRef.current === 0) void load();
+      }
+      if (snapshot.status === 'succeeded' || snapshot.status === 'failed') {
+        // Reset so a retry run (which counts only still-missing tables) can trigger refetches again.
+        completedRef.current = -1;
+        if (dirtyRef.current === 0) void load();
+      }
+      if (snapshot.status === 'succeeded') {
+        window.setTimeout(
+          () => setEnrich((current) => (current?.status === 'succeeded' ? null : current)),
+          4000,
+        );
+      }
+    } catch {
+      // Polling is best-effort; the banner keeps its last snapshot.
+    }
+  }, [dbId, load]);
+
+  useEffect(() => {
+    if (!dbId || !canManageSchema) return;
+    const immediate = setTimeout(() => void pollEnrich(), 0);
+    let stopped = false;
+    const id = setInterval(() => {
+      if (stopped) return;
+      const last = statusRef.current;
+      if (last && last.status !== 'running') {
+        stopped = true;
+        clearInterval(id);
+        return;
+      }
+      void pollEnrich();
+    }, 2000);
+    return () => {
+      clearTimeout(immediate);
+      clearInterval(id);
+    };
+  }, [dbId, canManageSchema, pollEnrich, pollTick]);
+
+  const onGenerate = async () => {
+    if (!dbId) return;
+    setError('');
+    try {
+      await generateDescriptionsApi(String(dbId));
+      setPollTick((tick) => tick + 1);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể khởi tạo tạo mô tả AI');
+    }
+  };
 
   if (dbId && !canManageSchema) {
     return <div className="flex h-full w-full flex-col overflow-hidden">
@@ -296,6 +215,8 @@ export function SchemaReviewView({
       <p role="status" className="p-6 text-sm text-muted-foreground"><Translated text="Schema Review requires schema management permission. Contact your Data Lead." /></p>
     </div>;
   }
+
+  const enriching = enrich?.status === 'running';
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
@@ -305,23 +226,38 @@ export function SchemaReviewView({
         description="Tên nghiệp vụ do AI đề xuất chỉ được lưu chính thức vào Metadata Store sau khi BA/DA chỉnh sửa và phê duyệt."
         database={database}
         actions={
-          <Button
-            size="sm"
-            disabled={!canApproveSchema || pendingTotal === 0 || approving !== null}
-            onClick={() => approve()}
-            className="gap-2 text-xs"
-          >
-            {approving === '*' ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4" />
-            )}
-            <Translated text={"Duyệt bảng & cột ("} />{pendingTotal})
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!dbId || enriching}
+              onClick={() => void onGenerate()}
+              className="gap-2 text-xs"
+            >
+              <Sparkles className="h-4 w-4" />
+              <Translated text={"Tạo mô tả AI"} />
+            </Button>
+            <Button
+              size="sm"
+              disabled={!canApproveSchema || pendingTotal === 0 || approving !== null}
+              onClick={() => approve()}
+              className="gap-2 text-xs"
+            >
+              {approving === '*' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              <Translated text={"Duyệt bảng & cột ("} />{pendingTotal})
+            </Button>
+          </div>
         }
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        {enrich && enrich.status !== 'idle' && (
+          <EnrichmentProgressBanner status={enrich} onRetry={() => void onGenerate()} />
+        )}
         <div role="tablist" onKeyDown={event => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();
@@ -372,135 +308,26 @@ export function SchemaReviewView({
           </p>
         )}
 
-        {review?.tables.map((table) => {
-          const key = tableKey(table);
-          const open = expanded[key] ?? table.review_status === 'pending_review';
-          const pendingColumns = table.columns.filter((c) => c.review_status === 'pending_review').length;
-          return (
-            <section
-              key={table.table_id}
-              className="shrink-0 rounded-xl border border-border bg-card p-4 shadow-sm"
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpanded((current) => ({ ...current, [key]: !open }))
-                  }
-                  className="flex min-w-0 items-center gap-2 text-left"
-                  aria-expanded={open}
-                >
-                  <ChevronRight
-                    className={cn('h-4 w-4 shrink-0 transition-transform', open && 'rotate-90')}
-                  />
-                  <span className="truncate font-mono text-[13px] text-foreground">
-                    {review.tables.filter(item => item.table_name === table.table_name).length > 1 && table.physical_schema ? `${table.physical_schema}.${table.table_name}` : table.table_name}
-                  </span>
-                </button>
-                <ReviewBadge status={table.review_status} />
-                {pendingColumns > 0 && (
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {pendingColumns}/{table.columns.length} <Translated text={"cột chờ"} /></span>
-                )}
-                {table.reviewed_at && (
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    <Translated text={"Duyệt lúc"} after />{new Date(table.reviewed_at).toLocaleString()}
-                  </span>
-                )}
-                <div className="ml-auto flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 gap-1.5 text-[11px]"
-                    disabled={
-                      !canApproveSchema ||
-                      approving !== null ||
-                      (table.review_status === 'approved' && pendingColumns === 0)
-                    }
-                    onClick={() => approve([table.table_id])}
-                  >
-                    {approving === String(table.table_id) ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-3 w-3" />
-                    )}
-                    <Translated text={"Duyệt bảng này"} />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-start gap-3">
-                <RowEditor
-                  businessName={drafts[key]?.business_name ?? ''}
-                  description={drafts[key]?.description ?? ''}
-                  aiBusinessName={table.ai_business_name}
-                  disabled={!canManageSchema}
-                  saving={savingKey === key}
-                  dirty={isDirty(key)}
-                  onChange={(value) => patch(key, value)}
-                  onSave={() =>
-                    saveRow(key, (draft) =>
-                      updateTableReviewApi(
-                        String(dbId),
-                        table.table_name,
-                        draft.business_name,
-                        draft.description,
-                        table.table_id,
-                      ),
-                    )
-                  }
-                />
-              </div>
-
-              {open && (
-                <div className="mt-4 space-y-3 border-t border-border pt-3">
-                  {table.columns.map((column) => {
-                    const colKey = columnKey(table, column);
-                    return (
-                      <div key={column.column_name} className="flex flex-col gap-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate font-mono text-[11px] text-muted-foreground">
-                            {column.column_name}
-                            <span className="ml-1.5 opacity-60">{column.data_type}</span>
-                          </span>
-                          {column.is_primary_key && (
-                            <span className="rounded bg-secondary px-1.5 font-mono text-[9px] text-secondary-foreground">
-                              PK
-                            </span>
-                          )}
-                          <ReviewBadge status={column.review_status} />
-                        </div>
-                        <RowEditor
-                          businessName={drafts[colKey]?.business_name ?? ''}
-                          description={drafts[colKey]?.description ?? ''}
-                              allowedValues={drafts[colKey]?.allowed_values ?? 'null'}
-                          aiBusinessName={column.ai_business_name}
-                          disabled={!canManageSchema}
-                          saving={savingKey === colKey}
-                          dirty={isDirty(colKey)}
-                          onChange={(value) => patch(colKey, value)}
-                          onSave={() =>
-                            saveRow(colKey, (draft) =>
-                              updateColumnReviewApi(
-                                String(dbId),
-                                table.table_name,
-                                column.column_name,
-                                draft.business_name,
-                                draft.description,
-                                table.table_id,
-                                parseAllowedValues(draft.allowed_values ?? 'null'),
-                              ),
-                            )
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          );
-        })}
+        {review?.tables.map((table) => (
+          <TableReviewCard
+            key={table.table_id}
+            dbId={dbId!}
+            table={table}
+            review={review}
+            drafts={drafts}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            savingKey={savingKey}
+            approving={approving}
+            canManageSchema={canManageSchema}
+            canApproveSchema={canApproveSchema}
+            enriching={Boolean(enriching)}
+            isDirty={isDirty}
+            patch={patch}
+            saveRow={saveRow}
+            approve={approve}
+          />
+        ))}
         </div>
       </div>
     </div>
