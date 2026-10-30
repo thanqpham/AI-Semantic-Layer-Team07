@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.db import ImportedSchemaModel, SemanticDatabaseModel
 from src.models.schema_metadata import RawSchemaMetadata
 from src.models.schemas import ImportedSchemaResponse, ImportedSchemaSummaryResponse
+from src.services import enrichment_progress
 from src.services.database import get_db_session
 from src.services.live_db_service import _safe_raw_schema
 from src.services.semantic_service import enrich_and_save_canonical_schema, ensure_semantic_database
@@ -63,6 +64,9 @@ async def create_imported_schema(
             semantic_db_id,
             record.id,
         )
+        if not enrichment_progress.try_start(semantic_db_id):
+            logger.warning("Enrichment already running for db_id=%d; skipping auto-enrichment", semantic_db_id)
+            return _full_response(record)
         task = asyncio.create_task(
             _run_enrichment_background(
                 user_id=owner_id,
@@ -199,3 +203,4 @@ async def _run_enrichment_background(
             logger.info("Successfully completed AI semantic enrichment for connection_id=%d", connection_id)
     except Exception as exc:
         logger.warning("Background enrichment failed for connection_id=%d: %s", connection_id, exc, exc_info=True)
+        enrichment_progress.fail(connection_id, str(exc))
