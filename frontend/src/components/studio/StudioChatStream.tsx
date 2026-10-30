@@ -189,7 +189,7 @@ export function StudioChatStream(props: StudioChatStreamProps) {
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       {/* 💬 Messages Stream */}
-      <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [scrollbar-width:thin]">
         <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-3 sm:px-6">
           {!canGenerateMetrics && (
             <div role="status" className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
