@@ -29,7 +29,7 @@ export function TraceDuration({ milliseconds, running = false }: { milliseconds:
 }
 
 export function StepStatus({ status }: { status: TraceEvent['status'] }) {
-  if (status === 'started') return <Loader2 aria-hidden className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-500 motion-reduce:animate-none" />;
+  if (status === 'started') return <span aria-hidden className="h-3.5 w-3.5 shrink-0 overflow-hidden"><Loader2 className="h-full w-full animate-spin text-blue-500 motion-reduce:animate-none" /></span>;
   if (status === 'failed') return <CircleAlert aria-hidden className="h-3.5 w-3.5 shrink-0 text-red-500" />;
   return <CheckCircle2 aria-hidden className="h-3.5 w-3.5 shrink-0 text-emerald-500" />;
 }
@@ -58,27 +58,38 @@ export function ThinkingSteps({ trace, node }: { trace: ExecutionTrace; node?: s
 
 function AgentTimelineItem({
   event,
+  trace,
+  reconnecting,
   t,
+  onToggleDetails,
 }: {
   event: TraceEvent;
+  trace: ExecutionTrace;
+  reconnecting?: boolean;
   t: (en: string, vi: string) => string;
+  onToggleDetails?: (open: boolean) => void;
 }) {
   return (
     <li key={event.step_id} className="flex items-start gap-2">
       <StepStatus status={event.status} />
       <div className="min-w-0 flex-1">
-        <details className="group">
+        <details
+          className="group"
+          onToggle={(e) => {
+            onToggleDetails?.(e.currentTarget.open);
+          }}
+        >
           <summary
             aria-label={`${t('View explanation', 'Xem giải thích')}: ${AGENT_NAMES[event.node] || t('System', 'Hệ thống')}`}
             className="flex w-fit cursor-pointer list-none items-center gap-1 rounded font-medium hover:text-primary focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden"
           >
             {AGENT_NAMES[event.node] || t('System', 'Hệ thống')}
-            <ChevronDown
+            <ChevronRight
               aria-hidden
-              className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+              className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-90 motion-reduce:transition-none"
             />
           </summary>
-          <p className="mt-1 whitespace-pre-wrap break-words text-foreground">
+          <p className="mt-1 whitespace-pre-wrap break-words text-foreground [overflow-wrap:anywhere]">
             {event.outcome_summary?.trim() || t('No explanation available', 'Chưa có giải thích')}
           </p>
         </details>
@@ -90,7 +101,11 @@ function AgentTimelineItem({
               : t('Completed', 'Hoàn tất')}
         </span>
       </div>
-      {event.duration_ms !== undefined && <TraceDuration milliseconds={event.duration_ms} />}
+      {(event.status === 'started' || event.duration_ms !== undefined) && <TraceDuration
+        key={`${event.step_id}:${event.status}:${trace.elapsed_ms}:${reconnecting}`}
+        milliseconds={event.duration_ms ?? Math.max(0, trace.elapsed_ms - event.elapsed_ms)}
+        running={event.status === 'started' && trace.status === 'running' && !reconnecting}
+      />}
     </li>
   );
 }
@@ -108,10 +123,10 @@ function AgentAnswerSection({
     <section
       data-thinking-answer
       aria-label={t('Final answer', 'Câu trả lời')}
-      className="border-t border-border pt-3"
+      className="border-t border-border pt-3 overflow-x-hidden"
     >
       <h3 className="mb-2 font-semibold">{t('Final answer', 'Câu trả lời')}</h3>
-      {renderAnswer ? renderAnswer(answer) : <p className="whitespace-pre-wrap break-words">{answer}</p>}
+      {renderAnswer ? renderAnswer(answer) : <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{answer}</p>}
     </section>
   );
 }
@@ -135,7 +150,7 @@ export function AgentThinking({
   const [showFlow, setShowFlow] = useState(false);
   const contentId = useId();
   const flowId = useId();
-  const timelineRef = useRef<HTMLOListElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const shouldFollowRef = useRef(true);
   const lastSeqRef = useRef<number | undefined>(undefined);
 
@@ -146,6 +161,18 @@ export function AgentThinking({
     const container = timelineRef.current;
     if (container && shouldFollowRef.current) container.scrollTop = container.scrollHeight;
   }, [trace.events]);
+
+  const handleToggleDetails = (isOpen: boolean) => {
+    if (isOpen) {
+      shouldFollowRef.current = false;
+    } else {
+      const container = timelineRef.current;
+      if (container) {
+        shouldFollowRef.current =
+          container.scrollHeight - container.scrollTop - container.clientHeight < 24;
+      }
+    }
+  };
 
   const { t } = useLanguage();
   const events = traceAgents(trace);
@@ -201,26 +228,37 @@ export function AgentThinking({
         </Button>
       </div>
       {open && (
-        <div id={contentId} className="max-h-96 space-y-3 overflow-y-auto border-t border-border p-3">
+        <div
+          id={contentId}
+          className="space-y-3 border-t border-border p-3"
+        >
           {showFlow && (
             <div id={flowId} className="w-full">
               <h4 className="sr-only">{t('Agent flow', 'Luồng agent')}</h4>
               <AgentFlowCanvas trace={trace} reconnecting={reconnecting} />
             </div>
           )}
-          <ol
+          <div
             ref={timelineRef}
-            aria-label={t('Live activity', 'Hoạt động trực tiếp')}
+            className="max-h-60 overflow-y-auto overflow-x-hidden pr-1 [scrollbar-gutter:stable] [scrollbar-width:thin] overscroll-contain"
             onScroll={(event) => {
               const element = event.currentTarget;
               shouldFollowRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
             }}
-            className="max-h-48 space-y-3 overflow-y-auto text-xs"
           >
-            {events.map((event) => (
-              <AgentTimelineItem key={event.step_id} event={event} t={t} />
-            ))}
-          </ol>
+            <ol aria-label={t('Live activity', 'Hoạt động trực tiếp')} className="space-y-3 text-xs">
+              {events.map((event) => (
+                <AgentTimelineItem
+                  key={event.step_id}
+                  event={event}
+                  trace={trace}
+                  reconnecting={reconnecting}
+                  t={t}
+                  onToggleDetails={handleToggleDetails}
+                />
+              ))}
+            </ol>
+          </div>
           {answerStreaming && answer?.trim() && (
             <AgentAnswerSection answer={answer} renderAnswer={renderAnswer} t={t} />
           )}

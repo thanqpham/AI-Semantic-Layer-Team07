@@ -112,7 +112,7 @@ function AgentDetailsPane({ trace, details, reconnecting }: AgentDetailsPaneProp
         durationMs={details.duration_ms ?? 0}
         running={isRunning}
       />
-      <div className="mt-1.5 break-words text-muted-foreground" data-testid="agent-flow-explanation">
+      <div className="mt-1.5 break-words text-muted-foreground [overflow-wrap:anywhere]" data-testid="agent-flow-explanation">
         {explanation}
       </div>
     </div>
