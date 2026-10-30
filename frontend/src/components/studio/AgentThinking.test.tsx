@@ -115,6 +115,24 @@ describe('thinking and agent flow', () => {
     expect(timeline.querySelectorAll('li')).toHaveLength(2);
   });
 
+  it('shows a live duration for running agents and the final duration after completion', () => {
+    vi.useFakeTimers();
+    const started = { seq: 3, kind: 'step' as const, step_id: 'live-duration', node: 'data_assistant',
+      at: '', elapsed_ms: 1000, status: 'started' as const, summary: 'Working' };
+    const trace = { ...traceFixture, elapsed_ms: 2000, events: [...traceFixture.events, started] };
+    const { rerender } = render(<AgentThinking trace={trace} />);
+    fireEvent.click(screen.getByRole('button', { name: /Thinking/ }));
+    const row = screen.getByLabelText('Xem giải thích: Data Assistant Agent').closest('li')!;
+    expect(row).toHaveTextContent('1 s');
+    act(() => { vi.advanceTimersByTime(3000); });
+    expect(row).toHaveTextContent('4 s');
+    const finished = { ...started, seq: 4, status: 'finished' as const, duration_ms: 4500 };
+    rerender(<AgentThinking trace={{ ...trace, elapsed_ms: 5500, events: [...trace.events, finished] }} />);
+    expect(row).toHaveTextContent('4 s');
+    act(() => { vi.advanceTimersByTime(3000); });
+    expect(row).toHaveTextContent('4 s');
+  });
+
   it('shows an outcome beside the action on one invocation as it updates', () => {
     const started = { seq: 3, kind: 'step' as const, step_id: 'outcome-step', node: 'metric_suggest', action: 'metric_suggest',
       at: '', elapsed_ms: 10, status: 'started' as const, summary: 'Đề xuất định nghĩa metric' };
@@ -167,7 +185,7 @@ describe('thinking and agent flow', () => {
     const trace = { ...traceFixture, events: [...traceFixture.events] };
     const { rerender } = render(<AgentThinking trace={trace} onOpenGraph={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /Thinking/ }));
-    const timeline = screen.getByRole('list', { name: 'Hoạt động trực tiếp' });
+    const timeline = screen.getByRole('list', { name: 'Hoạt động trực tiếp' }).parentElement as HTMLElement;
     Object.defineProperties(timeline, {
       scrollHeight: { configurable: true, value: 100 },
       clientHeight: { configurable: true, value: 50 },
