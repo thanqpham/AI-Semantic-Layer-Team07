@@ -17,7 +17,7 @@ export interface SemanticTable {
 }
 
 export type MetricFunction = 'SUM' | 'COUNT' | 'COUNT_DISTINCT' | 'AVG' | 'MIN' | 'MAX';
-export type MetricStatus = 'pending_approval' | 'approved' | 'needs_review' | 'unverified';
+export type MetricStatus = 'pending_approval' | 'approved' | 'needs_review' | 'unverified' | 'rejected';
 export type MetricConfidence = 'low' | 'medium' | 'high';
 /** Lifecycle of one append-only row in `metric_versions`. */
 export type MetricVersionStatus =
@@ -160,6 +160,12 @@ export interface DuplicateMetricNotice {
   existing_yaml?: string;
 }
 
+export interface SuggestionLifecycle {
+  metric_id: number | null;
+  metric_status: string | null;
+  rejection_reason: string | null;
+}
+
 export interface MetricSuggestion {
   definition: MetricDefinition;
   yaml_preview: string;
@@ -171,6 +177,7 @@ export interface MetricSuggestion {
   review?: MetricReview | null;
   variant_id?: string | null;
   criteria?: Record<string, string>;
+  lifecycle?: SuggestionLifecycle | null;
 }
 
 export interface MetricReview {

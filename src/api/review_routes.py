@@ -25,7 +25,7 @@ from src.models.schemas import MetricVersionResponse
 from src.services.database import get_db_session
 from src.services.metric_service import reject_metric_update
 from src.services.metric_versioning import latest_open_version
-from src.services.review_notifications import sync_schema_review_notifications
+from src.services.review_notifications import sync_metrics_pending_notifications, sync_schema_review_notifications
 from src.services.schema_review_service import (
     SchemaRowNotFoundError,
     SchemaTableAmbiguousError,
@@ -137,4 +137,5 @@ async def reject_metric_version(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
     return MetricVersionResponse.model_validate(record, from_attributes=True)

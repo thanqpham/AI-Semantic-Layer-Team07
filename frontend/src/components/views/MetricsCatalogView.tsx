@@ -19,6 +19,7 @@ import { MetricCard } from '@/components/metrics/MetricCard';
 import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { MetricAuditPanel } from '@/components/metrics/MetricAuditPanel';
 import { MetricHistoryDialog } from '@/components/metrics/MetricHistoryDialog';
+import { MetricRejectDialog } from '@/components/metrics/MetricRejectDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -52,6 +53,8 @@ interface MetricsCatalogViewProps {
   onOpenStudio?: () => void;
   onApproveAll?: () => Promise<void>;
   onApproveMetric?: (id: number) => Promise<void> | void;
+  /** Rejects the metric server-side; the mandatory reason comes from MetricRejectDialog. */
+  onRejectMetric?: (id: number, reason: string) => Promise<void> | void;
   onSubmitMetric?: () => void;
   onMetricsChanged?: () => Promise<void> | void;
   canSubmitMetric?: boolean;
@@ -76,7 +79,9 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
   const [editedReview, setEditedReview] = useState<ReviewedMetricProposal | null>(null);
   const [requestError, setRequestError] = useState('');
   const [reviewingRequest, setReviewingRequest] = useState(false);
-  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'trash' | 'audit'>('all');
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'rejected' | 'trash' | 'audit'>('all');
   const canManage = Boolean(props.canManageMetrics);
   const canApprove = Boolean(props.canApproveMetrics);
   const isMemberSubmitter = props.canSubmitMetric === true && !canManage;
@@ -162,6 +167,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
     [activeMetrics],
   );
 
+  const rejectedMetrics = useMemo(
+    () => activeMetrics.filter((item) => item.status === 'rejected'),
+    [activeMetrics],
+  );
+
   const trashMetrics = useMemo(
     () => filtered.filter((item) => Boolean(item.is_deleted)),
     [filtered],
@@ -184,6 +194,20 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
     } finally {
       setApproving(false);
     }
+  };
+
+  const confirmReject = async (metricId: number, reason: string) => {
+    if (!props.onRejectMetric) return;
+    setRejecting(true);
+    try {
+      await props.onRejectMetric(metricId, reason);
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  const openRejectDialog = (metricId: number) => {
+    setRejectingId(metricId);
   };
 
   const showHistory = async (metricId: number) => {
@@ -399,6 +423,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               key: 'approved' as const,
               label: 'Đã phê duyệt',
               count: approvedMetrics.length,
+            },
+            {
+              key: 'rejected' as const,
+              label: 'Đã từ chối',
+              count: rejectedMetrics.length,
             },
             { key: 'audit' as const, label: 'Audit', count: 0 },
             ...(canManage
@@ -627,6 +656,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                         onDelete={canManage ? props.onDeleteMetric : undefined}
                         onHistory={showHistory}
                         onApprove={canApprove ? props.onApproveMetric : undefined}
+                        onReject={canApprove && props.onRejectMetric ? openRejectDialog : undefined}
                       />
                     ))}
                   </div>
@@ -682,7 +712,9 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               ? pendingMetrics
               : filterTab === 'submitted'
                 ? submittedMetrics
-                : approvedMetrics
+                : filterTab === 'rejected'
+                  ? rejectedMetrics
+                  : approvedMetrics
             ).map((metric) => (
               <MetricCard
                 key={metric.metric_id}
@@ -691,6 +723,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 onDelete={canManage ? props.onDeleteMetric : undefined}
                 onHistory={showHistory}
                 onApprove={canApprove ? props.onApproveMetric : undefined}
+                onReject={canApprove && props.onRejectMetric ? openRejectDialog : undefined}
               />
             ))}
           </div>
@@ -714,6 +747,21 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
           {historyError}
         </div>
       )}
+
+      {rejectingId != null && props.onRejectMetric &&
+        (() => {
+          const item = props.metrics.find((m) => m.metric_id === rejectingId);
+          if (!item) return null;
+          return (
+            <MetricRejectDialog
+              metricId={rejectingId}
+              metricName={metricName(item)}
+              pending={rejecting}
+              onReject={confirmReject}
+              onClose={() => setRejectingId(null)}
+            />
+          );
+        })()}
 
       {history && props.dbId && (
         <MetricHistoryDialog

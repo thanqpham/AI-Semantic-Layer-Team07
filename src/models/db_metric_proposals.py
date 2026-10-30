@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.db_base import Base, utc_now
@@ -35,5 +35,6 @@ class MetricProposalModel(Base):
     schema_fingerprint: Mapped[str] = mapped_column(String(64))
     metric_id: Mapped[int | None] = mapped_column(ForeignKey("semantic_metrics.id", ondelete="SET NULL"))
     metric_version: Mapped[int | None] = mapped_column(Integer)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_id: Mapped[int | None] = mapped_column(ForeignKey("metric_requests.id", ondelete="SET NULL"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

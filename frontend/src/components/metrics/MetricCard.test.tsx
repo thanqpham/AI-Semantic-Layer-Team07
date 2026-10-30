@@ -89,3 +89,31 @@ describe('MetricCard compact rows', () => {
     confirm.mockRestore();
   });
 });
+
+describe('MetricCard reject action', () => {
+  it('shows the reject button on a pending metric and invokes onReject', () => {
+    const reject = vi.fn();
+    render(<MetricCard metric={metric} onHistory={vi.fn()} onApprove={vi.fn()} onReject={reject} />);
+
+    fireEvent.click(screen.getByTitle('Từ chối chỉ số này'));
+    expect(reject).toHaveBeenCalledExactlyOnceWith(7);
+  });
+
+  it('hides reject and approve on rejected metrics, hides reject on approved/deleted', () => {
+    const reject = vi.fn();
+    const { rerender } = render(
+      <MetricCard metric={{ ...metric, status: 'approved' }} onHistory={vi.fn()} onApprove={vi.fn()} onReject={reject} />,
+    );
+    expect(screen.queryByTitle('Từ chối chỉ số này')).toBeNull();
+
+    rerender(<MetricCard metric={{ ...metric, status: 'rejected' }} onHistory={vi.fn()} onApprove={vi.fn()} onReject={reject} />);
+    expect(screen.queryByTitle('Từ chối chỉ số này')).toBeNull();
+    expect(screen.queryByTitle('Phê duyệt chỉ số này')).toBeNull();
+
+    rerender(
+      <MetricCard metric={{ ...metric, is_deleted: true }} onHistory={vi.fn()} onApprove={vi.fn()} onReject={reject} />,
+    );
+    expect(screen.queryByTitle('Từ chối chỉ số này')).toBeNull();
+    expect(reject).not.toHaveBeenCalled();
+  });
+});

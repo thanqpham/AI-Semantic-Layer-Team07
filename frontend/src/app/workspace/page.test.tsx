@@ -91,12 +91,14 @@ vi.mock('@/components/workspace/WorkspaceApp', () => ({
     onSelectDatabase?: (id: string) => void;
     onSelectChatSession?: (id: string) => void;
     activeChatSessionId?: string | null;
+    pendingCount?: number;
     children: React.ReactNode;
   }) => (
     <div>
       <div data-testid="active-view">{props.view}</div>
       <div data-testid="active-database">{props.activeDbId}</div>
       <div data-testid="active-session">{props.activeChatSessionId}</div>
+      <div data-testid="sidebar-pending-count">{props.pendingCount ?? 0}</div>
       <button onClick={() => props.onSelectDatabase?.('2')}>page-select-database-2</button>
       <button onClick={() => props.onSelectChatSession?.('older-chat')}>page-select-older-chat</button>
       {props.onConnectDatabase && <button onClick={props.onConnectDatabase}>page-connect</button>}
@@ -274,6 +276,24 @@ describe('WorkspacePage metric approval sync', () => {
     expect(screen.queryByText('review-pending')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('page-nav-dashboard'));
     await waitFor(() => expect(apiModule.getSemanticCatalogApi).toHaveBeenCalledTimes(catalogCalls + 2));
+  });
+
+  it('excludes rejected metrics from the sidebar pending badge', async () => {
+    state.permissions = { can_manage_metrics: true, can_approve_metrics: true };
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([{
+      id: 1, display_name: 'Test DB', dialect: 'postgresql', updated_at: '', created_at: '',
+      semantic_db_id: 1, table_count: 1,
+    }]);
+    vi.mocked(apiModule.listMetricsApi).mockResolvedValue([
+      { metric_id: 1, name: 'Approved', definition: null, source: 'manual', created_at: '', status: 'approved', version: 1 },
+      { metric_id: 2, name: 'Waiting', definition: null, source: 'manual', created_at: '', status: 'pending_approval', version: 1, has_pending_version: true },
+      { metric_id: 3, name: 'Rejected', definition: null, source: 'manual', created_at: '', status: 'rejected', version: 1 },
+    ] as apiModule.MetricRecord[]);
+
+    render(<WorkspacePage />);
+    // Metrics are loaded once the catalog mock prints the pending marker
+    expect(await screen.findByText('review-pending')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-pending-count')).toHaveTextContent('1');
   });
 });
 

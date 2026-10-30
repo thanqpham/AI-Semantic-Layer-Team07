@@ -476,6 +476,7 @@ async def list_existing_metric_summaries(
             select(SemanticMetricModel).where(
                 SemanticMetricModel.db_id == db_id,
                 SemanticMetricModel.is_deleted.is_(False),
+                SemanticMetricModel.status != "rejected",
             )
         )
         return [_metric_summary(row) for row in result.scalars().all()]
@@ -563,7 +564,9 @@ async def dedupe_reviewed_suggestions(db: AsyncSession, db_id: int, state: dict[
         rows = (
             await db.scalars(
                 select(SemanticMetricModel).where(
-                    SemanticMetricModel.db_id == db_id, SemanticMetricModel.is_deleted.is_(False)
+                    SemanticMetricModel.db_id == db_id,
+                    SemanticMetricModel.is_deleted.is_(False),
+                    SemanticMetricModel.status != "rejected",
                 )
             )
         ).all()

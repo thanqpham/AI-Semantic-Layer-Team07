@@ -162,7 +162,7 @@ describe('StudioChatStream', () => {
   });
 
   it('tracks saved state by proposal id when candidate names match', async () => {
-    const addMetric = vi.fn().mockResolvedValue(undefined);
+    const addMetric = vi.fn().mockResolvedValue({ metric_id: 11, status: 'pending_approval' });
     const suggestion = {
       ...reviewedSuggestionFields,
       definition: {
@@ -191,6 +191,29 @@ describe('StudioChatStream', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Lưu vào Semantic Layer' })[0]);
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Đã lưu — mở catalog' })).toHaveLength(1));
     expect(screen.getAllByRole('button', { name: 'Lưu vào Semantic Layer' })).toHaveLength(1);
+  });
+
+  it('does not paint a pending pill when the save handler returns without a record', async () => {
+    // AIStudioView.save returns undefined after a guarded early exit (e.g. no
+    // semantic DB) — the card must stay unsaved, not claim "Chờ duyệt".
+    const addMetric = vi.fn().mockResolvedValue(undefined);
+    render(
+      <StudioChatStream
+        messages={[{
+          id: 'failed-save', sender: 'assistant', text: 'Gợi ý', timestamp: '10:00',
+          suggestions: [{ ...reviewedSuggestionFields, definition: { metric: { name: 'Doanh thu hỏng', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high', excluded_notes: '' } }, yaml_preview: '' }],
+        }]}
+        onSendMessage={vi.fn()}
+        onAddMetric={addMetric}
+        isLoading={false}
+        tableNames={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' }));
+    await waitFor(() => expect(addMetric).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' })).toBeInTheDocument();
+    expect(screen.queryByText('Chờ duyệt')).toBeNull();
   });
 
   it('shows unresolved business assumptions on a low-confidence proposal', () => {
@@ -415,10 +438,9 @@ describe('StudioChatStream', () => {
     );
     // Metric name heading
     expect(screen.getByText('Doanh thu thuần')).toBeInTheDocument();
-    // Status badge
-    expect(screen.getByText(/Chờ duyệt/)).toBeInTheDocument();
-    // Confidence badge
-    expect(screen.getByText(/Độ tin cậy: Cao/)).toBeInTheDocument();
+    // Status pill and confidence chip stay hidden on an unsaved suggestion
+    expect(screen.queryByText(/Chờ duyệt/)).toBeNull();
+    expect(screen.queryByText(/Độ tin cậy/)).toBeNull();
     // YAML toggle button
     expect(screen.getByRole('button', { name: /Hiển thị mã YAML/i })).toBeInTheDocument();
     // Save button

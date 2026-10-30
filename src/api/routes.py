@@ -19,6 +19,7 @@ from src.models.db import (
     ChatSessionModel,
     ImportedSchemaModel,
     LiveTargetDbModel,
+    MetricProposalModel,
     MetricRequestModel,
     MetricVersionModel,
     OrganizationMemberModel,
@@ -1837,6 +1838,42 @@ def _message_response(message: ChatMessageModel) -> ChatMessageResponse:
     return ChatMessageResponse.model_validate(message)
 
 
+async def _lifecycle_map(db: AsyncSession, messages: list[ChatMessageModel]) -> dict[str, dict[str, Any]]:
+    """Load proposal lifecycle annotations keyed by proposal id."""
+    ids = {
+        item["proposal_id"]
+        for message in messages
+        if isinstance(message.metadata_json, dict)
+        for item in message.metadata_json.get("suggestions") or []
+        if isinstance(item, dict) and item.get("proposal_id")
+    }
+    if not ids:
+        return {}
+    proposals = (await db.scalars(select(MetricProposalModel).where(MetricProposalModel.id.in_(ids)))).all()
+    annotations: dict[str, dict[str, Any]] = {}
+    for proposal in proposals:
+        metric = await db.get(SemanticMetricModel, proposal.metric_id) if proposal.metric_id else None
+        annotations[proposal.id] = {
+            "metric_id": proposal.metric_id,
+            "metric_status": metric.status if metric else None,
+            "rejection_reason": proposal.rejection_reason,
+        }
+    return annotations
+
+
+def _annotate_lifecycle(message: ChatMessageResponse, annotations: dict[str, dict[str, Any]]) -> ChatMessageResponse:
+    """Copy one message, attaching lifecycle to each suggestion without touching ORM JSON."""
+    metadata = message.metadata_json
+    if not (isinstance(metadata, dict) and metadata.get("suggestions")):
+        return message
+    suggestions = [
+        {**item, "lifecycle": annotations.get(item.get("proposal_id"))} if isinstance(item, dict) else item
+        for item in metadata["suggestions"]
+    ]
+    message.metadata_json = {**metadata, "suggestions": suggestions}
+    return message
+
+
 def _assistant_metadata(
     suggestions: list[Any] | None = None,
     action: str | None = None,
@@ -1958,13 +1995,15 @@ async def get_chat_session_route(
     except ChatAuthorizationError as exc:
         raise HTTPException(status_code=404, detail="Chat session not found") from exc
     summary = _session_summary(session)
+    annotations = await _lifecycle_map(db, messages)
+    annotated = [_annotate_lifecycle(_message_response(item), annotations) for item in messages]
     return ChatSessionDetailResponse(
         id=summary.id,
         db_id=summary.db_id,
         title=summary.title,
         created_at=summary.created_at,
         updated_at=summary.updated_at,
-        messages=[_message_response(item) for item in messages],
+        messages=annotated,
         message_count=total,
         next_before_sequence=next_cursor,
     )

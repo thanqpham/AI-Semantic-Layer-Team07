@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { ChevronRight, MoreHorizontal, Check, Edit2, History, RotateCcw, ShieldAlert, Sparkles, Trash2, User } from 'lucide-react';
+import { ChevronRight, MoreHorizontal, Check, Edit2, History, RotateCcw, ShieldAlert, Sparkles, Trash2, User, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { MetricRecord } from '@/lib/api';
@@ -18,6 +18,8 @@ interface MetricCardProps {
   onPermanentDelete?: (id: number) => Promise<void> | void;
   onHistory: (id: number) => Promise<void>;
   onApprove?: (id: number) => Promise<void> | void;
+  /** Opens the reject dialog — the mandatory reason is collected there, not here. */
+  onReject?: (id: number) => void;
   onRestore?: (id: number) => Promise<void> | void;
 }
 
@@ -30,12 +32,14 @@ export function MetricCard({
   onPermanentDelete,
   onHistory,
   onApprove,
+  onReject,
   onRestore,
 }: MetricCardProps) {
   const { translate, t } = useLanguage();
   const definition = metric.definition;
   const isDeleted = Boolean(metric.is_deleted);
-  const isPending = metric.status !== 'approved';
+  const isRejected = metric.status === 'rejected';
+  const isPending = metric.status !== 'approved' && !isRejected;
 
   const [expanded, setExpanded] = useState(false);
   const [tab, setTab] = useState<'definition' | 'yaml'>('definition');
@@ -106,6 +110,22 @@ export function MetricCard({
             >
               <Check className="h-3.5 w-3.5" />
               {t('Approve', 'Duyệt')}
+            </Button>
+          )}
+
+          {!isDeleted && isPending && onReject && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 justify-start gap-1.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-600 dark:text-red-400 dark:hover:bg-red-950/30 cursor-pointer"
+              onClick={() => {
+                onReject(metric.metric_id);
+              }}
+              title={translate("Từ chối chỉ số này")}
+              aria-label={translate('Từ chối chỉ số này')}
+            >
+              <X className="h-3.5 w-3.5" />
+              {t('Reject', 'Từ chối')}
             </Button>
           )}
 
