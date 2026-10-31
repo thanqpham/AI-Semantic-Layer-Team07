@@ -147,3 +147,201 @@ def test_temporal_context_lists_fields_across_schema() -> None:
     assert result.diagnostic["status"] == "ready"
     assert {item["table_name"] for item in result.schema["tables"]} == {"order_header", "customer"}
     assert result.schema["tables"][0]["columns"][0]["column_name"] == "completed_time"
+
+
+@pytest.mark.asyncio
+async def test_metric_context_adds_approved_bridge_without_unrelated_tables() -> None:
+    from src.services.metric_context import build_metric_context
+
+    facts, orders, customers, unrelated = [_table(n) for n in ("facts", "orders", "customers", "unrelated")]
+    for index, table in enumerate((facts, orders, customers, unrelated), 1):
+        table.id = index
+
+    def relation(source, target, number):
+        return SimpleNamespace(
+            id=number,
+            from_entity=source,
+            to_entity=target,
+            from_entity_id=source.id,
+            to_entity_id=target.id,
+            column_pairs=[{"from_column_id": number, "to_column_id": number + 10}],
+            join_condition="a = b",
+            relationship_type="many_to_one",
+        )
+
+    links = [relation(facts, orders, 1), relation(orders, customers, 2)]
+    with (
+        patch(
+            "src.services.metric_context._load_metadata",
+            AsyncMock(return_value=([facts, orders, customers, unrelated], links)),
+        ),
+        patch("src.services.metric_context._select_tables", AsyncMock(return_value=({"facts", "customers"}, None))),
+    ):
+        result = await build_metric_context(None, 1, "KPI", 10000)
+    assert result.diagnostic["status"] == "ready"
+    assert {table["table_name"] for table in result.schema["tables"]} == {"facts", "orders", "customers"}
+    assert len(result.schema["relationships"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_unqualified_table_name_requests_clarification() -> None:
+    tables = [_table("orders"), _table("orders")]
+    tables[0].physical_schema, tables[1].physical_schema = "sales", "billing"
+    with patch("src.services.metric_context.invoke_metric_json", scope_mock({"table_names": ["orders"]})):
+        selected, diagnostic = await _select_tables("orders", [], tables, None)
+    assert not selected
+    assert diagnostic["status"] == "needs_clarification"
+
+
+def test_explicit_qualified_scope_excludes_same_named_table_in_other_schema() -> None:
+    sales, billing = _table("orders"), _table("orders")
+    sales.physical_schema, billing.physical_schema = "sales", "billing"
+    assert [t["physical_schema"] for t in _expand_context([sales, billing], [], {"sales.orders"})["tables"]] == [
+        "sales"
+    ]
+    assert _expand_context([sales, billing], [], {"orders"})["tables"] == []
+
+
+def test_context_excludes_relationship_endpoint_outside_database() -> None:
+    local, target, foreign = _table("orders"), _table("customers"), _table("customers")
+    local.id, target.id, foreign.id = 1, 2, 3
+    link = SimpleNamespace(
+        from_entity=local, to_entity=foreign, join_condition="a = b", relationship_type="many_to_one"
+    )
+    assert _expand_context([local, target], [link], {"orders", "customers"})["relationships"] == []
+
+
+def test_bridge_reports_alternative_paths_and_ignores_unapproved_tables() -> None:
+    from src.services.metric_context_graph import expand_bridges
+
+    tables = [_table(name) for name in ("facts", "orders", "customers", "alternative")]
+    for index, table in enumerate(tables, 1):
+        table.id = index
+
+    def relation(source, target, number):
+        return SimpleNamespace(
+            id=number,
+            from_entity_id=source.id,
+            to_entity_id=target.id,
+            column_pairs=[{"from_column_id": number, "to_column_id": number + 10}],
+            relationship_type="many_to_one",
+        )
+
+    facts, orders, customers, alternative = tables
+    links = [
+        relation(facts, orders, 1),
+        relation(orders, customers, 2),
+        relation(facts, alternative, 3),
+        relation(alternative, customers, 4),
+    ]
+    selected, error = expand_bridges(tables, links, {"facts", "customers"})
+    assert error is None
+    assert selected == {"facts", "orders", "customers", "alternative"}
+    alternative.review_status = "pending_review"
+    selected, error = expand_bridges(tables, links, {"facts", "customers"})
+    assert error is None
+    assert selected == {"facts", "orders", "customers"}
+
+
+def test_discovery_scope_with_unrelated_ambiguous_pair_keeps_bridge() -> None:
+    from src.services.metric_context_graph import expand_bridges
+
+    carts, orders, customers, facts = [_table(name) for name in ("carts", "orders", "customers", "order_facts")]
+    for index, table in enumerate((carts, orders, customers, facts), 1):
+        table.id = index
+
+    def edge(source, target, number):
+        return SimpleNamespace(
+            id=number,
+            from_entity_id=source.id,
+            to_entity_id=target.id,
+            column_pairs=[{"from_column_id": number, "to_column_id": number + 10}],
+            relationship_type="many_to_one",
+        )
+
+    links = [edge(carts, customers, 1), edge(carts, orders, 2), edge(orders, customers, 3), edge(facts, orders, 4)]
+    selected, error = expand_bridges([carts, orders, customers, facts], links, {"carts", "customers", "order_facts"})
+    assert error is None
+    assert selected == {"carts", "orders", "customers", "order_facts"}
+
+
+def test_discovery_includes_common_order_bridge_for_facts_and_shipments() -> None:
+    from src.services.metric_context_graph import expand_bridges
+
+    facts, shipments, orders = [_table(name) for name in ("order_facts", "shipments", "orders")]
+    for index, table in enumerate((facts, shipments, orders), 1):
+        table.id = index
+    links = [
+        SimpleNamespace(id=i, from_entity_id=source.id, to_entity_id=orders.id,
+                        column_pairs=[{"from_column_id": i, "to_column_id": i + 10}],
+                        relationship_type="many_to_one")
+        for i, source in enumerate((facts, shipments), 1)
+    ]
+    selected, error = expand_bridges([facts, shipments, orders], links, {"order_facts", "shipments"})
+    assert error is None
+    assert selected == {"order_facts", "shipments", "orders"}
+
+
+def test_metric_review_rejects_alternative_path_of_different_length() -> None:
+    from src.services.metric_review_validation import _review_join_path
+
+    relations = [
+        {"from_table": "carts", "to_table": "customers", "relationship_type": "many_to_one"},
+        {"from_table": "carts", "to_table": "orders", "relationship_type": "many_to_one"},
+        {"from_table": "orders", "to_table": "customers", "relationship_type": "many_to_one"},
+    ]
+    with pytest.raises(ValueError, match="unambiguous"):
+        _review_join_path(relations, "carts", "customers")
+    with pytest.raises(ValueError, match="unambiguous"):
+        _review_join_path(relations, "carts", "carts")
+    assert _review_join_path(relations, "orders", "customers") == ["customers"]
+
+
+def test_proposal_freshness_preserves_legacy_snapshot_without_schema_name() -> None:
+    from src.services.metric_proposals import _freshness_schema, review_schema_fingerprint
+
+    original = {"tables": [{"id": 3, "table_name": "orders", "columns": []}], "relationships": []}
+    current = {"tables": [{**original["tables"][0], "physical_schema": "sales"}], "relationships": []}
+    assert review_schema_fingerprint(_freshness_schema(current, original)) == review_schema_fingerprint(original)
+
+
+@pytest.mark.asyncio
+async def test_scoped_discovery_adds_bridge_and_respects_budget() -> None:
+    from src.services.metric_context import build_discovery_context
+
+    facts, orders, customers, unrelated = [_table(name) for name in ("facts", "orders", "customers", "unrelated")]
+    for index, table in enumerate((facts, orders, customers, unrelated), 1):
+        table.id = index
+        table.columns[0].description = "x" * (20000 if table is unrelated else 1000)
+
+    def relation(source, target, number):
+        return SimpleNamespace(
+            id=number,
+            from_entity=source,
+            to_entity=target,
+            from_entity_id=source.id,
+            to_entity_id=target.id,
+            column_pairs=[{"from_column_id": number, "to_column_id": number + 10}],
+            join_condition="a = b",
+            relationship_type="many_to_one",
+        )
+
+    tables = [facts, orders, customers, unrelated]
+    links = [relation(facts, orders, 1), relation(orders, customers, 2)]
+
+    async def load(_db, _db_id, names=None):
+        return _expand_context(tables, links, set(names) if names is not None else {t.table_name for t in tables})
+
+    with (
+        patch("src.services.metric_context.load_review_schema", side_effect=load),
+        patch("src.services.metric_context._load_metadata", AsyncMock(return_value=(tables, links))),
+        patch(
+            "src.services.metric_context._select_discovery_scope",
+            AsyncMock(return_value=({"facts", "customers"}, None)),
+        ),
+    ):
+        result = await build_discovery_context(None, 1, 8000)
+        too_small = await build_discovery_context(None, 1, 2000)
+    assert result.diagnostic["status"] == "ready"
+    assert {t["table_name"] for t in result.schema["tables"]} == {"facts", "orders", "customers"}
+    assert too_small.diagnostic["status"] == "needs_clarification"

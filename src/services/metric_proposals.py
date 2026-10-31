@@ -13,6 +13,7 @@ from src.models.db import MetricProposalModel
 from src.models.metric_definition import MetricDefinition
 from src.models.metric_review import MetricReview
 from src.services.metric_context import load_review_schema
+from src.services.metric_context_graph import table_key
 from src.services.metric_dedupe import dedupe_reviewed_suggestions, load_existing_for_dedupe
 from src.services.metric_knowledge import metric_knowledge
 from src.services.metric_proposal_context import check_context_budget
@@ -31,6 +32,20 @@ def review_schema_fingerprint(schema: dict[str, Any]) -> str:
         "relationships": sorted(schema.get("relationships", []), key=lambda r: json.dumps(r, sort_keys=True)),
     }
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def _freshness_schema(current: dict[str, Any], original: dict[str, Any]) -> dict[str, Any]:
+    """Retain fingerprints of proposals created before schema-qualified context."""
+    old_tables = {t.get("id"): t for t in schema_tables(original)}
+    tables = [
+        {
+            k: v
+            for k, v in table.items()
+            if k != "physical_schema" or "physical_schema" in old_tables.get(table.get("id"), {})
+        }
+        for table in schema_tables(current)
+    ]
+    return {**current, "tables": tables}
 
 
 async def persist_reviewed_state(db: AsyncSession, db_id: int, user_id: int, state: dict[str, Any]) -> dict[str, Any]:
@@ -96,9 +111,9 @@ async def require_passing_proposal(
         raise ValueError("Proposal đã được lưu vào catalog.")
     if MetricDefinition.model_validate(proposal.final_definition) != definition:
         raise ValueError("Định nghĩa đã thay đổi. Hãy thẩm định lại trước khi lưu.")
-    names = [t["table_name"] for t in schema_tables(proposal.context["schema"])]
+    names = [table_key(t) for t in schema_tables(proposal.context["schema"])]
     current = await load_review_schema(db, db_id, names)
-    if review_schema_fingerprint(current) != proposal.schema_fingerprint:
+    if review_schema_fingerprint(_freshness_schema(current, proposal.context["schema"])) != proposal.schema_fingerprint:
         raise ValueError("Metadata đã thay đổi. Hãy thẩm định lại trước khi lưu hoặc gửi duyệt.")
     check = {"suggested_metrics": [{"definition": definition.model_dump(mode="json")}]}
     await dedupe_reviewed_suggestions(db, db_id, check)
@@ -111,7 +126,7 @@ async def re_review_proposal(
     db: AsyncSession, proposal: MetricProposalModel, user_id: int, definition: MetricDefinition
 ) -> MetricProposalModel:
     """Review an edit as a new proposal with fresh metadata and original requirements."""
-    names = list({t["table_name"] for t in schema_tables(proposal.context["schema"])} | {definition.metric.base_entity})
+    names = list({table_key(t) for t in schema_tables(proposal.context["schema"])} | {definition.metric.base_entity})
     existing, _ = await load_existing_for_dedupe(db, str(proposal.db_id))
     context = {
         **proposal.context,

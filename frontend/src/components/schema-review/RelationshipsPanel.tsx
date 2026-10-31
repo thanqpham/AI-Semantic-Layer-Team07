@@ -71,6 +71,15 @@ const message = (error: unknown, translate?: (text: string) => string): string =
     if (error.status === 503 || detailStr.includes('ACCOUNT_LLM_NOT_CONFIGURED')) {
       return t('Hệ thống hoặc tài khoản chưa cấu hình API Key AI. Vui lòng cấu hình trong Cài đặt AI để tiếp tục.');
     }
+    if (detailStr.includes('SUGGESTION_BATCH_')) {
+      const errors = (error.detail as { errors?: Array<{ unscanned_batches?: unknown }> })?.errors;
+      const batches = errors?.[0]?.unscanned_batches;
+      const unscanned = Array.isArray(batches)
+        ? batches.filter((batch): batch is string[] => Array.isArray(batch) && batch.every((name) => typeof name === 'string'))
+        : [];
+      const base = t('Chưa hoàn tất quét liên kết; không có đề xuất mới nào được lưu. Vui lòng thử lại.');
+      return unscanned.length ? `${base} ${t('Nhóm bảng chưa quét đầy đủ')}: ${unscanned.map((batch) => batch.join(', ')).join('; ')}` : base;
+    }
     if (detailStr.includes('SUGGESTION_FAILED') || error.status === 504) {
       return t('Quá trình AI đề xuất liên kết bị quá thời gian hoặc không thể phân tích schema. Vui lòng thử lại.');
     }
@@ -109,6 +118,7 @@ export function RelationshipsPanel({
   const [view, setView] = useState<RelationshipView>(initialView);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState('');
   const [errorAction, setErrorAction] = useState<'load' | 'suggest'>('load');
   const [impact, setImpact] = useState<RelationshipImpact | null>(null);
@@ -164,6 +174,7 @@ export function RelationshipsPanel({
     setSelected(null);
     setImpact(null);
     setBusy(false);
+    setSuggesting(false);
     setLeave(null);
     let cancelled = false;
     getSchemaReviewApi(dbId)
@@ -294,6 +305,7 @@ export function RelationshipsPanel({
 
   const suggest = async () => {
     setBusy(true);
+    setSuggesting(true);
     setError('');
     try {
       const result = await suggestRelationships(dbId);
@@ -310,7 +322,10 @@ export function RelationshipsPanel({
         setErrorAction('suggest');
       }
     } finally {
-      if (dbId === currentDb.current) setBusy(false);
+      if (dbId === currentDb.current) {
+        setBusy(false);
+        setSuggesting(false);
+      }
     }
   };
 
@@ -418,6 +433,15 @@ export function RelationshipsPanel({
         onSuggest={suggest}
         onAdd={() => guard(() => open(null))}
       />
+
+      {suggesting && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
+          <div className="mb-2" role="status"><Translated text="AI đang phân tích schema để đề xuất liên kết…" /></div>
+          <div role="progressbar" aria-label={t('AI đang đề xuất liên kết')} className="h-2 overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-900">
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-indigo-500 motion-reduce:animate-none" />
+          </div>
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-2 break-words rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">

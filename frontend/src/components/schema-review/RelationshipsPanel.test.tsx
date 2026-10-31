@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RelationshipsPanel } from './RelationshipsPanel';
 import * as api from '@/lib/relationshipReviewApi';
@@ -142,22 +142,38 @@ it('reloads a stale impact and requires a fresh acknowledgment', async () => {
    ).toBeInTheDocument();
  });
 
+ it('explains when a suggestion scan is incomplete', async () => {
+   vi.mocked(api.suggestRelationships).mockRejectedValueOnce(
+     new SemanticApiError(422, 'Scan incomplete', { errors: [{ code: 'SUGGESTION_BATCH_FAILED', unscanned_batches: [['public.orders', 'public.customers']] }] }),
+   );
+   setup();
+   fireEvent.click(screen.getByRole('button', { name: 'AI đề xuất' }));
+   expect(await screen.findByRole('alert')).toHaveTextContent('Chưa hoàn tất quét liên kết');
+   expect(screen.getByRole('alert')).toHaveTextContent('public.orders, public.customers');
+   expect(screen.getByRole('button', { name: 'Thử lại đề xuất' })).toBeEnabled();
+ });
+
  it('displays friendly timeout message and retries suggestion when clicking Thử lại đề xuất', async () => {
+   let finishRetry!: (value: api.RelationshipList) => void;
    vi.mocked(api.suggestRelationships)
      .mockRejectedValueOnce(
        new SemanticApiError(422, 'Suggestion failed', {
          errors: [{ code: 'SUGGESTION_FAILED', message: 'Timeout' }],
        }),
      )
-     .mockResolvedValueOnce({ items: [], counts: { pending_relationships: 0 } });
+     .mockImplementationOnce(() => new Promise(r => { finishRetry = r; }));
    setup();
    fireEvent.click(screen.getByRole('button', { name: 'AI đề xuất' }));
    expect(
      await screen.findByText('Quá trình AI đề xuất liên kết bị quá thời gian hoặc không thể phân tích schema. Vui lòng thử lại.'),
    ).toBeInTheDocument();
+   expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
    const retryBtn = screen.getByRole('button', { name: 'Thử lại đề xuất' });
    fireEvent.click(retryBtn);
    await waitFor(() => expect(api.suggestRelationships).toHaveBeenCalledTimes(2));
+   expect(screen.getByRole('progressbar')).toBeInTheDocument();
+   await act(async () => finishRetry({ items: [], counts: { pending_relationships: 0 } }));
+   await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
  });
 
  it('notifies when no new relationships were found', async () => {
@@ -167,4 +183,36 @@ it('reloads a stale impact and requires a fresh acknowledgment', async () => {
    fireEvent.click(screen.getByRole('button', { name: 'AI đề xuất' }));
    await waitFor(() => expect(notify).toHaveBeenCalledWith('Không tìm thấy liên kết mới nào từ schema'));
  });
+
+it('shows indeterminate progress until suggestions and the refreshed list finish', async () => {
+ let resolveSuggestion!: (value: api.RelationshipList) => void;
+ let resolveList!: (value: api.RelationshipList) => void;
+ vi.mocked(api.suggestRelationships).mockImplementation(() => new Promise(r => { resolveSuggestion = r; }));
+ vi.mocked(api.listRelationships).mockResolvedValueOnce(result).mockImplementationOnce(() => new Promise(r => { resolveList = r; }));
+ setup(); await screen.findByRole('button', { name: /sales.orders.*sales.customers/ });
+ expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+ const button = screen.getByRole('button', { name: 'AI đề xuất' });
+ fireEvent.click(button); fireEvent.click(button);
+ const progress = screen.getByRole('progressbar', { name: 'AI đang đề xuất liên kết' });
+ expect(progress).not.toHaveAttribute('aria-valuenow');
+ expect(api.suggestRelationships).toHaveBeenCalledTimes(1);
+ await act(async () => resolveSuggestion(result));
+ expect(screen.getByRole('progressbar')).toBeInTheDocument();
+ await act(async () => resolveList(result));
+ await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+});
+
+it('clears progress on failure and does not apply an old database suggestion', async () => {
+ let rejectSuggestion!: (reason: Error) => void;
+ vi.mocked(api.suggestRelationships).mockImplementationOnce(() => new Promise((_r, reject) => { rejectSuggestion = reject; }));
+ const notify = vi.fn();
+ const { rerender } = render(<RelationshipsPanel dbId="7" canManageSchema canApproveSchema onReviewChanged={changed} onNotify={notify} initialView="list" />);
+ fireEvent.click(screen.getByRole('button', { name: 'AI đề xuất' }));
+ expect(screen.getByRole('progressbar')).toBeInTheDocument();
+ rerender(<RelationshipsPanel dbId="8" canManageSchema canApproveSchema onReviewChanged={changed} onNotify={notify} initialView="list" />);
+ expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+ await act(async () => rejectSuggestion(new Error('Old error')));
+ expect(screen.queryByText('Old error')).not.toBeInTheDocument();
+ expect(notify).not.toHaveBeenCalled();
+});
 
