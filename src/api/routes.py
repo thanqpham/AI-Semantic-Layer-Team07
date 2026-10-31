@@ -1838,6 +1838,7 @@ def _assistant_metadata(
     interpretation: dict[str, Any] | None = None,
     blocked_candidates: list[Any] | None = None,
     run_status: str | None = None,
+    proposal_mode: str | None = None,
 ) -> dict[str, Any]:
     """Build the versioned assistant message metadata contract."""
     return {
@@ -1846,6 +1847,7 @@ def _assistant_metadata(
         "suggestions": suggestions or [],
         "blocked_candidates": blocked_candidates or [],
         "run_status": run_status,
+        "proposal_mode": proposal_mode,
         "suggestion_action": action,
         "duplicates": duplicates or [],
         "dedupe_performed": dedupe_performed,
@@ -2223,6 +2225,9 @@ async def _handle_clarification_selection(
     prev_msg = await get_chat_message(db, session.id, selection.assistant_message_id)
     if not prev_msg or not isinstance(prev_msg.metadata_json, dict):
         raise HTTPException(status_code=400, detail="Clarification message not found")
+    previous_mode = prev_msg.metadata_json.get("proposal_mode")
+    if previous_mode in {"requested", "discovery"}:
+        body = body.model_copy(update={"proposal_mode": previous_mode})
     clar_meta = prev_msg.metadata_json.get("clarification") or {}
     options = clar_meta.get("options", [])
     matched_option = next((opt for opt in options if opt.get("id") == selection.option_id), None)
@@ -2304,6 +2309,7 @@ async def _handle_clarification_selection(
                 f"{payload['knowledge_id']} ({choice}). "
                 "Hãy tạo lại đề xuất theo lựa chọn này và vẫn kiểm tra đầy đủ metadata schema.",
                 "clarification_selection": None,
+                "proposal_mode": "requested",
             }
         )
         return await _process_standard_chat(
@@ -2608,6 +2614,7 @@ async def _build_and_save_chat_response(
             clarification=clar_payload.model_dump(mode="json") if clar_payload else None,
             blocked_candidates=final_state.get("blocked_candidates", []),
             run_status=final_state.get("run_status"),
+            proposal_mode=body.proposal_mode,
         ),
         client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
     )
@@ -2622,6 +2629,7 @@ async def _build_and_save_chat_response(
         chat_response=response_text or None,
         suggestions=raw_metrics if intent == "metric_query" else None,
         blocked_candidates=final_state.get("blocked_candidates", []),
+        proposal_mode=body.proposal_mode,
         run_status=final_state.get("run_status"),
         duplicates=notices if intent == "metric_query" else [],
         dedupe_performed=performed,
@@ -2801,6 +2809,7 @@ async def _replay_chat_response(
         chat_response=assistant.content,
         suggestions=suggestions if intent == "metric_query" else None,
         blocked_candidates=metadata.get("blocked_candidates", []),
+        proposal_mode=metadata.get("proposal_mode") if metadata.get("proposal_mode") in {"requested", "discovery"} else None,
         run_status=metadata.get("run_status"),
         duplicates=duplicates if intent == "metric_query" else [],
         dedupe_performed=bool(metadata.get("dedupe_performed", True)),

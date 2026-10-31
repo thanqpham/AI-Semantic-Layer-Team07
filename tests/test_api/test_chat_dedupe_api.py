@@ -89,6 +89,22 @@ _DUPLICATE_NOTICE: dict = {
 
 
 @pytest.mark.asyncio
+async def test_replay_uses_saved_proposal_mode() -> None:
+    from src.api.routes import _replay_chat_response
+
+    session = SimpleNamespace(id="sess-1")
+    user = SimpleNamespace(id="user")
+    assistant = SimpleNamespace(id="assistant", intent="metric_query", content="test", metadata_json={"proposal_mode": "discovery"})
+    refreshed = SimpleNamespace(id="sess-1", db_id=101, title="Test", created_at=datetime(2026, 1, 1), updated_at=datetime(2026, 1, 1))
+    with (
+        patch("src.api.routes.get_chat_message_by_client_id", new=AsyncMock(side_effect=[user, assistant])),
+        patch("src.api.routes.get_chat_session_with_messages", new=AsyncMock(return_value=refreshed)),
+    ):
+        response = await _replay_chat_response(None, session, 1, "client")
+    assert response.proposal_mode == "discovery"
+
+
+@pytest.mark.asyncio
 async def test_scope_question_returns_and_persists_options(client, auth_headers, chat_session_mocks) -> None:
     """Scope questions must expose the same selectable choices live and after reload."""
     clarification = {
@@ -106,8 +122,10 @@ async def test_scope_question_returns_and_persists_options(client, auth_headers,
         )
         response = await client.post("/api/v1/semantic/101/chat", json={"message": "Tính AOV"}, headers=auth_headers)
     assert response.status_code == 200
+    assert response.json()["proposal_mode"] == "requested"
     assert response.json()["clarification"]["options"][0]["label"] == clarification["options"][0]["label"]
     metadata = chat_session_mocks.save.call_args.kwargs["metadata_json"]
+    assert metadata["proposal_mode"] == "requested"
     assert metadata["clarification"]["options"][0]["id"] == "scope_0"
 
 
@@ -118,7 +136,7 @@ async def test_scope_selection_continues_metric_generation() -> None:
     from src.models.schemas import ChatClarificationSelection, ChatRequest
 
     option = {"id": "scope_0", "label": "Tính AOV theo order_header.price_after_tax", "action": "create_metric"}
-    previous = SimpleNamespace(metadata_json={"clarification": {"options": [option]}})
+    previous = SimpleNamespace(metadata_json={"proposal_mode": "discovery", "clarification": {"options": [option]}})
     selection = ChatClarificationSelection(assistant_message_id="a-1", option_id="scope_0")
     with (
         patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
@@ -134,7 +152,24 @@ async def test_scope_selection_continues_metric_generation() -> None:
             True,
         )
     assert process.call_args.args[4].message == option["label"]
+    assert process.call_args.args[4].proposal_mode == "discovery"
     assert process.call_args.kwargs["intent_override"] == "metric_query"
+
+
+@pytest.mark.asyncio
+async def test_legacy_data_clarification_does_not_force_discovery() -> None:
+    from src.api.routes import _handle_clarification_selection
+    from src.models.schemas import ChatClarificationSelection, ChatRequest
+
+    selection = ChatClarificationSelection(assistant_message_id="a-1", option_id="data-choice")
+    previous = SimpleNamespace(metadata_json={"clarification": {"options": [{"id": "data-choice"}]}})
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes._process_standard_chat", new=AsyncMock()) as process,
+    ):
+        await _handle_clarification_selection(None, SimpleNamespace(id="sess-1"), SimpleNamespace(id=1), 101,
+                                            selection, ChatRequest(message="choice", clarification_selection=selection), True)
+    assert process.call_args.args[4].proposal_mode == "requested"
 
 
 @pytest.mark.asyncio
@@ -152,7 +187,7 @@ async def test_metric_variant_selection_reuses_stored_requirement_and_reviewed_c
             "criteria": {"tax_basis": "excludes_tax"},
         },
     }
-    previous = SimpleNamespace(metadata_json={"clarification": {"options": [option]}})
+    previous = SimpleNamespace(metadata_json={"proposal_mode": "discovery", "clarification": {"options": [option]}})
     selection = ChatClarificationSelection(assistant_message_id="a-1", option_id=option["id"])
     with (
         patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
@@ -166,6 +201,7 @@ async def test_metric_variant_selection_reuses_stored_requirement_and_reviewed_c
     assert "Net sales for completed orders" in request
     assert "merchandise_net_sales" in request
     assert "tax_basis: excludes_tax" in request
+    assert process.call_args.args[4].proposal_mode == "requested"
     assert process.call_args.kwargs["intent_override"] == "metric_query"
     assert process.call_args.kwargs["selected_metric_variant"] == option["action_payload"]
 
