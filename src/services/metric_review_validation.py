@@ -20,6 +20,7 @@ from src.models.metric_review import MetricReview, ReviewIssue
 from src.services.metric_definition_resolver import _resolve_filters, _resolve_ratio, expression_tree_for_columns
 from src.services.metric_definitions import _validate_expression_columns, _validate_filter_columns
 from src.services.metric_hygiene import hygiene_flag_filters
+from src.services.relationship_runtime import relationship_paths
 
 
 def schema_tables(schema: dict[str, Any]) -> list[dict[str, Any]]:
@@ -276,29 +277,20 @@ def _prior_stage_output(reference: str, source_stage: str, outputs: set[str]) ->
 
 
 def _review_join_path(relationships: list[dict[str, Any]], source: str, target: str) -> list[str]:
-    graph: dict[str, list[str]] = {}
-    for relation in relationships:
-        if relation.get("relationship_type", "").replace("-", "_") == "many_to_one":
-            graph.setdefault(relation["from_table"].casefold(), []).append(relation["to_table"])
-    queue = [(source.casefold(), [])]
-    shortest: int | None = None
-    paths: list[list[str]] = []
-    while queue:
-        current, path = queue.pop(0)
-        if shortest is not None and len(path) >= shortest:
-            continue
-        for neighbor in graph.get(current, []):
-            if neighbor.casefold() in {name.casefold() for name in path}:
-                continue
-            next_path = [*path, neighbor]
-            if neighbor.casefold() == target.casefold():
-                shortest = len(next_path)
-                paths.append(next_path)
-            else:
-                queue.append((neighbor.casefold(), next_path))
-    if len(paths) != 1:
+    edges = [
+        SimpleNamespace(
+            id=index,
+            from_entity_id=relation["from_table"].casefold(),
+            to_entity_id=relation["to_table"].casefold(),
+            relationship_type=relation.get("relationship_type", ""),
+            column_pairs=[{"from_column_id": 1, "to_column_id": 2}],
+        )
+        for index, relation in enumerate(relationships)
+    ]
+    paths = relationship_paths(edges, source.casefold(), target.casefold())
+    if len(paths) != 1 or not paths[0]:
         raise ValueError(f"Metric plan requires one unambiguous many-to-one path: {source} -> {target}")
-    return paths[0]
+    return [step.to_entity_id for step in paths[0]]
 
 
 def _validate_plan_column(expression: str, allowed_tables: set[str], tables: dict[str, Any]) -> None:
