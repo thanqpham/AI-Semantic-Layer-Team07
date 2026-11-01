@@ -431,7 +431,7 @@ async def test_metric_mutation_role_matrix(
     requests = {
         "create": ("post", f"/api/v1/semantic/{db_id}/metric", {"definition": definition, "source": "manual"}),
         "update": ("put", f"/api/v1/semantic/{db_id}/metric/{metric_id}", {"definition": definition}),
-        "delete": ("delete", f"/api/v1/semantic/{db_id}/metric/{metric_id}", None),
+        "delete": ("delete", f"/api/v1/semantic/{db_id}/metric/{metric_id}", {"reason": "Dọn dẹp catalog"}),
         "bulk_approve": ("post", "/api/v1/semantic/approve", {"db_id": db_id}),
         "single_approve": ("post", f"/api/v1/semantic/{db_id}/metric/{metric_id}/approve", None),
     }
@@ -1290,16 +1290,20 @@ async def test_soft_delete_restore_and_history_lifecycle(
     )
     await async_session.commit()
 
-    # 1. Soft delete
-    del_res = await client.delete(
+    # 1. Soft delete (reason is mandatory, same flow as reject)
+    del_res = await client.request(
+        "DELETE",
         f"/api/v1/semantic/{sem_db.id}/metric/{metric.id}",
+        json={"reason": "Dọn dẹp catalog"},
         headers=auth_headers,
     )
     assert del_res.status_code == 204
 
     # 2. Deleting already soft-deleted metric returns 404
-    del_again_res = await client.delete(
+    del_again_res = await client.request(
+        "DELETE",
         f"/api/v1/semantic/{sem_db.id}/metric/{metric.id}",
+        json={"reason": "Dọn dẹp lần nữa"},
         headers=auth_headers,
     )
     assert del_again_res.status_code == 404
