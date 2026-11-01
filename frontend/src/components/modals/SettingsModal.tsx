@@ -77,10 +77,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .slice(0, 2)
     : 'AI';
 
-  return (
+    return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-1 overflow-y-auto bg-background sm:max-w-4xl">
-        <DialogHeader className="pr-8">
+      <DialogContent className="flex h-[min(760px,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden bg-background sm:max-w-4xl">
+        <DialogHeader className="shrink-0 pr-8">
           <DialogTitle className="font-display text-2xl"><Translated text={"Settings"} /></DialogTitle>
           <DialogDescription>
             {t('Manage your account, appearance, and AI configuration.', 'Quản lý tài khoản, giao diện và cấu hình AI của bạn.')}
@@ -88,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </DialogHeader>
 
         <div role="tablist" aria-label={t('Settings sections', 'Các mục cài đặt')}
-          className="grid min-w-0 grid-cols-[auto_1fr] gap-1 rounded-xl border border-border bg-secondary/40 p-1 sm:grid-cols-2">
+          className="grid shrink-0 min-w-0 grid-cols-[auto_1fr] gap-1 rounded-xl border border-border bg-secondary/40 p-1 sm:grid-cols-2">
           {tabs.map((tab, index) => (
             <button key={tab.id} type="button" role="tab" id={`${id}-tab-${tab.id}`}
               aria-controls={`${id}-panel-${tab.id}`} aria-selected={activeTab === tab.id}
@@ -101,8 +101,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           ))}
         </div>
 
-        <div role="tabpanel" id={`${id}-panel-general`} aria-labelledby={`${id}-tab-general`}
-          hidden={activeTab !== 'general'} tabIndex={0} className="min-w-0 text-xs">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div role="tabpanel" id={`${id}-panel-general`} aria-labelledby={`${id}-tab-general`}
+            hidden={activeTab !== 'general'} tabIndex={0} className="min-w-0 text-xs">
           <div className="grid min-w-0 gap-4 py-2 sm:grid-cols-2">
             {/* Account Card */}
             <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-2xs sm:col-span-2">
@@ -240,14 +241,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
         </div>
-        <div role="tabpanel" id={`${id}-panel-ai`} aria-labelledby={`${id}-tab-ai`}
-          hidden={activeTab !== 'ai'} tabIndex={0} className="min-w-0 py-2 text-xs">
-          {user && token ? <AISettingsSection key={user.id} /> : (
-            <p className="text-sm text-muted-foreground">{t('Sign in to configure your AI provider.', 'Đăng nhập để cấu hình nhà cung cấp AI.')}</p>
-          )}
+                  <div role="tabpanel" id={`${id}-panel-ai`} aria-labelledby={`${id}-tab-ai`}
+            hidden={activeTab !== 'ai'} tabIndex={0} className="min-w-0 py-2 text-xs">
+            {user && token ? <AISettingsSection key={user.id} /> : (
+              <p className="text-sm text-muted-foreground">{t('Sign in to configure your AI provider.', 'Đăng nhập để cấu hình nhà cung cấp AI.')}</p>
+            )}
+          </div>
         </div>
         {user && (
-          <div className="flex justify-end border-t border-border pt-4">
+          <div className="flex shrink-0 justify-end border-t border-border pt-4">
             <Button type="button" variant="outline" size="sm"
               className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={() => { onClose(); logout(); }}>

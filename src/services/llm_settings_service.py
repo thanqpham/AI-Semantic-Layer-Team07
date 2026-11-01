@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import get_settings
 from src.models.llm_settings import LLMKeyRequest, LLMSettingsRequest, LLMSettingsResponse, UserLLMSettingsModel
+from src.observability.llm_usage import get_account_usage
 from src.services.database import decrypt_conn_url, encrypt_conn_url
 from src.services.llm import LLMConfig, _resolve_model, _resolve_provider
 from src.services.llm_providers import PROVIDERS
@@ -34,6 +35,7 @@ async def read_llm_settings(db: AsyncSession, user_id: int) -> LLMSettingsRespon
         source="account" if row else "environment",
         saved_models={name: values["model"] for name, values in credentials.items()},
         providers=[{"id": name, "name": values[0]} for name, values in PROVIDERS.items()],
+        usage=get_account_usage(user_id),
     )
 
 

@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import LiveTargetDbModel, SchemaSyncLogModel, SemanticDatabaseModel
+from src.observability.llm_usage import account_llm_user_id
 from src.services.database import get_db_session
 from src.services.llm import account_llm_config
 from src.services.llm_settings_service import load_account_llm_config
@@ -67,9 +68,11 @@ async def _sync_with_owner_llm(session: AsyncSession, sem_db_id: int) -> SchemaS
     )
     config = await load_account_llm_config(session, owner_id) if owner_id is not None else None
     token = account_llm_config.set(config)
+    user_token = account_llm_user_id.set(owner_id)
     try:
         return await execute_self_healing(session, sem_db_id, trigger_type="cron")
     finally:
+        account_llm_user_id.reset(user_token)
         account_llm_config.reset(token)
 
 
