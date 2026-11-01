@@ -193,6 +193,45 @@ describe('StudioChatStream', () => {
     expect(screen.getAllByRole('button', { name: 'Lưu vào Semantic Layer' })).toHaveLength(1);
   });
 
+  it('flips a rejected card to pending right after re-saving it in-session', async () => {
+    // Regression: the card carried a stale server annotation (released after a
+    // reject), and the annotation used to shadow the in-session save override —
+    // the flip only appeared after a full reload.
+    const addMetric = vi.fn().mockResolvedValue({ metric_id: 9, status: 'pending_approval' });
+    render(
+      <StudioChatStream
+        messages={[{
+          id: 'rejected-msg', sender: 'assistant', text: 'Đề xuất', timestamp: '10:00',
+          suggestions: [{
+            ...reviewedSuggestionFields,
+            proposal_id: 'proposal-rejected-1',
+            candidate_id: 'candidate-rejected-1',
+            lifecycle: { metric_id: null, metric_status: null, rejection_reason: 'Thiếu căn cứ nghiệp vụ' },
+            definition: {
+              metric: {
+                name: 'Doanh thu bị từ chối', formula: { function: 'SUM', expression: 'amount' },
+                base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high',
+              },
+            } as never,
+            yaml_preview: '',
+          }],
+        }]}
+        onSendMessage={vi.fn()}
+        onAddMetric={addMetric}
+        isLoading={false}
+        tableNames={[]}
+      />,
+    );
+
+    expect(screen.getByText('Đã từ chối')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' }));
+
+    expect(await screen.findByRole('button', { name: 'Đã lưu — mở catalog' })).toBeInTheDocument();
+    expect(screen.getByText('Chờ duyệt')).toBeInTheDocument();
+    expect(screen.queryByText('Đã từ chối')).toBeNull();
+  });
+
   it('does not paint a pending pill when the save handler returns without a record', async () => {
     // AIStudioView.save returns undefined after a guarded early exit (e.g. no
     // semantic DB) — the card must stay unsaved, not claim "Chờ duyệt".

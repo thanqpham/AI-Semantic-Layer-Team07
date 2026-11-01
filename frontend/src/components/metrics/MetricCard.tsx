@@ -97,11 +97,11 @@ export function MetricCard({
             )}
           </span>
         </button>
-        <div className="flex shrink-0 flex-col items-end justify-end gap-1 sm:w-28 sm:flex-row sm:items-center">
+        <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1.5">
           {!isDeleted && isPending && onApprove && (
             <Button
               size="sm"
-              className="h-8 justify-start gap-1.5 text-xs cursor-pointer"
+              className="h-7 gap-1 rounded-md bg-emerald-600 px-2.5 text-xs text-white hover:bg-emerald-700 cursor-pointer"
               onClick={() => {
                 void onApprove(metric.metric_id);
               }}
@@ -117,7 +117,7 @@ export function MetricCard({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 justify-start gap-1.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-600 dark:text-red-400 dark:hover:bg-red-950/30 cursor-pointer"
+              className="h-7 gap-1 rounded-md border-red-200 px-2.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-600 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30 cursor-pointer"
               onClick={() => {
                 onReject(metric.metric_id);
               }}

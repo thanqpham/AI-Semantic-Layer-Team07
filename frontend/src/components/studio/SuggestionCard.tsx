@@ -47,6 +47,7 @@ export function SuggestionCard({
   const [showRejectReason, setShowRejectReason] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   /** Saved = the proposal became a metric; rejected = it was rejected (metric freed). */
   const isSaved = lifecycle?.metric_id != null;
@@ -69,10 +70,15 @@ export function SuggestionCard({
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave();
-    } catch {
-      // Handled by parent error notification
+    } catch (error) {
+      // Also appended to the chat by the parent — repeat it here so the
+      // failure is visible on the card that was clicked, not only in the stream.
+      setSaveError(
+        error instanceof Error ? error.message : 'Không thể lưu chỉ số. Vui lòng thử lại.',
+      );
     } finally {
       setSaving(false);
     }
@@ -96,7 +102,7 @@ export function SuggestionCard({
   };
 
   return (
-    <div className={cn('w-full overflow-hidden', !embedded && 'rounded-lg border border-border bg-card shadow-xs')}>
+    <div className={cn('w-full overflow-hidden', embedded ? 'border-b border-border last:border-b-0' : 'rounded-lg border border-border bg-card shadow-xs')}>
       {/* ⚠️ Conflict clarify strip — same name as a saved metric, different formula */}
       {suggestion.conflict && (
         <div className="border-b border-border bg-secondary/20 p-3">
@@ -267,11 +273,17 @@ export function SuggestionCard({
 
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 border-t border-border bg-secondary/20 px-4 py-2.5">
-        <span className="font-mono text-[11px] text-muted-foreground">
-          <Translated text={suggestion.conflict
-            ? 'Xử lý cảnh báo trùng tên trước khi lưu'
-            : 'Chỉ khả dụng để truy vấn sau khi được phê duyệt'} />
-        </span>
+        {saveError ? (
+          <span role="alert" className="min-w-0 flex-1 break-words text-[11px] font-medium text-red-600 dark:text-red-400">
+            <Translated text={'Không thể lưu chỉ số:'} after /> {saveError}
+          </span>
+        ) : (
+          <span className="font-mono text-[11px] text-muted-foreground">
+            <Translated text={suggestion.conflict
+              ? 'Xử lý cảnh báo trùng tên trước khi lưu'
+              : 'Chỉ khả dụng để truy vấn sau khi được phê duyệt'} />
+          </span>
+        )}
 
         {/* ⛔ No Save/Submit while the conflict strip is unresolved — user must clarify first */}
         {!suggestion.conflict &&
