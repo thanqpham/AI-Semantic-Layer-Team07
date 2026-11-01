@@ -2,9 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AISettingsSection } from './AISettingsSection';
-import { getLLMSettingsApi, listLLMModelsApi, saveLLMSettingsApi, type LLMSettings } from '@/lib/api';
+import { clearLLMUsageApi, getLLMSettingsApi, listLLMModelsApi, saveLLMSettingsApi, type LLMSettings } from '@/lib/api';
 
 vi.mock('@/lib/api', () => ({
+  clearLLMUsageApi: vi.fn(),
   getLLMSettingsApi: vi.fn(),
   listLLMModelsApi: vi.fn(),
   saveLLMSettingsApi: vi.fn(),
@@ -60,13 +61,33 @@ describe('AISettingsSection', () => {
     expect(screen.getByLabelText('Model')).toHaveValue('saved-model');
   });
 
-  it('loads models from the selected provider without saving the key', async () => {
+    it('loads models from the selected provider without saving the key', async () => {
     render(<AISettingsSection />);
     await screen.findByLabelText('Model');
     fireEvent.click(screen.getByRole('button', { name: 'Tải danh sách model' }));
     await waitFor(() => expect(listLLMModelsApi).toHaveBeenCalledWith('openai', ''));
     await waitFor(() => expect(document.querySelector('datalist option[value="chat-two"]')).toBeInTheDocument());
     expect(saveLLMSettingsApi).not.toHaveBeenCalled();
+  });
+
+  it('shows all loaded models even when a model name is already entered without clearing it first', async () => {
+    render(<AISettingsSection />);
+    const modelInput = await screen.findByLabelText('Model');
+    expect(modelInput).toHaveValue('saved-model');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tải danh sách model' }));
+    const listbox = await screen.findByRole('listbox', { name: 'Danh sách model khả dụng' });
+    expect(within(listbox).getByRole('option', { name: 'chat-one' })).toBeInTheDocument();
+    expect(within(listbox).getByRole('option', { name: 'chat-two' })).toBeInTheDocument();
+
+    fireEvent.click(within(listbox).getByRole('option', { name: 'chat-two' }));
+    expect(modelInput).toHaveValue('chat-two');
+    expect(screen.queryByRole('listbox', { name: 'Danh sách model khả dụng' })).not.toBeInTheDocument();
+
+    fireEvent.focus(modelInput);
+    const reopened = await screen.findByRole('listbox', { name: 'Danh sách model khả dụng' });
+    expect(within(reopened).getByRole('option', { name: 'chat-one' })).toBeInTheDocument();
+    expect(within(reopened).getByRole('option', { name: 'chat-two' })).toBeInTheDocument();
   });
 
   it('reports save failure and keeps the entered key for retry', async () => {
@@ -107,7 +128,7 @@ describe('AISettingsSection', () => {
     expect(summary.queryByText('saved-model')).not.toBeInTheDocument();
   });
 
-  it('shows server configuration even when its provider is not in the picker', async () => {
+    it('shows server configuration even when its provider is not in the picker', async () => {
     vi.mocked(getLLMSettingsApi).mockResolvedValue({
       ...settings, source: 'environment', provider: 'custom-provider', model: 'server-model', saved_models: {},
     });
@@ -116,5 +137,53 @@ describe('AISettingsSection', () => {
     expect(summary.getByText('custom-provider')).toBeInTheDocument();
     expect(summary.getByText('server-model')).toBeInTheDocument();
     expect(screen.getByText('Cấu hình máy chủ')).toBeInTheDocument();
+  });
+
+  it('displays token and request usage statistics and allows resetting usage', async () => {
+    vi.mocked(getLLMSettingsApi).mockResolvedValue({
+      ...settings,
+      usage: {
+        total_requests: 3,
+        input_tokens: 450,
+        output_tokens: 150,
+        total_tokens: 600,
+        cached_input_tokens: 50,
+        reasoning_tokens: 25,
+        last_used_at: '2026-04-20T00:00:00Z',
+        by_provider: [
+          {
+            provider: 'openai',
+            requests: 3,
+            input_tokens: 450,
+            output_tokens: 150,
+            total_tokens: 600,
+            last_model: 'gpt-4o-mini',
+          },
+        ],
+      },
+    });
+    vi.mocked(clearLLMUsageApi).mockResolvedValue({
+      ...settings,
+      usage: {
+        total_requests: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cached_input_tokens: 0,
+        reasoning_tokens: 0,
+        last_used_at: null,
+        by_provider: [],
+      },
+    });
+
+    render(<AISettingsSection />);
+    const usagePanel = within(await screen.findByLabelText('Thống kê sử dụng AI'));
+    expect(usagePanel.getByText('450')).toBeInTheDocument();
+    expect(usagePanel.getByText('150')).toBeInTheDocument();
+    expect(usagePanel.getByText('600')).toBeInTheDocument();
+    expect(usagePanel.getByText('gpt-4o-mini')).toBeInTheDocument();
+
+    fireEvent.click(usagePanel.getByRole('button', { name: /Đặt lại thống kê/i }));
+    await waitFor(() => expect(clearLLMUsageApi).toHaveBeenCalledTimes(1));
   });
 });
