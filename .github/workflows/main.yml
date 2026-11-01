@@ -24,16 +24,16 @@ jobs:
     uses: ./.github/workflows/test.yml
 
   # 3. Build & Scan Image (chạy trên cả main hoặc dev)
-  build:
-    name: Build & Push
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && github.event_name == 'push'
-    uses: ./.github/workflows/build.yml
-    secrets: inherit
+  # build:
+  #   name: Build & Push
+  #   if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && github.event_name == 'push'
+  #   uses: ./.github/workflows/build.yml
+  #   secrets: inherit
 
   # 4. Đẩy tag sang GitOps repo (chỉ chạy khi Build thành công)
   deploy:
     name: GitOps Handoff
-    needs: [build]
+    # needs: [build]
     uses: ./.github/workflows/gitops.yml
     with:
       image_tag: ${{ needs.build.outputs.image_tag }}
