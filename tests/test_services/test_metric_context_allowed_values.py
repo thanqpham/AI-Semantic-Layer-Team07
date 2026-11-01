@@ -47,8 +47,37 @@ async def test_build_metric_context_uses_stored_allowed_values_only() -> None:
 
 def test_pending_values_are_not_in_agent_context() -> None:
     """A pending edit cannot leak categorical values to an agent."""
-    col = SemanticColumnModel(column_name="status", data_type="TEXT", allowed_values=["private@example.test"],
-                              review_status="pending_review")
+    col = SemanticColumnModel(
+        column_name="status", data_type="TEXT", allowed_values=["private@example.test"], review_status="pending_review"
+    )
     assert _column_payload(col)["allowed_values"] is None
     col.review_status = "approved"
     assert _column_payload(col)["allowed_values"] is None
+
+
+def test_pending_business_labels_are_not_in_agent_context() -> None:
+    col = SemanticColumnModel(
+        column_name="status",
+        data_type="TEXT",
+        review_status="approved",
+        allowed_values=["paid"],
+        allowed_value_mappings=[{"db_value": "paid", "business_value": "Paid", "status": "pending"}],
+    )
+    assert _column_payload(col)["allowed_values"] == ["paid"]
+    assert _column_payload(col)["allowed_value_mappings"] == []
+
+
+def test_context_excludes_unsafe_and_unapproved_business_mappings() -> None:
+    col = SemanticColumnModel(
+        column_name="status",
+        data_type="TEXT",
+        review_status="approved",
+        allowed_value_mappings=[
+            {"db_value": "paid", "business_value": "Đã thanh toán", "status": "approved"},
+            {"db_value": "private@example.test", "business_value": "Private", "status": "approved"},
+            {"db_value": "cancelled", "business_value": "private@example.test", "status": "approved"},
+        ],
+    )
+    assert [item["db_value"] for item in _column_payload(col)["allowed_value_mappings"]] == ["paid"]
+    col.review_status = "pending_review"
+    assert _column_payload(col)["allowed_value_mappings"] == []

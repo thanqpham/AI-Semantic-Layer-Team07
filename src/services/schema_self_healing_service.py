@@ -32,6 +32,7 @@ from src.services.database import decrypt_conn_url, lock_semantic_database
 from src.services.live_db_service import introspect_live_database, resolve_and_validate_dialect
 from src.services.relationship_sync import invalidate_relationship_columns, reconcile_relationships
 from src.services.schema_fingerprint import compute_schema_fingerprint
+from src.services.schema_review_service import preserve_approved_legacy_values
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +406,7 @@ async def _handle_dropped_items(
     for item in dropped_cols:
         col = await db.get(SemanticColumnModel, item["col_id"])
         if col and not col.business_name.startswith("[Deprecated]"):
+            preserve_approved_legacy_values(col)
             col.business_name = f"[Deprecated] {col.business_name}"
             col.review_status = REVIEW_STATUS_PENDING
 

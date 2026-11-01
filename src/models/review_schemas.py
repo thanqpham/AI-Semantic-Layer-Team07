@@ -27,6 +27,7 @@ class ReviewColumnItem(BaseModel):
     is_primary_key: bool = False
     is_time_dimension: bool = False
     allowed_values: list[str | int | float | bool] | None = None
+    pending_value_count: int = 0
     reviewed_by: int | None = None
     reviewed_at: datetime | None = None
 
