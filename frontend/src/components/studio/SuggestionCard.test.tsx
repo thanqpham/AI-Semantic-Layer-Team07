@@ -86,4 +86,35 @@ describe('SuggestionCard lifecycle states', () => {
 
     expect(screen.queryByText(/Độ tin cậy/)).toBeNull();
   });
+
+  it('embedded cards carry a bottom separator so stacked suggestions do not merge', () => {
+    const { container } = render(
+      <SuggestionCard
+        suggestion={makeSuggestion()}
+        embedded
+        catalogNameConflict={false}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toContain('border-b');
+    expect(root.className).toContain('last:border-b-0');
+  });
+
+  it('shows the save failure on the card instead of only flickering the button', async () => {
+    render(
+      <SuggestionCard
+        suggestion={makeSuggestion()}
+        catalogNameConflict={false}
+        onSave={vi.fn().mockRejectedValue(new Error('Metric với tên "Doanh thu trước thuế" đã tồn tại'))}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/đã tồn tại/);
+    // The card stays unsaved — black save button returns after the flicker.
+    expect(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' })).toBeInTheDocument();
+  });
 });

@@ -507,4 +507,104 @@ describe('AIStudioView', () => {
       if (conflict) expect(screen.getByRole('heading', { name: 'New AOV' })).toBeInTheDocument();
     });
   });
+
+  it('flips the suggestion card to saved right after a successful save, without reload', async () => {
+    const suggestion = {
+      ...reviewedSuggestionFields,
+      proposal_id: 'proposal-flip-1',
+      candidate_id: 'candidate-flip-1',
+      definition: {
+        metric: {
+          name: 'Doanh thu tiết kiệm', formula: { function: 'SUM', expression: 'amount' },
+          base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high',
+        },
+      } as never,
+      yaml_preview: '',
+    };
+    vi.mocked(api.getChatSessionDetailApi).mockResolvedValue({
+      id: 'session-flip', db_id: 101, title: 'Flip', created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z', message_count: 1,
+      messages: [{
+        id: 'm-flip', session_id: 'session-flip', sequence_no: 1, sender: 'assistant',
+        content: 'Đề xuất metric', created_at: '2026-01-01T00:00:00Z',
+        metadata_json: { suggestions: [suggestion], status: 'completed', suggestion_action: 'save_metric' },
+      }],
+    } as never);
+    vi.mocked(api.createMetricApi).mockResolvedValue({
+      metric_id: 11, definition: null, source: 'ai', status: 'pending_approval',
+      name: 'Doanh thu tiết kiệm', created_at: '2026-01-01T00:00:00Z',
+    } as never);
+
+    render(
+      <AIStudioView
+        layer={mockLayer}
+        theme="light"
+        onMetricsChanged={vi.fn().mockResolvedValue(undefined)}
+        activeSessionId="session-flip"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu vào Semantic Layer' }));
+
+    expect(await screen.findByRole('button', { name: 'Đã lưu — mở catalog' })).toBeInTheDocument();
+  });
+
+  it('flips a freshly generated suggestion card after the session refetch replaces messages', async () => {
+    const streamedSuggestion = {
+      ...reviewedSuggestionFields,
+      proposal_id: 'p-stream-1',
+      candidate_id: 'c-stream-1',
+      definition: {
+        metric: {
+          name: 'Doanh thu stream', formula: { function: 'SUM', expression: 'amount' },
+          base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high',
+        },
+      } as never,
+      yaml_preview: '',
+    };
+    vi.mocked(api.sendChatOrchestratorApi).mockResolvedValue({
+      intent: 'metric_query',
+      chat_response: 'Đã đề xuất 1 Metric Definition.',
+      suggestions: [streamedSuggestion],
+      duplicates: [],
+      dedupe_performed: true,
+      suggestion_action: 'save_metric',
+      session_id: 'sess-fresh',
+      user_message_id: 'u-fresh',
+      assistant_message_id: 'am-fresh',
+    } as never);
+    // After the stream completes the parent sets activeSessionId, which triggers
+    // the session-detail refetch that REPLACES the streamed messages.
+    vi.mocked(api.getChatSessionDetailApi).mockResolvedValue({
+      id: 'sess-fresh', db_id: 101, title: 'Fresh', created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z', message_count: 2,
+      messages: [{
+        id: 'am-fresh', session_id: 'sess-fresh', sequence_no: 2, sender: 'assistant',
+        content: 'Đã đề xuất 1 Metric Definition.', created_at: '2026-01-01T00:00:00Z',
+        metadata_json: { suggestions: [streamedSuggestion], status: 'completed', suggestion_action: 'save_metric' },
+      }],
+    } as never);
+    vi.mocked(api.createMetricApi).mockResolvedValue({
+      metric_id: 12, definition: null, source: 'ai', status: 'pending_approval',
+      name: 'Doanh thu stream', created_at: '2026-01-01T00:00:00Z',
+    } as never);
+    const setActiveSessionId = vi.fn();
+    const props = {
+      layer: mockLayer, theme: 'light' as const,
+      onMetricsChanged: vi.fn().mockResolvedValue(undefined),
+      setActiveSessionId,
+    };
+    const { rerender } = render(<AIStudioView {...props} />);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Đề xuất KPI doanh thu' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gửi tin nhắn/i }));
+    await waitFor(() => expect(setActiveSessionId).toHaveBeenCalledWith('sess-fresh'));
+
+    // Parent state updated → prop changes → session refetch replaces messages.
+    rerender(<AIStudioView {...props} activeSessionId="sess-fresh" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu vào Semantic Layer' }));
+
+    expect(await screen.findByRole('button', { name: 'Đã lưu — mở catalog' })).toBeInTheDocument();
+  });
 });

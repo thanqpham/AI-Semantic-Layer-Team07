@@ -377,9 +377,9 @@ function MessageBubble({
 }) {
   const isUser = message.sender === 'user';
   const candidateGroups = groupMetricCandidates(message.suggestions || [], message.blockedCandidates || []);
-  /** Server-annotated lifecycle wins; fall back to saves made in this session. */
+  /** In-session saves are fresher than the annotation snapshot loaded with the session. */
   const lifecycleFor = (item: MetricSuggestion, index: number): SuggestionLifecycle | null =>
-    item.lifecycle ?? lifecycleOverrides[suggestionStateKey(item, message.id, index)] ?? null;
+    lifecycleOverrides[suggestionStateKey(item, message.id, index)] ?? item.lifecycle ?? null;
 
   return (
     <div className={cn('flex gap-2.5', isUser && 'flex-row-reverse')}>
@@ -466,7 +466,7 @@ function MessageBubble({
               <AssistantMarkdown content={message.text || `Đề xuất ${message.suggestions?.length || 0} Metric Definition`} />
             </div>
             {candidateGroups.map((group) => (
-              <section key={group.id}>
+              <section key={group.id} className="border-b border-border last:border-b-0">
                 {group.name && <h3 className="border-b border-border bg-secondary/10 px-4 py-2 text-xs font-semibold">{group.name}</h3>}
                 {group.items.map((entry) => entry.kind === 'blocked' ? (
                   <div key={entry.item.proposal_id || entry.item.candidate_id || `blocked-${entry.index}`} className="border-b border-border p-4 last:border-b-0">
