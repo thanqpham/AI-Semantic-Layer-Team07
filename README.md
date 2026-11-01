@@ -168,9 +168,7 @@ P-069/
 │   └── test_services/            #    Unit tests cho 2-Pass, Compiler, Dump Scanner, Auth...
 ├── ARCHITECTURE.md               # 🏛 Architecture Document chi tiết
 ├── AGENTS.md                     # 📜 Quy tắc phát triển & AI Rules
-├── docker-compose.dev.yml        # 🐳 Docker Compose môi trường Development
-├── docker-compose.yml            # 🐙 Docker Compose môi trường Production
-├── Dockerfile                    # 🐳 Dockerfile Backend
+├── infra/                        # Docker Compose, Dockerfiles, pgAdmin config
 ├── requirements.txt              # 📦 Python Dependencies
 └── README.md                     # 📖 Tài liệu hướng dẫn (File này)
 ```
@@ -307,7 +305,7 @@ Hệ thống phân tách rành mạch **2 cơ sở dữ liệu**:
 
 ```bash
 # 1. Khởi chạy PostgreSQL Metadata Store và pgAdmin 4 UI
-docker compose -f docker-compose.dev.yml up postgres pgadmin -d
+docker compose -f infra/docker-compose.dev.yml up postgres pgadmin -d
 
 # 2. Cập nhật Database Schema lên phiên bản mới nhất bằng Alembic
 alembic upgrade head
@@ -384,13 +382,13 @@ npm run dev
 
 ```bash
 # Chạy toàn bộ hệ thống (PostgreSQL + Backend + Frontend + PgWeb)
-docker compose -f docker-compose.dev.yml up --build -d
+docker compose -f infra/docker-compose.dev.yml up --build -d
 
 # Xem log thời gian thực của backend
-docker compose -f docker-compose.dev.yml logs -f backend
+docker compose -f infra/docker-compose.dev.yml logs -f backend
 
 # Dừng toàn bộ hệ thống
-docker compose -f docker-compose.dev.yml down
+docker compose -f infra/docker-compose.dev.yml down
 ```
 
 ---
@@ -662,10 +660,16 @@ ruff check src/ tests/
 ruff format src/ tests/
 
 # 2. Chạy toàn bộ Test Suite (60+ unit & integration tests)
+# Start PostgreSQL and MySQL fixtures for compiler integration tests
+docker compose -f infra/docker-compose.compiler-test.yml up -d
+
 pytest
 
 # 3. Chạy kiểm thử có hiển thị chi tiết và đo thời gian
 pytest -v -s --durations=10
+
+# Stop compiler test databases
+docker compose -f infra/docker-compose.compiler-test.yml down
 ```
 
 ---

@@ -496,9 +496,6 @@ async def _run_enrichment_background(
                 dialect=dialect,
             )
             await session.commit()
-            from src.services.categorical_proposals import queue_discovery
-
-            queue_discovery(connection_id)
             logger.info("Successfully completed AI semantic enrichment for connection_id=%d", connection_id)
     except Exception as exc:
         logger.warning("Background enrichment failed for connection_id=%d: %s", connection_id, exc, exc_info=True)

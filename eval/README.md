@@ -1,5 +1,11 @@
 # Evaluation Framework — hướng dẫn chạy
 
+### Benchmark AI đề xuất liên kết
+
+`python -m eval.relationship_benchmark --baseline none` gọi provider thật qua cấu hình `LLM_*` hiện tại (có thể phát sinh chi phí), không đọc database khách hàng. Báo cáo JSON ghi phiên bản fixture, provider, model, temperature, baseline, precision/recall/F1, liên kết thiếu/thừa và lỗi. Thay `none` bằng mã run dùng để so sánh; đây là nhãn do người chạy cung cấp, không tự so sánh kết quả.
+
+Fixture `golden_dataset/relationship_suggestions.json` là schema tổng hợp không khai báo FK, với một liên kết giữa hai nhóm. Trong fixture này, khóa `(product_id, month_start)` của hai bảng catalog được định nghĩa cùng kỳ và cùng sản phẩm; không suy rộng giả định đó sang database thực. Benchmark chỉ chấm cặp bảng/cột đầu ra thô của LLM, chưa chấm cardinality hoặc validation/lưu vào hàng chờ. Bộ mẫu nhỏ không đại diện cho chất lượng tổng quát; kết quả mock không phải kết quả benchmark LLM.
+
 Khung đánh giá hybrid (deterministic + AI judge tùy chọn) chấm điểm output của agent
 trên **Golden Dataset** ở `eval/golden_dataset/<domain>/`. Tài liệu này giữ hai
 luồng chạy chính và danh mục suite/metric; chi tiết kiến trúc xem

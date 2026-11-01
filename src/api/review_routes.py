@@ -51,13 +51,19 @@ async def get_schema_review(
     tables = await load_review_tables(db, db_id)
     counts = await pending_review_counts(db, db_id)
     pending = counts["pending_tables"] or counts["pending_columns"]
+    review_tables = [ReviewTableItem.model_validate(table) for table in tables]
+    for table, review_table in zip(tables, review_tables, strict=True):
+        for column, review_column in zip(table.columns, review_table.columns, strict=True):
+            review_column.pending_value_count = sum(
+                item.get("status") == "pending" for item in (column.allowed_value_mappings or [])
+            )
     return SchemaReviewResponse(
         db_id=db_id,
         status="pending_review" if pending else "approved",
         pending_tables=counts["pending_tables"],
         pending_columns=counts["pending_columns"],
         pending_relationships=counts["pending_relationships"],
-        tables=[ReviewTableItem.model_validate(table) for table in tables],
+        tables=review_tables,
     )
 
 

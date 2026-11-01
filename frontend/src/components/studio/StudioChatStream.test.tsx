@@ -129,7 +129,7 @@ describe('StudioChatStream', () => {
     expect(screen.queryByText(/SQL Compiled/)).not.toBeInTheDocument();
   });
 
-  it('groups passing and blocked variants together under their curated family', () => {
+  it('shows passing variants without blocked variants in the same family', () => {
     render(
       <StudioChatStream
         messages={[{
@@ -158,7 +158,23 @@ describe('StudioChatStream', () => {
     );
     const family = screen.getByRole('heading', { name: 'Doanh số thuần' }).closest('section');
     expect(family).toContainElement(screen.getByText('Doanh thu trước thuế'));
-    expect(family).toContainElement(screen.getByText('Doanh thu sau thuế'));
+    expect(screen.queryByText('Doanh thu sau thuế')).not.toBeInTheDocument();
+  });
+
+  it('hides unsaveable suggestions and keeps the original index for valid actions', () => {
+    const submit = vi.fn();
+    const definition = { metric: { name: 'Không thể lưu', formula: { function: 'SUM', expression: 'amount' }, base_entity: 'orders', filters: [], status: 'pending_approval', confidence: 'high' } };
+    const valid = { ...reviewedSuggestionFields, definition: { metric: { ...definition.metric, name: 'Có thể lưu' } } as never, yaml_preview: '' };
+    render(<StudioChatStream messages={[{ id: 'mixed', sender: 'assistant', text: 'Đã đề xuất 2 Metric Definition.', timestamp: '', suggestionAction: 'submit_metric_request',
+      suggestions: [{ ...valid, definition: definition as never, review: { ...reviewedSuggestionFields.review!, status: 'rejected' } }, valid],
+      blockedCandidates: [{ name: 'Bị từ chối', review: { ...reviewedSuggestionFields.review!, status: 'unsupported' } }],
+    }]} onSendMessage={vi.fn()} onSubmitMetricRequest={submit} isLoading={false} tableNames={[]} />);
+    expect(screen.queryByText('Không thể lưu')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bị từ chối')).not.toBeInTheDocument();
+    expect(screen.queryByText('Đã đề xuất 2 Metric Definition.')).not.toBeInTheDocument();
+    expect(screen.getByText('Có thể lưu')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi Data Lead xem xét' }));
+    expect(submit).toHaveBeenCalledWith('mixed', 1);
   });
 
   it('tracks saved state by proposal id when candidate names match', async () => {
