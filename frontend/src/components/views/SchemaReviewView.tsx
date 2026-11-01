@@ -229,16 +229,6 @@ export function SchemaReviewView({
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              variant="outline"
-              disabled={!dbId || enriching}
-              onClick={() => void onGenerate()}
-              className="gap-2 text-xs"
-            >
-              <Sparkles className="h-4 w-4" />
-              <Translated text={"Tạo mô tả AI"} />
-            </Button>
-            <Button
-              size="sm"
               disabled={!canApproveSchema || pendingTotal === 0 || approving !== null}
               onClick={() => approve()}
               className="gap-2 text-xs"
@@ -258,6 +248,7 @@ export function SchemaReviewView({
         {enrich && enrich.status !== 'idle' && (
           <EnrichmentProgressBanner status={enrich} onRetry={() => void onGenerate()} />
         )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
         <div role="tablist" onKeyDown={event => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();
@@ -273,6 +264,19 @@ export function SchemaReviewView({
             {Boolean(review?.pending_relationships) && ` (${review?.pending_relationships})`}
           </Button>
           <Button role="tab" id="values-tab" tabIndex={reviewTab === 'values' ? 0 : -1} aria-selected={reviewTab === 'values'} aria-controls="values-review" onClick={() => setReviewTab('values')} variant={reviewTab === 'values' ? 'default' : 'outline'}>Giá trị đề xuất</Button>
+        </div>
+        {reviewTab === 'tables' && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!dbId || enriching}
+            onClick={() => void onGenerate()}
+            className="gap-2 text-xs"
+          >
+            <Sparkles className="h-4 w-4" />
+            <Translated text={"Tạo mô tả AI"} />
+          </Button>
+        )}
         </div>
         <p className="text-xs text-muted-foreground">
           {review?.pending_relationships
