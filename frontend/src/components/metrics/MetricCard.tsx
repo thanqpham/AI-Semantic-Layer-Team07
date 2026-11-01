@@ -183,9 +183,7 @@ export function MetricCard({
                       variant="ghost"
                       className="h-8 justify-start gap-2 text-xs text-muted-foreground hover:text-destructive cursor-pointer"
                       onClick={() => {
-                        if (window.confirm(`Chuyển metric "${metricName(metric)}" vào Thùng rác?`)) {
-                          void onDelete(metric.metric_id);
-                        }
+                        onDelete(metric.metric_id);
                       }}
                       title={translate("Chuyển vào Thùng rác")}
                       aria-label={`Delete ${metricName(metric)}`}

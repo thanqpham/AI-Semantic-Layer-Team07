@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any, NoReturn
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query, Request, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -60,6 +60,7 @@ from src.models.schemas import (
     LiveDbSummaryResponse,
     MetricComparisonResponse,
     MetricCreate,
+    MetricDeleteRequest,
     MetricDimensionsResponse,
     MetricFilterColumnsResponse,
     MetricHistoryResponse,
@@ -1586,6 +1587,7 @@ async def delete_metric(
     db_id: int,
     metric_id: int,
     permanent: bool = Query(default=False),
+    body: MetricDeleteRequest | None = Body(default=None),
     org_id: int | None = Header(default=None, alias="X-Organization-ID"),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -1612,12 +1614,17 @@ async def delete_metric(
     )
     if (await db.execute(scoped_stmt)).scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail=f"Metric {metric_id} not found in database {db_id}")
-    await soft_delete_metric(
-        db,
-        metric_id=metric_id,
-        user_id=current_user.id,
-        require_ownership=resource.org_id is None,
-    )
+    try:
+        await soft_delete_metric(
+            db,
+            metric_id=metric_id,
+            user_id=current_user.id,
+            require_ownership=resource.org_id is None,
+            reason=body.reason if body else "",
+        )
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
     await sync_metrics_pending_notifications(db, db_id)
 

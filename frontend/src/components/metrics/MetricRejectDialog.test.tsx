@@ -54,6 +54,31 @@ describe('MetricRejectDialog', () => {
     expect(props.onReject).not.toHaveBeenCalled();
   });
 
+  it('renders custom labels for the delete usage', async () => {
+    const props = makeProps();
+    render(
+      <MetricRejectDialog
+        {...props}
+        title="Xóa chỉ số"
+        hint="Metric bị xóa sẽ chuyển vào Thùng rác và hiển thị lý do trên card đề xuất."
+        reasonLabel="Lý do xóa"
+        confirmLabel="Xác nhận xóa"
+        blankReasonError="⚠️ Vui lòng nhập lý do xóa trước khi bấm Xóa."
+      />,
+    );
+
+    expect(screen.getByText('Xóa chỉ số')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Xác nhận xóa/ }));
+
+    expect(await screen.findByText(/Vui lòng nhập lý do xóa/)).toBeInTheDocument();
+    expect(props.onReject).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/Lý do xóa/), { target: { value: 'Không còn dùng' } });
+    fireEvent.click(screen.getByRole('button', { name: /Xác nhận xóa/ }));
+
+    await waitFor(() => expect(props.onReject).toHaveBeenCalledExactlyOnceWith(7, 'Không còn dùng'));
+  });
+
   it('surfaces the error and stays open when the reject request fails', async () => {
     const props = makeProps();
     props.onReject = vi.fn().mockRejectedValue(new Error('Metric has no version awaiting approval'));

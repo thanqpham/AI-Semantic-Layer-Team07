@@ -422,10 +422,16 @@ async def soft_delete_metric(
     metric_id: int,
     user_id: int | None = None,
     require_ownership: bool = False,
+    reason: str = "",
 ) -> SemanticMetricModel:
-    """Mark a business metric as soft-deleted without purging its history."""
+    """Soft-delete a metric like a reject: free the name and carry the reason to proposals."""
+    if not reason.strip():
+        raise ValueError("Lý do xóa không được để trống.")
     metric = await require_metric(db, metric_id, user_id, require_ownership)
     metric.is_deleted = True
+    metric.status = METRIC_STATUS_REJECTED
+    metric.approved_by = None
+    await _release_metric_proposals(db, metric.id, reason)
     await db.flush()
     logger.info("Metric soft-deleted metric_id=%s actor=%s", metric.id, user_id)
     return metric

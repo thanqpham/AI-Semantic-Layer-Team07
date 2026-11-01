@@ -115,3 +115,45 @@ async def test_reject_route_published_edit_draft_keeps_metric_approved(
     assert response.json()["status"] == "rejected"
     metric = await async_session.get(SemanticMetricModel, metric_id)
     assert metric.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_delete_route_with_reason_releases_proposal_like_reject(
+    client, auth_headers, async_session: AsyncSession
+) -> None:
+    """DELETE with a reason soft-deletes like a reject so the chat card shows it."""
+    db_id, metric_id, proposal_id = await _seed_ai_metric_with_proposal(async_session)
+    await approve_metric(db=async_session, metric_id=metric_id, user_id=1)
+    await async_session.commit()
+
+    response = await client.request(
+        "DELETE",
+        f"/api/v1/semantic/{db_id}/metric/{metric_id}",
+        json={"reason": "Không còn dùng báo cáo"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 204
+    metric = await async_session.get(SemanticMetricModel, metric_id)
+    assert metric.is_deleted is True
+    assert metric.status == "rejected"
+    proposal = await async_session.get(MetricProposalModel, proposal_id)
+    assert proposal.metric_id is None
+    assert proposal.rejection_reason == "Không còn dùng báo cáo"
+
+
+@pytest.mark.asyncio
+async def test_delete_route_without_reason_returns_422(
+    client, auth_headers, async_session: AsyncSession
+) -> None:
+    """Soft-delete without a reason is a 422, not a silent delete."""
+    db_id, metric_id = await _seed_manual_metric(async_session)
+
+    response = await client.delete(
+        f"/api/v1/semantic/{db_id}/metric/{metric_id}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    metric = await async_session.get(SemanticMetricModel, metric_id)
+    assert metric.is_deleted is False

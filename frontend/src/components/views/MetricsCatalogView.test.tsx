@@ -167,9 +167,8 @@ describe('MetricsCatalogView', () => {
     expect(handleApproveAll).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onDeleteMetric when delete button is clicked', () => {
+  it('collects a mandatory reason before deleting and passes it to onDeleteMetric', async () => {
     const handleDelete = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(
       <MetricsCatalogView
@@ -184,10 +183,18 @@ describe('MetricsCatalogView', () => {
     );
 
     fireEvent.click(screen.getAllByLabelText(/Thao tác với/)[0]);
-    const deleteButtons = screen.getAllByTitle('Chuyển vào Thùng rác');
-    fireEvent.click(deleteButtons[0]);
+    fireEvent.click(screen.getAllByTitle('Chuyển vào Thùng rác')[0]);
 
-    expect(handleDelete).toHaveBeenCalledWith(2);
+    // Dialog opens; empty reason is blocked.
+    expect(await screen.findByText('Xóa chỉ số')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Xác nhận xóa/ }));
+    expect(handleDelete).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Vui lòng nhập lý do xóa/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Lý do xóa/), { target: { value: 'Không còn dùng báo cáo' } });
+    fireEvent.click(screen.getByRole('button', { name: /Xác nhận xóa/ }));
+
+    await waitFor(() => expect(handleDelete).toHaveBeenCalledWith(2, 'Không còn dùng báo cáo'));
   });
 
   it('calls onEditMetric when edit button is clicked', () => {
