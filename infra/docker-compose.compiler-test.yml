@@ -10,7 +10,7 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
     volumes:
-      - ./tests/fixtures/compiler_postgres:/docker-entrypoint-initdb.d:ro
+      - ../tests/fixtures/compiler_postgres:/docker-entrypoint-initdb.d:ro
 
   compiler-mysql:
     image: mysql:8.0
@@ -25,4 +25,4 @@ services:
     tmpfs:
       - /var/lib/mysql
     volumes:
-      - ./tests/fixtures/compiler_mysql:/docker-entrypoint-initdb.d:ro
+      - ../tests/fixtures/compiler_mysql:/docker-entrypoint-initdb.d:ro

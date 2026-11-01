@@ -1087,6 +1087,7 @@ class ChatResponse(BaseModel):
         description="Danh sách Business Metrics JSON (khi intent = 'metric_query')",
     )
     blocked_candidates: list[MetricCandidateReport] = Field(default_factory=list)
+    proposal_mode: ProposalMode | None = None
     run_status: RunStatus | None = None
     duplicates: list[DuplicateMetricNotice] = Field(default_factory=list)
     dedupe_performed: bool = True
