@@ -13,8 +13,10 @@ from src.models.db import (
     SemanticMetricModel,
     SemanticTableModel,
 )
+from src.services.export_service import build_semantic_layer_dict
 from src.services.metric_dedupe import dedupe_reviewed_suggestions
 from src.services.metric_service import (
+    DuplicateMetricError,
     _ensure_unique_metric_name,
     approve_metric,
     create_metric,
@@ -246,3 +248,42 @@ async def test_restore_after_reason_delete_keeps_rejected_status(async_session: 
 
     assert restored.is_deleted is False
     assert restored.status == "rejected"
+    approved = await approve_metric(async_session, metric_id, 1)
+    assert approved.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_restore_rejects_duplicate_active_metric_name(async_session: AsyncSession) -> None:
+    """Restoring a deleted metric fails if a new active metric already took its name."""
+    db_id, metric_id = await _seed_manual_metric(async_session, source_id=74)
+    await soft_delete_metric(async_session, metric_id, 1, reason="Thay bằng chỉ số mới")
+    await create_metric(
+        db=async_session,
+        connection_id=db_id,
+        metric_data={"source": "manual", "definition": _manual_definition("Doanh thu")},
+        user_id=1,
+    )
+
+    with pytest.raises(DuplicateMetricError, match="already exists"):
+        await restore_metric(async_session, metric_id, 1)
+
+
+@pytest.mark.asyncio
+async def test_export_semantic_layer_excludes_rejected_metrics(async_session: AsyncSession) -> None:
+    """Rejected metrics and their versions must not leak into exported semantic layers."""
+    db_id, rejected_id = await _seed_manual_metric(async_session, name="Doanh thu nháp", source_id=75)
+    approved = await create_metric(
+        db=async_session,
+        connection_id=db_id,
+        metric_data={"source": "manual", "definition": _manual_definition("Doanh thu chuẩn")},
+        user_id=1,
+    )
+    await approve_metric(async_session, approved.id, 1)
+    await reject_metric_update(async_session, rejected_id, 1, reason="Không dùng")
+
+    exported = await build_semantic_layer_dict(async_session, db_id)
+
+    metric_ids = [item["id"] for item in exported["canonical_metrics"]]
+    version_metric_ids = {item["metric_id"] for item in exported["metric_versions"]}
+    assert metric_ids == [approved.id]
+    assert version_metric_ids == {approved.id}
