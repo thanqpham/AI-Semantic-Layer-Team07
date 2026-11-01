@@ -1,5 +1,6 @@
 """Metric lifecycle: create, copy-on-write edit, approval, and rejection.
 
+
 A published (``approved``) metric is never overwritten in place. Editing one
 appends a new ``metric_versions`` row awaiting approval while the live row keeps
 serving Flow 2; approval promotes that draft, rejection discards it without
@@ -40,7 +41,12 @@ METRIC_STATUS_APPROVED = "approved"
 METRIC_STATUS_NEEDS_REVIEW = "needs_review"
 METRIC_STATUS_REJECTED = "rejected"
 METRIC_STATUS_PENDING = "pending_approval"
-APPROVABLE_METRIC_STATUSES = (METRIC_STATUS_PENDING, METRIC_STATUS_NEEDS_REVIEW, "unverified")
+APPROVABLE_METRIC_STATUSES = (
+    METRIC_STATUS_PENDING,
+    METRIC_STATUS_NEEDS_REVIEW,
+    "unverified",
+    METRIC_STATUS_REJECTED,
+)
 
 
 class MetricRequiresReviewError(ValueError):
@@ -51,12 +57,17 @@ class DuplicateMetricError(ValueError):
     """Raised when a metric name already exists within one semantic database."""
 
 
-async def _ensure_unique_metric_name(db: AsyncSession, db_id: int, name: str) -> None:
-    """Reject a duplicate metric name before creating a second catalog record."""
+async def _ensure_unique_metric_name(
+    db: AsyncSession, db_id: int, name: str, exclude_metric_id: int | None = None
+) -> None:
+    """Reject a duplicate metric name before creating or activating a catalog record."""
     stmt = select(SemanticMetricModel.name).where(
         SemanticMetricModel.db_id == db_id,
+        SemanticMetricModel.is_deleted.is_(False),
         SemanticMetricModel.status != METRIC_STATUS_REJECTED,
     )
+    if exclude_metric_id is not None:
+        stmt = stmt.where(SemanticMetricModel.id != exclude_metric_id)
     existing_names = (await db.execute(stmt)).scalars().all()
     normalized = name.strip().casefold()
     if any(existing.strip().casefold() == normalized for existing in existing_names):
@@ -188,6 +199,7 @@ async def update_metric(
     """
     metric = await require_metric(db, metric_id, user_id, require_ownership)
     definition, status = await _resolve_definition(db, metric.db_id, metric_data["definition"])
+    await _ensure_unique_metric_name(db, metric.db_id, definition.metric.name, exclude_metric_id=metric.id)
     table = await validate_metric_definition(db, metric.db_id, definition)
     payload = definition.model_dump(mode="json")
     reason = (metric_data.get("change_reason") or "").strip()
@@ -357,6 +369,7 @@ async def approve_metric(
         await _flag_draft_for_review(db, metric, draft, resolved)
         raise MetricRequiresReviewError("Metric requires review before approval")
 
+    await _ensure_unique_metric_name(db, metric.db_id, resolved.metric.name, exclude_metric_id=metric.id)
     definition = with_metric_status(resolved, METRIC_STATUS_APPROVED)
     table = await validate_metric_definition(db, metric.db_id, definition)
     _publish_draft(metric, draft, definition, table.id, user_id)
@@ -445,6 +458,7 @@ async def restore_metric(
 ) -> SemanticMetricModel:
     """Restore a previously soft-deleted metric back to active status."""
     metric = await require_metric(db, metric_id, user_id, require_ownership)
+    await _ensure_unique_metric_name(db, metric.db_id, metric.name, exclude_metric_id=metric.id)
     metric.is_deleted = False
     await db.flush()
     logger.info("Metric restored metric_id=%s actor=%s", metric.id, user_id)

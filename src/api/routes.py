@@ -1660,12 +1660,19 @@ async def restore_metric_endpoint(
     )
     if (await db.execute(scoped_stmt)).scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail=f"Metric {metric_id} not found in database {db_id}")
-    metric = await restore_metric(
-        db,
-        metric_id=metric_id,
-        user_id=current_user.id,
-        require_ownership=resource.org_id is None,
-    )
+    try:
+        metric = await restore_metric(
+            db,
+            metric_id=metric_id,
+            user_id=current_user.id,
+            require_ownership=resource.org_id is None,
+        )
+    except DuplicateMetricError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
     await sync_metrics_pending_notifications(db, db_id)
     await db.refresh(metric)
@@ -1872,9 +1879,14 @@ async def _lifecycle_map(db: AsyncSession, messages: list[ChatMessageModel]) -> 
     if not ids:
         return {}
     proposals = (await db.scalars(select(MetricProposalModel).where(MetricProposalModel.id.in_(ids)))).all()
+    metric_ids = {proposal.metric_id for proposal in proposals if proposal.metric_id is not None}
+    metrics_by_id: dict[int, SemanticMetricModel] = {}
+    if metric_ids:
+        metrics = (await db.scalars(select(SemanticMetricModel).where(SemanticMetricModel.id.in_(metric_ids)))).all()
+        metrics_by_id = {metric.id: metric for metric in metrics}
     annotations: dict[str, dict[str, Any]] = {}
     for proposal in proposals:
-        metric = await db.get(SemanticMetricModel, proposal.metric_id) if proposal.metric_id else None
+        metric = metrics_by_id.get(proposal.metric_id) if proposal.metric_id is not None else None
         annotations[proposal.id] = {
             "metric_id": proposal.metric_id,
             "metric_status": metric.status if metric else None,
