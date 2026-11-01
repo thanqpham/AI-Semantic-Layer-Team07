@@ -127,6 +127,8 @@ it('reloads a stale impact and requires a fresh acknowledgment', async () => {
    fireEvent.click(screen.getByRole('button', { name: 'Danh sách' }));
    expect(screen.getByRole('button', { name: 'Danh sách' })).toHaveAttribute('aria-pressed', 'true');
    expect(await screen.findByRole('button', { name: /sales.orders.*sales.customers/ })).toBeInTheDocument();
+   expect(screen.getByText('Table ID: 1')).toBeInTheDocument();
+   expect(screen.getByText('customer_id → id')).toBeInTheDocument();
  });
 
  it('displays friendly message when account AI is not configured', async () => {
