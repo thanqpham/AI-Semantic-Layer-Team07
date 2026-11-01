@@ -314,10 +314,11 @@ export function SchemaReviewView({
           </p>
         )}
 
-        {review?.tables.map((table) => (
+        {review?.tables.map((table, index) => (
           <TableReviewCard
             key={`${dbId}:${table.table_id}`}
             dbId={dbId!}
+            tableIndex={index}
             table={table}
             review={review}
             drafts={drafts}

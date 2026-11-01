@@ -78,6 +78,10 @@ it('does not advertise or load a read-only review queue without schema permissio
  ]});
  render(<SchemaReviewView dbId={7} canManageSchema canApproveSchema/>);
  await screen.findByText('public.orders'); expect(screen.getByText('archive.orders')).toBeVisible();
+ expect(screen.getByText('#1')).toBeVisible();
+ expect(screen.getByText('#2')).toBeVisible();
+ expect(screen.getByText('Table ID: 11')).toBeVisible();
+ expect(screen.getByText('Table ID: 12')).toBeVisible();
  fireEvent.change(screen.getAllByRole('textbox')[2],{target:{value:'Edited archive'}});
  fireEvent.click(screen.getAllByRole('button').find(button=>button.textContent === 'L\u01b0u' && !button.hasAttribute('disabled'))!);
  await waitFor(()=>expect(updateTableReviewApi).toHaveBeenCalledWith('7','orders','Edited archive','',12));
@@ -95,6 +99,7 @@ it('shows values under the column and saves metadata without rewriting values', 
  await screen.findByText('orders');
  expect(screen.getByRole('tablist').parentElement).toContainElement(screen.getByRole('button', {name:'Nạp giá trị nghiệp vụ'}));
  fireEvent.click(screen.getByRole('button', { name: /orders/ }));
+ expect(screen.getByText('Column ID: 21')).toBeVisible();
  expect(screen.getByRole('button',{name:/Giá trị nghiệp vụ/})).toBeInTheDocument();
  expect(screen.queryByRole('textbox',{name:'Giá trị cho phép (JSON array)'})).not.toBeInTheDocument();
  fireEvent.change(screen.getByDisplayValue('Status'),{target:{value:'Updated status'}});

@@ -144,6 +144,7 @@ function SkeletonCell() {
 
 interface TableReviewCardProps {
   dbId: number;
+  tableIndex?: number;
   table: SchemaReviewTable;
   review: SchemaReview;
   drafts: DraftMap;
@@ -164,6 +165,7 @@ interface TableReviewCardProps {
 /** One collapsible table card with its inline editors and per-table approve action. */
 export function TableReviewCard({
   dbId,
+  tableIndex,
   table,
   review,
   drafts,
@@ -187,6 +189,7 @@ export function TableReviewCard({
   const duplicateName =
     review.tables.filter((item) => item.table_name === table.table_name).length > 1 && table.physical_schema;
   const tableEmpty = enriching && cellIsEmpty(drafts[key], table.table_name);
+  const orderNumber = (tableIndex ?? review.tables.findIndex((item) => item.table_id === table.table_id)) + 1;
 
   return (
     <section className="shrink-0 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -198,15 +201,28 @@ export function TableReviewCard({
           aria-expanded={open}
         >
           <ChevronRight className={cn('h-4 w-4 shrink-0 transition-transform', open && 'rotate-90')} />
+          {orderNumber > 0 && (
+            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded bg-secondary px-1.5 font-mono text-[10px] font-semibold text-secondary-foreground">
+              #{orderNumber}
+            </span>
+          )}
           <span className="truncate font-mono text-[13px] text-foreground">
             {duplicateName ? `${table.physical_schema}.${table.table_name}` : table.table_name}
           </span>
         </button>
+        <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          Table ID: {table.table_id}
+        </span>
         <ReviewBadge status={table.review_status} />
         {pendingValues > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-100">● {pendingValues} giá trị chờ duyệt</span>}
-        {pendingColumns > 0 && (
+
+        {pendingColumns > 0 ? (
           <span className="font-mono text-[10px] text-muted-foreground">
             {pendingColumns}/{table.columns.length} <Translated text={"cột chờ"} /></span>
+        ) : (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {table.columns.length} <Translated text={"cột"} />
+          </span>
         )}
         {table.reviewed_at && (
           <span className="font-mono text-[10px] text-muted-foreground">
@@ -263,15 +279,19 @@ export function TableReviewCard({
       </div>
 
         <div hidden={!open} className="mt-4 space-y-3 border-t border-border pt-3">
-          {table.columns.map((column) => {
+          {table.columns.map((column, colIndex) => {
             const colKey = columnKey(table, column);
             return (
               <div key={column.column_name} className="flex flex-col gap-1.5">
                 <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
+                    {colIndex + 1}
+                  </span>
                   <span className="truncate font-mono text-[11px] text-muted-foreground">
                     {column.column_name}
                     <span className="ml-1.5 opacity-60">{column.data_type}</span>
                   </span>
+                  <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">Column ID: {column.column_id}</span>
                   {column.is_primary_key && (
                     <span className="rounded bg-secondary px-1.5 font-mono text-[9px] text-secondary-foreground">
                       PK
