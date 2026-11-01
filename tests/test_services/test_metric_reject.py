@@ -19,6 +19,8 @@ from src.services.metric_service import (
     approve_metric,
     create_metric,
     reject_metric_update,
+    restore_metric,
+    soft_delete_metric,
     update_metric,
 )
 from src.services.review_notifications import sync_metrics_pending_notifications
@@ -206,3 +208,41 @@ async def test_pending_metric_count_excludes_rejected(async_session: AsyncSessio
 
     row = (await async_session.execute(select(NotificationModel))).scalar_one()
     assert row.handled_at is not None
+
+
+@pytest.mark.asyncio
+async def test_soft_delete_with_reason_releases_proposal_like_reject(async_session: AsyncSession) -> None:
+    """Deleting an approved metric frees its name and shows the reason on the chat card."""
+    db_id, metric_id, proposal_id = await _seed_ai_metric_with_proposal(async_session, source_id=71)
+    await approve_metric(db=async_session, metric_id=metric_id, user_id=1)
+
+    deleted = await soft_delete_metric(async_session, metric_id, 1, reason="Không còn dùng báo cáo")
+
+    assert deleted.is_deleted is True
+    assert deleted.status == "rejected"
+    proposal = await async_session.get(MetricProposalModel, proposal_id)
+    assert proposal.metric_id is None
+    assert proposal.metric_version is None
+    assert proposal.rejection_reason == "Không còn dùng báo cáo"
+    await _ensure_unique_metric_name(async_session, db_id, definition()["metric"]["name"])
+
+
+@pytest.mark.asyncio
+async def test_soft_delete_blank_reason_raises(async_session: AsyncSession) -> None:
+    """A whitespace-only delete reason is rejected."""
+    _db_id, metric_id = await _seed_manual_metric(async_session, source_id=72)
+
+    with pytest.raises(ValueError, match="Lý do xóa"):
+        await soft_delete_metric(async_session, metric_id, 1, reason="   ")
+
+
+@pytest.mark.asyncio
+async def test_restore_after_reason_delete_keeps_rejected_status(async_session: AsyncSession) -> None:
+    """A restored metric lands in the rejected tab, ready to re-approve or edit."""
+    _db_id, metric_id = await _seed_manual_metric(async_session, source_id=73)
+    await soft_delete_metric(async_session, metric_id, 1, reason="Nhầm chỉ số")
+
+    restored = await restore_metric(async_session, metric_id, 1)
+
+    assert restored.is_deleted is False
+    assert restored.status == "rejected"

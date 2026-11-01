@@ -721,10 +721,10 @@ export default function WorkspacePage() {
     }
   };
 
-  const removeMetric = async (metricId: number) => {
+  const removeMetric = async (metricId: number, reason: string) => {
     if (!activeLayer?.semantic_db_id) return;
     try {
-      await deleteMetricApi(String(activeLayer.semantic_db_id), metricId);
+      await deleteMetricApi(String(activeLayer.semantic_db_id), metricId, false, reason);
       await refreshSemanticData();
       notify('Đã chuyển metric vào Thùng rác.');
     } catch (error) {

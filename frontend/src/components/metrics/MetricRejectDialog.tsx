@@ -11,19 +11,32 @@ import { useLanguage } from '@/context/LanguageContext';
 interface MetricRejectDialogProps {
   metricId: number;
   metricName: string;
-  /** Disables inputs while the reject request is in flight. */
+  /** Disables inputs while the request is in flight. */
   pending?: boolean;
   onReject: (metricId: number, reason: string) => Promise<void> | void;
   onClose: () => void;
+  /** Copy overrides so the same dialog serves the delete-with-reason flow. */
+  title?: string;
+  hint?: string;
+  reasonLabel?: string;
+  confirmLabel?: string;
+  blankReasonError?: string;
+  fallbackError?: string;
 }
 
-/** Mandatory-reason confirmation for rejecting a metric. */
+/** Mandatory-reason confirmation for rejecting or deleting a metric. */
 export function MetricRejectDialog({
   metricId,
   metricName,
   pending = false,
   onReject,
   onClose,
+  title = 'Từ chối chỉ số',
+  hint = 'Metric bị từ chối sẽ giải phóng tên và công thức để lưu lại bản mới.',
+  reasonLabel = 'Lý do từ chối',
+  confirmLabel = 'Xác nhận từ chối',
+  blankReasonError = '⚠️ Vui lòng nhập lý do từ chối trước khi bấm Từ chối.',
+  fallbackError = 'Không thể từ chối chỉ số. Vui lòng thử lại.',
 }: MetricRejectDialogProps) {
   const { translate } = useLanguage();
   const [reason, setReason] = useState('');
@@ -40,9 +53,7 @@ export function MetricRejectDialog({
       await onReject(metricId, trimmed);
       onClose();
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Không thể từ chối chỉ số. Vui lòng thử lại.',
-      );
+      setErrorMessage(error instanceof Error ? error.message : fallbackError);
     }
   };
 
@@ -56,7 +67,7 @@ export function MetricRejectDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            <Translated text={'Từ chối chỉ số'} />
+            <Translated text={title} />
           </DialogTitle>
         </DialogHeader>
 
@@ -65,27 +76,25 @@ export function MetricRejectDialog({
           <span className="font-medium text-foreground">{metricName}</span>
         </p>
         <p className="text-[11px] text-muted-foreground">
-          <Translated
-            text={'Metric bị từ chối sẽ giải phóng tên và công thức để lưu lại bản mới.'}
-          />
+          <Translated text={hint} />
         </p>
 
         <textarea
-          aria-label={translate('Lý do từ chối')}
+          aria-label={translate(reasonLabel)}
           value={reason}
           disabled={pending}
           onChange={(event) => {
             setReason(event.target.value);
             if (event.target.value.trim()) setShowReasonError(false);
           }}
-          placeholder={translate('Lý do từ chối (bắt buộc)')}
+          placeholder={translate(`${reasonLabel} (bắt buộc)`)}
           className={`min-h-24 w-full rounded-md border bg-background p-2 text-xs text-foreground ${
             showReasonError ? 'border-red-500 ring-1 ring-red-500' : 'border-border'
           }`}
         />
         {showReasonError && (
           <p className="text-[11px] font-medium text-red-500">
-            <Translated text={'⚠️ Vui lòng nhập lý do từ chối trước khi bấm Từ chối.'} />
+            <Translated text={blankReasonError} />
           </p>
         )}
         {errorMessage && (
@@ -107,7 +116,7 @@ export function MetricRejectDialog({
             className="gap-1.5 text-xs cursor-pointer"
           >
             <X className="h-3.5 w-3.5" />
-            <Translated text={'Xác nhận từ chối'} />
+            <Translated text={confirmLabel} />
           </Button>
         </div>
       </DialogContent>

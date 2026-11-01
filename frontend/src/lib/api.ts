@@ -1155,10 +1155,12 @@ export async function deleteMetricApi(
   dbId: string,
   metricId: number,
   permanent: boolean = false,
+  reason?: string,
 ): Promise<void> {
   const query = permanent ? '?permanent=true' : '';
   await semanticRequest<void>(`/api/v1/semantic/${dbId}/metric/${metricId}${query}`, {
     method: 'DELETE',
+    body: reason !== undefined && !permanent ? JSON.stringify({ reason }) : undefined,
   });
 }
 

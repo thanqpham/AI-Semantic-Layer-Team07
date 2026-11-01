@@ -233,7 +233,12 @@ async def test_create_update_and_delete_definition(
     updated = await client.put(f"/api/v1/semantic/20/metric/{metric_id}", json=updated_payload, headers=auth_headers)
     assert updated.status_code == 200
     assert updated.json()["definition"]["metric"]["name"] == "Doanh thu thuần"
-    deleted = await client.delete(f"/api/v1/semantic/20/metric/{metric_id}", headers=auth_headers)
+    deleted = await client.request(
+        "DELETE",
+        f"/api/v1/semantic/20/metric/{metric_id}",
+        json={"reason": "Dọn dẹp catalog"},
+        headers=auth_headers,
+    )
     assert deleted.status_code == 204
 
 
