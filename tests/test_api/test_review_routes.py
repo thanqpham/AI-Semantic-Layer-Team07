@@ -91,6 +91,13 @@ async def test_schema_review_lists_pending_tables_and_columns(client: AsyncClien
         select(SemanticColumnModel).where(SemanticColumnModel.table_id == table["table_id"])
     )
     assert table["columns"][0]["column_id"] == column.id
+    column.allowed_value_mappings = [
+        {"db_value": "new", "business_value": "New", "status": "pending", "source": "manual"},
+        {"db_value": "old", "business_value": "Old", "status": "approved", "source": "manual"},
+    ]
+    await async_session.commit()
+    response = await client.get(f"/api/v1/semantic/{sem_db.id}/schema/review", headers=_headers(user))
+    assert response.json()["tables"][0]["columns"][0]["pending_value_count"] == 1
 
 
 @pytest.mark.asyncio

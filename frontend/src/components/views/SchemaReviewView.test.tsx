@@ -6,6 +6,7 @@ import {
   generateDescriptionsApi,
   getEnrichStatusApi,
   getSchemaReviewApi,
+  getColumnValueMappingsApi,
   updateColumnReviewApi,
   updateTableReviewApi,
   type EnrichStatus,
@@ -21,6 +22,9 @@ vi.mock('@/lib/api', () => ({
   updateTableReviewApi: vi.fn(),
   generateDescriptionsApi: vi.fn(),
   getEnrichStatusApi: vi.fn(),
+  getColumnValueMappingsApi: vi.fn(),
+  updateColumnValueMappingsApi: vi.fn(),
+  reviewColumnValueMappingsApi: vi.fn(),
 }));
 
 const idleStatus: EnrichStatus = { db_id: 7, status: 'idle', phase: '', total_tables: 0, completed_tables: 0, current_table: null, error: null, started_at: null, finished_at: null };
@@ -48,6 +52,10 @@ it('shows pending relationship tab and bulk approves only tables and columns', a
  render(<SchemaReviewView dbId={7} canManageSchema canApproveSchema/>);
  const tab=await screen.findByRole('tab',{name:'Liên kết (3)'});fireEvent.click(tab);expect(tab).toHaveAttribute('aria-selected','true');
  expect(screen.getByText('Relationship queue')).toBeVisible();expect(screen.getByRole('tab',{name:'Bảng & cột'})).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'Duyệt bảng & cột (3)'})).not.toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'Tạo mô tả AI'})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('tab',{name:'Bảng & cột'}));
+ expect(screen.getByRole('tablist').parentElement).toContainElement(screen.getByRole('button',{name:'Tạo mô tả AI'}));
  fireEvent.click(screen.getByRole('button',{name:'Duyệt bảng & cột (3)'}));
  await waitFor(()=>expect(approveSchemaReviewApi).toHaveBeenCalledWith('7',undefined,undefined));
  expect(screen.getByText(/liên kết chờ xác nhận riêng/)).toHaveTextContent('3');
@@ -77,17 +85,40 @@ it('does not advertise or load a read-only review queue without schema permissio
  await waitFor(()=>expect(approveSchemaReviewApi).toHaveBeenCalledWith('7',undefined,[12]));
  });
 
-it('saves edited allowed values as JSON metadata', async () => {
+it('shows values under the column and saves metadata without rewriting values', async () => {
  vi.mocked(getSchemaReviewApi).mockResolvedValue({db_id:7,status:'pending_review',pending_tables:0,pending_columns:1,pending_relationships:0,tables:[
   {table_id:11,table_name:'orders',business_name:'Orders',description:'',review_status:'approved',columns:[
    {column_id:21,column_name:'status',business_name:'Status',description:'',data_type:'TEXT',review_status:'pending_review',is_primary_key:false,is_time_dimension:false,allowed_values:['completed','cancelled']},
   ]},
  ]});
  render(<SchemaReviewView dbId={7} canManageSchema/>);
- const values = await screen.findByRole('textbox',{name:'Giá trị cho phép (JSON array)'});
- fireEvent.change(values,{target:{value:'["completed", "returned"]'}});
+ await screen.findByText('orders');
+ expect(screen.getByRole('tablist').parentElement).toContainElement(screen.getByRole('button', {name:'Nạp giá trị nghiệp vụ'}));
+ fireEvent.click(screen.getByRole('button', { name: /orders/ }));
+ expect(screen.getByRole('button',{name:/Giá trị nghiệp vụ/})).toBeInTheDocument();
+ expect(screen.queryByRole('textbox',{name:'Giá trị cho phép (JSON array)'})).not.toBeInTheDocument();
+ fireEvent.change(screen.getByDisplayValue('Status'),{target:{value:'Updated status'}});
  fireEvent.click(screen.getAllByRole('button').find(button=>button.textContent === 'Lưu' && !button.hasAttribute('disabled'))!);
- await waitFor(()=>expect(updateColumnReviewApi).toHaveBeenCalledWith('7','orders','status','Status','',11,['completed','returned']));
+ await waitFor(()=>expect(updateColumnReviewApi).toHaveBeenCalledWith('7','orders','status','Updated status','',11));
+});
+
+it('keeps a value draft when its table is collapsed or the review tab changes', async () => {
+ vi.mocked(getSchemaReviewApi).mockResolvedValue({db_id:7,status:'pending_review',pending_tables:1,pending_columns:1,pending_relationships:0,tables:[
+  {table_id:11,table_name:'orders',business_name:'Orders',description:'',review_status:'pending_review',columns:[
+   {column_id:21,column_name:'status',business_name:'Status',description:'',data_type:'TEXT',review_status:'pending_review',is_primary_key:false,is_time_dimension:false},
+  ]},
+ ]});
+ vi.mocked(getColumnValueMappingsApi).mockResolvedValue({column_id:21,complete:false,version:'v1',items:[
+  {db_value:'paid',business_value:'Đã trả',source:'manual',status:'pending'},
+ ]});
+ render(<SchemaReviewView dbId={7} canManageSchema canApproveSchema/>);
+ fireEvent.click(await screen.findByRole('button',{name:/Giá trị nghiệp vụ/}));
+ fireEvent.change(await screen.findByRole('textbox',{name:/Ý nghĩa nghiệp vụ 1/}),{target:{value:'Bản nháp'}});
+ fireEvent.click(screen.getByRole('button',{name:/orders/}));
+ fireEvent.click(screen.getByRole('tab',{name:'Liên kết'}));
+ fireEvent.click(screen.getByRole('tab',{name:'Bảng & cột'}));
+ fireEvent.click(screen.getByRole('button',{name:/orders/}));
+ expect(screen.getByRole('textbox',{name:/Ý nghĩa nghiệp vụ 1/})).toHaveValue('Bản nháp');
 });
 
 it('shows the AI description button only for schema managers and dispatches on click', async () => {
@@ -157,3 +188,11 @@ it('refetches the review after a failed run so committed tables appear', async (
   // mount load + failed-run refresh: tables saved before the failure become visible.
   await waitFor(() => expect(getSchemaReviewApi).toHaveBeenCalledTimes(2), { timeout: 4000 });
 }, 10000);
+
+it('marks tables and columns with values awaiting review', async () => {
+  vi.mocked(getSchemaReviewApi).mockResolvedValue({ ...emptyReview, tables: [{ table_id: 11, table_name: 'orders', business_name: 'Orders', description: '', review_status: 'approved', columns: [{ column_id: 21, column_name: 'status', business_name: 'Status', description: '', data_type: 'TEXT', review_status: 'approved', is_primary_key: false, is_time_dimension: false, pending_value_count: 2 }] }] });
+  render(<SchemaReviewView dbId={7} canManageSchema />);
+  expect((await screen.findAllByText(/2 giá trị chờ duyệt/))[0]).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: /orders/ }));
+  expect(screen.getAllByText(/2 giá trị chờ duyệt/)).toHaveLength(2);
+});

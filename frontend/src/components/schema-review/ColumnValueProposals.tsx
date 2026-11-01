@@ -1,179 +1,142 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { ChevronRight, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
-  getColumnValueProposalsApi,
-  reviewColumnValueProposalsApi,
-  scanColumnValueProposalsApi,
-  setColumnValueDiscoveryApi,
-  type ColumnValueProposal,
+  getColumnValueMappingsApi,
+  reviewColumnValueMappingsApi,
+  type ColumnValueMapping,
 } from '@/lib/api';
 
-interface Props {
-  dbId: string;
-  canManage: boolean;
-  canApprove: boolean;
-  onReviewChanged?: () => void;
+type ValueType = 'string' | 'number' | 'boolean';
+type Row = { value: string; type: ValueType; business: string; source: ColumnValueMapping['source']; status: ColumnValueMapping['status'] };
+type Values = { rows: Row[]; complete: boolean };
+type Props = { dbId: string; columnId: number; columnName: string; canManage: boolean; canApprove: boolean; onReviewChanged?: () => void };
+
+function toDraft(items: ColumnValueMapping[], complete: boolean): Values {
+  return { rows: items.map((item) => ({ value: String(item.db_value), type: typeof item.db_value as ValueType,
+    business: item.business_value, source: item.source, status: item.status })), complete };
 }
 
-function columnLabel(item: ColumnValueProposal): string {
-  return [item.physical_schema, item.table_name, item.column_name].filter(Boolean).join('.');
+function toPayload(rows: Row[]): Pick<ColumnValueMapping, 'db_value' | 'business_value'>[] {
+  return rows.map((row) => ({ db_value: row.type === 'number' ? Number(row.value) : row.type === 'boolean'
+    ? row.value === 'true' : row.value, business_value: row.business }));
 }
 
-/** Review screened categorical values without treating observations as a complete domain. */
-export function ColumnValueProposals({ dbId, canManage, canApprove, onReviewChanged }: Props) {
-  const [items, setItems] = useState<ColumnValueProposal[]>([]);
-  const [enabled, setEnabled] = useState(false);
-  const [available, setAvailable] = useState(false);
-  const [selected, setSelected] = useState<number[]>([]);
+function validate(rows: Row[], baseline: Row[]): string | null {
+  for (const [index, row] of rows.entries()) {
+    const unchangedLegacy = row.source === 'legacy' && baseline.some((old) =>
+      old.source === 'legacy' && old.value === row.value && old.type === row.type && old.business === row.business);
+    if (!row.business.trim() && !unchangedLegacy) return `Dòng ${index + 1}: nhập ý nghĩa nghiệp vụ.`;
+    if (row.type === 'number' && (!row.value.trim() || !Number.isFinite(Number(row.value)))) return `Dòng ${index + 1}: nhập số hợp lệ.`;
+    if (row.type === 'boolean' && !['true', 'false'].includes(row.value)) return `Dòng ${index + 1}: nhập true hoặc false.`;
+  }
+  const keys = toPayload(rows).map((row) => `${typeof row.db_value}:${String(row.db_value)}`);
+  return new Set(keys).size === keys.length ? null : 'Giá trị DB bị trùng; hãy sửa hoặc xóa dòng trùng.';
+}
+
+function errorMessage(caught: unknown, fallback: string): string {
+  if (typeof caught === 'object' && caught !== null && 'status' in caught && caught.status === 409) {
+    return 'Giá trị đã thay đổi ở phiên khác. Bản nháp vẫn được giữ; hãy tải lại trước khi lưu hoặc duyệt.';
+  }
+  return caught instanceof Error ? caught.message : fallback;
+}
+
+/** Edit value meanings in the context of a single semantic column. */
+export function ColumnValueEditor({ dbId, columnId, columnName, canManage, canApprove, onReviewChanged }: Props) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Values | null>(null);
+  const [baseline, setBaseline] = useState<Values | null>(null);
+  const [version, setVersion] = useState('');
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [scope, setScope] = useState<boolean | null>(null);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
+  const pending = baseline?.rows.filter((row) => row.status === 'pending') ?? [];
+  const approvedCount = baseline?.rows.filter((row) => row.status === 'approved').length ?? 0;
+  const panelId = `column-values-${columnId}`;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = async () => {
+    setBusy(true); setError('');
     try {
-      const response = await getColumnValueProposalsApi(dbId);
-      setItems(response.items);
-      setEnabled(response.enabled);
-      setAvailable(response.available);
-      setSelected([]);
-      setError('');
-    } catch {
-      setItems([]);
-      setSelected([]);
-      setEnabled(false);
-      setAvailable(false);
-      setError('Không thể tải đề xuất giá trị. Vui lòng thử lại.');
-    } finally {
-      setLoading(false);
-    }
-  }, [dbId]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const scan = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      await scanColumnValueProposalsApi(dbId);
-      setMessage('Đã yêu cầu quét. Làm mới danh sách sau khi quá trình hoàn tất.');
-      await load();
-    } catch {
-      setError('Không thể bắt đầu quét. Kiểm tra cấu hình và quyền truy cập.');
-    } finally {
-      setBusy(false);
-    }
+      const result = await getColumnValueMappingsApi(dbId, columnId);
+      const next = toDraft(result.items, result.complete);
+      setDraft(next); setBaseline(next); setVersion(result.version); setScope(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể tải giá trị.');
+    } finally { setBusy(false); }
   };
 
-  const toggleDiscovery = async () => {
-    setBusy(true);
-    setError('');
+  const approve = async () => {
+    if (!draft || scope === null || !draft.rows.length) return;
+    const problem = validate(draft.rows, baseline?.rows ?? []);
+    if (problem) { setError(problem); return; }
+    setBusy(true); setError(''); setMessage('');
     try {
-      const result = await setColumnValueDiscoveryApi(dbId, !enabled);
-      setEnabled(result.enabled);
-      setMessage(result.enabled ? 'Đã bật khám phá giá trị cho kết nối này.' : 'Đã tắt khám phá giá trị cho kết nối này.');
-    } catch {
-      setError('Không thể thay đổi cấu hình khám phá giá trị.');
-    } finally {
-      setBusy(false);
-    }
+      await reviewColumnValueMappingsApi(dbId, columnId, [], 'approve', version,
+        { items: toPayload(draft.rows), complete: scope });
+      await load(); setMessage('Đã duyệt giá trị và phạm vi danh sách.'); onReviewChanged?.();
+    } catch (caught) {
+      setError(errorMessage(caught, 'Không thể duyệt giá trị.'));
+    } finally { setBusy(false); }
   };
 
-  const review = async (action: 'approve' | 'dismiss') => {
-    setBusy(true);
-    setError('');
-    try {
-      const result = await reviewColumnValueProposalsApi(dbId, selected, action);
-      setMessage(`Đã xử lý ${result.updated} đề xuất.`);
-      await load();
-      onReviewChanged?.();
-    } catch {
-      setError('Không thể xử lý đề xuất. Hãy làm mới và thử lại.');
-    } finally {
-      setBusy(false);
-    }
+  const changeRow = (index: number, update: Partial<Row>) => {
+    if (!draft) return;
+    setDraft({ rows: draft.rows.map((row, i) => i === index ? { ...row, ...update } : row), complete: false });
   };
 
-  const pendingIds = items.filter((item) => item.status === 'pending' || item.status === 'pending_review')
-    .map((item) => item.id);
-
-  return (
-    <section aria-label="Đề xuất giá trị phân loại" className="space-y-4 rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Đề xuất giá trị phân loại</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Giá trị quan sát từ dữ liệu có thể chưa đầy đủ. Kiểm tra trước khi xác nhận.
-          </p>
-          {!available && <p className="mt-1 text-xs text-muted-foreground">
-            Chức năng chưa khả dụng cho kết nối hoặc chưa được bật trong cấu hình hệ thống.
-          </p>}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => void toggleDiscovery()} disabled={!canManage || !available || busy || loading}>
-            {enabled ? 'Tắt khám phá tự động' : 'Bật khám phá tự động'}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading || busy}>Làm mới</Button>
-          <Button size="sm" variant="outline" onClick={() => void scan()} disabled={!canManage || !available || !enabled || busy || loading}>
-            Quét lại
-          </Button>
-        </div>
-      </div>
-      {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
+  return <section className="mt-1 rounded-lg border border-border bg-background/50 p-2">
+    <div className="flex items-center justify-between gap-2">
+    <button type="button" aria-expanded={open} aria-controls={panelId} className="flex items-center gap-1 text-left text-xs font-medium"
+      onClick={() => { setOpen(!open); if (!open && !draft && !busy) void load(); }}>
+      <ChevronRight className={`h-3.5 w-3.5 ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
+      Giá trị nghiệp vụ {baseline && `· ${approvedCount} đã duyệt · ${pending.length} chờ duyệt`}{dirty && ' · Chưa lưu'}
+    </button>
+    {open && draft && <Button size="icon-sm" variant="outline" aria-label={error ? "Tải lại từ máy chủ" : "Tải lại giá trị"} title={error ? "Tải lại từ máy chủ" : "Tải lại giá trị"} disabled={busy} onClick={() => {
+      if (!dirty || window.confirm('Tải lại sẽ bỏ các thay đổi chưa lưu. Tiếp tục?')) void load();
+    }}><RefreshCw aria-hidden="true" /></Button>}
+    </div>
+    <div id={panelId} hidden={!open} className="mt-3 space-y-3">
+      {busy && !draft && <p role="status" className="text-xs">Đang tải giá trị…</p>}
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-      {loading ? <p role="status" className="text-xs">Đang tải đề xuất…</p> : items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Chưa có đề xuất giá trị.</p>
-      ) : (
-        <>
-        <label className="flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={pendingIds.length > 0 && selected.length === pendingIds.length}
-            disabled={!canApprove || busy || pendingIds.length === 0}
-            onChange={(event) => setSelected(event.target.checked ? pendingIds : [])} />
-          Chọn tất cả đề xuất đang chờ
-        </label>
-        <ul className="divide-y divide-border">
-          {items.map((item) => {
-            const label = columnLabel(item);
-            const pending = item.status === 'pending' || item.status === 'pending_review';
-            const values = pending || item.status === 'approved' ? item.values : null;
-            return (
-              <li key={item.id} className="flex items-start gap-3 py-3">
-                <input
-                  type="checkbox"
-                  aria-label={`Chọn ${label}`}
-                  checked={selected.includes(item.id)}
-                  disabled={!canApprove || busy || !pending}
-                  onChange={(event) => setSelected((current) => event.target.checked
-                    ? [...current, item.id] : current.filter((id) => id !== item.id))}
-                />
-                <div className="min-w-0 flex-1 text-xs">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="break-all font-mono font-semibold">{label}</span>
-                    <span className="rounded bg-secondary px-1.5 py-0.5">
-                      {item.source === 'declared' ? 'Khai báo trong schema' : 'Quan sát từ dữ liệu'}
-                    </span>
-                    <span className="text-muted-foreground">{pending ? 'Chờ xác nhận' : item.status}</span>
-                  </div>
-                  {values && <p className="mt-1 break-words">{values.map(String).join(', ')}</p>}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        </>
-      )}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => void review('approve')} disabled={!canApprove || busy || selected.length === 0}>
-          Xác nhận giá trị ({selected.length})
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => void review('dismiss')} disabled={!canApprove || busy || selected.length === 0}>
-          Bỏ qua ({selected.length})
-        </Button>
-      </div>
-    </section>
-  );
+      {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
+      {!draft && !busy && <Button size="sm" variant="outline" onClick={() => void load()}>Thử tải lại</Button>}
+      {draft && <>
+        {draft.rows.length === 0 && <p className="text-xs text-muted-foreground">Chưa có giá trị nào cho cột này.</p>}
+        {draft.rows.map((row, index) => <div key={index} className="grid gap-2 rounded-md border border-border p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+          <label className="space-y-1 text-xs"><span>Giá trị trong DB</span>
+            <Input aria-label={`Giá trị DB ${index + 1} của ${columnName}`} value={row.value} disabled={!canManage || busy} className="h-8 font-mono text-xs"
+              onChange={(event) => changeRow(index, { value: event.target.value })} />
+          </label>
+          <label className="space-y-1 text-xs"><span>Giá trị nghiệp vụ</span>
+            <Input aria-label={`Ý nghĩa nghiệp vụ ${index + 1} của ${columnName}`} value={row.business} disabled={!canManage || busy} className="h-8 text-xs"
+              onChange={(event) => changeRow(index, { business: event.target.value })} />
+          </label>
+          <Button size="sm" variant="ghost" aria-label={`Xóa giá trị ${index + 1} của ${columnName}`} disabled={!canManage || busy}
+            onClick={() => setDraft({ rows: draft.rows.filter((_, i) => i !== index), complete: false })}>Xóa</Button>
+          <label className="text-xs">Kiểu giá trị{' '}
+            <select aria-label={`Kiểu giá trị DB ${index + 1} của ${columnName}`} value={row.type} disabled={!canManage || busy}
+              className="rounded border border-border bg-background px-1 py-1" onChange={(event) => changeRow(index, { type: event.target.value as ValueType })}>
+              <option value="string">Chuỗi</option><option value="number">Số</option><option value="boolean">Đúng/sai</option>
+            </select>
+          </label>
+          <p className="text-xs text-muted-foreground">{JSON.stringify(row) !== JSON.stringify(baseline?.rows[index]) ? 'Chưa lưu' : row.status === 'approved' ? 'Đã duyệt' : row.status === 'pending' ? 'Chờ duyệt' : 'Đã bỏ qua'} · {row.source === 'legacy' ? 'Giá trị cũ' : row.source === 'declared' ? 'Khai báo schema' : 'Nhập thủ công'}</p>
+        </div>)}
+        <Button size="sm" variant="outline" disabled={!canManage || busy} onClick={() => setDraft({ rows: [...draft.rows,
+          { value: '', type: 'string', business: '', source: 'manual', status: 'pending' }], complete: false })}>+ Thêm giá trị</Button>
+        <fieldset className="space-y-1 text-xs"><legend>Phạm vi danh sách</legend>
+          <label className="mr-4"><input type="radio" name={`${panelId}-scope`} checked={scope === false} disabled={!canManage || !canApprove || busy} onChange={() => setScope(false)} /> Tham khảo</label>
+          <label><input type="radio" name={`${panelId}-scope`} checked={scope === true} disabled={!canManage || !canApprove || busy} onChange={() => setScope(true)} /> Đầy đủ</label>
+          <p className="text-muted-foreground">Tham khảo: không loại trừ giá trị khác. Đầy đủ: khai báo toàn bộ giá trị hợp lệ.</p>
+        </fieldset>
+        <Button size="sm" variant="outline" disabled={!canManage || !canApprove || busy || scope === null || draft.rows.length === 0} onClick={() => void approve()}>Duyệt giá trị</Button>
+        {!canApprove && pending.length > 0 && <p className="text-xs text-muted-foreground">Cần người có quyền phê duyệt các giá trị đang chờ.</p>}
+      </>}
+    </div>
+  </section>;
 }

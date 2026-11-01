@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 from src.models.db import SemanticColumnModel, SemanticTableModel, utc_now
 from src.models.db_relationships import RelationshipCandidateModel
 from src.models.review_mixin import REVIEW_STATUS_APPROVED, REVIEW_STATUS_PENDING
+from src.services.database import lock_semantic_database
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,20 @@ class SchemaTableAmbiguousError(LookupError):
     """Raised when a bare table name identifies multiple physical tables."""
 
 
+def preserve_approved_legacy_values(row: Any) -> None:
+    """Preserve previously approved values before column metadata returns to review."""
+    if (
+        isinstance(row, SemanticColumnModel)
+        and row.review_status == REVIEW_STATUS_APPROVED
+        and row.allowed_value_mappings is None
+        and row.allowed_values
+    ):
+        row.allowed_value_mappings = [
+            {"db_value": value, "business_value": "", "source": "legacy", "status": "approved"}
+            for value in row.allowed_values
+        ]
+
+
 def apply_ai_proposal(row: Any, business_name: str, description: str) -> None:
     """Record an AI proposal on *row* without overwriting approved human edits.
 
@@ -41,6 +56,7 @@ def apply_ai_proposal(row: Any, business_name: str, description: str) -> None:
     row.ai_description = description
     if row.review_status == REVIEW_STATUS_APPROVED:
         if business_name != row.business_name or description != row.description:
+            preserve_approved_legacy_values(row)
             row.review_status = REVIEW_STATUS_PENDING
         return
     row.business_name = business_name
@@ -137,6 +153,7 @@ async def _require_column(
 
 def _apply_inline_edit(row: Any, business_name: str, description: str, actor_id: int) -> None:
     """Store a reviewer's inline edit and keep the row awaiting explicit approval."""
+    preserve_approved_legacy_values(row)
     row.business_name = business_name.strip()
     row.description = description.strip()
     row.updated_by = actor_id
@@ -182,6 +199,13 @@ def _approve_row(row: Any, actor_id: int) -> bool:
     """Stamp *row* as approved, returning True when it was still pending."""
     if row.review_status == REVIEW_STATUS_APPROVED:
         return False
+    if isinstance(row, SemanticColumnModel) and row.allowed_value_mappings is None and row.allowed_values:
+        row.allowed_value_mappings = [
+            {"db_value": value, "business_value": "", "source": "legacy", "status": "pending"}
+            for value in row.allowed_values
+        ]
+        row.allowed_values = None
+        row.allowed_values_complete = False
     row.review_status = REVIEW_STATUS_APPROVED
     row.reviewed_by = actor_id
     row.reviewed_at = utc_now()
@@ -200,6 +224,7 @@ async def approve_schema(
     Passing *table_names* approves only that subset, letting reviewers publish
     incrementally. Returns the number of rows promoted plus what remains pending.
     """
+    await lock_semantic_database(db, db_id)
     tables = await load_review_tables(db, db_id)
     if table_ids is not None:
         selected = [item for item in tables if item.id in table_ids]

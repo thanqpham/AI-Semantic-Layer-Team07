@@ -14,8 +14,9 @@ import {
 import { cn } from '@/lib/utils';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
+import { ColumnValueEditor } from './ColumnValueProposals';
 
-export type Draft = { business_name: string; description: string; allowed_values?: string };
+export type Draft = { business_name: string; description: string };
 export type DraftMap = Record<string, Draft>;
 
 export function tableKey(table: SchemaReviewTable): string {
@@ -76,7 +77,6 @@ function AiSuggestion({
 function RowEditor({
   businessName,
   description,
-  allowedValues,
   aiBusinessName,
   disabled,
   saving,
@@ -86,7 +86,6 @@ function RowEditor({
 }: {
   businessName: string;
   description: string;
-  allowedValues?: string;
   aiBusinessName?: string | null;
   disabled?: boolean;
   saving?: boolean;
@@ -96,12 +95,7 @@ function RowEditor({
 }) {
   const { translate } = useLanguage();
   return (
-    <div className={cn(
-      'grid flex-1 gap-2',
-      allowedValues === undefined
-        ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]'
-        : 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto]',
-    )}>
+    <div className="grid flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
       <div className="min-w-0">
         <Input
           value={businessName}
@@ -124,16 +118,6 @@ function RowEditor({
         className="h-8 text-xs"
         onChange={(event) => onChange({ description: event.target.value })}
       />
-      {allowedValues !== undefined && (
-        <Input
-          value={allowedValues}
-          disabled={disabled}
-          aria-label={translate("Giá trị cho phép (JSON array)")}
-          placeholder='["completed", "cancelled"]'
-          className="h-8 font-mono text-xs"
-          onChange={(event) => onChange({ allowed_values: event.target.value })}
-        />
-      )}
       <Button
         size="sm"
         variant="outline"
@@ -146,18 +130,6 @@ function RowEditor({
       </Button>
     </div>
   );
-}
-
-function parseAllowedValues(value: string): (string | number | boolean)[] | null {
-  const parsed: unknown = JSON.parse(value);
-  if (parsed === null) return null;
-  if (
-    !Array.isArray(parsed) ||
-    parsed.some((item) => !['string', 'number', 'boolean'].includes(typeof item))
-  ) {
-    throw new Error('Giá trị cho phép phải là mảng JSON gồm string, number, boolean hoặc null ở cấp cao nhất.');
-  }
-  return parsed;
 }
 
 /** A row counts as empty when the AI has nothing to show for it yet. */
@@ -186,6 +158,7 @@ interface TableReviewCardProps {
   patch: (key: string, value: Partial<Draft>) => void;
   saveRow: (key: string, save: (draft: Draft) => Promise<unknown>) => Promise<void>;
   approve: (tableIds?: number[]) => Promise<void>;
+  onReviewChanged?: () => void;
 }
 
 /** One collapsible table card with its inline editors and per-table approve action. */
@@ -205,10 +178,12 @@ export function TableReviewCard({
   patch,
   saveRow,
   approve,
+  onReviewChanged,
 }: TableReviewCardProps) {
   const key = tableKey(table);
   const open = expanded[key] ?? table.review_status === 'pending_review';
   const pendingColumns = table.columns.filter((c) => c.review_status === 'pending_review').length;
+  const pendingValues = table.columns.reduce((total, column) => total + (column.pending_value_count ?? 0), 0);
   const duplicateName =
     review.tables.filter((item) => item.table_name === table.table_name).length > 1 && table.physical_schema;
   const tableEmpty = enriching && cellIsEmpty(drafts[key], table.table_name);
@@ -228,6 +203,7 @@ export function TableReviewCard({
           </span>
         </button>
         <ReviewBadge status={table.review_status} />
+        {pendingValues > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-100">● {pendingValues} giá trị chờ duyệt</span>}
         {pendingColumns > 0 && (
           <span className="font-mono text-[10px] text-muted-foreground">
             {pendingColumns}/{table.columns.length} <Translated text={"cột chờ"} /></span>
@@ -286,8 +262,7 @@ export function TableReviewCard({
         )}
       </div>
 
-      {open && (
-        <div className="mt-4 space-y-3 border-t border-border pt-3">
+        <div hidden={!open} className="mt-4 space-y-3 border-t border-border pt-3">
           {table.columns.map((column) => {
             const colKey = columnKey(table, column);
             return (
@@ -303,6 +278,7 @@ export function TableReviewCard({
                     </span>
                   )}
                   <ReviewBadge status={column.review_status} />
+                  {(column.pending_value_count ?? 0) > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-100">● {column.pending_value_count} giá trị chờ duyệt</span>}
                 </div>
                 {enriching && cellIsEmpty(drafts[colKey], column.column_name) ? (
                   <SkeletonCell />
@@ -310,7 +286,6 @@ export function TableReviewCard({
                   <RowEditor
                     businessName={drafts[colKey]?.business_name ?? ''}
                     description={drafts[colKey]?.description ?? ''}
-                    allowedValues={drafts[colKey]?.allowed_values ?? 'null'}
                     aiBusinessName={column.ai_business_name}
                     disabled={!canManageSchema}
                     saving={savingKey === colKey}
@@ -325,17 +300,17 @@ export function TableReviewCard({
                           draft.business_name,
                           draft.description,
                           table.table_id,
-                          parseAllowedValues(draft.allowed_values ?? 'null'),
                         ),
                       )
                     }
                   />
                 )}
+                <ColumnValueEditor dbId={String(dbId)} columnId={column.column_id} columnName={column.column_name}
+                  canManage={canManageSchema} canApprove={canApproveSchema} onReviewChanged={onReviewChanged} />
               </div>
             );
           })}
         </div>
-      )}
     </section>
   );
 }
