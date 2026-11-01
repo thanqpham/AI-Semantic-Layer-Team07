@@ -22,6 +22,7 @@ from src.models.db import (
     MetricRequestModel,
     MetricVersionModel,
     OrganizationMemberModel,
+    SemanticColumnModel,
     SemanticDatabaseModel,
     SemanticMetricModel,
     SemanticTableModel,
@@ -90,6 +91,7 @@ from src.models.schemas import (
 )
 from src.observability.langfuse_tracing import observation, trace_summary
 from src.services import enrichment_progress
+from src.services.categorical_discovery_policy import safe_business_mappings, safe_observed_values
 from src.services.chat_execution import SAFE_ERROR, ChatExecution, current_execution, execution_step, stream_execution
 from src.services.chat_service import (
     ChatAuthorizationError,
@@ -110,7 +112,7 @@ from src.services.chat_service import (
 )
 from src.services.chat_tasks import start_chat_task
 from src.services.chat_trace_storage import execute_with_trace
-from src.services.database import decrypt_conn_url, get_db_session, get_session_factory
+from src.services.database import decrypt_conn_url, get_db_session, get_session_factory, lock_semantic_database
 from src.services.dimension_recommender import get_dimensions_for_metric, get_filter_columns_for_metric
 from src.services.export_service import build_semantic_layer_dict, serialize_to_json, serialize_to_yaml
 from src.services.imported_schema_service import (
@@ -764,12 +766,15 @@ async def update_column(
         return {"message": "Column updated successfully"}
 
     try:
+        await lock_semantic_database(db, int_id)
         column = await update_column_review(
             db, int_id, table_name, column_name, body.business_name, body.description, user.id, table_id
         )
         if "allowed_values" in body.model_fields_set:
-            column.allowed_values = body.allowed_values
-            column.allowed_values_complete = True
+            old = [(type(value).__name__, value) for value in column.allowed_values or []]
+            new = [(type(value).__name__, value) for value in body.allowed_values or []]
+            if old != new or (column.allowed_values is None) != (body.allowed_values is None):
+                raise HTTPException(status_code=409, detail="Use value mappings to edit allowed values")
     except SchemaTableAmbiguousError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SchemaRowNotFoundError as exc:
@@ -782,6 +787,12 @@ async def update_column(
 # ---------------------------------------------------------------------------
 # 5. AI Prompt Metric Generation & Metric CRUD (Chức năng từ nhánh của bạn)
 # ---------------------------------------------------------------------------
+
+
+def _safe_column_values(column: SemanticColumnModel) -> list | None:
+    if column.review_status != "approved" or not column.allowed_values:
+        return None
+    return safe_observed_values(list(column.allowed_values))
 
 
 async def _load_schema_context_for_db(db: AsyncSession, db_id: Any) -> dict[str, Any]:
@@ -804,6 +815,7 @@ async def _load_schema_context_for_db(db: AsyncSession, db_id: Any) -> dict[str,
                     "columns": [
                         {
                             "column_name": col.column_name,
+                            "review_status": col.review_status,
                             "data_type": col.data_type,
                             "business_name": col.business_name or col.column_name,
                             "is_primary_key": col.is_primary_key,
@@ -812,8 +824,11 @@ async def _load_schema_context_for_db(db: AsyncSession, db_id: Any) -> dict[str,
                             "fk_target_table": col.fk_target_table,
                             "fk_target_column": col.fk_target_column,
                             "description": col.description or "",
-                            "sample_values": col.allowed_values,
-                            "allowed_values": col.allowed_values,
+                            "sample_values": _safe_column_values(col),
+                            "allowed_values": _safe_column_values(col),
+                            "allowed_value_mappings": safe_business_mappings(
+                                col.allowed_value_mappings or [], col.review_status
+                            ),
                         }
                         for col in tbl.columns
                     ],
@@ -1323,7 +1338,7 @@ def _catalog_table(table: SemanticTableModel) -> SemanticCatalogTable:
             is_time_dimension=column.is_time_dimension,
             is_primary_key=column.is_primary_key,
             is_foreign_key=column.is_foreign_key,
-            allowed_values=column.allowed_values,
+            allowed_values=column.allowed_values if column.review_status == "approved" else None,
         )
         for column in sorted(table.columns, key=lambda item: item.id)
     ]
@@ -2809,7 +2824,9 @@ async def _replay_chat_response(
         chat_response=assistant.content,
         suggestions=suggestions if intent == "metric_query" else None,
         blocked_candidates=metadata.get("blocked_candidates", []),
-        proposal_mode=metadata.get("proposal_mode") if metadata.get("proposal_mode") in {"requested", "discovery"} else None,
+        proposal_mode=metadata.get("proposal_mode")
+        if metadata.get("proposal_mode") in {"requested", "discovery"}
+        else None,
         run_status=metadata.get("run_status"),
         duplicates=duplicates if intent == "metric_query" else [],
         dedupe_performed=bool(metadata.get("dedupe_performed", True)),

@@ -374,9 +374,6 @@ async def _upsert_semantic_column(
         existing.fk_target_table = fk_reference[0] if fk_reference else None
         existing.fk_target_column = fk_reference[1] if fk_reference else None
         existing.is_nullable = col_meta.nullable
-        if col_meta.sample_values:
-            existing.allowed_values = list(col_meta.sample_values)
-            existing.allowed_values_complete = True
         return existing.id
 
     record = SemanticColumnModel(
@@ -394,7 +391,6 @@ async def _upsert_semantic_column(
         fk_target_column=fk_reference[1] if fk_reference else None,
         is_nullable=col_meta.nullable,
         is_time_dimension=is_time,
-        allowed_values=list(col_meta.sample_values) if col_meta.sample_values else None,
     )
     db.add(record)
     await db.flush()

@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from src.models.db import CanonicalRelationshipModel, SemanticTableModel
 from src.models.metric_review import MetricScopeSelection
 from src.models.schemas import ChatClarificationOption, ChatClarificationPayload
-from src.services.categorical_discovery_policy import safe_observed_values
+from src.services.categorical_discovery_policy import safe_business_mappings, safe_observed_values
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 from src.services.metric_context_graph import expand_bridges, table_key
@@ -360,7 +360,13 @@ def _column_payload(column: Any) -> dict[str, Any]:
             and safe_observed_values(list(column.allowed_values)) is not None
             else None
         ),
-        "allowed_values_complete": getattr(column, "allowed_values_complete", True) is not False,
+        "allowed_values_complete": getattr(column, "allowed_values_complete", True) is not False
+        and not any(
+            item.get("status") == "pending" for item in (getattr(column, "allowed_value_mappings", None) or [])
+        ),
+        "allowed_value_mappings": safe_business_mappings(
+            getattr(column, "allowed_value_mappings", None) or [], column.review_status
+        ),
         "review_status": column.review_status,
         "is_foreign_key": column.is_foreign_key,
         "fk_target_table": column.fk_target_table,

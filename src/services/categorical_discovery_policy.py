@@ -41,6 +41,19 @@ def safe_observed_values(values: list[Any]) -> list[Any] | None:
     return sorted(values, key=str)
 
 
+def safe_business_mappings(mappings: list[dict], review_status: str) -> list[dict]:
+    """Expose only approved mappings passing the categorical safety screen."""
+    if review_status != "approved":
+        return []
+    return [
+        {"db_value": item["db_value"], "business_value": item["business_value"], "status": "approved"}
+        for item in mappings
+        if item.get("status") == "approved"
+        and safe_observed_values([item.get("db_value")]) is not None
+        and safe_observed_values([item.get("business_value")]) is not None
+    ]
+
+
 def safe_declared_values(values: list[Any]) -> list[Any] | None:
     """Keep the schema's order when accepting an enum domain."""
     if not values or len(values) > 20 or any(not _safe_value(value) for value in values):

@@ -104,7 +104,7 @@ def _dimension_to_dict(col: SemanticColumnModel) -> dict[str, Any]:
         "is_foreign_key": col.is_foreign_key,
         "is_nullable": col.is_nullable,
         "is_time_dimension": col.is_time_dimension,
-        "allowed_values": col.allowed_values,
+        "allowed_values": col.allowed_values if col.review_status == "approved" else None,
     }
 
 

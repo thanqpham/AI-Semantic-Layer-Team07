@@ -1244,6 +1244,7 @@ export interface SchemaReviewColumn {
   review_status: 'pending_review' | 'approved';
   is_primary_key: boolean;
   is_time_dimension: boolean;
+  pending_value_count?: number;
   allowed_values?: (string | number | boolean)[] | null;
   reviewed_by?: number | null;
   reviewed_at?: string | null;
@@ -1323,6 +1324,52 @@ export interface ColumnValueProposal {
   status: string;
   values: (string | number | boolean)[] | null;
   observed_at: string | null;
+}
+
+export interface ColumnValueMapping {
+  db_value: string | number | boolean;
+  business_value: string;
+  source: 'manual' | 'declared' | 'legacy';
+  status: 'approved' | 'pending' | 'dismissed';
+}
+
+export async function previewColumnValueMappingsApi(
+  dbId: string, columnId: number, file: File, fileType: 'json' | 'csv' | 'xlsx',
+): Promise<{ items: Pick<ColumnValueMapping, 'db_value' | 'business_value'>[] }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/columns/${columnId}/value-mappings/preview?file_type=${fileType}`, {
+    method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' },
+  });
+}
+
+export async function previewValueMappingBatchApi(
+  dbId: string, file: File, fileType: 'json' | 'csv' | 'xlsx',
+): Promise<{ columns: { column_id: number; items: Pick<ColumnValueMapping, 'db_value' | 'business_value'>[] }[] }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/value-mappings/preview?file_type=${fileType}`, {
+    method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' },
+  });
+}
+
+export async function getColumnValueMappingsApi(dbId: string, columnId: number): Promise<{
+  column_id: number; items: ColumnValueMapping[]; complete: boolean; version: string;
+}> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/columns/${columnId}/value-mappings`);
+}
+
+export async function updateColumnValueMappingsApi(
+  dbId: string, columnId: number, items: Pick<ColumnValueMapping, 'db_value' | 'business_value'>[], complete: boolean, version: string,
+): Promise<{ column_id: number; items: ColumnValueMapping[]; complete: boolean; version: string }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/columns/${columnId}/value-mappings`, {
+    method: 'PUT', body: JSON.stringify({ items, complete, version }),
+  });
+}
+
+export async function reviewColumnValueMappingsApi(
+  dbId: string, columnId: number, dbValues: (string | number | boolean)[], action: 'approve' | 'dismiss', version: string,
+  selection?: { items: Pick<ColumnValueMapping, 'db_value' | 'business_value'>[]; complete: boolean },
+): Promise<{ updated: number; version: string }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/columns/${columnId}/value-mappings/review`, {
+    method: 'POST', body: JSON.stringify({ db_values: dbValues, action, version, ...selection }),
+  });
 }
 
 export async function getColumnValueProposalsApi(dbId: string): Promise<{
