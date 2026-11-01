@@ -48,6 +48,7 @@ async def _load_metrics(db: AsyncSession, db_id: int) -> list[SemanticMetricMode
         .where(
             SemanticMetricModel.db_id == db_id,
             SemanticMetricModel.is_deleted.is_(False),
+            SemanticMetricModel.status != "rejected",
         )
         .options(selectinload(SemanticMetricModel.versions))
     )
@@ -72,6 +73,7 @@ async def _load_metric_versions(db: AsyncSession, db_id: int) -> list[MetricVers
         .where(
             SemanticMetricModel.db_id == db_id,
             SemanticMetricModel.is_deleted.is_(False),
+            SemanticMetricModel.status != "rejected",
         )
     )
     return list(result.scalars().all())

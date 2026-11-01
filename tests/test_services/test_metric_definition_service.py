@@ -93,7 +93,7 @@ async def test_soft_delete_and_restore(async_session: AsyncSession) -> None:
     )
     assert metric.is_deleted is False
 
-    deleted = await soft_delete_metric(async_session, metric.id, 1)
+    deleted = await soft_delete_metric(async_session, metric.id, 1, reason="Dọn dẹp catalog")
     assert deleted.is_deleted is True
 
     restored = await restore_metric(async_session, metric.id, 1)

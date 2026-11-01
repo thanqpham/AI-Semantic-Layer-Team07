@@ -167,9 +167,8 @@ describe('MetricsCatalogView', () => {
     expect(handleApproveAll).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onDeleteMetric when delete button is clicked', () => {
+  it('collects a mandatory reason before deleting and passes it to onDeleteMetric', async () => {
     const handleDelete = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(
       <MetricsCatalogView
@@ -184,10 +183,18 @@ describe('MetricsCatalogView', () => {
     );
 
     fireEvent.click(screen.getAllByLabelText(/Thao tác với/)[0]);
-    const deleteButtons = screen.getAllByTitle('Chuyển vào Thùng rác');
-    fireEvent.click(deleteButtons[0]);
+    fireEvent.click(screen.getAllByTitle('Chuyển vào Thùng rác')[0]);
 
-    expect(handleDelete).toHaveBeenCalledWith(2);
+    // Dialog opens; empty reason is blocked.
+    expect(await screen.findByText('Xóa chỉ số')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Xác nhận xóa/ }));
+    expect(handleDelete).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Vui lòng nhập lý do xóa/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Lý do xóa/), { target: { value: 'Không còn dùng báo cáo' } });
+    fireEvent.click(screen.getByRole('button', { name: /Xác nhận xóa/ }));
+
+    await waitFor(() => expect(handleDelete).toHaveBeenCalledWith(2, 'Không còn dùng báo cáo'));
   });
 
   it('calls onEditMetric when edit button is clicked', () => {
@@ -741,5 +748,39 @@ describe('MetricsCatalogView history modal', () => {
     expect(
       screen.queryByRole('button', { name: 'Khôi phục phiên bản này' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('lists rejected metrics in their own tab and keeps them out of All/Pending', () => {
+    const rejectedMetric: MetricRecord = {
+      ...approvedMetric,
+      metric_id: 9,
+      name: 'Tỉ lệ hoàn đơn',
+      status: 'rejected',
+    };
+    render(
+      <MetricsCatalogView
+        dbId={3}
+        canSubmitMetric
+        canManageMetrics
+        canApproveMetrics
+        metrics={[approvedMetric, rejectedMetric]}
+        onDeleteMetric={vi.fn()}
+        onEditMetric={vi.fn()}
+        onOpenStudio={vi.fn()}
+        onApproveAll={vi.fn()}
+        onRejectMetric={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Đã từ chối/ }));
+    expect(screen.getByText('Tỉ lệ hoàn đơn')).toBeInTheDocument();
+    expect(screen.queryByTitle('Phê duyệt chỉ số này')).toBeNull();
+    expect(screen.queryByTitle('Từ chối chỉ số này')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Tất cả/ }));
+    expect(screen.queryByText('Tỉ lệ hoàn đơn')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Chờ phê duyệt/ }));
+    expect(screen.queryByText('Tỉ lệ hoàn đơn')).toBeNull();
   });
 });

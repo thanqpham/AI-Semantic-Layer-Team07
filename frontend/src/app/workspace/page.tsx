@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, ClipboardCheck, Database, Loader2, Plus } from 'lucide-react';
+import { CheckCircle2, Database, Loader2, Plus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,7 +10,6 @@ import { AIStudioView } from '@/components/views/AIStudioView';
 import { MetricsCatalogView } from '@/components/views/MetricsCatalogView';
 import type { ExplorerInitialSelection } from '@/components/views/MetricExplorerView';
 import { WorkspaceApp } from '@/components/workspace/WorkspaceApp';
-import { SchemaDriftBanner } from '@/components/workspace/SchemaDriftBanner';
 import type { ViewId, WorkspaceDatabase } from '@/components/workspace/shared';
 import { streamNotifications } from '@/lib/notificationStream';
 import { useAuth } from '@/context/AuthContext';
@@ -23,6 +22,7 @@ import {
   ChatSessionItem,
   convertRawSchemaToLayer,
   createMetricApi,
+  rejectMetricVersionApi,
   reviewMetricProposalApi,
   deleteChatSessionApi,
   deleteDatabaseApi,
@@ -418,11 +418,30 @@ export default function WorkspacePage() {
     });
   }, [token]);
 
-  const openCatalog = useCallback(() => {
-    // Already-on-catalog clicks do not remount the view, so nudge a refetch.
-    setCatalogRefreshKey((current) => current + 1);
-    setTab('metrics');
-  }, []);
+  const openLayerTab = useCallback(
+    (dbId: number | null | undefined, tab: 'metrics' | 'schema') => {
+      if (dbId != null) {
+        const nextLayer = layers.find((item) => item.semantic_db_id === dbId);
+        if (nextLayer && nextLayer.id !== selectedId) {
+          if (relationshipDirty.current && !window.confirm('Bỏ chỉnh sửa liên kết chưa lưu để chuyển database?')) {
+            return;
+          }
+          setSelectedId(nextLayer.id);
+          if (currentWorkspace) {
+            window.localStorage.setItem(`workspace_database_${currentWorkspace.id}`, nextLayer.id);
+          }
+        }
+      }
+      if (tab === 'metrics') {
+        // Already-on-catalog clicks do not remount the view, so nudge a refetch.
+        setCatalogRefreshKey((current) => current + 1);
+      }
+      setTab(tab);
+    },
+    [layers, selectedId, currentWorkspace],
+  );
+
+  const openCatalog = useCallback(() => openLayerTab(null, 'metrics'), [openLayerTab]);
 
   const markAllNotificationsRead = useCallback(async () => {
     await markNotificationsReadApi();
@@ -702,10 +721,10 @@ export default function WorkspacePage() {
     }
   };
 
-  const removeMetric = async (metricId: number) => {
+  const removeMetric = async (metricId: number, reason: string) => {
     if (!activeLayer?.semantic_db_id) return;
     try {
-      await deleteMetricApi(String(activeLayer.semantic_db_id), metricId);
+      await deleteMetricApi(String(activeLayer.semantic_db_id), metricId, false, reason);
       await refreshSemanticData();
       notify('Đã chuyển metric vào Thùng rác.');
     } catch (error) {
@@ -780,6 +799,13 @@ export default function WorkspacePage() {
     notify('Đã phê duyệt chỉ số thành công.');
   };
 
+  const rejectSingleMetric = async (metricId: number, reason: string) => {
+    if (!activeLayer?.semantic_db_id) return;
+    await rejectMetricVersionApi(String(activeLayer.semantic_db_id), metricId, reason);
+    await refreshSemanticData();
+    notify('Đã từ chối chỉ số. Tên và công thức được giải phóng để lưu lại.');
+  };
+
   const openEditor = (metric?: MetricRecord, suggestion?: MetricSuggestion) => {
     setEditingMetric(metric || null);
     setEditingSuggestion(suggestion || null);
@@ -787,7 +813,9 @@ export default function WorkspacePage() {
   };
 
   const pendingCount = activeLayer
-    ? activeLayer.metrics.filter((m) => !m.is_deleted && m.status !== 'approved').length
+    ? activeLayer.metrics.filter(
+        (m) => !m.is_deleted && m.status !== 'approved' && m.status !== 'rejected',
+      ).length
     : 0;
   const pendingSchemaCount = pendingSchema.tables + pendingSchema.columns + pendingSchema.relationships;
 
@@ -888,7 +916,8 @@ export default function WorkspacePage() {
       onRenameChatSession={canChat ? handleRenameSession : undefined}
       notifications={notifications}
       unreadNotifications={unreadNotifications}
-      onOpenCatalog={openCatalog}
+      onOpenCatalog={(dbId) => openLayerTab(dbId, 'metrics')}
+      onOpenSchema={(dbId) => openLayerTab(dbId, 'schema')}
       onMarkAllNotificationsRead={markAllNotificationsRead}
       onMarkNotificationRead={markNotificationRead}
     >
@@ -901,39 +930,6 @@ export default function WorkspacePage() {
 
       {activeLayer ? (
         <>
-          {(pendingCount > 0 || pendingSchemaCount > 0) && canApproveMetrics && (
-            <div className="mx-6 mt-6 flex items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-700 shadow-sm dark:text-amber-300">
-              <div>
-                <h3 className="text-sm font-semibold"><Translated text={"Cần phê duyệt Schema &amp; Chỉ số"} /></h3>
-                <p className="mt-1 text-xs opacity-90">
-                  {pendingSchemaCount > 0 && (
-                    <>
-                      {pendingSchema.tables} <Translated text={"bảng và"} after />{pendingSchema.columns} <Translated text={"cột đang chờ review tên nghiệp vụ."} />{' '}
-                    </>
-                  )}
-                  {pendingCount > 0 && <>{pendingCount} <Translated text={"chỉ số đang chờ duyệt để chính thức sử dụng."} /></>}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {pendingSchemaCount > 0 && (
-                  <Button
-                    onClick={() => setTab('schema')}
-                    variant="outline"
-                    size="sm"
-                    className="gap-2 text-xs font-semibold"
-                  >
-                    <ClipboardCheck className="h-4 w-4" />
-                    <Translated text={"Review Schema ("} />{pendingSchemaCount})
-                  </Button>
-                )}
-                {pendingCount > 0 && (
-                  <Button onClick={approve} className="gap-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-amber-950" size="sm">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <Translated text={"Duyệt"} after />{pendingCount} <Translated text={"Chỉ số"} /></Button>
-                )}
-              </div>
-            </div>
-          )}
           {tab === 'studio' && (
             <AIStudioView
               layer={activeLayer}
@@ -983,6 +979,7 @@ export default function WorkspacePage() {
               onOpenStudio={canUseMetricStudio ? () => setTab('studio') : undefined}
               onApproveAll={canApproveMetrics ? approve : undefined}
               onApproveMetric={canApproveMetrics ? approveSingleMetric : undefined}
+              onRejectMetric={canApproveMetrics ? rejectSingleMetric : undefined}
               onMetricsChanged={refreshSemanticData}
               refreshKey={catalogRefreshKey}
               onOpenSyncLogs={() => setSyncModalOpen(true)}

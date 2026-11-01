@@ -19,6 +19,7 @@ import { MetricCard } from '@/components/metrics/MetricCard';
 import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { MetricAuditPanel } from '@/components/metrics/MetricAuditPanel';
 import { MetricHistoryDialog } from '@/components/metrics/MetricHistoryDialog';
+import { MetricRejectDialog } from '@/components/metrics/MetricRejectDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -44,7 +45,8 @@ interface MetricsCatalogViewProps {
   dbId?: number | null;
   metrics: MetricRecord[];
   onAddMetric?: () => void;
-  onDeleteMetric?: (id: number) => Promise<void> | void;
+  /** Soft-deletes the metric server-side; the mandatory reason comes from MetricRejectDialog. */
+  onDeleteMetric?: (id: number, reason: string) => Promise<void> | void;
   onPermanentDeleteMetric?: (id: number) => Promise<void> | void;
   onEmptyTrash?: () => Promise<void> | void;
   onRestoreMetric?: (id: number) => Promise<void> | void;
@@ -52,6 +54,8 @@ interface MetricsCatalogViewProps {
   onOpenStudio?: () => void;
   onApproveAll?: () => Promise<void>;
   onApproveMetric?: (id: number) => Promise<void> | void;
+  /** Rejects the metric server-side; the mandatory reason comes from MetricRejectDialog. */
+  onRejectMetric?: (id: number, reason: string) => Promise<void> | void;
   onSubmitMetric?: () => void;
   onMetricsChanged?: () => Promise<void> | void;
   canSubmitMetric?: boolean;
@@ -76,7 +80,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
   const [editedReview, setEditedReview] = useState<ReviewedMetricProposal | null>(null);
   const [requestError, setRequestError] = useState('');
   const [reviewingRequest, setReviewingRequest] = useState(false);
-  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'trash' | 'audit'>('all');
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'rejected' | 'trash' | 'audit'>('all');
   const canManage = Boolean(props.canManageMetrics);
   const canApprove = Boolean(props.canApproveMetrics);
   const isMemberSubmitter = props.canSubmitMetric === true && !canManage;
@@ -162,6 +170,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
     [activeMetrics],
   );
 
+  const rejectedMetrics = useMemo(
+    () => activeMetrics.filter((item) => item.status === 'rejected'),
+    [activeMetrics],
+  );
+
   const trashMetrics = useMemo(
     () => filtered.filter((item) => Boolean(item.is_deleted)),
     [filtered],
@@ -184,6 +197,34 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
     } finally {
       setApproving(false);
     }
+  };
+
+  const confirmReject = async (metricId: number, reason: string) => {
+    if (!props.onRejectMetric) return;
+    setRejecting(true);
+    try {
+      await props.onRejectMetric(metricId, reason);
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  const openRejectDialog = (metricId: number) => {
+    setRejectingId(metricId);
+  };
+
+  const confirmDelete = async (metricId: number, reason: string) => {
+    if (!props.onDeleteMetric) return;
+    setDeleting(true);
+    try {
+      await props.onDeleteMetric(metricId, reason);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openDeleteDialog = (metricId: number) => {
+    setDeletingId(metricId);
   };
 
   const showHistory = async (metricId: number) => {
@@ -399,6 +440,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               key: 'approved' as const,
               label: 'Đã phê duyệt',
               count: approvedMetrics.length,
+            },
+            {
+              key: 'rejected' as const,
+              label: 'Đã từ chối',
+              count: rejectedMetrics.length,
             },
             { key: 'audit' as const, label: 'Audit', count: 0 },
             ...(canManage
@@ -624,9 +670,10 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                         key={metric.metric_id}
                         metric={metric}
                         onEdit={canManage ? props.onEditMetric : undefined}
-                        onDelete={canManage ? props.onDeleteMetric : undefined}
+                        onDelete={canManage ? openDeleteDialog : undefined}
                         onHistory={showHistory}
                         onApprove={canApprove ? props.onApproveMetric : undefined}
+                        onReject={canApprove && props.onRejectMetric ? openRejectDialog : undefined}
                       />
                     ))}
                   </div>
@@ -667,7 +714,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                       key={metric.metric_id}
                       metric={metric}
                       onEdit={canManage ? props.onEditMetric : undefined}
-                      onDelete={canManage ? props.onDeleteMetric : undefined}
+                      onDelete={canManage ? openDeleteDialog : undefined}
                       onHistory={showHistory}
                       onApprove={canApprove ? props.onApproveMetric : undefined}
                     />
@@ -682,15 +729,18 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               ? pendingMetrics
               : filterTab === 'submitted'
                 ? submittedMetrics
-                : approvedMetrics
+                : filterTab === 'rejected'
+                  ? rejectedMetrics
+                  : approvedMetrics
             ).map((metric) => (
               <MetricCard
                 key={metric.metric_id}
                 metric={metric}
                 onEdit={canManage ? props.onEditMetric : undefined}
-                onDelete={canManage ? props.onDeleteMetric : undefined}
+                onDelete={canManage ? openDeleteDialog : undefined}
                 onHistory={showHistory}
                 onApprove={canApprove ? props.onApproveMetric : undefined}
+                onReject={canApprove && props.onRejectMetric ? openRejectDialog : undefined}
               />
             ))}
           </div>
@@ -714,6 +764,42 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
           {historyError}
         </div>
       )}
+
+      {rejectingId != null && props.onRejectMetric &&
+        (() => {
+          const item = props.metrics.find((m) => m.metric_id === rejectingId);
+          if (!item) return null;
+          return (
+            <MetricRejectDialog
+              metricId={rejectingId}
+              metricName={metricName(item)}
+              pending={rejecting}
+              onReject={confirmReject}
+              onClose={() => setRejectingId(null)}
+            />
+          );
+        })()}
+
+      {deletingId != null && props.onDeleteMetric &&
+        (() => {
+          const item = props.metrics.find((m) => m.metric_id === deletingId);
+          if (!item) return null;
+          return (
+            <MetricRejectDialog
+              metricId={deletingId}
+              metricName={metricName(item)}
+              pending={deleting}
+              onReject={confirmDelete}
+              onClose={() => setDeletingId(null)}
+              title="Xóa chỉ số"
+              hint="Metric bị xóa sẽ chuyển vào Thùng rác, giải phóng tên và hiển thị lý do trên card đề xuất."
+              reasonLabel="Lý do xóa"
+              confirmLabel="Xác nhận xóa"
+              blankReasonError="⚠️ Vui lòng nhập lý do xóa trước khi bấm Xóa."
+              fallbackError="Không thể xóa chỉ số. Vui lòng thử lại."
+            />
+          );
+        })()}
 
       {history && props.dbId && (
         <MetricHistoryDialog

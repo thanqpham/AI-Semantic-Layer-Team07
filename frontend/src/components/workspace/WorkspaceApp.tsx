@@ -23,7 +23,8 @@ interface WorkspaceAppProps {
   chatMode?: 'data_assistant' | 'metric_studio';
   notifications?: AppNotification[];
   unreadNotifications?: number;
-  onOpenCatalog?: () => void;
+  onOpenCatalog?: (dbId?: number | null) => void;
+  onOpenSchema?: (dbId?: number | null) => void;
   onMarkAllNotificationsRead?: () => Promise<void> | void;
   onMarkNotificationRead?: (item: AppNotification) => Promise<void> | void;
   onSelectView: (view: ViewId) => void;
@@ -61,6 +62,7 @@ export function WorkspaceApp({
   notifications,
   unreadNotifications,
   onOpenCatalog,
+  onOpenSchema,
   onMarkAllNotificationsRead,
   onMarkNotificationRead,
   onSelectView,
@@ -107,6 +109,7 @@ export function WorkspaceApp({
         notifications={notifications}
         unreadNotifications={unreadNotifications}
         onOpenCatalog={onOpenCatalog}
+        onOpenSchema={onOpenSchema}
         onMarkAllNotificationsRead={onMarkAllNotificationsRead}
         onMarkNotificationRead={onMarkNotificationRead}
         onSelectView={onSelectView}
