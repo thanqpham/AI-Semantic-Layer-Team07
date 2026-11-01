@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.auth import get_current_user
 from src.models.db import UserModel
 from src.models.llm_settings import LLMKeyRequest, LLMSettingsRequest, LLMSettingsResponse
+from src.observability.llm_usage import account_llm_user_id, reset_account_usage
 from src.services.database import get_db_session
 from src.services.llm import account_llm_config
 from src.services.llm_settings_service import (
@@ -29,9 +30,11 @@ async def use_account_llm(
     except ValueError as exc:
         raise HTTPException(503, detail=str(exc)) from exc
     token = account_llm_config.set(config)
+    user_token = account_llm_user_id.set(user.id)
     try:
         yield
     finally:
+        account_llm_user_id.reset(user_token)
         account_llm_config.reset(token)
 
 
@@ -72,3 +75,16 @@ async def get_ai_models(
         raise HTTPException(400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, detail="Could not load models. Check your API key and provider availability.") from exc
+
+
+@router.delete("/usage", response_model=LLMSettingsResponse)
+async def clear_ai_usage(
+    user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> LLMSettingsResponse:
+    """Reset accumulated AI token and request usage for the signed-in account."""
+    reset_account_usage(user.id)
+    try:
+        return await read_llm_settings(db, user.id)
+    except ValueError as exc:
+        raise HTTPException(503, detail=str(exc)) from exc

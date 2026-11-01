@@ -660,12 +660,39 @@ export async function semanticRequest<T>(path: string, init: RequestInit = {}): 
   return response.json() as Promise<T>;
 }
 
+export interface LLMProviderUsage {
+  provider: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  last_model: string;
+}
+
+export interface LLMUsageSummary {
+  total_requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached_input_tokens: number;
+  reasoning_tokens: number;
+  last_used_at: string | null;
+  by_provider: LLMProviderUsage[];
+}
+
 export interface LLMSettings {
   provider: string;
   model: string;
   source: 'account' | 'environment';
   saved_models: Record<string, string>;
   providers: Array<{ id: string; name: string }>;
+  usage?: LLMUsageSummary | null;
+}
+
+export function clearLLMUsageApi(): Promise<LLMSettings> {
+  return semanticRequest('/api/v1/settings/llm/usage', {
+    method: 'DELETE',
+  });
 }
 
 export function getLLMSettingsApi(): Promise<LLMSettings> {

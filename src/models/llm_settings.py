@@ -8,7 +8,25 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.db_base import Base
 
-Provider = Literal["openrouter", "gemini", "openai", "anthropic", "deepseek", "groq", "mimo"]
+Provider = Literal[
+    "openrouter",
+    "gemini",
+    "openai",
+    "anthropic",
+    "deepseek",
+    "groq",
+    "mimo",
+    "mistral",
+    "xai",
+    "together",
+    "fireworks",
+    "perplexity",
+    "cerebras",
+    "qwen",
+    "moonshot",
+    "cohere",
+    "glm",
+]
 
 
 class UserLLMSettingsModel(Base):
@@ -53,6 +71,30 @@ class LLMProviderResponse(BaseModel):
     name: str
 
 
+class LLMProviderUsageResponse(BaseModel):
+    """Token and request statistics aggregated for one provider."""
+
+    provider: str
+    requests: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    last_model: str = ""
+
+
+class LLMUsageSummaryResponse(BaseModel):
+    """Accumulated token and request usage for the signed-in account."""
+
+    total_requests: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cached_input_tokens: int = 0
+    reasoning_tokens: int = 0
+    last_used_at: str | None = None
+    by_provider: list[LLMProviderUsageResponse] = Field(default_factory=list)
+
+
 class LLMSettingsResponse(BaseModel):
     """Expose active settings and remembered models, never API keys."""
 
@@ -61,3 +103,4 @@ class LLMSettingsResponse(BaseModel):
     source: Literal["account", "environment"]
     saved_models: dict[str, str]
     providers: list[LLMProviderResponse]
+    usage: LLMUsageSummaryResponse | None = None

@@ -29,7 +29,15 @@ if (
     os.environ.pop("LANGCHAIN_API_KEY", None)
 
 # Alternative spellings accepted for LLM_PROVIDER
-_PROVIDER_ALIASES = {"google": "gemini", "claude": "anthropic"}
+_PROVIDER_ALIASES = {
+    "google": "gemini",
+    "claude": "anthropic",
+    "grok": "xai",
+    "kimi": "moonshot",
+    "dashscope": "qwen",
+    "zhipu": "glm",
+    "chatglm": "glm",
+}
 
 # Default model per provider (fallback when MODEL_NAME / LLM_MODEL are empty)
 _DEFAULT_MODELS = {
@@ -40,6 +48,16 @@ _DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
     "openrouter": "openrouter/auto",
     "deepseek": "deepseek-flash",
+    "mistral": "mistral-small-latest",
+    "xai": "grok-2-latest",
+    "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "fireworks": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+    "perplexity": "sonar-pro",
+    "cerebras": "llama-3.3-70b",
+    "qwen": "qwen-plus",
+    "moonshot": "moonshot-v1-auto",
+    "cohere": "command-a-03-2025",
+    "glm": "glm-4-flash",
 }
 
 # Wire protocol per provider — providers not listed speak the OpenAI protocol
