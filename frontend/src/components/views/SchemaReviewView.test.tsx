@@ -104,6 +104,17 @@ it('shows the AI description button only for schema managers and dispatches on c
   await waitFor(() => expect(generateDescriptionsApi).toHaveBeenCalledWith('7'));
 });
 
+it('hides the AI description button outside the tables tab', async () => {
+  vi.mocked(getSchemaReviewApi).mockResolvedValue(emptyReview);
+  vi.mocked(getEnrichStatusApi).mockResolvedValue(idleStatus);
+
+  render(<SchemaReviewView dbId={7} canManageSchema />);
+  expect(await screen.findByRole('button', { name: 'Tạo mô tả AI' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Liên kết' }));
+  expect(screen.queryByRole('button', { name: 'Tạo mô tả AI' })).not.toBeInTheDocument();
+});
+
 it('polls enrichment progress and refetches the review when tables complete', async () => {
   vi.mocked(getSchemaReviewApi).mockResolvedValue(emptyReview);
   vi.mocked(getEnrichStatusApi)
