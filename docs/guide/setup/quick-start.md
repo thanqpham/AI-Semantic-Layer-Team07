@@ -70,8 +70,7 @@ C2-App-XXX/
 ├── docs/                   ← Documentation
 ├── eval/                   ← Evaluation results
 ├── presentation/           ← Demo materials
-├── Dockerfile              ← Multi-stage build
-├── docker-compose.yml      ← Full stack
+├── infra/                  ← Dockerfiles and Compose configurations
 └── .github/workflows/      ← CI/CD
 ```
 

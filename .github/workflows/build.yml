@@ -35,7 +35,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./infra/Dockerfile
           load: true
           tags: backend-scan:${{ steps.vars.outputs.sha_short }}
 
@@ -62,7 +62,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./infra/Dockerfile
           platforms: linux/arm64
           push: true
           tags: |
