@@ -201,3 +201,14 @@ it('marks tables and columns with values awaiting review', async () => {
   fireEvent.click(screen.getByRole('button', { name: /orders/ }));
   expect(screen.getAllByText(/2 giá trị chờ duyệt/)).toHaveLength(2);
 });
+
+it('hides the AI description button outside the tables tab', async () => {
+  vi.mocked(getSchemaReviewApi).mockResolvedValue(emptyReview);
+  vi.mocked(getEnrichStatusApi).mockResolvedValue(idleStatus);
+
+  render(<SchemaReviewView dbId={7} canManageSchema />);
+  expect(await screen.findByRole('button', { name: 'Tạo mô tả AI' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Liên kết' }));
+  expect(screen.queryByRole('button', { name: 'Tạo mô tả AI' })).not.toBeInTheDocument();
+});

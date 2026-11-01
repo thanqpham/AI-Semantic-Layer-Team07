@@ -193,6 +193,12 @@ class MetricUpdate(BaseModel):
     change_reason: str = Field(default="", description="Lý do thay đổi (audit log)")
 
 
+class MetricDeleteRequest(BaseModel):
+    """Mandatory reason for soft-deleting a metric (same flow as reject)."""
+
+    reason: str = Field(min_length=1, description="Lý do xóa (hiển thị trên card đề xuất)")
+
+
 class MetricResponse(BaseModel):
     """Return a persisted canonical metric definition."""
 
@@ -301,7 +307,9 @@ class NotificationResponse(BaseModel):
     title: str
     body: str
     metric_request_id: int | None = None
+    db_id: int | None = None
     read_at: datetime | None = None
+    handled_at: datetime | None = None
     created_at: datetime
 
 

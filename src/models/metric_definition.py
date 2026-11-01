@@ -14,7 +14,7 @@ from sqlglot import exp
 logger = logging.getLogger(__name__)
 
 MetricFunction = Literal["SUM", "COUNT", "COUNT_DISTINCT", "AVG", "MIN", "MAX"]
-MetricStatus = Literal["draft", "pending_approval", "approved", "needs_review", "unverified"]
+MetricStatus = Literal["draft", "pending_approval", "approved", "needs_review", "unverified", "rejected"]
 MetricConfidence = Literal["low", "medium", "high"]
 FilterOperator = Literal["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "is_null", "is_not_null"]
 ExpressionKind = Literal["column", "literal", "add", "sub", "mul", "div", "neg"]

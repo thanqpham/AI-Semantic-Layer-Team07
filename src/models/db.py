@@ -458,7 +458,7 @@ class SemanticMetricModel(Base):
     __table_args__ = (
         Index("idx_semantic_metrics_db_name", "db_id", "name"),
         CheckConstraint(
-            "status IN ('draft', 'pending_approval', 'needs_review', 'approved', 'unverified')",
+            "status IN ('draft', 'pending_approval', 'needs_review', 'approved', 'unverified', 'rejected')",
             name="ck_semantic_metrics_status",
         ),
     )
@@ -660,7 +660,11 @@ class NotificationModel(Base):
     metric_request_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("metric_requests.id", ondelete="CASCADE"), nullable=True
     )
+    db_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("semantic_databases.id", ondelete="CASCADE"), nullable=True
+    )
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     recipient: Mapped["UserModel"] = relationship("UserModel", back_populates="notifications")

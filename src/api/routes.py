@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any, NoReturn
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query, Request, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -19,6 +19,7 @@ from src.models.db import (
     ChatSessionModel,
     ImportedSchemaModel,
     LiveTargetDbModel,
+    MetricProposalModel,
     MetricRequestModel,
     MetricVersionModel,
     OrganizationMemberModel,
@@ -60,6 +61,7 @@ from src.models.schemas import (
     LiveDbSummaryResponse,
     MetricComparisonResponse,
     MetricCreate,
+    MetricDeleteRequest,
     MetricDimensionsResponse,
     MetricFilterColumnsResponse,
     MetricHistoryResponse,
@@ -172,6 +174,7 @@ from src.services.organization_service import (
 from src.services.query_compiler import SemanticQueryCompiler
 from src.services.query_execution import execute_compiled_query
 from src.services.relationship_runtime import active_relationship_filters
+from src.services.review_notifications import sync_metrics_pending_notifications, sync_schema_review_notifications
 from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 from src.services.schema_ingestion import parse_sql_dump_preview
 from src.services.schema_review_service import (
@@ -670,6 +673,7 @@ async def approve_semantic_layer(
 
     sem_db.status = "saved"
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
 
     return SemanticApproveV2Response(
         db_id=db_id,
@@ -700,6 +704,7 @@ async def approve_single_metric_endpoint(
     try:
         approved = await approve_metric(db=db, metric_id=metric_id, user_id=current_user.id)
         await db.commit()
+        await sync_metrics_pending_notifications(db, db_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -744,6 +749,7 @@ async def update_table(
     except SchemaRowNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found") from exc
     await db.commit()
+    await sync_schema_review_notifications(db, int_id)
     return {"message": "Table updated successfully", "review_status": table.review_status}
 
 
@@ -781,6 +787,7 @@ async def update_column(
         detail = "Table not found" if "Table" in str(exc) else "Column not found"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     await db.commit()
+    await sync_schema_review_notifications(db, int_id)
     return {"message": "Column updated successfully", "review_status": column.review_status}
 
 
@@ -999,6 +1006,7 @@ async def create_metric_endpoint(
     # Update DB status to 'draft' after metric creation
     db_record.status = "draft"
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
 
     return MetricResponse(
         metric_id=new_metric.id,
@@ -1543,6 +1551,7 @@ async def update_metric(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
     await db.refresh(metric)
     return await _metric_update_response(db, metric)
 
@@ -1576,6 +1585,7 @@ async def rollback_metric(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
     await db.refresh(metric)
     return MetricResponse(
         metric_id=metric.id,
@@ -1592,6 +1602,7 @@ async def delete_metric(
     db_id: int,
     metric_id: int,
     permanent: bool = Query(default=False),
+    body: MetricDeleteRequest | None = Body(default=None),
     org_id: int | None = Header(default=None, alias="X-Organization-ID"),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -1608,6 +1619,7 @@ async def delete_metric(
             raise HTTPException(status_code=404, detail=f"Metric {metric_id} not found in database {db_id}")
         await db.delete(metric)
         await db.commit()
+        await sync_metrics_pending_notifications(db, db_id)
         return
 
     scoped_stmt = select(SemanticMetricModel.id).where(
@@ -1617,13 +1629,19 @@ async def delete_metric(
     )
     if (await db.execute(scoped_stmt)).scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail=f"Metric {metric_id} not found in database {db_id}")
-    await soft_delete_metric(
-        db,
-        metric_id=metric_id,
-        user_id=current_user.id,
-        require_ownership=resource.org_id is None,
-    )
+    try:
+        await soft_delete_metric(
+            db,
+            metric_id=metric_id,
+            user_id=current_user.id,
+            require_ownership=resource.org_id is None,
+            reason=body.reason if body else "",
+        )
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
 
 
 @router.post("/semantic/{db_id}/metric/{metric_id}/restore", response_model=MetricResponse)
@@ -1642,13 +1660,21 @@ async def restore_metric_endpoint(
     )
     if (await db.execute(scoped_stmt)).scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail=f"Metric {metric_id} not found in database {db_id}")
-    metric = await restore_metric(
-        db,
-        metric_id=metric_id,
-        user_id=current_user.id,
-        require_ownership=resource.org_id is None,
-    )
+    try:
+        metric = await restore_metric(
+            db,
+            metric_id=metric_id,
+            user_id=current_user.id,
+            require_ownership=resource.org_id is None,
+        )
+    except DuplicateMetricError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await db.commit()
+    await sync_metrics_pending_notifications(db, db_id)
     await db.refresh(metric)
     return MetricResponse(
         metric_id=metric.id,
@@ -1841,6 +1867,47 @@ def _message_response(message: ChatMessageModel) -> ChatMessageResponse:
     return ChatMessageResponse.model_validate(message)
 
 
+async def _lifecycle_map(db: AsyncSession, messages: list[ChatMessageModel]) -> dict[str, dict[str, Any]]:
+    """Load proposal lifecycle annotations keyed by proposal id."""
+    ids = {
+        item["proposal_id"]
+        for message in messages
+        if isinstance(message.metadata_json, dict)
+        for item in message.metadata_json.get("suggestions") or []
+        if isinstance(item, dict) and item.get("proposal_id")
+    }
+    if not ids:
+        return {}
+    proposals = (await db.scalars(select(MetricProposalModel).where(MetricProposalModel.id.in_(ids)))).all()
+    metric_ids = {proposal.metric_id for proposal in proposals if proposal.metric_id is not None}
+    metrics_by_id: dict[int, SemanticMetricModel] = {}
+    if metric_ids:
+        metrics = (await db.scalars(select(SemanticMetricModel).where(SemanticMetricModel.id.in_(metric_ids)))).all()
+        metrics_by_id = {metric.id: metric for metric in metrics}
+    annotations: dict[str, dict[str, Any]] = {}
+    for proposal in proposals:
+        metric = metrics_by_id.get(proposal.metric_id) if proposal.metric_id is not None else None
+        annotations[proposal.id] = {
+            "metric_id": proposal.metric_id,
+            "metric_status": metric.status if metric else None,
+            "rejection_reason": proposal.rejection_reason,
+        }
+    return annotations
+
+
+def _annotate_lifecycle(message: ChatMessageResponse, annotations: dict[str, dict[str, Any]]) -> ChatMessageResponse:
+    """Copy one message, attaching lifecycle to each suggestion without touching ORM JSON."""
+    metadata = message.metadata_json
+    if not (isinstance(metadata, dict) and metadata.get("suggestions")):
+        return message
+    suggestions = [
+        {**item, "lifecycle": annotations.get(item.get("proposal_id"))} if isinstance(item, dict) else item
+        for item in metadata["suggestions"]
+    ]
+    message.metadata_json = {**metadata, "suggestions": suggestions}
+    return message
+
+
 def _assistant_metadata(
     suggestions: list[Any] | None = None,
     action: str | None = None,
@@ -1964,13 +2031,15 @@ async def get_chat_session_route(
     except ChatAuthorizationError as exc:
         raise HTTPException(status_code=404, detail="Chat session not found") from exc
     summary = _session_summary(session)
+    annotations = await _lifecycle_map(db, messages)
+    annotated = [_annotate_lifecycle(_message_response(item), annotations) for item in messages]
     return ChatSessionDetailResponse(
         id=summary.id,
         db_id=summary.db_id,
         title=summary.title,
         created_at=summary.created_at,
         updated_at=summary.updated_at,
-        messages=[_message_response(item) for item in messages],
+        messages=annotated,
         message_count=total,
         next_before_sequence=next_cursor,
     )
