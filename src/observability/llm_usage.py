@@ -2,12 +2,98 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from contextvars import ContextVar
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
 from src.observability import trace_llm_usage
+
+account_llm_user_id: ContextVar[int | None] = ContextVar("account_llm_user_id", default=None)
+
+_USER_USAGE: dict[int, dict[str, Any]] = defaultdict(
+    lambda: {
+        "total_requests": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 0,
+        "last_used_at": None,
+        "by_provider": {},
+    }
+)
+
+
+def _init_provider_entry(provider: str, model: str) -> dict[str, Any]:
+    return {
+        "provider": provider,
+        "requests": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "last_model": model,
+    }
+
+
+def record_account_usage(payload: dict[str, Any], user_id: int | None = None) -> None:
+    """Accumulate token and request metrics for an authenticated account."""
+    uid = user_id if user_id is not None else account_llm_user_id.get()
+    if uid is None:
+        return
+    in_tok = int(payload.get("input_tokens") or 0)
+    out_tok = int(payload.get("output_tokens") or 0)
+    provider = str(payload.get("provider") or "unknown")
+    model = str(payload.get("model") or "")
+    stats = _USER_USAGE[uid]
+    stats["total_requests"] += 1
+    stats["input_tokens"] += in_tok
+    stats["output_tokens"] += out_tok
+    stats["total_tokens"] += in_tok + out_tok
+    stats["cached_input_tokens"] += int(payload.get("cached_input_tokens") or 0)
+    stats["reasoning_tokens"] += int(payload.get("reasoning_tokens") or 0)
+    stats["last_used_at"] = datetime.now(UTC).isoformat()
+    by_prov = stats["by_provider"].setdefault(provider, _init_provider_entry(provider, model))
+    by_prov["requests"] += 1
+    by_prov["input_tokens"] += in_tok
+    by_prov["output_tokens"] += out_tok
+    by_prov["total_tokens"] += in_tok + out_tok
+    if model:
+        by_prov["last_model"] = model
+
+
+def get_account_usage(user_id: int) -> dict[str, Any]:
+    """Return accumulated LLM token and request usage for the given user."""
+    stats = _USER_USAGE.get(user_id)
+    if not stats:
+        return {
+            "total_requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "reasoning_tokens": 0,
+            "last_used_at": None,
+            "by_provider": [],
+        }
+    return {
+        "total_requests": stats["total_requests"],
+        "input_tokens": stats["input_tokens"],
+        "output_tokens": stats["output_tokens"],
+        "total_tokens": stats["total_tokens"],
+        "cached_input_tokens": stats["cached_input_tokens"],
+        "reasoning_tokens": stats["reasoning_tokens"],
+        "last_used_at": stats["last_used_at"],
+        "by_provider": list(stats["by_provider"].values()),
+    }
+
+
+def reset_account_usage(user_id: int) -> None:
+    """Clear accumulated usage stats for an account."""
+    _USER_USAGE.pop(user_id, None)
 
 
 class BenchmarkUsageCallback(BaseCallbackHandler):
@@ -20,7 +106,9 @@ class BenchmarkUsageCallback(BaseCallbackHandler):
 
     def on_llm_end(self, response: LLMResult, **_kwargs: Any) -> None:
         """Extract metadata before structured-output runnables discard the raw message."""
-        trace_llm_usage(_payload(response, self._provider, self._model))
+        payload = _payload(response, self._provider, self._model)
+        record_account_usage(payload)
+        trace_llm_usage(payload)
 
 
 def _payload(response: LLMResult, provider: str, configured_model: str) -> dict[str, Any]:

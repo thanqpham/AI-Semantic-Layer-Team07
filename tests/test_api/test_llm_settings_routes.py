@@ -9,6 +9,7 @@ import pytest
 from src.api.auth import create_access_token
 from src.models.db import UserModel
 from src.models.llm_settings import UserLLMSettingsModel
+from src.observability.llm_usage import account_llm_user_id, record_account_usage, reset_account_usage
 from src.services import llm_settings_service as service
 from src.services.database import decrypt_conn_url
 
@@ -19,10 +20,56 @@ async def _headers(session, user_id=1):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path", [("get", ""), ("put", ""), ("post", "/models")])
+@pytest.mark.parametrize("method,path", [("get", ""), ("put", ""), ("post", "/models"), ("delete", "/usage")])
 async def test_requires_authentication(client, method, path):
     response = await getattr(client, method)(f"/api/v1/settings/llm{path}")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_tracks_and_resets_account_llm_usage(client, async_session):
+    reset_account_usage(1)
+    headers = await _headers(async_session)
+    token = account_llm_user_id.set(1)
+    try:
+        record_account_usage(
+            {
+                "provider": "glm",
+                "model": "glm-4-flash",
+                "input_tokens": 120,
+                "output_tokens": 80,
+                "cached_input_tokens": 20,
+                "reasoning_tokens": 15,
+            }
+        )
+    finally:
+        account_llm_user_id.reset(token)
+
+    loaded = await client.get("/api/v1/settings/llm", headers=headers)
+    assert loaded.status_code == 200
+    usage = loaded.json()["usage"]
+    assert usage["total_requests"] == 1
+    assert usage["input_tokens"] == 120
+    assert usage["output_tokens"] == 80
+    assert usage["total_tokens"] == 200
+    assert usage["cached_input_tokens"] == 20
+    assert usage["reasoning_tokens"] == 15
+    assert usage["by_provider"] == [
+        {
+            "provider": "glm",
+            "requests": 1,
+            "input_tokens": 120,
+            "output_tokens": 80,
+            "total_tokens": 200,
+            "last_model": "glm-4-flash",
+        }
+    ]
+
+    cleared = await client.delete("/api/v1/settings/llm/usage", headers=headers)
+    assert cleared.status_code == 200
+    assert cleared.json()["usage"]["total_requests"] == 0
+    assert cleared.json()["usage"]["total_tokens"] == 0
+    assert cleared.json()["usage"]["by_provider"] == []
 
 
 @pytest.mark.asyncio
@@ -77,7 +124,7 @@ async def test_settings_are_isolated_by_account(client, async_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["openrouter", "gemini", "openai", "anthropic", "deepseek"])
+@pytest.mark.parametrize("provider", list(service.PROVIDERS))
 async def test_all_requested_providers_resolve_to_official_endpoints(client, async_session, provider):
     saved = await client.put("/api/v1/settings/llm", headers=await _headers(async_session), json={
         "provider": provider, "model": "chosen-model", "api_key": "chosen-key",
