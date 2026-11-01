@@ -6,6 +6,14 @@ on:
       image_tag:
         required: true
         type: string
+      backend_changed:
+        required: false
+        type: string
+        default: "false"
+      frontend_changed:
+        required: false
+        type: string
+        default: "false"
     secrets:
       GITOPS_TOKEN:
         required: true
@@ -22,21 +30,29 @@ jobs:
           token: ${{ secrets.GITOPS_TOKEN }}
           ref: main
 
-      - name: Update tags in values.yaml for API and UI
+      - name: Update tags conditionally
         run: |
-          # Cập nhật image tag mới cho Backend API
-          sed -i -E "s/(tag: ).*/\1\"${{ inputs.image_tag }}\"/" apps/semantic-layer-api/values.yaml
+          # Chỉ cập nhật Backend nếu có code Backend thay đổi
+          if [ "${{ inputs.backend_changed }}" == "true" ]; then
+            echo "Updating backend image tag to ${{ inputs.image_tag }}"
+            sed -i -E "s/(tag: ).*/\1\"${{ inputs.image_tag }}\"/" apps/semantic-layer-api/values.yaml
+          fi
 
-          # Cập nhật image tag mới cho Frontend UI
-          sed -i -E "s/(tag: ).*/\1\"${{ inputs.image_tag }}\"/" apps/semantic-layer-ui/values.yaml
-
-          # Kiểm tra sự thay đổi
-          git diff apps/semantic-layer-api/values.yaml apps/semantic-layer-ui/values.yaml
+          # Chỉ cập nhật Frontend nếu có code Frontend thay đổi
+          if [ "${{ inputs.frontend_changed }}" == "true" ]; then
+            echo "Updating frontend image tag to ${{ inputs.image_tag }}"
+            sed -i -E "s/(tag: ).*/\1\"${{ inputs.image_tag }}\"/" apps/semantic-layer-ui/values.yaml
+          fi
 
       - name: Commit and Push to cloud-infra
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add apps/semantic-layer-api/values.yaml apps/semantic-layer-ui/values.yaml
-          git commit -m "chore(gitops): update semantic-layer images to ${{ inputs.image_tag }} [skip ci]"
-          git push origin main
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit. Image tags are already up to date."
+          else
+            git commit -m "chore(gitops): update semantic-layer images to ${{ inputs.image_tag }} [skip ci]"
+            git push origin main
+          fi
