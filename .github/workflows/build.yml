@@ -6,6 +6,12 @@ on:
       image_tag:
         description: "Commit short SHA tag"
         value: ${{ jobs.detect-changes.outputs.sha_short }}
+      backend_changed:
+        description: "Backend has changes"
+        value: ${{ jobs.detect-changes.outputs.backend }}
+      frontend_changed:
+        description: "Frontend has changes"
+        value: ${{ jobs.detect-changes.outputs.frontend }}
 
 jobs:
   # ==============================================================

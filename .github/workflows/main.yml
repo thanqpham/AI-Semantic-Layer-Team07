@@ -34,7 +34,10 @@ jobs:
   deploy:
     name: GitOps Handoff
     needs: [build]
+    if: needs.build.outputs.backend_changed == 'true' || needs.build.outputs.frontend_changed == 'true'
     uses: ./.github/workflows/gitops.yml
     with:
       image_tag: ${{ needs.build.outputs.image_tag }}
+      backend_changed: ${{ needs.build.outputs.backend_changed }}
+      frontend_changed: ${{ needs.build.outputs.frontend_changed }}
     secrets: inherit
