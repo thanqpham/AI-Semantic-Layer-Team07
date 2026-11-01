@@ -36,6 +36,7 @@ import { ExecutionTrace } from '@/lib/chatTrace';
 import { AgentThinking } from './AgentThinking';
 
 export interface ChatMessage {
+  proposalMode?: 'requested' | 'discovery' | null;
   runStatus?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
   executionTrace?: ExecutionTrace | null;
   reconnecting?: boolean;
@@ -376,7 +377,17 @@ function MessageBubble({
   theme?: 'light' | 'dark';
 }) {
   const isUser = message.sender === 'user';
-  const candidateGroups = groupMetricCandidates(message.suggestions || [], message.blockedCandidates || []);
+  const candidateGroups = groupMetricCandidates(message.suggestions || []);
+  const visibleCount = candidateGroups.reduce((count, group) => count + group.items.length, 0);
+  const hiddenCandidates = !!message.blockedCandidates?.length || visibleCount < (message.suggestions?.length || 0);
+  const defaultBlockedText = message.text.startsWith('Các KPI dưới đây chưa đủ điều kiện');
+  const answer = hiddenCandidates && message.clarification
+    ? message.clarification.prompt
+    : hiddenCandidates && !message.duplicates?.length && (!message.isError && message.runStatus !== 'error' || defaultBlockedText)
+      ? message.isError || message.runStatus === 'error'
+        ? 'Không thể hoàn tất đề xuất metric do lỗi xử lý. Vui lòng thử lại.'
+        : visibleCount ? `Đã đề xuất ${visibleCount} Metric Definition.` : 'Chưa tạo được metric có thể lưu.'
+      : message.text;
 
   return (
     <div className={cn('flex gap-2.5', isUser && 'flex-row-reverse')}>
@@ -401,11 +412,11 @@ function MessageBubble({
         </div>
 
         {!isUser && message.executionTrace && <AgentThinking trace={message.executionTrace}
-          reconnecting={message.reconnecting} answer={message.text}
+          reconnecting={message.reconnecting} answer={answer}
           answerStreaming={message.executionTrace.status === 'running' && !message.reconnecting}
           renderAnswer={(answer) => <AssistantMarkdown content={answer} />} />}
         {/* The description line is hidden once every duplicate notice is settled. */}
-        {message.text && !message.suggestions?.length && !(message.executionTrace?.status === 'running' && !message.reconnecting) ? (
+        {answer && !candidateGroups.length && !(message.executionTrace?.status === 'running' && !message.reconnecting) ? (
           <div
             className={cn(
               'inline-block break-words rounded-xl px-2.5 py-1.5 text-[13px] leading-5 shadow-2xs',
@@ -415,7 +426,7 @@ function MessageBubble({
               message.isError && 'border-destructive/30 bg-destructive/10 text-destructive',
             )}
           >
-            {isUser ? message.text : <AssistantMarkdown content={message.text} />}
+            {isUser ? answer : <AssistantMarkdown content={answer} />}
           </div>
         ) : null}
 
@@ -445,6 +456,16 @@ function MessageBubble({
           </div>
         )}
 
+        {message.proposalMode === 'requested' && message.blockedCandidates?.filter((candidate) => candidate.review.status !== 'error').map((candidate, index) => (
+          <div key={candidate.candidate_id || index} className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+            <p className="font-semibold text-amber-700 dark:text-amber-300">Lý do chưa tạo được metric</p>
+            {candidate.review.summary && !message.clarification?.prompt.includes(candidate.review.summary) && <p className="mt-2">{candidate.review.summary}</p>}
+            {candidate.review.clarification && !message.clarification?.prompt.includes(candidate.review.clarification) && candidate.review.clarification !== candidate.review.summary && <p className="mt-2">{candidate.review.clarification}</p>}
+            {candidate.review.issues.some((issue) => issue.action) && <p className="mt-3 font-semibold">Cần làm</p>}
+            {candidate.review.issues.map((issue, issueIndex) => issue.action && <p className="mt-1" key={issueIndex}>{issue.action}</p>)}
+          </div>
+        ))}
+
         {message.dedupeSkipped && (
           <div
             role="status"
@@ -455,22 +476,17 @@ function MessageBubble({
         )}
 
         {message.runStatus === 'partial' && <p role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
-          Một phần tác vụ đã hoàn tất. Các KPI đạt vẫn có thể gửi duyệt; phần lỗi được ghi riêng bên dưới.
+          Một phần tác vụ đã hoàn tất. Các KPI đạt vẫn có thể gửi duyệt.
         </p>}
         {candidateGroups.length > 0 && (
           <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-xs">
             <div className="border-b border-border bg-secondary/20 px-4 py-3 text-sm leading-relaxed text-card-foreground">
-              <AssistantMarkdown content={message.text || `Đề xuất ${message.suggestions?.length || 0} Metric Definition`} />
+              <AssistantMarkdown content={answer || `Đề xuất ${visibleCount} Metric Definition`} />
             </div>
             {candidateGroups.map((group) => (
               <section key={group.id}>
                 {group.name && <h3 className="border-b border-border bg-secondary/10 px-4 py-2 text-xs font-semibold">{group.name}</h3>}
-                {group.items.map((entry) => entry.kind === 'blocked' ? (
-                  <div key={entry.item.proposal_id || entry.item.candidate_id || `blocked-${entry.index}`} className="border-b border-border p-4 last:border-b-0">
-                    <p className="text-sm font-medium">{entry.item.name}</p>
-                    <MetricReviewPanel review={entry.item.review} />
-                  </div>
-                ) : (
+                {group.items.map((entry) => (
                   <SuggestionCard
                     key={entry.item.proposal_id || entry.item.candidate_id || `suggestion-${entry.index}`}
                     suggestion={entry.item}
@@ -511,9 +527,7 @@ function MessageBubble({
   );
 }
 
-type CandidateEntry =
-  | { kind: 'suggestion'; item: MetricSuggestion; index: number }
-  | { kind: 'blocked'; item: MetricCandidateReport; index: number };
+type CandidateEntry = { item: MetricSuggestion; index: number };
 
 interface CandidateGroup {
   id: string;
@@ -525,7 +539,7 @@ function suggestionStateKey(suggestion: MetricSuggestion, messageId: string, ind
   return suggestion.proposal_id ? `proposal:${suggestion.proposal_id}` : `message:${messageId}:${index}`;
 }
 
-function groupMetricCandidates(suggestions: MetricSuggestion[], blocked: MetricCandidateReport[]): CandidateGroup[] {
+function groupMetricCandidates(suggestions: MetricSuggestion[]): CandidateGroup[] {
   const groups = new Map<string, CandidateGroup>();
   const add = (id: string, name: string | undefined, entry: CandidateEntry) => {
     const group = groups.get(id) || { id, name, items: [] };
@@ -534,12 +548,9 @@ function groupMetricCandidates(suggestions: MetricSuggestion[], blocked: MetricC
     groups.set(id, group);
   };
   suggestions.forEach((suggestion, index) => {
+    if (!suggestion.proposal_id || suggestion.review?.status !== 'pass') return;
     const id = suggestion.group_id || `candidate-${index}`;
-    add(id, suggestion.group_name || undefined, { kind: 'suggestion', item: suggestion, index });
-  });
-  blocked.forEach((candidate, index) => {
-    const id = candidate.group_id || `blocked-${index}`;
-    add(id, candidate.group_name || undefined, { kind: 'blocked', item: candidate, index });
+    add(id, suggestion.group_name || undefined, { item: suggestion, index });
   });
   return [...groups.values()];
 }

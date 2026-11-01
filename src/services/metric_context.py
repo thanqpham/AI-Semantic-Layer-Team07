@@ -17,6 +17,7 @@ from src.models.schemas import ChatClarificationOption, ChatClarificationPayload
 from src.services.categorical_discovery_policy import safe_observed_values
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
+from src.services.metric_context_graph import expand_bridges, table_key
 from src.services.metric_runtime import MetricCallError, invoke_metric_json
 from src.services.relationship_runtime import active_relationship_filters
 
@@ -76,6 +77,10 @@ async def build_metric_context(
     selected, diagnostic = await _select_tables(question, inventory, tables, target_tables)
     if diagnostic:
         return MetricContextResult(schema={}, diagnostic=diagnostic)
+    if not target_tables:
+        selected, error = expand_bridges(tables, relationships, selected)
+        if error:
+            return _clarification(error)
     schema = _expand_context(tables, relationships, selected)
     if _token_estimate({"schema": schema, "question": question}) > token_budget:
         return _clarification("Phạm vi KPI quá rộng; hãy nêu rõ bảng hoặc dimension cần tính.")
@@ -102,7 +107,7 @@ async def build_data_context(db: AsyncSession, db_id: int, question: str, token_
 async def load_review_schema(db: AsyncSession, db_id: int, table_names: list[str] | None = None) -> dict[str, Any]:
     """Read complete declared metadata for discovery and proposal freshness checks."""
     tables, relationships = await _load_metadata(db, db_id)
-    selected = set(table_names) if table_names is not None else {t.table_name for t in tables}
+    selected = set(table_names) if table_names is not None else {table_key(t) for t in tables}
     return _expand_context(tables, relationships, selected)
 
 
@@ -117,6 +122,9 @@ async def build_discovery_context(
     schema = await load_review_schema(db, db_id, table_names)
     if not schema["tables"]:
         return _clarification("Chưa có schema metadata. Hãy nhập hoặc kết nối schema trước.")
+    names = [table["table_name"] for table in schema["tables"]]
+    if len(names) != len(set(names)):
+        return _clarification("Tên bảng không duy nhất; hãy chọn tên đầy đủ schema.table.")
     # Reserve half for the request, KPI recipes, catalog and review feedback.
     schema_budget = token_budget // 2
     if _token_estimate(schema) <= (token_budget if table_names else schema_budget):
@@ -126,6 +134,11 @@ async def build_discovery_context(
     selected, diagnostic = await _select_discovery_scope(schema, question, schema_budget)
     if diagnostic:
         return MetricContextResult(schema={}, diagnostic=diagnostic)
+    if schema["relationships"]:
+        tables, relationships = await _load_metadata(db, db_id)
+        selected, error = expand_bridges(tables, relationships, selected)
+        if error:
+            return _clarification(error)
     scoped = await load_review_schema(db, db_id, list(selected))
     if not scoped["tables"] or _token_estimate(scoped) > schema_budget:
         return _clarification("Các bảng nghiệp vụ đã chọn vẫn vượt ngân sách context; hãy chọn phạm vi KPI cụ thể hơn.")
@@ -153,6 +166,7 @@ def _discovery_inventory(schema: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
             "table_name": table["table_name"],
+            "physical_schema": table.get("physical_schema"),
             "business_name": table.get("business_name"),
             "description": table.get("description"),
             "columns": {c["column_name"]: c.get("data_type") for c in table.get("columns", [])},
@@ -189,6 +203,7 @@ def _inventory(tables: list[SemanticTableModel]) -> list[dict[str, Any]]:
     return [
         {
             "table_name": table.table_name,
+            "physical_schema": getattr(table, "physical_schema", None),
             "business_name": table.business_name,
             "description": table.description,
             "columns": [column.column_name for column in table.columns],
@@ -205,8 +220,13 @@ async def _select_tables(
     prompt_template: str = _SCOPE_PROMPT,
 ) -> tuple[set[str], dict[str, Any] | None]:
     """Use the first controlled AI call to select a business domain."""
-    valid = {table["table_name"] if isinstance(table, dict) else table.table_name for table in tables}
+    valid = {table_key(table) for table in tables}
+    names = [table["table_name"] if isinstance(table, dict) else table.table_name for table in tables]
+    ambiguous = {name for name in names if names.count(name) > 1}
+    valid.update(set(names) - ambiguous)
     if target_tables:
+        if set(target_tables) & ambiguous:
+            return set(), _clarification("Tên bảng không duy nhất; hãy chọn tên đầy đủ schema.table.").diagnostic
         selected = set(target_tables) & valid
         return (
             (selected, None)
@@ -214,6 +234,8 @@ async def _select_tables(
             else (set(), _clarification("Bảng được chọn không tồn tại trong schema.").diagnostic)
         )
     prompt = prompt_template.format(inventory=json.dumps(inventory, ensure_ascii=False), question=question)
+    if ambiguous:
+        prompt += "\nVới tên bảng trùng nhau, chọn tên đầy đủ schema.table từ physical_schema và table_name."
     if prompt_template == _DATA_SCOPE_PROMPT:
         prompt += _CLARIFICATION_OPTIONS_PROMPT
     try:
@@ -228,6 +250,9 @@ async def _select_tables(
             "message": exc.error.message,
             "execution_error": exc.error.model_dump(mode="json"),
         }
+    requested = {str(name) for name in payload.get("table_names", [])} if isinstance(payload, dict) else set()
+    if requested & ambiguous:
+        return set(), _clarification("Tên bảng không duy nhất; hãy chọn tên đầy đủ schema.table.").diagnostic
     selected = (
         {str(name) for name in payload.get("table_names", []) if str(name) in valid}
         if isinstance(payload, dict)
@@ -291,10 +316,17 @@ def _expand_context(
     tables: list[SemanticTableModel], relationships: list[CanonicalRelationshipModel], selected: set[str]
 ) -> dict[str, Any]:
     """Keep the selected business subgraph without unrelated neighbor tables."""
-    included = set(selected)
+    names = [table.table_name for table in tables]
+    included = {
+        table_key(t)
+        for t in tables
+        if table_key(t) in selected or (t.table_name in selected and names.count(t.table_name) == 1)
+    }
+    included_tables = [table for table in tables if table_key(table) in included]
+    identities = {(table.id, table_key(table)) for table in included_tables}
     return {
-        "tables": [_table_payload(table) for table in tables if table.table_name in included],
-        "relationships": _relations(relationships, included),
+        "tables": [_table_payload(table) for table in included_tables],
+        "relationships": _relations(relationships, identities),
     }
 
 
@@ -303,6 +335,7 @@ def _table_payload(table: SemanticTableModel) -> dict[str, Any]:
     return {
         "id": table.id,
         "table_name": table.table_name,
+        "physical_schema": getattr(table, "physical_schema", None),
         "business_name": table.business_name,
         "description": table.description,
         "review_status": table.review_status,
@@ -335,7 +368,7 @@ def _column_payload(column: Any) -> dict[str, Any]:
     }
 
 
-def _relations(relationships: list[CanonicalRelationshipModel], included: set[str]) -> list[dict[str, str]]:
+def _relations(relationships: list[CanonicalRelationshipModel], included: set[tuple[int, str]]) -> list[dict[str, str]]:
     """Serialize only relationships wholly contained in the selected context."""
     return [
         {
@@ -345,7 +378,8 @@ def _relations(relationships: list[CanonicalRelationshipModel], included: set[st
             "relationship_type": relation.relationship_type,
         }
         for relation in relationships
-        if relation.from_entity.table_name in included and relation.to_entity.table_name in included
+        if (relation.from_entity.id, table_key(relation.from_entity)) in included
+        and (relation.to_entity.id, table_key(relation.to_entity)) in included
     ]
 
 

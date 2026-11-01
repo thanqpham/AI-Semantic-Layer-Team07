@@ -810,6 +810,7 @@ export interface ChatSemanticQueryResult {
 }
 
 export interface ChatOrchestratorResponse {
+  proposal_mode?: 'requested' | 'discovery' | null;
   run_status?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
   blocked_candidates?: MetricCandidateReport[];
   execution_trace?: ExecutionTrace | null;
@@ -846,6 +847,7 @@ export interface ChatMessageItem {
   content: string;
   intent?: string | null;
   metadata_json?: {
+    proposal_mode?: 'requested' | 'discovery' | null;
     run_status?: 'completed' | 'partial' | 'needs_clarification' | 'error' | null;
     blocked_candidates?: MetricCandidateReport[];
     execution_trace?: ExecutionTrace | null;

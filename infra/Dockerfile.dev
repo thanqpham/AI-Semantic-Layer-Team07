@@ -1,5 +1,5 @@
 # ---- Dev image ----
-# Single-stage, lightweight — dùng với docker-compose.dev.yml
+# Single-stage, lightweight — dùng với infra/docker-compose.dev.yml
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -14,7 +14,7 @@ COPY requirements.txt requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
 # Code được mount qua volume — không cần COPY ở đây
-# (bind mount trong docker-compose.dev.yml ghi đè thư mục /app)
+# (bind mount trong infra/docker-compose.dev.yml ghi đè thư mục /app)
 
 EXPOSE 8000
 

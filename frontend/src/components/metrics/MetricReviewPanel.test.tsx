@@ -36,7 +36,7 @@ describe('metric review evidence and gates', () => {
     render(<MetricReviewPanel review={{ ...passingReview, status: 'needs_clarification',
       reason_code: 'UNRESOLVED_ASSUMPTION' }} />);
     fireEvent.click(screen.getByText('Cần xác nhận nghiệp vụ'));
-    expect(screen.getByText('Nhóm lý do: Còn giả định nghiệp vụ chưa xác nhận')).toBeInTheDocument();
+    expect(screen.getByText('Nhóm lý do:').parentElement).toHaveTextContent('Còn giả định nghiệp vụ chưa xác nhận');
   });
   it.each([
     ['INVALID_AGENT_OUTPUT', 'AI chưa tạo được định nghĩa hợp lệ'],
@@ -59,7 +59,7 @@ describe('metric review evidence and gates', () => {
     }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} onAddMetric={vi.fn()} />);
     expect(screen.getByRole('status')).toHaveTextContent('Một phần tác vụ đã hoàn tất');
     expect(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' })).toBeEnabled();
-    expect(screen.getByText('Đang bị giới hạn API')).toBeInTheDocument();
+    expect(screen.queryByText('KPI bị giới hạn')).not.toBeInTheDocument();
   });
 
   it('shows the typed handoff history without exposing payloads', () => {
@@ -85,23 +85,72 @@ describe('metric review evidence and gates', () => {
     expect(screen.getByText('Đã dùng 1/1 lượt sửa.')).toBeInTheDocument();
   });
 
-  it.each(['legacy', 'error', 'unsupported'] as const)('prevents save for %s suggestions', status => {
+  it.each(['legacy', 'error', 'unsupported'] as const)('hides unsaveable %s suggestions', status => {
     const suggestion: MetricSuggestion = { definition, yaml_preview: '', ...(status === 'legacy' ? {} : {
       ...reviewedSuggestionFields, review: { ...passingReview, status },
     }) };
     render(<StudioChatStream messages={[{ id: 'message', sender: 'assistant', text: '', timestamp: '', suggestions: [suggestion] }]}
       onSendMessage={vi.fn()} isLoading={false} tableNames={[]} onAddMetric={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Lưu vào Semantic Layer' })).toBeDisabled();
+    expect(screen.queryByText('Doanh thu')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Lưu vào Semantic Layer' })).not.toBeInTheDocument();
+    expect(screen.getByText('Chưa tạo được metric có thể lưu.')).toBeInTheDocument();
   });
 
-  it('keeps blocked candidates visible after history reload', () => {
+  it('hides blocked candidates after history reload', () => {
     render(<StudioChatStream messages={[{ id: 'reloaded', sender: 'assistant', text: '', timestamp: '',
       blockedCandidates: [{ name: 'Biên lợi nhuận', review: { ...passingReview, status: 'rejected', summary: 'Thiếu giá vốn' } }],
     }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} />);
-    expect(screen.getByText('Biên lợi nhuận')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Chưa phù hợp hoặc thiếu dữ liệu'));
-    expect(screen.getByText('Thiếu giá vốn')).toBeInTheDocument();
+    expect(screen.queryByText('Biên lợi nhuận')).not.toBeInTheDocument();
+    expect(screen.getByText('Chưa tạo được metric có thể lưu.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Lưu vào Semantic Layer' })).not.toBeInTheDocument();
+  });
+
+  it.each(['rejected', 'unsupported', 'needs_clarification'] as const)('explains a blocked requested metric: %s', status => {
+    render(<StudioChatStream messages={[{ id: 'requested', sender: 'assistant', text: '', timestamp: '', proposalMode: 'requested',
+      blockedCandidates: [{ name: 'Tỷ lệ hoàn tiền', review: { ...passingReview, status,
+        summary: 'Cần dữ liệu hoàn tiền', issues: [{ code: 'MISSING', message: 'Thiếu dữ liệu', evidence: 'Không có cột', action: 'Bổ sung cột hoàn tiền' }] } }],
+    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} onAddMetric={vi.fn()} />);
+    expect(screen.getByText('Cần dữ liệu hoàn tiền')).toBeInTheDocument();
+    expect(screen.getByText('Lý do chưa tạo được metric')).toBeInTheDocument();
+    expect(screen.getByText('Cần làm')).toBeInTheDocument();
+    expect(screen.getByText(/Bổ sung cột hoàn tiền/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Lưu vào Semantic Layer' })).not.toBeInTheDocument();
+  });
+
+  it('preserves conversation clarification when all candidates are blocked', () => {
+    render(<StudioChatStream messages={[{ id: 'clarify', sender: 'assistant', text: 'Bạn muốn tính kỳ nào?', timestamp: '',
+      clarification: { prompt: 'Bạn muốn tính kỳ nào?', options: [{ id: 'month', label: 'Theo tháng' }] },
+      blockedCandidates: [{ name: 'Không thể tạo', review: { ...passingReview, status: 'needs_clarification' } }],
+    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} />);
+    expect(screen.getByText('Bạn muốn tính kỳ nào?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Theo tháng' })).toBeInTheDocument();
+    expect(screen.queryByText('Không thể tạo')).not.toBeInTheDocument();
+  });
+
+  it('shows the clarification prompt even without options when candidates are blocked', () => {
+    render(<StudioChatStream messages={[{ id: 'clarify-empty', sender: 'assistant', text: 'Các KPI dưới đây chưa đủ điều kiện.', timestamp: '',
+      clarification: { prompt: 'Bạn muốn tính kỳ nào?', options: [] },
+      blockedCandidates: [{ name: 'Không thể tạo', review: { ...passingReview, status: 'needs_clarification' } }],
+    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} />);
+    expect(screen.getByText('Bạn muốn tính kỳ nào?')).toBeInTheDocument();
+    expect(screen.queryByText('Các KPI dưới đây chưa đủ điều kiện.')).not.toBeInTheDocument();
+  });
+
+  it('keeps duplicate guidance when blocked candidates are hidden', () => {
+    render(<StudioChatStream messages={[{ id: 'duplicate-blocked', sender: 'assistant', text: 'Chỉ số đã có sẵn.', timestamp: '',
+      duplicates: [{ existing_metric_id: 1, existing_metric_name: 'AOV', existing_metric_status: 'approved', user_message: 'AOV đã tồn tại', similarity_reason: 'Giống công thức' }],
+      blockedCandidates: [{ name: 'Không thể tạo', review: { ...passingReview, status: 'rejected' } }],
+    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} />);
+    expect(screen.getByText('Chỉ số đã có sẵn.')).toBeInTheDocument();
+    expect(screen.queryByText('Không thể tạo')).not.toBeInTheDocument();
+  });
+
+  it('shows a general message when an error response references hidden candidates', () => {
+    render(<StudioChatStream messages={[{ id: 'error-blocked', sender: 'assistant', text: 'Các KPI dưới đây chưa đủ điều kiện gửi duyệt.', timestamp: '', runStatus: 'error',
+      blockedCandidates: [{ name: 'Không thể tạo', review: { ...passingReview, status: 'error' } }],
+    }]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} />);
+    expect(screen.getByText('Không thể hoàn tất đề xuất metric do lỗi xử lý. Vui lòng thử lại.')).toBeInTheDocument();
+    expect(screen.queryByText('Không thể tạo')).not.toBeInTheDocument();
   });
 
   it('re-reviews a modal draft without saving or closing it', async () => {
