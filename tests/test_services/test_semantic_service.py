@@ -629,8 +629,8 @@ async def test_get_metric_with_history_not_found(async_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_enrich_saves_allowed_values_from_sample_values(async_session: AsyncSession):
-    """enrich_and_save_canonical_schema persists sample_values as allowed_values in SemanticColumnModel."""
+async def test_enrich_does_not_publish_unreviewed_sample_values(async_session: AsyncSession):
+    """Schema metadata values are not automatically published as approved values."""
     dialect = SchemaDialect.POSTGRESQL
     users_cols = (
         ColumnMetadata(
@@ -710,7 +710,7 @@ async def test_enrich_saves_allowed_values_from_sample_values(async_session: Asy
             )
         )
     ).scalar_one()
-    assert status_col.allowed_values == ["active", "inactive"]
+    assert status_col.allowed_values is None
 
     user_id_col = (
         await async_session.execute(

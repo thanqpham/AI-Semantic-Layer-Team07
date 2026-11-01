@@ -29,10 +29,10 @@ CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ### Commands
 
 ```bash
-docker build -t ai20k-app .
-docker compose up -d
-docker compose logs -f backend
-docker compose down
+docker build -f infra/Dockerfile -t ai20k-app .
+docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml logs -f backend
+docker compose -f infra/docker-compose.yml down
 ```
 
 ## CI/CD (GitHub Actions)

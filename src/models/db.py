@@ -440,6 +440,7 @@ class SemanticColumnModel(ReviewStateMixin, Base):
     is_time_dimension: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     allowed_values: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     allowed_values_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    allowed_value_mappings: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now

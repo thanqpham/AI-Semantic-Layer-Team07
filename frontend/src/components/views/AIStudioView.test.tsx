@@ -151,6 +151,25 @@ describe('AIStudioView', () => {
     expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[0][7]).toBe('discovery');
   });
 
+  it.each(['live', 'history'] as const)('shows requested metric guidance from %s response', async (source) => {
+    const blocked = [{ name: 'Metric', review: { ...reviewedSuggestionFields.review!, status: 'unsupported' as const,
+      summary: 'Cần thêm dữ liệu giao hàng' } }];
+    if (source === 'history') {
+      vi.mocked(api.getChatSessionDetailApi).mockResolvedValueOnce({ id: 'sess-1', db_id: 101, title: 'Test',
+        created_at: '', updated_at: '', message_count: 1, messages: [{ id: 'a-1', session_id: 'sess-1', sequence_no: 1,
+          sender: 'assistant', content: '', created_at: '', metadata_json: { proposal_mode: 'requested', blocked_candidates: blocked } }] });
+    } else {
+      vi.mocked(api.sendChatOrchestratorApi).mockResolvedValueOnce({ intent: 'metric_query', proposal_mode: 'requested',
+        blocked_candidates: blocked, session_id: 'sess-1', user_message_id: 'u-1', assistant_message_id: 'a-1' });
+    }
+    render(<AIStudioView layer={mockLayer} theme="light" activeSessionId={source === 'history' ? 'sess-1' : undefined} onMetricsChanged={vi.fn()} />);
+    if (source === 'live') {
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Tạo metric giao hàng' } });
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', code: 'Enter' });
+    }
+    expect(await screen.findByText('Cần thêm dữ liệu giao hàng')).toBeInTheDocument();
+  });
+
   it('creates a new immutable Member proposal when resolving a name conflict', async () => {
     vi.mocked(api.getChatSessionDetailApi).mockResolvedValue({ id: 'sess-1', db_id: 101, title: 'Metrics',
       created_at: '', updated_at: '', message_count: 1, messages: [{ id: 'a-original', session_id: 'sess-1', sequence_no: 1,
@@ -433,6 +452,7 @@ describe('AIStudioView', () => {
         intent: 'metric_query',
         chat_response: 'Metric này đã tồn tại.',
         suggestions: conflict ? [{
+          ...reviewedSuggestionFields,
           yaml_preview: 'metric: new_aov',
           definition: { metric: { name: 'New AOV', formula: { function: 'AVG', expression: 'order_total' }, base_entity: 'orders', filters: [], status: 'unverified', excluded_notes: '' } },
           conflict: { proposed_metric_name: 'New AOV', existing_metric_id: 7, existing_metric_name: 'AOV', existing_metric_status: 'approved', suggested_name: 'New AOV 2', clarify_question: 'Name conflict' },

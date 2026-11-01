@@ -1,0 +1,163 @@
+{
+  "version": "synthetic-relationships-v2",
+  "metadata": [
+    {
+      "id": 1,
+      "schema": "sales",
+      "name": "orders",
+      "columns": [
+        {
+          "id": 11,
+          "column_name": "id",
+          "data_type": "INTEGER",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        },
+        {
+          "id": 12,
+          "column_name": "customer_id",
+          "data_type": "INTEGER",
+          "is_nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "schema": "catalog",
+      "name": "price_history",
+      "columns": [
+        {
+          "id": 31,
+          "column_name": "product_id",
+          "data_type": "INTEGER",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        },
+        {
+          "id": 32,
+          "column_name": "month_start",
+          "data_type": "DATE",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "schema": "catalog",
+      "name": "inventory_snapshot",
+      "columns": [
+        {
+          "id": 41,
+          "column_name": "product_id",
+          "data_type": "INTEGER",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        },
+        {
+          "id": 42,
+          "column_name": "month_start",
+          "data_type": "DATE",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "schema": "sales",
+      "name": "warehouses",
+      "columns": [
+        {
+          "id": 51,
+          "column_name": "id",
+          "data_type": "INTEGER",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "schema": "sales",
+      "name": "promotions",
+      "columns": [
+        {
+          "id": 61,
+          "column_name": "id",
+          "data_type": "INTEGER",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "schema": "sales",
+      "name": "customers",
+      "columns": [
+        {
+          "id": 21,
+          "column_name": "id",
+          "data_type": "INTEGER",
+          "is_nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "fk_target_table": null,
+          "fk_target_column": null
+        }
+      ]
+    }
+  ],
+  "expected": [
+    {
+      "from_entity_id": 1,
+      "to_entity_id": 2,
+      "column_pairs": [
+        {
+          "from_column_id": 12,
+          "to_column_id": 21
+        }
+      ]
+    },
+    {
+      "from_entity_id": 3,
+      "to_entity_id": 4,
+      "column_pairs": [
+        {
+          "from_column_id": 31,
+          "to_column_id": 41
+        },
+        {
+          "from_column_id": 32,
+          "to_column_id": 42
+        }
+      ]
+    }
+  ]
+}

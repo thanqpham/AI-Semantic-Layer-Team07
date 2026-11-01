@@ -72,10 +72,11 @@ def is_valid_dimension_column(col: SemanticColumnModel, *, include_time: bool = 
     dt = (col.data_type or "").upper()
     if not include_time and (any(t in dt for t in TIME_TYPES) or col.is_time_dimension):
         return False
+    allowed_values = col.allowed_values if col.review_status == "approved" else None
     if any(t in dt for t in NUMERIC_TYPES):
-        if not col.allowed_values or len(col.allowed_values) > 30:
+        if not allowed_values or len(allowed_values) > 30:
             return False
-    if col.allowed_values and len(col.allowed_values) > 30:
+    if allowed_values and len(allowed_values) > 30:
         return False
     return True
 
@@ -94,7 +95,7 @@ def _make_dimension_item(
         "C": "Liên kết mở rộng (N:1)",
         "D": "Chi tiết dòng hàng (1:N)",
     }
-    cardinality = len(col.allowed_values) if col.allowed_values else None
+    cardinality = len(col.allowed_values) if col.review_status == "approved" and col.allowed_values else None
     return RecommendedDimensionItem(
         column_id=col.id,
         column_name=col.column_name,

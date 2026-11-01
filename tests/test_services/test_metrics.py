@@ -139,6 +139,23 @@ def test_format_columns_only_includes_approved_allowed_values() -> None:
     assert "private@example.test" not in _format_columns([approved])[0]
 
 
+def test_format_columns_only_exposes_safe_approved_business_labels() -> None:
+    column = {
+        "column_name": "status",
+        "review_status": "approved",
+        "allowed_value_mappings": [
+            {"db_value": "paid", "business_value": "Đã thanh toán", "status": "approved"},
+            {"db_value": "secret@example.test", "business_value": "Private", "status": "approved"},
+            {"db_value": "new", "business_value": "Chờ duyệt", "status": "pending"},
+        ],
+    }
+    text = _format_columns([column])[0]
+    assert "Đã thanh toán" in text
+    assert "secret@example.test" not in text and "Chờ duyệt" not in text
+    column["review_status"] = "pending_review"
+    assert "Đã thanh toán" not in _format_columns([column])[0]
+
+
 # ---------------------------------------------------------------------------
 # build_metric_system_prompt — Rule 6
 # ---------------------------------------------------------------------------

@@ -120,6 +120,7 @@ async def seeded_db(async_session: AsyncSession) -> int:
         is_nullable=True,
         is_time_dimension=False,
         allowed_values=["pending", "shipped", "delivered", "cancelled"],
+        review_status="approved",
     )
     async_session.add_all([user_id_col, email_col, order_id_col, created_at_col, status_col])
     await async_session.flush()
