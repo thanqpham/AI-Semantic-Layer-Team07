@@ -113,11 +113,8 @@ logs/
 # ==========================================
 # IDE & System Files
 # ==========================================
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+.vscode/
+.continue/
 .idea/
 *.swp
 *.swo
