@@ -7,7 +7,7 @@ RUN npm ci --legacy-peer-deps || npm install
 COPY . .
 
 # Environment variables for Next.js build
-ARG NEXT_PUBLIC_API_BASE_URL=https://my-app-service-78389130178.asia-southeast1.run.app
+ARG NEXT_PUBLIC_API_BASE_URL=https://api.140.245.58.162.nip.io
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=56976125302-vb1suvl9rm1esc9nib0lasuc764ume02.apps.googleusercontent.com
 ARG NEXT_PUBLIC_SUPABASE_URL=https://wyzxcnbnosbhrkehuxuu.supabase.co
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_3raIcTDoeyYglaMVFwpFYg_sTnLCMwo
