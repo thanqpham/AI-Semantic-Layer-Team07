@@ -138,17 +138,23 @@ def _split_component_by_budget(
     anchor = max(names, key=lambda n: (len(local[n]), n))
 
     visited: set[str] = set()
-    queue = deque([anchor])
     bfs_order: list[str] = []
-    while queue:
-        current = queue.popleft()
-        if current in visited:
+    # Satellite subtraction can leave the component internally disconnected; BFS from
+    # one anchor would then silently drop every other subgraph, so restart from any
+    # still-unvisited name.
+    for start in [anchor, *(n for n in names if n != anchor)]:
+        if start in visited:
             continue
-        visited.add(current)
-        bfs_order.append(current)
-        for nb in sorted(local.get(current, set())):
-            if nb not in visited:
-                queue.append(nb)
+        queue = deque([start])
+        while queue:
+            current = queue.popleft()
+            if current in visited:
+                continue
+            visited.add(current)
+            bfs_order.append(current)
+            for nb in sorted(local.get(current, set())):
+                if nb not in visited:
+                    queue.append(nb)
 
     result: list[list[str]] = []
     current_cluster: list[str] = []

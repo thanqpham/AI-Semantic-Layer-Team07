@@ -16,14 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.models.db import SemanticTableModel
-from src.models.review_mixin import REVIEW_STATUS_APPROVED
+from src.models.review_mixin import REVIEW_STATUS_APPROVED, REVIEW_STATUS_PENDING
 from src.models.schema_metadata import RawSchemaMetadata
 from src.services import enrichment_progress
 from src.services.clustering import cluster_tables
 from src.services.enrichment_config import DEFAULT_CONFIG
 from src.services.pass1_global_glossary import execute_pass1
 from src.services.pass2_cluster_enrichment import enrich_clusters_parallel
-from src.services.schema_review_service import apply_ai_proposal
+from src.services.schema_review_service import apply_ai_proposal, preserve_approved_legacy_values
 
 
 def pydantic_tables_to_typeddict(tables) -> list[dict]:
@@ -76,10 +76,12 @@ def pydantic_tables_to_typeddict(tables) -> list[dict]:
     return result
 
 
-def row_is_complete(business_name: str | None, physical_name: str, description: str | None, review_status: str) -> bool:
-    """A row is complete when approved, or filled with a business name and description."""
-    if review_status == REVIEW_STATUS_APPROVED:
-        return True
+def row_is_complete(business_name: str | None, physical_name: str, description: str | None) -> bool:
+    """A row is complete only when it carries real content.
+
+    Approval alone does not complete a row: bulk approve signs off empty rows
+    too, and treating those as complete locks them out of every re-generation.
+    """
     return bool(business_name and business_name != physical_name and description and description.strip())
 
 
@@ -95,9 +97,9 @@ async def load_existing_state(db: AsyncSession, connection_id: int) -> dict[tupl
     for row in tables:
         key = (row.physical_schema_key or row.physical_schema or "", row.table_name_key or row.table_name)
         state[key] = {
-            "complete": row_is_complete(row.business_name, row.table_name, row.description, row.review_status),
+            "complete": row_is_complete(row.business_name, row.table_name, row.description),
             "columns": {
-                col.column_name: row_is_complete(col.business_name, col.column_name, col.description, col.review_status)
+                col.column_name: row_is_complete(col.business_name, col.column_name, col.description)
                 for col in row.columns
             },
         }
@@ -120,16 +122,28 @@ def table_needs_llm(existing_state: dict[tuple[str, str], dict[str, Any]], table
 def apply_proposal_values(
     row: Any, physical_name: str, prop_business_name: str, prop_description: str, fill_missing: bool
 ) -> None:
-    """Record a proposal: fill-missing keeps human-set fields, HITL applies wholesale."""
-    if not fill_missing or row.review_status == REVIEW_STATUS_APPROVED:
+    """Record a proposal: fill-missing keeps human-set fields, HITL applies wholesale.
+
+    Approved rows re-enter review only when an empty cell actually got filled;
+    an empty proposal (LLM fallback) changes nothing.
+    """
+    if not fill_missing:
         apply_ai_proposal(row, prop_business_name, prop_description)
         return
     row.ai_business_name = prop_business_name
     row.ai_description = prop_description
-    if not row.business_name or not row.business_name.strip() or row.business_name == physical_name:
-        row.business_name = prop_business_name
-    if not row.description or not row.description.strip():
+    filled = False
+    if prop_business_name and prop_business_name != physical_name:
+        needs_name = not row.business_name or not row.business_name.strip() or row.business_name == physical_name
+        if needs_name:
+            row.business_name = prop_business_name
+            filled = True
+    if prop_description and (not row.description or not row.description.strip()):
         row.description = prop_description
+        filled = True
+    if filled and row.review_status == REVIEW_STATUS_APPROVED:
+        preserve_approved_legacy_values(row)
+        row.review_status = REVIEW_STATUS_PENDING
 
 
 def progress_publisher(connection_id: int) -> Callable[[int, int, str | None], None]:
