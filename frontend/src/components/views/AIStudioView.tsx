@@ -455,7 +455,7 @@ export function AIStudioView({
             <Button type="button" variant="outline" size="sm" className="gap-2"
               disabled={loading || loadingSessions}
               onClick={() => void send('Khám phá các KPI phù hợp với schema bán lẻ/ecommerce này.', [], undefined, undefined, undefined, 'discovery')}>
-              <Sparkles className="h-4 w-4" />Đề xuất KPI
+              <Sparkles className="h-4 w-4" />Đề xuất metrics
             </Button>
             {activeSession ? (
               <>
