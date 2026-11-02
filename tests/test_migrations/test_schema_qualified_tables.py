@@ -58,3 +58,21 @@ def test_upgrade_preserves_rows_and_safe_downgrade():
                 == before
             )
             assert connection.exec_driver_sql("SELECT * FROM semantic_metrics").all() == [(21, 11, "COUNT(*)")]
+
+
+def test_upgrade_succeeds_without_legacy_unique_constraint():
+    path = next((Path(__file__).parents[2] / "alembic/versions").glob("*_schema_qualified_tables.py"))
+    spec = importlib.util.spec_from_file_location("qualified_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE semantic_tables (id INTEGER PRIMARY KEY, db_id INTEGER, table_name TEXT, physical_schema TEXT)"
+        )
+        connection.exec_driver_sql("INSERT INTO semantic_tables VALUES (1,1,'orders','public')")
+        with patch.object(migration, "op", Operations(MigrationContext.configure(connection))):
+            migration.upgrade()
+            cols = [col["name"] for col in sa.inspect(connection).get_columns("semantic_tables")]
+            assert "physical_schema_key" in cols
+            assert "table_name_key" in cols
