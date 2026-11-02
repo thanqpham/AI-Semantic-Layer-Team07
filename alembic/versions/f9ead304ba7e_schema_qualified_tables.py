@@ -21,10 +21,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Replace bare-name uniqueness without changing persisted identity or schema."""
+    unique_constraints = {
+        constraint["name"] for constraint in sa.inspect(op.get_bind()).get_unique_constraints("semantic_tables")
+    }
     with op.batch_alter_table("semantic_tables") as batch:
         batch.add_column(sa.Column("physical_schema_key", sa.String(200), nullable=True))
         batch.add_column(sa.Column("table_name_key", sa.String(200), nullable=True))
-        batch.drop_constraint("uq_semantic_tables_db_table", type_="unique")
+        if "uq_semantic_tables_db_table" in unique_constraints:
+            batch.drop_constraint("uq_semantic_tables_db_table", type_="unique")
     op.create_index(
         "uq_semantic_tables_db_schema_table",
         "semantic_tables",
