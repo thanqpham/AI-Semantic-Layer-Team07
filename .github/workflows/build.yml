@@ -125,6 +125,8 @@ jobs:
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://api.140.245.58.162.nip.io
           load: true
           tags: frontend-scan:${{ needs.detect-changes.outputs.sha_short }}
 
@@ -152,6 +154,8 @@ jobs:
           file: ./frontend/Dockerfile
           platforms: linux/arm64
           push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://api.140.245.58.162.nip.io
           tags: |
             ghcr.io/${{ github.repository_owner }}/ai-semantic-layer-frontend:${{ needs.detect-changes.outputs.sha_short }}
             ghcr.io/${{ github.repository_owner }}/ai-semantic-layer-frontend:latest
