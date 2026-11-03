@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.db import (
     ChatMessageModel,
     ChatSessionModel,
+    MetricProposalModel,
     MetricRequestModel,
     NotificationModel,
     OrganizationMemberModel,
@@ -140,6 +141,13 @@ async def reject_metric_request(
     request = await _pending_request(db, request_id)
     request.status, request.reviewed_by, request.review_note = "rejected", reviewer_id, note
     request.reviewed_at = datetime.now(UTC)
+    # Stamp the proposal so the member's chat card flips to "Đã từ chối" like a direct metric reject.
+    reason = (note or "").strip() or "Yêu cầu metric bị từ chối"
+    proposals = (
+        await db.scalars(select(MetricProposalModel).where(MetricProposalModel.request_id == request.id))
+    ).all()
+    for proposal in proposals:
+        proposal.rejection_reason = reason
     await _notify_requester(db, request, "metric_request_rejected", "Metric request đã bị từ chối")
     resolved = await _mark_submitted_handled(db, request)
     await db.commit()

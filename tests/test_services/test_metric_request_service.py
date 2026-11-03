@@ -6,6 +6,7 @@ from sqlalchemy import select
 from src.models.db import (
     ChatMessageModel,
     ChatSessionModel,
+    MetricProposalModel,
     MetricRequestModel,
     NotificationModel,
     OrganizationMemberModel,
@@ -225,6 +226,65 @@ async def test_reject_notifies_requester_of_rejection(async_session) -> None:
     assert notification.title == "Metric request đã bị từ chối"
     assert notification.body == "Doanh thu trước thuế"
     assert notification.db_id == database.id
+
+
+@pytest.mark.asyncio
+async def test_reject_stamps_proposal_reason_for_chat_card(async_session) -> None:
+    """Rejecting a request stamps the proposal so the member's chat card shows Đã từ chối."""
+    database = SemanticDatabaseModel(created_by=1, display_name="DB", db_type="sqlite", conn_url_enc="enc")
+    async_session.add(database)
+    await async_session.flush()
+    session = ChatSessionModel(id="session-6", user_id=1, db_id=database.id)
+    message = ChatMessageModel(
+        id="message-6",
+        session_id=session.id,
+        sequence_no=1,
+        sender="assistant",
+        content="Proposal",
+        metadata_json=await _suggestion_metadata(async_session, database.id),
+    )
+    async_session.add_all([session, message])
+    await async_session.commit()
+
+    request = await create_metric_request(async_session, database.id, 1, message.id, 0)
+    await reject_metric_request(async_session, request.id, 2, "Thiếu điều kiện lọc")
+
+    proposal = (
+        await async_session.execute(
+            select(MetricProposalModel).where(MetricProposalModel.request_id == request.id)
+        )
+    ).scalar_one()
+    assert proposal.metric_id is None
+    assert proposal.rejection_reason == "Thiếu điều kiện lọc"
+
+
+@pytest.mark.asyncio
+async def test_reject_without_note_still_marks_proposal_rejected(async_session) -> None:
+    """A note-less rejection still flips the chat card, not only the request row."""
+    database = SemanticDatabaseModel(created_by=1, display_name="DB", db_type="sqlite", conn_url_enc="enc")
+    async_session.add(database)
+    await async_session.flush()
+    session = ChatSessionModel(id="session-7", user_id=1, db_id=database.id)
+    message = ChatMessageModel(
+        id="message-7",
+        session_id=session.id,
+        sequence_no=1,
+        sender="assistant",
+        content="Proposal",
+        metadata_json=await _suggestion_metadata(async_session, database.id),
+    )
+    async_session.add_all([session, message])
+    await async_session.commit()
+
+    request = await create_metric_request(async_session, database.id, 1, message.id, 0)
+    await reject_metric_request(async_session, request.id, 2, None)
+
+    proposal = (
+        await async_session.execute(
+            select(MetricProposalModel).where(MetricProposalModel.request_id == request.id)
+        )
+    ).scalar_one()
+    assert proposal.rejection_reason is not None
 
 
 @pytest.mark.asyncio
