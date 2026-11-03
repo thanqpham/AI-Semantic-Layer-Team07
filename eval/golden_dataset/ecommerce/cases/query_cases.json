@@ -497,9 +497,9 @@
         ]
       },
       "sql_by_dialect": {
-        "postgresql": "SELECT COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS conversion_rate FROM fact_sessions",
-        "mysql": "SELECT COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS conversion_rate FROM fact_sessions",
-        "sqlite": "SELECT COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS conversion_rate FROM fact_sessions"
+        "postgresql": "SELECT COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS conversion_rate FROM fact_sessions WHERE is_bot_traffic = FALSE",
+        "mysql": "SELECT COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS conversion_rate FROM fact_sessions WHERE is_bot_traffic = FALSE",
+        "sqlite": "SELECT COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS conversion_rate FROM fact_sessions WHERE is_bot_traffic = FALSE"
       },
       "result_ref": "ecommerce_query_011"
     },
@@ -844,9 +844,9 @@
         ]
       },
       "sql_by_dialect": {
-        "postgresql": "SELECT COUNT(DISTINCT CASE WHEN is_test_order = FALSE AND customer_order_seq > 1 THEN customer_id END) * 1.0 / NULLIF(COUNT(DISTINCT CASE WHEN is_test_order = FALSE THEN customer_id END), 0) AS returning_customer_rate FROM fact_orders",
-        "mysql": "SELECT COUNT(DISTINCT CASE WHEN is_test_order = FALSE AND customer_order_seq > 1 THEN customer_id END) * 1.0 / NULLIF(COUNT(DISTINCT CASE WHEN is_test_order = FALSE THEN customer_id END), 0) AS returning_customer_rate FROM fact_orders",
-        "sqlite": "SELECT COUNT(DISTINCT CASE WHEN is_test_order = FALSE AND customer_order_seq > 1 THEN customer_id END) * 1.0 / NULLIF(COUNT(DISTINCT CASE WHEN is_test_order = FALSE THEN customer_id END), 0) AS returning_customer_rate FROM fact_orders"
+        "postgresql": "SELECT COUNT(DISTINCT CASE WHEN customer_order_seq > 1 THEN customer_id END) * 1.0 / NULLIF(COUNT(DISTINCT customer_id), 0) AS returning_customer_rate FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE",
+        "mysql": "SELECT COUNT(DISTINCT CASE WHEN customer_order_seq > 1 THEN customer_id END) * 1.0 / NULLIF(COUNT(DISTINCT customer_id), 0) AS returning_customer_rate FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE",
+        "sqlite": "SELECT COUNT(DISTINCT CASE WHEN customer_order_seq > 1 THEN customer_id END) * 1.0 / NULLIF(COUNT(DISTINCT customer_id), 0) AS returning_customer_rate FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE"
       },
       "result_ref": "ecommerce_query_023"
     },
@@ -1011,9 +1011,9 @@
         ]
       },
       "sql_by_dialect": {
-        "postgresql": "SELECT SUM(CASE WHEN is_test_order = FALSE THEN discount_amount END) * 1.0 / NULLIF(SUM(CASE WHEN is_test_order = FALSE THEN gross_amount END), 0) AS discount_rate FROM fact_orders",
-        "mysql": "SELECT SUM(CASE WHEN is_test_order = FALSE THEN discount_amount END) * 1.0 / NULLIF(SUM(CASE WHEN is_test_order = FALSE THEN gross_amount END), 0) AS discount_rate FROM fact_orders",
-        "sqlite": "SELECT SUM(CASE WHEN is_test_order = FALSE THEN discount_amount END) * 1.0 / NULLIF(SUM(CASE WHEN is_test_order = FALSE THEN gross_amount END), 0) AS discount_rate FROM fact_orders"
+        "postgresql": "SELECT SUM(discount_amount) * 1.0 / NULLIF(SUM(gross_amount), 0) AS discount_rate FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE",
+        "mysql": "SELECT SUM(discount_amount) * 1.0 / NULLIF(SUM(gross_amount), 0) AS discount_rate FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE",
+        "sqlite": "SELECT SUM(discount_amount) * 1.0 / NULLIF(SUM(gross_amount), 0) AS discount_rate FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE"
       },
       "result_ref": "ecommerce_query_033"
     },
@@ -1199,9 +1199,9 @@
         ]
       },
       "sql_by_dialect": {
-        "postgresql": "SELECT COUNT(DISTINCT CASE WHEN has_cart_addition = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS add_to_cart_rate FROM fact_sessions",
-        "mysql": "SELECT COUNT(DISTINCT CASE WHEN has_cart_addition = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS add_to_cart_rate FROM fact_sessions",
-        "sqlite": "SELECT COUNT(DISTINCT CASE WHEN has_cart_addition = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS add_to_cart_rate FROM fact_sessions"
+        "postgresql": "SELECT COUNT(DISTINCT CASE WHEN has_cart_addition = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS add_to_cart_rate FROM fact_sessions WHERE is_bot_traffic = FALSE",
+        "mysql": "SELECT COUNT(DISTINCT CASE WHEN has_cart_addition = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS add_to_cart_rate FROM fact_sessions WHERE is_bot_traffic = FALSE",
+        "sqlite": "SELECT COUNT(DISTINCT CASE WHEN has_cart_addition = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0) AS add_to_cart_rate FROM fact_sessions WHERE is_bot_traffic = FALSE"
       },
       "result_ref": "ecommerce_query_037"
     },
@@ -1246,9 +1246,9 @@
         ]
       },
       "sql_by_dialect": {
-        "postgresql": "SELECT AVG(session_duration_seconds) AS average_session_duration FROM fact_sessions",
-        "mysql": "SELECT AVG(session_duration_seconds) AS average_session_duration FROM fact_sessions",
-        "sqlite": "SELECT AVG(session_duration_seconds) AS average_session_duration FROM fact_sessions"
+        "postgresql": "SELECT AVG(session_duration_seconds) AS average_session_duration FROM fact_sessions WHERE is_bot_traffic = FALSE",
+        "mysql": "SELECT AVG(session_duration_seconds) AS average_session_duration FROM fact_sessions WHERE is_bot_traffic = FALSE",
+        "sqlite": "SELECT AVG(session_duration_seconds) AS average_session_duration FROM fact_sessions WHERE is_bot_traffic = FALSE"
       },
       "result_ref": "ecommerce_query_038"
     },
@@ -1406,9 +1406,9 @@
         ]
       },
       "sql_by_dialect": {
-        "postgresql": "SELECT delivery_type AS delivery_type, AVG(CASE WHEN is_test_order = FALSE AND is_delivered = TRUE THEN EXTRACT(EPOCH FROM (delivered_time - order_date)) / 3600.0 END) AS average_delivery_lead_time_hours FROM fact_orders GROUP BY delivery_type ORDER BY delivery_type",
-        "mysql": "SELECT delivery_type AS delivery_type, AVG(CASE WHEN is_test_order = FALSE AND is_delivered = TRUE THEN TIMESTAMPDIFF(MINUTE, order_date, delivered_time) / 60.0 END) AS average_delivery_lead_time_hours FROM fact_orders GROUP BY delivery_type ORDER BY delivery_type",
-        "sqlite": "SELECT delivery_type AS delivery_type, AVG(CASE WHEN is_test_order = FALSE AND is_delivered = TRUE THEN (julianday(delivered_time) - julianday(order_date)) * 24.0 END) AS average_delivery_lead_time_hours FROM fact_orders GROUP BY delivery_type ORDER BY delivery_type"
+        "postgresql": "SELECT delivery_type AS delivery_type, AVG((julianday(delivered_time) - julianday(order_date)) * 24.0) AS average_delivery_lead_time_hours FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE AND is_delivered = TRUE GROUP BY delivery_type ORDER BY delivery_type",
+        "mysql": "SELECT delivery_type AS delivery_type, AVG((julianday(delivered_time) - julianday(order_date)) * 24.0) AS average_delivery_lead_time_hours FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE AND is_delivered = TRUE GROUP BY delivery_type ORDER BY delivery_type",
+        "sqlite": "SELECT delivery_type AS delivery_type, AVG((julianday(delivered_time) - julianday(order_date)) * 24.0) AS average_delivery_lead_time_hours FROM fact_orders WHERE is_test_order = FALSE AND is_canceled = FALSE AND is_delivered = TRUE GROUP BY delivery_type ORDER BY delivery_type"
       },
       "result_ref": "ecommerce_query_041"
     },
@@ -1785,9 +1785,9 @@
         ]
       },
       "sql_by_dialect": {
-        "postgresql": "SELECT cities.city_name AS city_name, SUM(CASE WHEN fact_orders.is_test_order = FALSE THEN fact_orders.discount_amount END) * 1.0 / NULLIF(SUM(CASE WHEN fact_orders.is_test_order = FALSE THEN fact_orders.gross_amount END), 0) AS discount_rate FROM fact_orders JOIN customers ON fact_orders.customer_id = customers.id JOIN customer_addresses ON customers.default_address_id = customer_addresses.address_id JOIN cities ON customer_addresses.city_id = cities.city_id GROUP BY cities.city_name ORDER BY cities.city_name",
-        "mysql": "SELECT cities.city_name AS city_name, SUM(CASE WHEN fact_orders.is_test_order = FALSE THEN fact_orders.discount_amount END) * 1.0 / NULLIF(SUM(CASE WHEN fact_orders.is_test_order = FALSE THEN fact_orders.gross_amount END), 0) AS discount_rate FROM fact_orders JOIN customers ON fact_orders.customer_id = customers.id JOIN customer_addresses ON customers.default_address_id = customer_addresses.address_id JOIN cities ON customer_addresses.city_id = cities.city_id GROUP BY cities.city_name ORDER BY cities.city_name",
-        "sqlite": "SELECT cities.city_name AS city_name, SUM(CASE WHEN fact_orders.is_test_order = FALSE THEN fact_orders.discount_amount END) * 1.0 / NULLIF(SUM(CASE WHEN fact_orders.is_test_order = FALSE THEN fact_orders.gross_amount END), 0) AS discount_rate FROM fact_orders JOIN customers ON fact_orders.customer_id = customers.id JOIN customer_addresses ON customers.default_address_id = customer_addresses.address_id JOIN cities ON customer_addresses.city_id = cities.city_id GROUP BY cities.city_name ORDER BY cities.city_name"
+        "postgresql": "SELECT cities.city_name AS city_name, SUM(fact_orders.discount_amount) * 1.0 / NULLIF(SUM(fact_orders.gross_amount), 0) AS discount_rate FROM fact_orders JOIN customers ON fact_orders.customer_id = customers.id JOIN customer_addresses ON customers.default_address_id = customer_addresses.address_id JOIN cities ON customer_addresses.city_id = cities.city_id WHERE fact_orders.is_test_order = FALSE AND fact_orders.is_canceled = FALSE GROUP BY cities.city_name ORDER BY cities.city_name",
+        "mysql": "SELECT cities.city_name AS city_name, SUM(fact_orders.discount_amount) * 1.0 / NULLIF(SUM(fact_orders.gross_amount), 0) AS discount_rate FROM fact_orders JOIN customers ON fact_orders.customer_id = customers.id JOIN customer_addresses ON customers.default_address_id = customer_addresses.address_id JOIN cities ON customer_addresses.city_id = cities.city_id WHERE fact_orders.is_test_order = FALSE AND fact_orders.is_canceled = FALSE GROUP BY cities.city_name ORDER BY cities.city_name",
+        "sqlite": "SELECT cities.city_name AS city_name, SUM(fact_orders.discount_amount) * 1.0 / NULLIF(SUM(fact_orders.gross_amount), 0) AS discount_rate FROM fact_orders JOIN customers ON fact_orders.customer_id = customers.id JOIN customer_addresses ON customers.default_address_id = customer_addresses.address_id JOIN cities ON customer_addresses.city_id = cities.city_id WHERE fact_orders.is_test_order = FALSE AND fact_orders.is_canceled = FALSE GROUP BY cities.city_name ORDER BY cities.city_name"
       },
       "result_ref": "ecommerce_query_047"
     },

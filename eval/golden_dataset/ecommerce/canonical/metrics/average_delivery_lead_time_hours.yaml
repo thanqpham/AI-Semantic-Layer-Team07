@@ -11,7 +11,7 @@ sql_expression: "AVG((julianday(delivered_time) - julianday(order_date)) * 24.0)
 dependencies: []
 description: "Số giờ trung bình từ lúc đặt hàng đến lúc giao hàng xong, tính trên các đơn không test đã giao thành công."
 default_filters:
-  - condition: "is_test_order = FALSE AND is_delivered = TRUE"
+  - condition: "is_test_order = FALSE AND is_canceled = FALSE AND is_delivered = TRUE"
 allowed_dimensions: [order.order_date, order.channel, order.store_id, order.delivery_type, city.city_name, city.region_name]
 default_time_grain: month
 reference_source: "Ecommerce Metric Dictionary (Expanded)"

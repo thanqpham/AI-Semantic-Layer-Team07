@@ -1,5 +1,27 @@
 # Golden Dataset Changelog
 
+## [3.1.0] - 2026-11-03
+### Changed
+- 21 metric request viết lại theo khung **"Hãy đề xuất metric ..."** — giữ nguyên
+  ràng buộc nghiệp vụ, 2 negative case (011, 012) giữ nguyên bẫy.
+- Đồng bộ hygiene filter theo hành vi thật của product khi lưu metric (quyết định
+  nhóm 2026-11-03): `is_bot_traffic = FALSE` cho conversion_rate (004),
+  add_to_cart_rate (017), average_session_duration (019) — **đảo ngược mục 4
+  GROUND_TRUTH_NOTES** vì product auto-attach cột này ở fixture mới; thêm
+  `is_canceled` cho returned_order_rate (008), discount_rate (013); thêm
+  `is_canceled + is_delivered` cho average_delivery_lead_time_hours (014).
+  Không adopt cho units_per_transaction (AVG-vs-ratio là gap thật) và
+  low_stock_sku_count (filter cột-vs-chuỗi là gap thật).
+- Sửa aggregation `count` → `count_distinct` cho order_count (002) và
+  low_stock_sku_count (021).
+- Query cases 011, 023, 033, 037, 038, 041, 047: SQL chuyển sang dạng
+  WHERE-lift (default filter xuống `WHERE`, side-filter giữ CASE trong numerator)
+  — engine normalization từ 2026-11-03 hội tụ 2 spelling này; expected results
+  tính lại trên fixture (vd 011: 0.6154 → 0.6667; 041 mất nhóm `delivery_type`
+  rỗng vì WHERE drop empty group, đúng hành vi compiler).
+- Canonical registry (`canonical/metrics/*.yaml`) đồng bộ từng thay đổi
+  agg/filter — validator bắt buộc cases ↔ registry khớp.
+
 ## [3.0.0] - 2026-08-25
 ### Added
 - Đồng bộ benchmark theo 19 metric trong

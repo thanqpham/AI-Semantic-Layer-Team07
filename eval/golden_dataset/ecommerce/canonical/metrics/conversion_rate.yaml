@@ -10,7 +10,8 @@ business_formula: "Completed Checkout Sessions / Total Sessions"
 sql_expression: "COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0)"
 dependencies: []
 description: "Tỷ lệ phần trăm phiên truy cập cửa hàng hoàn tất thanh toán trong phiên; lọc bot qua chiều is_bot_traffic khi cần."
-default_filters: []
+default_filters:
+  - condition: "is_bot_traffic = FALSE"
 allowed_dimensions: [session.session_date, session.channel, session.device_type, session.store_id, session.utm_source, session.is_bot_traffic]
 default_time_grain: day
 reference_source: "Shopify Analytics Fields"

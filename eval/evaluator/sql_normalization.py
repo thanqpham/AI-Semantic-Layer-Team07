@@ -214,13 +214,73 @@ def _canonicalize_semantics(expression: exp.Expression) -> exp.Expression:
 
     Order matters only in that alias canonicalization must see the original
     column/table qualifiers; the remaining steps are rendering-only rewrites
-    (identifier quoting, boolean literal convention, parenthesization), and
-    the conditional-aggregate rewrite runs last so the condition it copies
-    into every CASE branch is itself already canonical.
+    (identifier quoting, boolean literal convention, parenthesization,
+    division-promotion spelling), and the conditional-aggregate rewrite runs
+    last so the condition it copies into every CASE branch is itself already
+    canonical.
     """
-    return _canonicalize_conditional_aggregates(
-        _canonicalize_parens(_canonicalize_booleans(_canonicalize_identifier_quotes(_canonicalize_aliases(expression))))
+    return _canonicalize_conjunctions(
+        _canonicalize_conditional_aggregates(
+            _canonicalize_arithmetic(
+                _canonicalize_parens(
+                    _canonicalize_booleans(_canonicalize_identifier_quotes(_canonicalize_aliases(expression)))
+                )
+            )
+        )
     )
+
+
+#: Value-preserving float promotions (``REAL`` parses as ``FLOAT`` in sqlglot).
+#: ``DECIMAL`` is excluded on purpose: it can truncate, not just promote.
+_FLOAT_PROMOTION_TYPES = frozenset({exp.DataType.Type.DOUBLE, exp.DataType.Type.FLOAT})
+
+
+def _canonicalize_arithmetic(expression: exp.Expression) -> exp.Expression:
+    """Fold division-promotion spellings onto one canonical form.
+
+    Producers promote integer division differently: the product compiler
+    wraps one side in ``CAST(... AS REAL)`` (and spells ratio defaults as
+    ``0 + 1.0 * ...``) while golden writes ``x * 1.0 / ...``. Rewriting the
+    cast to the golden multiplication and folding the neutral ``0``/``1.0``
+    literals — on both compared sides — leaves one form. Other literals are
+    untouched, so a ratio complement like ``1 - x`` never folds.
+
+    Like paren stripping, one ``transform`` pass cannot revisit replaced
+    subtrees, so passes repeat until the rendering stops changing.
+
+    shortcut: folding drops real-vs-integer division promotion when only one
+    side spelled it; golden ratio SQL always promotes, so accept the blur.
+    """
+    result = expression
+    previous = result.sql()
+    while True:
+        result = result.transform(_fold_promotion_spelling)
+        current = result.sql()
+        if current == previous:
+            return result
+        previous = current
+
+
+def _fold_promotion_spelling(node: exp.Expression) -> exp.Expression:
+    """Rewrite one promotion cast or neutral literal operation, if foldable."""
+    if isinstance(node, exp.Cast) and node.to.this in _FLOAT_PROMOTION_TYPES:
+        return exp.Mul(this=node.this.copy(), expression=exp.Literal.number(1.0))
+    if isinstance(node, exp.Add):
+        if _is_number_literal(node.this, 0):
+            return node.expression
+        if _is_number_literal(node.expression, 0):
+            return node.this
+    if isinstance(node, exp.Mul):
+        if _is_number_literal(node.this, 1):
+            return node.expression
+        if _is_number_literal(node.expression, 1):
+            return node.this
+    return node
+
+
+def _is_number_literal(node: exp.Expression, value: float) -> bool:
+    """Report whether a node is the numeric literal ``value``."""
+    return isinstance(node, exp.Literal) and node.is_number and float(node.this) == value
 
 
 def _canonicalize_conditional_aggregates(expression: exp.Expression) -> exp.Expression:
@@ -229,14 +289,18 @@ def _canonicalize_conditional_aggregates(expression: exp.Expression) -> exp.Expr
     For NULL-ignoring aggregates both spellings compute the same value, and
     the golden dataset mixes the conventions: golden SQL conditions inside
     CASE while the product compiler lifts the same metric filters into
-    WHERE. Rewriting the WHERE form onto the CASE form — applied to both
-    compared sides — removes that presentation difference.
+    WHERE — sometimes both at once. The WHERE condition is therefore merged
+    into every projection aggregate: bare arguments get a fresh CASE guard,
+    and an already-guarded argument gets the condition AND-ed onto its
+    existing single-branch CASE (a later conjunction pass sorts and dedupes
+    the atoms, so ``CASE WHEN f THEN x END ... WHERE f`` collapses onto the
+    guarded form). Applied to both compared sides, every spelling converges.
 
     Fail-closed: set operations, projection subqueries, window functions,
-    HAVING, already-conditioned aggregates, and explicit FILTER clauses all
-    skip the rewrite, so such sides compare as written (honest mismatch,
-    never a false equal). With GROUP BY the CASE form retains empty groups
-    that WHERE drops; accepted because golden treats both spellings as one
+    HAVING, explicit FILTER clauses, and multi-branch CASEs all skip the
+    rewrite, so such sides compare as written (honest mismatch, never a
+    false equal). With GROUP BY the CASE form retains empty groups that
+    WHERE drops; accepted because golden treats both spellings as one
     intent.
     """
     if not isinstance(expression, exp.Select):
@@ -247,26 +311,31 @@ def _canonicalize_conditional_aggregates(expression: exp.Expression) -> exp.Expr
     if any(p.find(exp.Select, exp.Window) is not None for p in expression.expressions):
         return expression
     aggregates = tuple(a for p in expression.expressions for a in p.find_all(*_NULL_IGNORING_AGGREGATES))
-    if not aggregates or any(_conditioned(a) for a in aggregates):
+    if not aggregates or any(_conditioned_unmergeable(a) for a in aggregates):
         return expression
     condition = where.this
     for aggregate in aggregates:
-        aggregate.replace(_case_wrapped(aggregate, condition))
+        aggregate.replace(_condition_merged(aggregate, condition))
     expression.set("where", None)
     return expression
 
 
-def _conditioned(aggregate: exp.Expression) -> bool:
-    """Report whether the aggregate already carries its own condition."""
+def _conditioned_unmergeable(aggregate: exp.Expression) -> bool:
+    """Report whether the aggregate carries a condition the merge cannot AND onto."""
     if aggregate.args.get("filter") is not None:
         return True
     argument = aggregate.this
     if isinstance(argument, exp.Distinct):
         argument = argument.expressions[0] if argument.expressions else None
-    return isinstance(argument, exp.Case)
+    return isinstance(argument, exp.Case) and not _single_searched_if(argument)
 
 
-def _case_wrapped(aggregate: exp.Expression, condition: exp.Expression) -> exp.Expression:
+def _single_searched_if(node: exp.Case) -> bool:
+    """Report whether a CASE is exactly one ``WHEN cond THEN x`` with no ELSE."""
+    return len(node.args.get("ifs", [])) == 1 and node.args.get("default") is None
+
+
+def _condition_merged(aggregate: exp.Expression, condition: exp.Expression) -> exp.Expression:
     """Return the same aggregate with its argument guarded by the condition."""
     if isinstance(aggregate.this, exp.Distinct):
         distinct = aggregate.this.copy()
@@ -276,9 +345,52 @@ def _case_wrapped(aggregate: exp.Expression, condition: exp.Expression) -> exp.E
 
 
 def _guarded(argument: exp.Expression, condition: exp.Expression) -> exp.Case:
-    """Return ``CASE WHEN condition THEN argument END`` (``COUNT(*)`` counts 1)."""
+    """Guard an argument with the condition, AND-ing onto an existing guard.
+
+    ``COUNT(*)`` counts 1; a single-branch searched CASE keeps its own THEN
+    value and gains the condition on its WHEN, so ``CASE WHEN g THEN x END``
+    under ``WHERE f`` becomes ``CASE WHEN g AND f THEN x END`` (a later pass
+    sorts and dedupes the conjunction's atoms).
+    """
+    if isinstance(argument, exp.Case) and _single_searched_if(argument):
+        branch = argument.args["ifs"][0]
+        merged = exp.And(this=branch.this.copy(), expression=condition.copy())
+        return exp.Case(ifs=[exp.If(this=merged, true=branch.args["true"])])
     inner = exp.Literal.number(1) if isinstance(argument, exp.Star) else argument.copy()
     return exp.Case(ifs=[exp.If(this=condition.copy(), true=inner)])
+
+
+def _canonicalize_conjunctions(expression: exp.Expression) -> exp.Expression:
+    """Sort and dedupe every AND's atoms so conjunction order never compares.
+
+    ``f AND g`` and ``g AND f`` are the same predicate to SQL, and the
+    WHERE-merge above can materialize ``f AND f`` when a producer wrote the
+    same condition as both a CASE guard and a WHERE filter. Flattening each
+    top-most AND into its atoms, dropping duplicates, and rebuilding in
+    sorted order gives every spelling one canonical tree.
+    """
+    for node in tuple(expression.find_all(exp.And)):
+        if isinstance(node.parent, exp.And):
+            continue
+        node.replace(_sorted_conjunction(node))
+    return expression
+
+
+def _sorted_conjunction(node: exp.And) -> exp.Expression:
+    """Rebuild one conjunction as a left-nested AND over sorted unique atoms."""
+    unique = {atom.sql(normalize=True): atom.copy() for atom in _and_atoms(node)}
+    ordered = [unique[key] for key in sorted(unique)]
+    result = ordered[0]
+    for atom in ordered[1:]:
+        result = exp.And(this=result, expression=atom)
+    return result
+
+
+def _and_atoms(node: exp.Expression) -> tuple[exp.Expression, ...]:
+    """Flatten one expression into its AND-connected atoms."""
+    if isinstance(node, exp.And):
+        return _and_atoms(node.this) + _and_atoms(node.expression)
+    return (node,)
 
 
 def _canonicalize_identifier_quotes(expression: exp.Expression) -> exp.Expression:

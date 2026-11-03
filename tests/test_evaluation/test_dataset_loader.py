@@ -51,7 +51,7 @@ async def test_load_ecommerce_domain_dataset() -> None:
     """Load every ecommerce artifact and verify baseline completeness."""
     dataset = await load_domain_dataset(GOLDEN_ROOT, "ecommerce")
 
-    assert dataset.manifest.dataset_version == "3.0.0"
+    assert dataset.manifest.dataset_version == "3.1.0"
     assert dataset.manifest.contract_version == "2.1.0"
     assert dataset.manifest.ground_truth_metric_count == 19
     assert dataset.manifest.review_status == "pending"

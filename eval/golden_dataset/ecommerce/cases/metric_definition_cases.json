@@ -1,7 +1,7 @@
 [
   {
     "case_id": "ecommerce_metric_001",
-    "request": "Cuối kỳ kế toán cần báo doanh thu còn lại sau khi trừ chiết khấu cho khách và tiền hoàn trả, bỏ qua đơn test và đơn đã hủy.",
+    "request": "Hãy đề xuất metric doanh thu còn lại sau khi trừ chiết khấu cho khách và tiền hoàn trả, bỏ qua đơn test và đơn đã hủy.",
     "canonical_context": {
       "entities": [
         "order"
@@ -64,7 +64,7 @@
   },
   {
     "case_id": "ecommerce_metric_002",
-    "request": "Đếm giúp tôi có bao nhiêu đơn đặt thành công trong kỳ, không tính đơn nội bộ test và đơn đã bị hủy.",
+    "request": "Hãy đề xuất metric đếm số đơn đặt thành công trong kỳ, không tính đơn nội bộ test và đơn đã bị hủy.",
     "canonical_context": {
       "entities": [
         "order"
@@ -91,7 +91,7 @@
       "metric_type": "simple",
       "target_entity": "order",
       "source_table": "fact_orders",
-      "aggregation": "count",
+      "aggregation": "count_distinct",
       "field": "order_id",
       "business_formula": "COUNT(Order ID)",
       "sql_expression": "COUNT(DISTINCT order_id)",
@@ -127,7 +127,7 @@
   },
   {
     "case_id": "ecommerce_metric_003",
-    "request": "Mức chi tiêu trung bình cho một đơn hàng hợp lệ của shop hiện là bao nhiêu?",
+    "request": "Hãy đề xuất metric mức chi tiêu trung bình cho một đơn hàng hợp lệ của shop.",
     "canonical_context": {
       "entities": [
         "order"
@@ -193,7 +193,7 @@
   },
   {
     "case_id": "ecommerce_metric_004",
-    "request": "Cứ 100 lượt khách vào shop thì có bao nhiêu lượt hoàn tất thanh toán trong chính phiên đó?",
+    "request": "Hãy đề xuất metric tỷ lệ lượt khách vào shop hoàn tất thanh toán trong chính phiên đó.",
     "canonical_context": {
       "entities": [
         "session"
@@ -223,7 +223,11 @@
       "business_formula": "Completed Checkout Sessions / Total Sessions",
       "sql_expression": "COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0)",
       "dependencies": [],
-      "default_filters": [],
+      "default_filters": [
+        {
+          "condition": "is_bot_traffic = FALSE"
+        }
+      ],
       "allowed_dimensions": [
         "session.session_date",
         "session.channel",
@@ -251,7 +255,7 @@
   },
   {
     "case_id": "ecommerce_metric_005",
-    "request": "Trong các đơn hợp lệ, tỷ lệ khách nhận hàng rồi lại trả lại đơn chiếm bao nhiêu?",
+    "request": "Hãy đề xuất metric tỷ lệ khách nhận hàng rồi trả lại đơn trong các đơn hợp lệ.",
     "canonical_context": {
       "entities": [
         "order"
@@ -314,7 +318,7 @@
   },
   {
     "case_id": "ecommerce_metric_006",
-    "request": "Tổng số đơn vị sản phẩm khách đã đặt trong kỳ là bao nhiêu, tính trên các dòng đơn thật?",
+    "request": "Hãy đề xuất metric tổng số đơn vị sản phẩm khách đã đặt trong kỳ, tính trên các dòng đơn thật.",
     "canonical_context": {
       "entities": [
         "order_item"
@@ -377,7 +381,7 @@
   },
   {
     "case_id": "ecommerce_metric_007",
-    "request": "Shop hiện có bao nhiêu khách hàng có mã đã từng đặt ít nhất một đơn thật?",
+    "request": "Hãy đề xuất metric số khách hàng có mã đã từng đặt ít nhất một đơn thật.",
     "canonical_context": {
       "entities": [
         "order"
@@ -438,7 +442,7 @@
   },
   {
     "case_id": "ecommerce_metric_008",
-    "request": "Trong số khách đã mua hàng, bao nhiêu phần trăm quay lại mua từ lần thứ hai trở đi?",
+    "request": "Hãy đề xuất metric tỷ lệ khách đã mua hàng quay lại mua từ lần thứ hai trở đi.",
     "canonical_context": {
       "entities": [
         "order"
@@ -472,7 +476,7 @@
       ],
       "default_filters": [
         {
-          "condition": "is_test_order = FALSE"
+          "condition": "is_test_order = FALSE AND is_canceled = FALSE"
         }
       ],
       "allowed_dimensions": [
@@ -501,7 +505,7 @@
   },
   {
     "case_id": "ecommerce_metric_009",
-    "request": "Có bao nhiêu phần trăm giỏ hàng được tạo nhưng khách bỏ đi mà không hoàn tất thanh toán?",
+    "request": "Hãy đề xuất metric tỷ lệ giỏ hàng được tạo nhưng khách bỏ đi mà không hoàn tất thanh toán.",
     "canonical_context": {
       "entities": [
         "cart"
@@ -560,7 +564,7 @@
   },
   {
     "case_id": "ecommerce_metric_010",
-    "request": "Sau khi trừ giá vốn hàng bán, mỗi đồng doanh thu thuần của đơn hợp lệ còn lãi bao nhiêu phần trăm?",
+    "request": "Hãy đề xuất metric tỷ suất lợi nhuận trên mỗi đồng doanh thu thuần của đơn hợp lệ sau khi trừ giá vốn hàng bán.",
     "canonical_context": {
       "entities": [
         "order"
@@ -624,7 +628,7 @@
   },
   {
     "case_id": "ecommerce_metric_013",
-    "request": "Tiền chiết khấu đang ăn vào bao nhiêu phần trăm doanh thu gộp của các đơn thật?",
+    "request": "Hãy đề xuất metric tỷ lệ tiền chiết khấu trên doanh thu gộp của các đơn thật.",
     "canonical_context": {
       "entities": [
         "order"
@@ -656,7 +660,7 @@
       "dependencies": [],
       "default_filters": [
         {
-          "condition": "is_test_order = FALSE"
+          "condition": "is_test_order = FALSE AND is_canceled = FALSE"
         }
       ],
       "allowed_dimensions": [
@@ -685,7 +689,7 @@
   },
   {
     "case_id": "ecommerce_metric_014",
-    "request": "Từ lúc khách đặt hàng đến lúc giao xong, trung bình một đơn thật mất bao nhiêu giờ?",
+    "request": "Hãy đề xuất metric số giờ trung bình từ lúc khách đặt hàng đến lúc giao xong cho một đơn thật.",
     "canonical_context": {
       "entities": [
         "order"
@@ -718,7 +722,7 @@
       "dependencies": [],
       "default_filters": [
         {
-          "condition": "is_test_order = FALSE AND is_delivered = TRUE"
+          "condition": "is_test_order = FALSE AND is_canceled = FALSE AND is_delivered = TRUE"
         }
       ],
       "allowed_dimensions": [
@@ -748,7 +752,7 @@
   },
   {
     "case_id": "ecommerce_metric_015",
-    "request": "Tỷ lệ đơn bị hủy chiếm bao nhiêu phần trăm so với tổng đơn phát sinh (không tính đơn test)?",
+    "request": "Hãy đề xuất metric tỷ lệ đơn bị hủy so với tổng đơn phát sinh, không tính đơn test.",
     "canonical_context": {
       "entities": [
         "order"
@@ -810,7 +814,7 @@
   },
   {
     "case_id": "ecommerce_metric_016",
-    "request": "Trung bình một đơn hàng hợp lệ chứa bao nhiêu đơn vị sản phẩm?",
+    "request": "Hãy đề xuất metric số đơn vị sản phẩm trung bình một đơn hàng hợp lệ chứa.",
     "canonical_context": {
       "entities": [
         "order_item"
@@ -873,7 +877,7 @@
   },
   {
     "case_id": "ecommerce_metric_017",
-    "request": "Cứ 100 phiên truy cập shop thì bao nhiêu phiên có hành động thêm sản phẩm vào giỏ?",
+    "request": "Hãy đề xuất metric tỷ lệ phiên truy cập shop có hành động thêm sản phẩm vào giỏ.",
     "canonical_context": {
       "entities": [
         "session"
@@ -903,7 +907,11 @@
       "business_formula": "Sessions with Cart Addition / Total Sessions",
       "sql_expression": "COUNT(DISTINCT CASE WHEN has_cart_addition = TRUE THEN session_id END) * 1.0 / NULLIF(COUNT(DISTINCT session_id), 0)",
       "dependencies": [],
-      "default_filters": [],
+      "default_filters": [
+        {
+          "condition": "is_bot_traffic = FALSE"
+        }
+      ],
       "allowed_dimensions": [
         "session.session_date",
         "session.channel",
@@ -931,7 +939,7 @@
   },
   {
     "case_id": "ecommerce_metric_018",
-    "request": "Khách vào đến bước thanh toán rồi thoát ra không đặt hàng chiếm tỷ lệ bao nhiêu?",
+    "request": "Hãy đề xuất metric tỷ lệ khách vào đến bước thanh toán rồi thoát ra không đặt hàng.",
     "canonical_context": {
       "entities": [
         "session"
@@ -990,7 +998,7 @@
   },
   {
     "case_id": "ecommerce_metric_019",
-    "request": "Một phiên truy cập shop kéo dài trung bình bao nhiêu giây?",
+    "request": "Hãy đề xuất metric thời gian trung bình một phiên truy cập shop tính bằng giây.",
     "canonical_context": {
       "entities": [
         "session"
@@ -1020,7 +1028,11 @@
       "business_formula": "AVG(Session Duration Seconds)",
       "sql_expression": "AVG(session_duration_seconds)",
       "dependencies": [],
-      "default_filters": [],
+      "default_filters": [
+        {
+          "condition": "is_bot_traffic = FALSE"
+        }
+      ],
       "allowed_dimensions": [
         "session.session_date",
         "session.channel",
@@ -1048,7 +1060,7 @@
   },
   {
     "case_id": "ecommerce_metric_020",
-    "request": "Bao nhiêu phần trăm đơn hàng thật được đặt bằng thẻ thành viên?",
+    "request": "Hãy đề xuất metric tỷ lệ đơn hàng thật được đặt bằng thẻ thành viên.",
     "canonical_context": {
       "entities": [
         "order"
@@ -1109,7 +1121,7 @@
   },
   {
     "case_id": "ecommerce_metric_021",
-    "request": "Hiện đang có bao nhiêu SKU còn kinh doanh, vẫn còn hàng nhưng tồn kho đã chạm ngưỡng tối thiểu?",
+    "request": "Hãy đề xuất metric số SKU còn kinh doanh, vẫn còn hàng nhưng tồn kho đã chạm ngưỡng tối thiểu.",
     "canonical_context": {
       "entities": [
         "item"
@@ -1135,7 +1147,7 @@
       "metric_type": "simple",
       "target_entity": "item",
       "source_table": "dim_items",
-      "aggregation": "count",
+      "aggregation": "count_distinct",
       "field": "item_id",
       "business_formula": "COUNT(SKU at Low Stock)",
       "sql_expression": "COUNT(DISTINCT item_id)",
@@ -1170,7 +1182,7 @@
   },
   {
     "case_id": "ecommerce_metric_011",
-    "request": "Định nghĩa lợi nhuận sau chi phí marketing nhưng schema không có marketing_cost.",
+    "request": "Hãy đề xuất metric lợi nhuận sau chi phí marketing nhưng schema không có marketing_cost.",
     "canonical_context": {
       "entities": [
         "order"
@@ -1191,7 +1203,7 @@
   },
   {
     "case_id": "ecommerce_metric_012",
-    "request": "Tạo chỉ số hiệu quả thương mại tốt nhất.",
+    "request": "Hãy đề xuất metric hiệu quả thương mại tốt nhất.",
     "canonical_context": {
       "entities": [
         "order",
