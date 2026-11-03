@@ -378,6 +378,89 @@ async def test_fallback_empty_proposal_does_not_wipe_human_description(async_ses
 
 
 @pytest.mark.asyncio
+async def test_approved_but_empty_rows_are_refilled_and_re_pended(async_session: AsyncSession) -> None:
+    """Regression: bulk approve signs off empty rows too; generate must refill them.
+
+    An approved row with only the physical name and no description counts as
+    missing, goes back to the LLM, gets its empty cells filled and re-pends.
+    """
+    db_id = 608
+    await _seed_db(async_session, db_id)
+    await _add_table(
+        async_session,
+        db_id,
+        "orders",
+        "orders",
+        "",
+        "approved",
+        columns={"id": ("id", "", "approved")},
+    )
+
+    with patch.object(
+        semantic_service,
+        "_call_llm_enrichment",
+        AsyncMock(return_value=[_enrichment("orders", "Đơn hàng", "Bảng đơn hàng")]),
+    ) as mock_llm:
+        await semantic_service.enrich_and_save_canonical_schema(
+            db=async_session,
+            user_id=1,
+            connection_id=db_id,
+            raw_schema=_raw_schema(_table("orders", ("id",))),
+            dialect="postgresql",
+        )
+
+    llm_tables = mock_llm.call_args[0][0].tables
+    assert [t.table_name.raw_name for t in llm_tables] == ["orders"]
+
+    orders = await _get_table(async_session, db_id, "orders")
+    assert orders.business_name == "Đơn hàng"
+    assert orders.description == "Bảng đơn hàng"
+    assert orders.review_status == "pending_review"
+    cols = {c.column_name: c for c in orders.columns}
+    assert cols["id"].business_name == "ID"  # per the _enrichment helper fixture
+    assert cols["id"].description == "Khóa chính"
+    assert cols["id"].review_status == "pending_review"
+
+
+@pytest.mark.asyncio
+async def test_approved_filled_row_untouched_and_empty_proposal_keeps_approval(async_session: AsyncSession) -> None:
+    """Two guards: filled approved rows stay approved; empty proposals change nothing."""
+    db_id = 609
+    await _seed_db(async_session, db_id)
+    await _add_table(
+        async_session,
+        db_id,
+        "orders",
+        "Đơn hàng",
+        "Bảng đơn hàng",
+        "approved",
+        columns={"id": ("Mã đơn", "Khóa chính", "approved")},
+    )
+    await _add_table(async_session, db_id, "refunds", "refunds", "", "approved")
+
+    with patch.object(
+        semantic_service,
+        "_call_llm_enrichment",
+        AsyncMock(return_value=[_enrichment("refunds", "refunds", "")]),  # LLM-fail fallback shape
+    ):
+        await semantic_service.enrich_and_save_canonical_schema(
+            db=async_session,
+            user_id=1,
+            connection_id=db_id,
+            raw_schema=_raw_schema(_table("orders", ("id",)), _table("refunds", ("id",))),
+            dialect="postgresql",
+        )
+
+    orders = await _get_table(async_session, db_id, "orders")
+    assert orders.review_status == "approved"
+    assert orders.business_name == "Đơn hàng"
+
+    refunds = await _get_table(async_session, db_id, "refunds")
+    assert refunds.review_status == "approved"  # nothing filled → nothing re-pended
+    assert refunds.business_name == "refunds"
+
+
+@pytest.mark.asyncio
 async def test_pass2_proposal_without_table_name_still_applies(async_session: AsyncSession) -> None:
     """Regression: pass2 returns entries without a table_name field.
 

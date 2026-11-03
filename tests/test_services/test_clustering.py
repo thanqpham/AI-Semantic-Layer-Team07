@@ -266,6 +266,28 @@ class TestSplitComponentByBudget:
             assert total <= 45
             assert len(cluster) <= 6
 
+    def test_disconnected_members_are_not_dropped(self) -> None:
+        """Post-satellite-subtraction a component can be internally disconnected.
+
+        BFS from a single anchor only walks the anchor's own subgraph and used to
+        silently drop the remaining members (ecommerce_dashboard lost 2 of 42
+        tables this way, leaving them with no LLM proposal at all).
+        """
+        tables = [
+            _table("orphan_a", num_cols=7),
+            _table("orphan_b", num_cols=4),
+            _table("orphan_c", num_cols=4),
+        ]
+        # Every FK points outside the set, so the three share no internal edge.
+        tables[0]["foreign_keys"].append(_fk(["oi"], "order_items", ["id"]))
+        tables[1]["foreign_keys"].append(_fk(["pr"], "product_returns", ["id"]))
+        tables[2]["foreign_keys"].append(_fk(["pr"], "product_returns", ["id"]))
+        table_map = {t["table_name"]: t for t in tables}
+
+        result = _split_component_by_budget(set(table_map.keys()), table_map)
+
+        assert sorted(name for cluster in result for name in cluster) == ["orphan_a", "orphan_b", "orphan_c"]
+
 
 # ---------------------------------------------------------------------------
 # cluster_tables — full integration
@@ -301,6 +323,34 @@ class TestClusterTables:
         assert {"customer", "order", "wishlist"} in names_per_cluster
         assert {"item", "review", "cart"} in names_per_cluster
         assert {"store", "staff", "shift"} in names_per_cluster
+
+    def test_tables_disconnected_by_satellite_removal_are_not_dropped(self) -> None:
+        """Regression (ecommerce_dashboard, 42 tables → 40 enriched).
+
+        inventory_movements/refunds connected to the graph only through tables
+        that became hub satellites; after satellite subtraction they formed an
+        internally disconnected "component" and were silently dropped.
+        """
+        config = EnrichmentConfig(hub_in_degree_threshold=2, max_cols_per_cluster=45)
+
+        products = _table("products", num_cols=5)
+        order_items = _table("order_items", num_cols=6, fks=[_fk(["pid"], "products", ["id"])])
+        returns_bridge = _table("returns_bridge", num_cols=5, fks=[_fk(["pid"], "products", ["id"])])
+        inv = _table("inventory_movements", num_cols=7, fks=[_fk(["oi"], "order_items", ["id"])])
+        refunds = _table("refunds", num_cols=4, fks=[_fk(["rb"], "returns_bridge", ["id"])])
+        return_items = _table("return_items", num_cols=4, fks=[_fk(["rb"], "returns_bridge", ["id"])])
+
+        result = cluster_tables([products, order_items, returns_bridge, inv, refunds, return_items], config)
+
+        covered = {t["table_name"] for cluster in result for t in cluster}
+        assert covered == {
+            "products",
+            "order_items",
+            "returns_bridge",
+            "inventory_movements",
+            "refunds",
+            "return_items",
+        }
 
     def test_self_referencing_fk(self) -> None:
         emp = _table(

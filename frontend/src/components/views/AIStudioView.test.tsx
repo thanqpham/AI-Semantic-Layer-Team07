@@ -146,7 +146,7 @@ describe('AIStudioView', () => {
     vi.mocked(api.sendChatOrchestratorApi).mockResolvedValue({ intent: 'metric_query', suggestions: [],
       session_id: 'sess-1', user_message_id: 'u-1', assistant_message_id: 'a-1' });
     render(<AIStudioView layer={mockLayer} theme="light" onMetricsChanged={vi.fn()} />);
-    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Đề xuất KPI' }));
+    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Đề xuất metrics' }));
     await waitFor(() => expect(api.sendChatOrchestratorApi).toHaveBeenCalled());
     expect(vi.mocked(api.sendChatOrchestratorApi).mock.calls[0][7]).toBe('discovery');
   });
