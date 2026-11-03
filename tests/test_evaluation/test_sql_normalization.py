@@ -301,3 +301,36 @@ def test_having_where_form_is_not_rewritten() -> None:
         "sqlite",
         ignore_limit=True,
     )
+
+
+def test_ratio_promotion_spellings_are_equivalent() -> None:
+    compiler = "SELECT (0 + 1.0 * CAST(SUM(x) AS REAL) / NULLIF((COUNT(DISTINCT id)), 0)) AS m FROM t LIMIT 100"
+    golden = "SELECT SUM(x) * 1.0 / NULLIF(COUNT(DISTINCT id), 0) AS m FROM t"
+    assert structurally_equal(compiler, golden, "sqlite", ignore_limit=True)
+
+
+def test_ratio_complement_is_not_folded_onto_bare_division() -> None:
+    complement = "SELECT 1 - (a * 1.0 / NULLIF(b, 0)) FROM t"
+    bare = "SELECT a / NULLIF(b, 0) FROM t"
+    assert not structurally_equal(complement, bare)
+
+
+def test_decimal_cast_is_not_folded_away() -> None:
+    assert not structurally_equal("SELECT CAST(x AS DECIMAL) FROM t", "SELECT x FROM t")
+
+
+def test_where_merges_into_already_guarded_aggregate() -> None:
+    guarded = "SELECT COUNT(DISTINCT CASE WHEN seq > 1 THEN id END) FROM t WHERE is_test = FALSE"
+    inlined = "SELECT COUNT(DISTINCT CASE WHEN is_test = FALSE AND seq > 1 THEN id END) FROM t"
+    assert structurally_equal(guarded, inlined)
+
+
+def test_conjunction_atom_order_and_duplicates_do_not_compare() -> None:
+    assert structurally_equal(
+        "SELECT SUM(x) FROM t WHERE a = 1 AND b = 2",
+        "SELECT SUM(x) FROM t WHERE b = 2 AND a = 1",
+    )
+    assert structurally_equal(
+        "SELECT SUM(x) FROM t WHERE a = 1",
+        "SELECT SUM(CASE WHEN a = 1 THEN x END) FROM t WHERE a = 1",
+    )

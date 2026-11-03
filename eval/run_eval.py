@@ -157,11 +157,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _build_judge_runner() -> JudgeRunner:
-    """Wire the isolated get_llm(role='judge') lane."""
+    """Wire the isolated get_llm(role='judge') lane, failing fast on bad auth."""
     from eval.evaluator.hybrid.judge.base import JudgeRunner, LangChainJudgeLLM
     from eval.evaluator.hybrid.judge.cache import MemoryJudgeCache
 
-    return JudgeRunner(llm=LangChainJudgeLLM(), cache=MemoryJudgeCache())
+    llm = LangChainJudgeLLM()
+    try:
+        llm.verify()
+    except Exception as exc:
+        raise SystemExit(
+            f"Judge lane is not usable ({type(exc).__name__}: {exc}). Fix JUDGE_LLM_PROVIDER, "
+            "JUDGE_API_KEY, JUDGE_MODEL_NAME, JUDGE_API_BASE — the judge must also differ "
+            "from the agent lane in provider, model, and API key."
+        ) from exc
+    return JudgeRunner(llm=llm, cache=MemoryJudgeCache())
 
 
 async def run_hybrid_engine(args: argparse.Namespace) -> int:

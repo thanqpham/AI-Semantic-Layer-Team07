@@ -11,7 +11,7 @@ sql_expression: "COUNT(DISTINCT CASE WHEN customer_order_seq > 1 THEN customer_i
 dependencies: [customer_count]
 description: "Tỷ lệ phần trăm khách hàng đã mua hàng từ lần thứ hai trở lên trên tổng số khách hàng."
 default_filters:
-  - condition: "is_test_order = FALSE"
+  - condition: "is_test_order = FALSE AND is_canceled = FALSE"
 allowed_dimensions: [order.order_date, order.channel, order.store_id, city.city_name, city.region_name]
 default_time_grain: month
 reference_source: "Shopify Analytics Fields"
