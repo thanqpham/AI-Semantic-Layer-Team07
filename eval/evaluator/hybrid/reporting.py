@@ -71,10 +71,17 @@ def render_markdown(result: HybridRunResult) -> str:
         lines.append("- none")
     lines.extend(["", "## Failed results", ""])
     failures = [r for r in result.results if r.status in {"failed", "error"}]
-    lines.extend(f"- `{r.sample_id}` / `{r.metric}`: {r.status} — {r.reason}" for r in failures)
+    lines.extend(f"- `{r.sample_id}` / `{r.metric}`: {_failure_label(r)} — {r.reason}" for r in failures)
     if not failures:
         lines.append("- none")
     return "\n".join(lines) + "\n"
+
+
+def _failure_label(row: MetricResult) -> str:
+    """Carry the score so hard zeros read apart from partial-credit misses."""
+    if row.status == "failed" and row.score is not None:
+        return f"failed (score {row.score:.2f})"
+    return row.status
 
 
 def _suite_rows(result: HybridRunResult) -> list[str]:

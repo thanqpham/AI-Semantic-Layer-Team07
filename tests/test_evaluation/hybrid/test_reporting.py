@@ -168,3 +168,38 @@ def test_markdown_renders_warnings(tmp_path) -> None:
     markdown = render_markdown(run)
     assert "## Warnings" in markdown
     assert "- judge metric m errored on 2 sample(s)" in markdown
+
+
+def test_markdown_failed_rows_distinguish_zero_from_partial_credit() -> None:
+    """Failed lines carry their score so 0.00 (sai thật) reads apart from 0.67 (một phần)."""
+    base = _mini_run()
+    zero = MetricResult(
+        sample_id="q_001",
+        metric="sql_ast_equivalence",
+        metric_type="deterministic",
+        status="failed",
+        score=0.0,
+        threshold=1.0,
+    )
+    partial = MetricResult(
+        sample_id="m_001",
+        metric="allowed_dimension_f1",
+        metric_type="deterministic",
+        status="failed",
+        score=0.67,
+        threshold=1.0,
+    )
+    crashed = MetricResult(
+        sample_id="q_002",
+        metric="sql_execution_accuracy",
+        metric_type="deterministic",
+        status="error",
+        threshold=1.0,
+        reason="judge runner unavailable",
+    )
+    results = (*base.results, zero, partial, crashed)
+    run = base.model_copy(update={"results": results})
+    markdown = render_markdown(run)
+    assert "`q_001` / `sql_ast_equivalence`: failed (score 0.00)" in markdown
+    assert "`m_001` / `allowed_dimension_f1`: failed (score 0.67)" in markdown
+    assert "`q_002` / `sql_execution_accuracy`: error — judge runner unavailable" in markdown

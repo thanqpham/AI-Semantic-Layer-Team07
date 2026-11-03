@@ -42,6 +42,9 @@ SYSTEM_PROMPT = (
     "tổng số thì PHẢI trả về dimensions là danh sách rỗng. "
     "Dimension đã chọn phải thuộc entity (bảng) của metric đã chọn, hoặc thuộc entity "
     "nối được với metric qua các relationship đã duyệt (xem phần RELATIONSHIPS). "
+    "Khi nhiều metric cùng chủ đề, ưu tiên metric khớp ĐẦY ĐỦ nhất các cụm mang nghĩa "
+    "trong câu hỏi (điều kiện trừ/bỏ, nhóm đối tượng, 'tỷ lệ' vs 'tổng' vs 'trung bình'); "
+    "cùng bảng hay cùng từ khóa chung chưa đủ để chọn. "
     "Nếu câu hỏi mơ hồ không thể chọn duy nhất metric hoặc dimension, trả về "
     '{"clarify": true, "question": "<câu hỏi làm rõ cho người dùng>"}. '
     'Nếu không metric nào trong danh mục thực sự trả lời câu hỏi, trả về {"metrics": [], "abstain": true}.'
@@ -303,9 +306,9 @@ def _record_attempt(trace: ResolverTrace | None, content: str, error: ResolverEr
 
 def _user_prompt(question: str, catalog: ResolverCatalog) -> str:
     """Render the question plus the approved catalog for the LLM."""
-    lines = [f"Câu hỏi: {question}", "", "METRICS (tên — mô tả):"]
+    lines = [f"Câu hỏi: {question}", "", "METRICS (tên — bảng gốc — mô tả):"]
     for metric in catalog.metrics:
-        lines.append(f"- {metric.name} — {metric.description or ''}")
+        lines.append(f"- {metric.name} — {metric.base_entity} — {metric.description or ''}")
     lines.append("DIMENSIONS (entity.column — tên nghiệp vụ):")
     for dimension in catalog.dimensions:
         lines.append(
