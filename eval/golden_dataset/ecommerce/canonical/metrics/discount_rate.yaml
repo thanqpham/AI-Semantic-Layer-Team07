@@ -11,7 +11,7 @@ sql_expression: "SUM(discount_amount) * 1.0 / NULLIF(SUM(gross_amount), 0)"
 dependencies: []
 description: "Tỷ trọng giá trị giảm giá trên doanh thu gộp của các đơn hàng không test."
 default_filters:
-  - condition: "is_test_order = FALSE"
+  - condition: "is_test_order = FALSE AND is_canceled = FALSE"
 allowed_dimensions: [order.order_date, order.channel, order.store_id, city.city_name, city.region_name]
 default_time_grain: month
 reference_source: "Ecommerce Metric Dictionary (Expanded)"

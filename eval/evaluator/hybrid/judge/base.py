@@ -39,6 +39,10 @@ class LangChainJudgeLLM:
         message = await self._llm.ainvoke([system_type(content=system), human_type(content=user)])
         return str(message.content)
 
+    def verify(self) -> None:
+        """Ping once so authentication errors surface before any suite runs."""
+        self._llm.invoke("ping")
+
 
 @dataclass(frozen=True)
 class JudgeRequest:

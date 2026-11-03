@@ -201,3 +201,68 @@ async def test_collect_metrics_case_crash_isolated_and_accumulates(enriched, mon
     allowed = result.candidates["m2"].metric.allowed_dimensions
     assert "order.order_status" in allowed
     assert all("." in dimension for dimension in allowed)
+
+
+def _ratio_definition(offset: float = 0.0, scale: float = 1.0) -> MetricDefinition:
+    """Build a conversion-rate style ratio definition with a filtered numerator."""
+    return MetricDefinition(
+        schema_version=1,
+        metric=MetricSpec(
+            name="ty_le_hoan_thanh",
+            formula={
+                "function": "COUNT_DISTINCT",
+                "expression": "session_id",
+                "ratio": {
+                    "numerator": {
+                        "function": "COUNT_DISTINCT",
+                        "expression": "session_id",
+                        "filters": [{"field": "completed_checkout", "operator": "eq", "value": True}],
+                    },
+                    "denominator": {"function": "COUNT_DISTINCT", "expression": "session_id"},
+                    "offset": offset,
+                    "scale": scale,
+                },
+            },
+            base_entity="fact_sessions",
+            filters=[{"field": "is_bot_traffic", "operator": "eq", "value": False}],
+            status="approved",
+        ),
+    )
+
+
+async def test_to_metric_candidate_ratio_maps_golden_convention():
+    candidate = to_metric_candidate(
+        _ratio_definition(),
+        allowed_dimensions=[],
+        source_table="fact_sessions",
+        resolver=await _ecommerce_resolver(),
+    ).metric
+    assert candidate.aggregation == "ratio"
+    assert candidate.metric_type == "derived"
+    assert candidate.field is None
+    assert candidate.sql_expression == (
+        "COUNT(DISTINCT CASE WHEN completed_checkout = TRUE THEN session_id END) "
+        "* 1.0 / NULLIF(COUNT(DISTINCT session_id), 0)"
+    )
+    assert [item.condition for item in candidate.default_filters] == ["is_bot_traffic = FALSE"]
+
+
+async def test_to_metric_candidate_ratio_complement_uses_one_minus_shape():
+    candidate = to_metric_candidate(
+        _ratio_definition(offset=1.0, scale=-1.0),
+        allowed_dimensions=[],
+        source_table="fact_sessions",
+        resolver=await _ecommerce_resolver(),
+    ).metric
+    assert candidate.sql_expression.startswith("1 - (COUNT(DISTINCT CASE WHEN")
+    assert candidate.sql_expression.endswith("NULLIF(COUNT(DISTINCT session_id), 0))")
+
+
+async def test_to_metric_candidate_ratio_generic_scale_offset_spelled_out():
+    candidate = to_metric_candidate(
+        _ratio_definition(offset=0.0, scale=100.0),
+        allowed_dimensions=[],
+        source_table="fact_sessions",
+        resolver=await _ecommerce_resolver(),
+    ).metric
+    assert candidate.sql_expression.startswith("(0 + 100 * (COUNT(DISTINCT CASE WHEN")

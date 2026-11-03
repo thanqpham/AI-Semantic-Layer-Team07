@@ -32,7 +32,13 @@ from eval.evaluator.sql_normalization import (
     parse_single_statement,
 )
 from src.models.db import CanonicalRelationshipModel, SemanticColumnModel, SemanticTableModel
-from src.models.metric_definition import MetricDefinition, MetricFilter, is_timestamp_diff_hours
+from src.models.metric_definition import (
+    MetricAggregate,
+    MetricDefinition,
+    MetricFilter,
+    MetricRatio,
+    is_timestamp_diff_hours,
+)
 from src.models.schema_metadata import (
     ColumnMetadata,
     ForeignKeyMetadata,
@@ -323,19 +329,21 @@ def to_metric_candidate(
     carries the function. Golden MIXES conventions (most expressions wrap the
     declared aggregation — ``SUM(quantity)`` — while ``net_revenue`` is bare);
     comparison-side ``unwrap_declared_aggregation`` reconciles both shapes.
+    A ``formula.ratio`` maps to golden's ``aggregation="ratio"`` with the
+    spelled-out ``num * 1.0 / NULLIF(den, 0)`` expression (see
+    ``_ratio_sql_expression``).
     """
     spec = definition.metric
-    expression = spec.formula.expression
-    sql_expression = _eval_sql_expression(expression)
+    aggregation, field, sql_expression, metric_type = _formula_fields(spec.formula)
     metric = CandidateMetricDefinition(
         name=spec.name,
         business_name=spec.name,
         description=spec.excluded_notes or "",
-        metric_type=_metric_type(expression),
+        metric_type=metric_type,
         target_entity=resolver.resolve_entity(spec.base_entity),
         source_table=source_table or spec.base_entity,
-        aggregation=spec.formula.function.lower(),
-        field=expression if _BARE_IDENTIFIER.match(expression) else None,
+        aggregation=aggregation,
+        field=field,
         business_formula="",
         sql_expression=sql_expression,
         default_filters=tuple(CandidateMetricFilter(condition=_render_filter(item)) for item in spec.filters),
@@ -345,6 +353,51 @@ def to_metric_candidate(
         status="approved" if spec.status == "approved" else "draft",
     )
     return CandidateMetricOutput(metric=metric)
+
+
+def _formula_fields(formula: Any) -> tuple[str, str | None, str, str]:
+    """Return (aggregation, field, sql_expression, metric_type) for one formula."""
+    expression = formula.expression
+    if formula.ratio is not None:
+        return "ratio", None, _ratio_sql_expression(formula.ratio), "derived"
+    field = expression if _BARE_IDENTIFIER.match(expression) else None
+    return formula.function.lower(), field, _eval_sql_expression(expression), _metric_type(expression)
+
+
+_AGGREGATE_TEMPLATES: dict[str, str] = {
+    "SUM": "SUM({inner})",
+    "COUNT": "COUNT({inner})",
+    "COUNT_DISTINCT": "COUNT(DISTINCT {inner})",
+    "AVG": "AVG({inner})",
+    "MIN": "MIN({inner})",
+    "MAX": "MAX({inner})",
+}
+
+
+def _ratio_sql_expression(ratio: MetricRatio) -> str:
+    """Render one metric ratio in the golden dataset's spelled-out SQL style.
+
+    Aggregate-side filters become ``CASE WHEN ... THEN x END`` inside their
+    aggregate (golden convention); metric-level filters stay in
+    ``default_filters``. Scale/offset keep golden's two spellings: the default
+    ratio and the ``1 - (...)`` complement; anything else renders generically.
+    """
+    division = f"{_aggregate_sql(ratio.numerator)} * 1.0 / NULLIF({_aggregate_sql(ratio.denominator)}, 0)"
+    if ratio.offset == 0 and ratio.scale == 1:
+        return division
+    if ratio.offset == 1 and ratio.scale == -1:
+        return f"1 - ({division})"
+    return f"({ratio.offset:g} + {ratio.scale:g} * ({division}))"
+
+
+def _aggregate_sql(aggregate: MetricAggregate) -> str:
+    """Render one ratio side, guarding a filtered argument with CASE WHEN."""
+    inner = aggregate.expression
+    if aggregate.filters:
+        condition = " AND ".join(_render_filter(item) for item in aggregate.filters)
+        inner = f"CASE WHEN {condition} THEN {inner} END"
+    template = _AGGREGATE_TEMPLATES.get(aggregate.function, f"{aggregate.function}({{inner}})")
+    return template.format(inner=inner)
 
 
 def _metric_type(expression: str) -> str:

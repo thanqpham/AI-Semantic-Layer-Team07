@@ -100,7 +100,7 @@
   ],
   "ecommerce_query_011": [
     {
-      "conversion_rate": 0.6153846153846154
+      "conversion_rate": 0.6666666666666666
     }
   ],
   "ecommerce_query_012": [
@@ -170,7 +170,7 @@
   ],
   "ecommerce_query_023": [
     {
-      "returning_customer_rate": 0.6
+      "returning_customer_rate": 0.75
     }
   ],
   "ecommerce_query_026": [
@@ -185,7 +185,7 @@
   ],
   "ecommerce_query_033": [
     {
-      "discount_rate": 0.05194805194805195
+      "discount_rate": 0.057971014492753624
     }
   ],
   "ecommerce_query_034": [
@@ -205,12 +205,12 @@
   ],
   "ecommerce_query_037": [
     {
-      "add_to_cart_rate": 0.6153846153846154
+      "add_to_cart_rate": 0.5833333333333334
     }
   ],
   "ecommerce_query_038": [
     {
-      "average_session_duration": 276.15384615384613
+      "average_session_duration": 298.3333333333333
     }
   ],
   "ecommerce_query_039": [
@@ -236,10 +236,6 @@
     }
   ],
   "ecommerce_query_041": [
-    {
-      "delivery_type": null,
-      "average_delivery_lead_time_hours": null
-    },
     {
       "delivery_type": "express",
       "average_delivery_lead_time_hours": 36.0
@@ -338,7 +334,7 @@
     },
     {
       "city_name": "Hà Nội",
-      "discount_rate": 0.07027027027027027
+      "discount_rate": 0.0896551724137931
     },
     {
       "city_name": "TP HCM",

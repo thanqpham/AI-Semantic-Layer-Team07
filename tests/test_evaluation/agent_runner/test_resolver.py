@@ -133,6 +133,20 @@ def test_prompts_forbid_unrequested_dimensions():
     assert "dimensions rỗng" in rendered.lower()
 
 
+def test_prompts_carry_disambiguation_signals():
+    """Catalog lines must expose the base entity so similar-looking metrics split.
+
+    Description alone cannot separate e.g. two 'doanh thu' metrics (and is empty
+    until core fills it), so the render carries the metric's base entity and the
+    system prompt demands full phrase-semantics matching over shared keywords.
+    """
+    from eval.agent_runner.resolver import SYSTEM_PROMPT, _user_prompt
+
+    rendered = _user_prompt("doanh thu thuần?", CATALOG)
+    assert "— fact_orders —" in rendered  # base entity rides along every metric line
+    assert "khớp đầy đủ nhất" in SYSTEM_PROMPT.lower()
+
+
 class ScriptedLLM:
     """Return queued payloads in order; count every ainvoke call."""
 

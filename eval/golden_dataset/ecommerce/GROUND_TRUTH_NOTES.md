@@ -78,6 +78,11 @@ golden để `default_filters: []` cho cả 4 metric, giữ `session.is_bot_traf
 dimension lọc ad-hoc (case `query_012` dùng `WHERE is_bot_traffic = FALSE` tường minh).
 Đây là deviation so với workbook — ghi rõ để BA đối chiếu khi nâng cấp workbook.
 
+> **Đảo ngược 2026-11-03 (dataset 3.1.0):** fixture mới có cột
+> `fact_sessions.is_bot_traffic` và product auto-attach filter này khi lưu
+> metric; nhóm quyết định adopt vào `default_filters` của 004/017/019.
+> `checkout_abandonment_rate` (fact_carts) vẫn không có filter này.
+
 ## 5. `average_delivery_lead_time_hours` — SQL theo dialect
 
 Golden SQL phải chạy thật trên từng dialect nên biểu diễn khoảng thời gian khác nhau:
@@ -112,9 +117,11 @@ Golden SQL phải chạy thật trên từng dialect nên biểu diễn khoảng
 Golden SQL của 34 case positive được viết **đúng hình đầu ra của
 `SemanticQueryCompiler`** để `sql_ast_equivalence` so khớp AST trực tiếp:
 
-- Default filter của metric được **CASE-wrap bên trong aggregate**
-  (`SUM(CASE WHEN is_test_order = FALSE AND is_canceled = FALSE THEN ... END)`),
-  không phải WHERE.
+- Default filter của metric: từ 3.1.0 engine normalization hội tụ cả hai spelling
+  — WHERE-lift (`WHERE is_test_order = FALSE`) và CASE-wrap
+  (`SUM(CASE WHEN is_test_order = FALSE THEN ... END)`) — nên golden dùng dạng
+  dễ đọc hơn (WHERE-lift; side-filter numerator vẫn giữ CASE). Case cũ chưa
+  sửa giữ nguyên CASE-wrap: hai dạng so sánh bằng nhau.
 - JOIN **trần** (`JOIN`, không viết `INNER JOIN` — sqlglot phân biệt kind `None` vs
   `"INNER"`); bảng theo thứ tự BFS của compiler (base table trước, join theo path).
 - Không `LIMIT` (compiler auto-append 100; hybrid engine bỏ LIMIT khi so sánh).
@@ -141,6 +148,27 @@ giữ để theo dõi khi sản phẩm sửa:
 `guardrail_016` (`pg_sleep`) đã được eval chấm và adapter đồng ý từ v3.0.0
 (lockstep thêm `pg_sleep` vào cả eval validator và engine normalization).
 
+### 8.1 Gap phát hiện qua agent-live runs (2026-11-02 / 2026-11-03)
+
+Không phải thiết kế có chủ đích như 1-3, mà là hành vi thật của agent lộ qua
+2 run — các case liên quan chấm FAIL đúng (golden không thay đổi để nuốt):
+
+- **AVG thay ratio**: "giá trị TB/đơn" sinh `AVG(gross)` thay
+  `SUM(net)/COUNT(DISTINCT order_id)` — metric 003/016, query 008/009/010/036/044.
+- **LLM tự viết thêm `is_canceled`** ngoài hygiene auto-attach (product chỉ
+  attach cố định `is_test_order`) — run 20261103 làm query 020/021/035/046 sai.
+- **scale=100 (phần trăm)**: LLM chọn percent thay fraction — query 012/014/034.
+- **Negative case không từ chối**: 031/048/049 vẫn compile (032/050 từ chối đúng).
+- **query_018**: câu hỏi đòi "theo Mã sản phẩm" nhưng agent group theo
+  `products.name` qua JOIN — golden giữ `product_id` đúng nguyên văn câu hỏi.
+- **Generation flaky**: mỗi run 1-4 metric request fail validation của chính
+  product (20261102: 018; 20261103a: 005/008/009/010; 20261103b: 005/008/010).
+- **Metric không có business description** (phát hiện qua judge run 20261103-072603):
+  `semantic_metrics.description` rỗng 100%, MetricSpec không có trường này —
+  mọi case được judge đều nhận "Mô tả trống" ⇒ business_definition_correctness
+  0.2. Golden kỳ vọng description nghiệp vụ (vd "Doanh thu thực nhận sau khi
+  trừ chiết khấu và hoàn trả...").
+
 ## 9. Renames & traceability
 
 - `return_rate` → `returned_order_rate`; `average_fulfillment_hours` →
@@ -148,3 +176,20 @@ giữ để theo dõi khi sản phẩm sửa:
 - Mọi metric YAML có `ground_truth_source: "...xlsx#<metric>"` anchor về workbook.
 - 11 query case clone lặp mẫu đã retire (003, 013, 015, 016, 019, 022, 024, 025,
   027, 028, 030) để lấy chỗ cho case L2 paraphrase / L3 multi-hop / L4 clarify.
+
+## 10. Giới hạn comparator đã biết (không sửa — có lý do)
+
+Sau đợt chuẩn hóa 2026-11-03 (fold promotion, WHERE-merge vào aggregate,
+sort/dedupe conjunction), **query_026 là false-negative cấu trúc duy nhất**
+còn lại: mọi ast-fail khác đều lệch giá trị thật (exec cũng sai).
+
+- **query_026 — tương đương đại số complement**: golden viết
+  `1 - COUNT(checkout=1)/COUNT(all)`, compiler sinh trực tiếp
+  `COUNT(checkout=0)/COUNT(all)`. Hai dạng bằng giá trị trên fixture (exec=1)
+  nhưng không thể hội tụ syntactic mà không blur sai tổng quát: cần giả định
+  cột boolean 2 giá trị NOT NULL (`x <> 1 ≡ x = 0`) và set-difference của
+  COUNT(DISTINCT). Giữ ast strict — lane exec đã cho điểm giá trị.
+- **query_040 — CTE multi-metric**: compiler dịch multi-metric thành
+  `WITH m1.., m2.. SELECT ... JOIN`; golden viết flat single-SELECT. Chưa
+  inline CTE vì run 20261103 case này sai cả giá trị (exec=0) — khi product
+  sửa đúng content thì mới đáng làm canonicalize CTE-inline.
