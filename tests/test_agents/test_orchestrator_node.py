@@ -61,6 +61,28 @@ async def test_classifies_metric_calculation_prompt() -> None:
 
 
 @pytest.mark.asyncio
+async def test_explicit_query_action_routes_to_semantic_query_without_llm() -> None:
+    """An explicit metric-query request must execute immediately, skipping LLM classification."""
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
+        result = await orchestrator_node(
+            {"user_message": "Giúp tôi thực hiện truy vấn chỉ số tính toán tổng số khách hàng"}
+        )
+
+    assert result["intent"] == "semantic_query"
+    mock_get_llm.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_marker_wins_over_query_marker() -> None:
+    """Creation phrasing keeps routing to metric generation even when 'truy vấn' appears."""
+    with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:
+        result = await orchestrator_node({"user_message": "Tạo metric để truy vấn doanh thu"})
+
+    assert result["intent"] == "metric_query"
+    mock_get_llm.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_classifies_semantic_query_request() -> None:
     """Asking for live metric numbers routes to semantic_query."""
     with patch("src.agents.roles.orchestrator_agent.get_llm") as mock_get_llm:

@@ -59,6 +59,44 @@ def sample_catalog() -> dict:
 
 
 @pytest.mark.asyncio
+async def test_metric_by_dimension_phrase_resolves_without_llm(sample_catalog: dict) -> None:
+    """'chỉ số X theo chiều dữ liệu Y' resolves deterministically when both names uniquely match catalog."""
+    state = {
+        "user_message": "hãy thực hiện tính toán chỉ số Số lượng đơn hàng theo chiều dữ liệu 'Mã khách hàng'",
+        "parser_catalog": sample_catalog,
+    }
+
+    with patch("src.agents.roles.semantic_query_parser_agent.get_llm") as mock_get_llm:
+        result = await semantic_query_parser_node(state)
+        mock_get_llm.assert_not_called()
+
+    interp = result["interpretation"]
+    assert interp["status"] == "resolved"
+    assert interp["spec"]["metric_ids"] == [2]
+    assert interp["spec"]["dimensions"][0]["column_id"] == 10
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_dimension_phrase_falls_back_to_llm(sample_catalog: dict) -> None:
+    """When the dimension phrase matches nothing, deterministic pass steps aside for the LLM."""
+    llm_payload = {
+        "status": "needs_clarification",
+        "clarification": {"prompt": "Bạn muốn xem theo tiêu chí nào?", "options": []},
+        "rationale": "Chiều phân tích chưa rõ",
+    }
+    state = {
+        "user_message": "hãy thực hiện tính toán chỉ số Số lượng đơn hàng theo chiều dữ liệu 'quý'",
+        "parser_catalog": sample_catalog,
+    }
+
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = llm_payload
+        result = await semantic_query_parser_node(state)
+
+    assert result["interpretation"]["status"] == "needs_clarification"
+
+
+@pytest.mark.asyncio
 async def test_empty_catalog_returns_needs_clarification() -> None:
     """When catalog has no metrics, node immediately returns clarification without calling LLM."""
     state = {
