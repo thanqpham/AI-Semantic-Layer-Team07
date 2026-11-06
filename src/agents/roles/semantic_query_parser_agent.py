@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -62,6 +63,11 @@ QUY TẮC BẮT BUỘC:
          {{"id": "create_metric", "label": "{action_label} '<Tên chỉ số người dùng hỏi>'", "description": "Yêu cầu AI đề xuất định nghĩa metric này", "spec": null, "action": "create_metric"}}
        ]
 3. Nếu câu hỏi rõ ràng và map được metric/dimension/filter hợp lệ:
+   - PHÂN TÁCH CÂU THEO CẤU TRÚC "<chỉ số X> theo <Y>" (bao gồm các cách nói: "theo chiều dữ liệu", "theo chiều", "phân tích theo", "phân theo", "thống kê theo", "báo cáo theo"):
+     + Phần TRƯỚC cụm "theo..." là TÊN CHỈ SỐ (metric).
+     + Phần SAU cụm "theo..." là TÊN CHIỀU (dimension) hoặc GIÁ TRỊ LỌC (filter). TUYỆT ĐỐI KHÔNG được coi phần đứng sau "theo" là tên chỉ số.
+   - Quy tắc phân tách này KHÔNG làm suy yếu quy tắc 2: chỉ được "resolved" khi phần metric thực sự khớp metric trong CATALOG; nếu phần metric không khớp thì vẫn áp dụng quy tắc 2 (needs_clarification + đề xuất tạo metric).
+   - Nếu metric khớp nhưng dimension/filter người dùng nêu KHÔNG có trong CATALOG: áp dụng quy tắc 4 (needs_clarification kèm các option chiều hợp lệ của chính metric đó).
    - status: "resolved"
    - metric_ids: danh sách ID chỉ số đã chọn (ví dụ [1])
    - dimensions: danh sách {{"column_id": int, "time_grain": "day"|"week"|"month"|"quarter"|"year"|null}}
@@ -78,6 +84,7 @@ QUY TẮC BẮT BUỘC:
 VÍ DỤ MẪU BẮT BUỘC TUÂN THEO:
 - Ví dụ 1 (Khớp đúng): User "Xem tổng doanh thu 2024", Catalog có "Tổng doanh thu" (id=1) -> status: "resolved", metric_ids: [1]
 - Ví dụ 2 (Chưa có chỉ số được hỏi, catalog chỉ có chỉ số gần giống): User "Xem tỷ lệ giữ chân khách hàng", Catalog có "Tỷ lệ khách hàng quay lại mua hàng" (id=9) -> KHÔNG ĐƯỢC CHỌN id=9 -> status: "needs_clarification", clarification.prompt: "Hệ thống hiện chưa có chỉ số 'Tỷ lệ giữ chân khách hàng'. Bạn có muốn {action_prompt} này không?", clarification.options: [{{"id": "create_metric", "label": "{action_label} 'Tỷ lệ giữ chân khách hàng'", "spec": null, "action": "create_metric"}}]
+- Ví dụ 3 (Câu dạng "chỉ số X theo Y" — Y là chiều phân tích, KHÔNG phải chỉ số): User "hãy thực hiện tính toán chỉ số tổng số đơn hàng theo chiều dữ liệu 'trạng thái đơn hàng'", Catalog có metric "Tổng số đơn hàng" (id=2) và dimension "Trạng thái đơn hàng" (column_id=12) -> status: "resolved", metric_ids: [2], dimensions: [{{"column_id": 12, "time_grain": null}}]. TUYỆT ĐỐI KHÔNG trả về needs_clarification vì 'trạng thái đơn hàng' là chiều phân tích, không phải chỉ số bị thiếu.
 
 CHỈ TRẢ VỀ DUY NHẤT 1 JSON OBJECT hợp lệ theo cấu trúc sau:
 {{
@@ -105,6 +112,10 @@ async def parse_semantic_query(
         return _empty_catalog_fallback()
 
     user_message = user_message.strip()
+    direct = _try_direct_resolution(user_message, catalog)
+    if direct is not None:
+        logger.info("Semantic parser resolved query deterministically without LLM")
+        return _build_node_output(direct)
     prompt = _build_parse_prompt(user_message, catalog, can_generate_metrics, chat_history or [])
     try:
         raw_json = await trace_action(
@@ -118,6 +129,96 @@ async def parse_semantic_query(
         )
 
     return _build_node_output(interpretation)
+
+
+# Folded (accent-stripped) dimension markers, longest first so specific ones win.
+_DIM_MARKERS = (
+    "theo chieu du lieu",
+    "theo chieu",
+    "phan tich theo",
+    "phan theo",
+    "thong ke theo",
+    "bao cao theo",
+    "nhom theo",
+)
+_LEAD_PREFIXES = (
+    "hay thuc hien",
+    "thuc hien",
+    "vui long",
+    "giup toi",
+    "cho toi",
+    "hay",
+    "tinh toan",
+    "phan tich",
+    "thong ke",
+    "bao cao",
+    "xem",
+    "tinh",
+    "chi so",
+    "chi tieu",
+    "so lieu",
+)
+
+
+def _fold(text: str) -> str:
+    """Casefold and strip Vietnamese diacritics for accent-insensitive matching."""
+    return "".join(
+        char for char in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(char)
+    ).replace("đ", "d")
+
+
+def _strip_lead_words(folded: str) -> str:
+    """Drop common request prefixes so the metric phrase starts at its name."""
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _LEAD_PREFIXES:
+            if folded.startswith(prefix + " "):
+                folded = folded[len(prefix) :].strip()
+                changed = True
+    return folded
+
+
+def _unique_match(phrase: str, items: list[dict[str, Any]], name_keys: tuple[str, ...]) -> dict[str, Any] | None:
+    """Return the single item whose folded name equals/contains the phrase, else None."""
+    matches = []
+    for item in items:
+        names = [_fold(str(item.get(key) or "")) for key in name_keys]
+        if any(name and (name == phrase or name in phrase or phrase in name) for name in names):
+            matches.append(item)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _try_direct_resolution(user_message: str, catalog: dict[str, Any]) -> SemanticQueryInterpretation | None:
+    """Deterministically resolve "<metric> theo <dimension>" sentences without an LLM pass.
+
+    Returns None whenever either side is missing or ambiguous so the LLM flow stays in charge.
+    """
+    text = _fold(user_message)
+    marker = next((m for m in _DIM_MARKERS if m in text), None)
+    if marker is None:
+        return None
+    head, _, tail = text.partition(marker)
+    metric_phrase = _strip_lead_words(head.strip(" .,;'\""))
+    dim_phrase = tail.strip(" .,;'\"")
+    metric = _unique_match(metric_phrase, catalog.get("metrics", []), ("business_name", "name"))
+    dim = _unique_match(dim_phrase, catalog.get("dimensions", []), ("business_name", "column_name"))
+    if metric is None or dim is None:
+        return None
+    metric_name = metric.get("business_name") or metric.get("name")
+    dim_name = dim.get("business_name") or dim.get("column_name")
+    spec = SemanticQuerySpec(
+        metric_ids=[metric["id"]],
+        dimensions=[DimensionSelection(column_id=dim["column_id"])],
+        filters=[],
+        limit=100,
+    )
+    return SemanticQueryInterpretation(
+        status="resolved",
+        spec=spec,
+        time_ranges=[],
+        rationale=f"Phân tách trực tiếp: chỉ số '{metric_name}' theo chiều '{dim_name}'.",
+    )
 
 
 def _empty_catalog_fallback() -> dict[str, Any]:

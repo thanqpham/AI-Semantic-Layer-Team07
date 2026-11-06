@@ -2536,8 +2536,13 @@ async def _process_standard_chat_inner(
 
     parser_catalog: dict[str, Any] = {}
     if preclassified_intent == "semantic_query":
-        await _query_target(db, numeric_db_id, current_user.id, org_id)
-        parser_catalog = await build_parser_catalog(db, numeric_db_id)
+        try:
+            await _query_target(db, numeric_db_id, current_user.id, org_id)
+        except HTTPException:
+            # SQL Dump DBs cannot execute queries; fall back to metric generation instead of erroring.
+            preclassified_intent = "metric_query"
+        else:
+            parser_catalog = await build_parser_catalog(db, numeric_db_id)
 
     with execution_step("context"):
         try:

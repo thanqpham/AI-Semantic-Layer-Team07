@@ -24,9 +24,10 @@ Phân loại câu hỏi của người dùng vào đúng 1 trong 5 nhóm:
 - "metric_query": Yêu cầu tạo mới, định nghĩa, xây dựng, tính toán công thức hoặc đề xuất Business Metric / KPI mới cho hệ thống Semantic Layer. Bao gồm:
   + Các câu hỏi mô tả công thức, logic tính toán, chỉ số kinh doanh (ví dụ: "Tính giá trị trung bình trên mỗi đơn hàng (Average Order Value - AOV)", "Tính tổng doanh thu thuần của các đơn hàng có trạng thái hoàn thành (Net Revenue)", "Tính tổng số lượng đơn đặt hàng phát sinh trong toàn hệ thống", "Tính tỷ lệ hủy đơn hàng", "Doanh thu thực nhận sau khi trừ chiết khấu, hoàn trả", "Giá trị đơn hàng trung bình", "Lợi nhuận gộp Gross Profit", "Thời gian giao hàng trung bình", "Tỷ lệ đơn hàng thành công", "Số lượng khách hàng mới").
   + Các câu hỏi yêu cầu tạo/đề xuất metric (ví dụ: "Tạo metric mới Doanh thu thuần", "Đề xuất metric cho bảng orders", "Định nghĩa công thức AOV", "Xây dựng chỉ số khách hàng mới", "Thêm KPI tỷ lệ hoàn hàng").
-  BẤT KỲ CÂU HỎI NÀO MÔ TẢ ĐỊNH NGHĨA/CÔNG THỨC CHỈ SỐ HOẶC YÊU CẦU TÍNH TOÁN/TẠO METRIC (không kèm yêu cầu trích xuất bảng báo cáo dữ liệu cụ thể theo thời gian hay chiều lọc) ĐỀU THUỘC NHÓM NÀY.
+  BẤT KỲ CÂU HỎI NÀO MÔ TẢ ĐỊNH NGHĨA/CÔNG THỨC CHỈ SỐ HOẶC YÊU CẦU TÍNH TOÁN/TẠO METRIC (không kèm yêu cầu trích xuất dữ liệu cụ thể) ĐỀU THUỘC NHÓM NÀY.
+  NGOẠI LỆ QUAN TRỌNG: nếu động từ chính của câu là hành động TRUY VẤN/XEM/LẤY KẾT QUẢ số liệu (ví dụ chứa "truy vấn chỉ số", "thực hiện truy vấn", "xem kết quả", "cho tôi kết quả số liệu") thì PHẢI xếp vào "semantic_query", KỂ CẢ khi câu không nêu thời gian hay chiều lọc. Nhóm này chỉ giữ các câu thuần định nghĩa/tính toán/tạo mới.
 
-- "semantic_query": Câu hỏi yêu cầu truy vấn, trích xuất dữ liệu, xem kết quả bảng số liệu, báo cáo hoặc thống kê cụ thể từ Live Database theo các chiều phân tích (dimensions: theo khách hàng, theo ngày/tháng/năm, theo chi nhánh, theo sản phẩm) hoặc theo bộ lọc (filters) (ví dụ: "cho tôi kết quả Tổng doanh thu theo từng khách hàng", "Xem kết quả doanh thu", "Tổng doanh thu theo khách hàng năm 2024", "Doanh thu tháng này theo chi nhánh", "Số lượng đơn hàng hoàn thành năm 2024", "Báo cáo doanh số theo sản phẩm", "Thống kê đơn hàng tháng này", "Top 5 khách hàng chi tiêu nhiều nhất").
+- "semantic_query": Câu hỏi yêu cầu truy vấn, trích xuất dữ liệu, xem kết quả bảng số liệu, báo cáo hoặc thống kê cụ thể từ Live Database theo các chiều phân tích (dimensions: theo khách hàng, theo ngày/tháng/năm, theo chi nhánh, theo sản phẩm) hoặc theo bộ lọc (filters) (ví dụ: "cho tôi kết quả Tổng doanh thu theo từng khách hàng", "Xem kết quả doanh thu", "Tổng doanh thu theo khách hàng năm 2024", "Doanh thu tháng này theo chi nhánh", "Số lượng đơn hàng hoàn thành năm 2024", "Báo cáo doanh số theo sản phẩm", "Thống kê đơn hàng tháng này", "Top 5 khách hàng chi tiêu nhiều nhất"). Kể cả câu yêu cầu truy vấn/xem kết quả MỘT chỉ số duy nhất mà KHÔNG nêu chiều lọc hay thời gian (ví dụ: "Truy vấn chỉ số tổng số khách hàng", "Xem tổng doanh thu", "Giúp tôi thực hiện truy vấn chỉ số tính toán tổng số khách hàng", "Cho tôi kết quả số lượng đơn hàng").
 
 - "data_question": Hỏi về cấu trúc database, schema, bảng, cột, kiểu dữ liệu, glossary, quan hệ bảng, danh sách metric đã có hoặc hướng dẫn chọn dữ liệu/dimension/filter để tìm hiểu dữ liệu (không yêu cầu tạo metric hay lấy số liệu cụ thể) (ví dụ: "Bảng orders có những cột nào?", "Quan hệ giữa bảng orders và customers", "Có những metric doanh thu nào đã được phê duyệt?").
 
@@ -45,6 +46,13 @@ Latest request: {user_message}"""
 
 _INTENTS = {"chitchat", "semantic_query", "data_question", "metric_query", "out_of_scope"}
 _METRIC_ACTION_MARKERS = ("gui data lead de xuat chi so", "tao business metric", "tao metric")
+_QUERY_ACTION_MARKERS = (
+    "thuc hien truy van",
+    "truy van chi so",
+    "truy van metric",
+    "truy van business metric",
+    "truy van kpi",
+)
 
 
 async def classify_request(
@@ -70,6 +78,8 @@ async def classify_request(
         return {"intent": "chitchat", "chat_response": "Bạn chưa nhập câu hỏi. Tôi có thể giúp gì?"}
     if _is_metric_action_message(user_message):
         return {"intent": "metric_query"}
+    if _is_query_action_message(user_message):
+        return {"intent": "semantic_query"}
     try:
         response = await get_llm().ainvoke(_classification_prompt(chat_history or [], user_message))
         raw = (response.content if hasattr(response, "content") else str(response)).strip().lower()
@@ -114,10 +124,21 @@ def _parse_intent(raw: str) -> str:
 
 def _is_metric_action_message(message: str) -> bool:
     """Recognize metric action labels before an LLM can misclassify them."""
-    normalized = "".join(
+    normalized = _normalize_text(message)
+    return any(marker in normalized for marker in _METRIC_ACTION_MARKERS)
+
+
+def _is_query_action_message(message: str) -> bool:
+    """Recognize explicit metric-query requests so they execute without an LLM pass."""
+    normalized = _normalize_text(message)
+    return any(marker in normalized for marker in _QUERY_ACTION_MARKERS)
+
+
+def _normalize_text(message: str) -> str:
+    """Casefold and strip Vietnamese diacritics for accent-insensitive marker matching."""
+    return "".join(
         char for char in unicodedata.normalize("NFKD", message.casefold()) if not unicodedata.combining(char)
     ).replace("đ", "d")
-    return any(marker in normalized for marker in _METRIC_ACTION_MARKERS)
 
 
 def _format_history(history: list[dict[str, str]]) -> str:
