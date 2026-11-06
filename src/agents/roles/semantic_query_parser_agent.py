@@ -144,6 +144,7 @@ _DIM_MARKERS = (
 _LEAD_PREFIXES = (
     "hay thuc hien",
     "thuc hien",
+    "truy van",
     "vui long",
     "giup toi",
     "cho toi",
@@ -189,12 +190,43 @@ def _unique_match(phrase: str, items: list[dict[str, Any]], name_keys: tuple[str
     return matches[0] if len(matches) == 1 else None
 
 
+def _exact_unique_match(phrase: str, items: list[dict[str, Any]], name_keys: tuple[str, ...]) -> dict[str, Any] | None:
+    """Return the single item whose folded name equals the phrase exactly, else None."""
+    matches = [item for item in items if phrase and any(_fold(str(item.get(key) or "")) == phrase for key in name_keys)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _resolved_interpretation(
+    metric_ids: list[int],
+    dims: list[DimensionSelection],
+    metric: dict[str, Any],
+    dim: dict[str, Any] | None,
+) -> SemanticQueryInterpretation:
+    """Build a resolved interpretation for deterministically matched catalog items."""
+    spec = SemanticQuerySpec(metric_ids=metric_ids, dimensions=dims, filters=[], limit=100)
+    metric_name = metric.get("business_name") or metric.get("name")
+    rationale = f"Phân tách trực tiếp: chỉ số '{metric_name}'"
+    if dim is not None:
+        rationale += f" theo chiều '{dim.get('business_name') or dim.get('column_name')}'"
+    return SemanticQueryInterpretation(
+        status="resolved",
+        spec=spec,
+        time_ranges=[],
+        rationale=rationale + ".",
+    )
+
+
 def _try_direct_resolution(user_message: str, catalog: dict[str, Any]) -> SemanticQueryInterpretation | None:
-    """Deterministically resolve "<metric> theo <dimension>" sentences without an LLM pass.
+    """Deterministically resolve verbatim metric or "<metric> theo <dimension>" sentences without an LLM pass.
 
     Returns None whenever either side is missing or ambiguous so the LLM flow stays in charge.
     """
     text = _fold(user_message)
+    phrase = _strip_lead_words(text.strip(" .,;'\""))
+    # shortcut: metric names may embed their own "theo ..." suffix, so verbatim match wins before the split.
+    exact = _exact_unique_match(phrase, catalog.get("metrics", []), ("business_name", "name"))
+    if exact is not None:
+        return _resolved_interpretation([exact["id"]], [], exact, None)
     marker = next((m for m in _DIM_MARKERS if m in text), None)
     if marker is None:
         return None
@@ -205,19 +237,11 @@ def _try_direct_resolution(user_message: str, catalog: dict[str, Any]) -> Semant
     dim = _unique_match(dim_phrase, catalog.get("dimensions", []), ("business_name", "column_name"))
     if metric is None or dim is None:
         return None
-    metric_name = metric.get("business_name") or metric.get("name")
-    dim_name = dim.get("business_name") or dim.get("column_name")
-    spec = SemanticQuerySpec(
-        metric_ids=[metric["id"]],
-        dimensions=[DimensionSelection(column_id=dim["column_id"])],
-        filters=[],
-        limit=100,
-    )
-    return SemanticQueryInterpretation(
-        status="resolved",
-        spec=spec,
-        time_ranges=[],
-        rationale=f"Phân tách trực tiếp: chỉ số '{metric_name}' theo chiều '{dim_name}'.",
+    return _resolved_interpretation(
+        [metric["id"]],
+        [DimensionSelection(column_id=dim["column_id"])],
+        metric,
+        dim,
     )
 
 

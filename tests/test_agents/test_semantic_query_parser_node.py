@@ -77,7 +77,54 @@ async def test_metric_by_dimension_phrase_resolves_without_llm(sample_catalog: d
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_dimension_phrase_falls_back_to_llm(sample_catalog: dict) -> None:
+async def test_verbatim_metric_name_with_query_prefix_resolves_without_llm(sample_catalog: dict) -> None:
+    """'truy vấn chỉ số <tên metric nguyên văn>' resolves deterministically even when the name contains 'theo ...'."""
+    catalog = {
+        **sample_catalog,
+        "metrics": [
+            *sample_catalog["metrics"],
+            {
+                "id": 3,
+                "name": "gross_profit_by_region",
+                "business_name": "Lợi nhuận gộp từ đơn hàng theo khu vực",
+                "formula": "SUM(gross_profit)",
+                "base_entity": "order_facts",
+            },
+        ],
+    }
+    state = {
+        "user_message": "thực hiện truy vấn chỉ số Lợi nhuận gộp từ đơn hàng theo khu vực",
+        "parser_catalog": catalog,
+    }
+
+    with patch("src.agents.roles.semantic_query_parser_agent.get_llm") as mock_get_llm:
+        result = await semantic_query_parser_node(state)
+        mock_get_llm.assert_not_called()
+
+    interp = result["interpretation"]
+    assert interp["status"] == "resolved"
+    assert interp["spec"]["metric_ids"] == [3]
+    assert interp["spec"]["dimensions"] == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_verbatim_phrase_still_uses_llm(sample_catalog: dict) -> None:
+    """A 'truy vấn chỉ số' phrase matching no catalog metric name falls through to the LLM."""
+    llm_payload = {
+        "status": "needs_clarification",
+        "clarification": {"prompt": "Hệ thống hiện chưa có chỉ số 'Lợi nhuận ròng'.", "options": []},
+        "rationale": "Chưa có chỉ số trong catalog",
+    }
+    state = {
+        "user_message": "thực hiện truy vấn chỉ số Lợi nhuận ròng",
+        "parser_catalog": sample_catalog,
+    }
+
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = llm_payload
+        result = await semantic_query_parser_node(state)
+
+    assert result["interpretation"]["status"] == "needs_clarification"
     """When the dimension phrase matches nothing, deterministic pass steps aside for the LLM."""
     llm_payload = {
         "status": "needs_clarification",
