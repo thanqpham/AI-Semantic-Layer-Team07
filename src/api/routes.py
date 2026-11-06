@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
+from src.agents.roles.data_assistant_agent import _asks_for_metric_catalog
 from src.api.auth import get_current_user
 from src.config import get_settings
 from src.models.db import (
@@ -878,6 +879,7 @@ async def _load_approved_metric_context(db: AsyncSession, db_id: int) -> list[di
     stmt = select(SemanticMetricModel).where(
         SemanticMetricModel.db_id == db_id,
         SemanticMetricModel.status == "approved",
+        SemanticMetricModel.is_deleted.is_(False),
     )
     metrics = (await db.execute(stmt)).scalars().all()
     return [
@@ -2957,6 +2959,8 @@ async def _build_chat_context(
             )
         return await build_metric_context(db, db_id, query, token_budget)
     if intent == "data_question":
+        if _asks_for_metric_catalog(message):
+            return MetricContextResult(schema={}, diagnostic={"status": "ready"})
         return await build_data_context(db, db_id, query, token_budget)
     return MetricContextResult(schema={}, diagnostic={"status": "ready", "tables": [], "relationship_count": 0})
 
