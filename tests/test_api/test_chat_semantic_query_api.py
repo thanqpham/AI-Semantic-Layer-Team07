@@ -444,3 +444,191 @@ async def test_clarification_selection_with_stale_metric_id_delegates_to_standar
     body = res.json()
     assert body["intent"] != "semantic_query"
     chat_mocks.mock_exec.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "can_generate,denied,expected",
+    [(True, False, "metric_query"), (False, False, "metric_query"), (False, True, "semantic_query")],
+)
+async def test_missing_metric_routes_by_permission(client, auth_headers, chat_mocks, can_generate, denied, expected):
+    from fastapi import HTTPException
+
+    chat_mocks.mock_can.return_value = can_generate
+    missing = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "missing_metric",
+        "interpretation": {"status": "needs_clarification", "clarification": {"prompt": "missing", "options": []}},
+    }
+    proposal = {"intent": "metric_query", "suggested_metrics": [], "blocked_candidates": []}
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes.get_metric_requirement_history", new=AsyncMock(return_value=[])),
+        patch(
+            "src.api.routes._require_resource_permission",
+            new=AsyncMock(side_effect=HTTPException(403) if denied else None),
+        ),
+    ):
+        agent.ainvoke = AsyncMock(side_effect=[missing, proposal])
+        res = await client.post(
+            "/api/v1/semantic/101/chat", json={"message": "Xem tổng số khách hàng"}, headers=auth_headers
+        )
+    assert res.status_code == 200
+    assert res.json()["intent"] == expected
+    assert agent.ainvoke.await_count == (1 if denied else 2)
+    assert chat_mocks.mock_save.await_count == 2
+    chat_mocks.mock_exec.assert_not_awaited()
+    if denied:
+        assert "quyền" in res.json()["chat_response"]
+
+
+@pytest.mark.asyncio
+async def test_dump_missing_metric_is_not_blocked_by_live_query_check(client, auth_headers, chat_mocks):
+    from fastapi import HTTPException
+
+    missing = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "missing_metric",
+        "interpretation": {"status": "needs_clarification", "clarification": {"prompt": "missing", "options": []}},
+    }
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes.get_metric_requirement_history", new=AsyncMock(return_value=[])),
+        patch("src.api.routes._query_target", new=AsyncMock(side_effect=HTTPException(400, "live only"))) as target,
+    ):
+        agent.ainvoke = AsyncMock(side_effect=[missing, {"intent": "metric_query"}])
+        res = await client.post(
+            "/api/v1/semantic/101/chat", json={"message": "Xem tổng số khách hàng"}, headers=auth_headers
+        )
+    assert res.status_code == 200
+    assert res.json()["intent"] == "metric_query"
+    target.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_query_does_not_start_metric_proposal(client, auth_headers, chat_mocks):
+    ambiguous = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "needs_clarification",
+        "interpretation": {
+            "status": "needs_clarification",
+            "clarification": {"prompt": "Which metric?", "options": []},
+        },
+    }
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes._require_resource_permission", new_callable=AsyncMock) as permission,
+    ):
+        agent.ainvoke = AsyncMock(return_value=ambiguous)
+        res = await client.post("/api/v1/semantic/101/chat", json={"message": "Which metric?"}, headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json()["chat_response"] == "Which metric?"
+    assert agent.ainvoke.await_count == 1
+    permission.assert_not_awaited()
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_select_create_metric(client, auth_headers, chat_mocks):
+    from fastapi import HTTPException
+
+    chat_mocks.mock_can.return_value = False
+    previous = SimpleNamespace(
+        metadata_json={"clarification": {"options": [{"id": "create_metric", "action": "create_metric"}]}}
+    )
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes._require_resource_permission", new=AsyncMock(side_effect=HTTPException(403))),
+        patch("src.api.routes._process_standard_chat", new_callable=AsyncMock) as process,
+    ):
+        res = await client.post(
+            "/api/v1/semantic/101/chat",
+            json={
+                "message": "Create",
+                "clarification_selection": {"assistant_message_id": "a", "option_id": "create_metric"},
+            },
+            headers=auth_headers,
+        )
+    assert res.status_code == 403
+    process.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["requested", "discovery"])
+async def test_admin_cannot_start_metric_generation(client, auth_headers, chat_mocks, mode):
+    from fastapi import HTTPException
+
+    chat_mocks.mock_can.return_value = False
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "metric_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes._require_resource_permission", new=AsyncMock(side_effect=HTTPException(403))),
+        patch("src.api.routes.persist_reviewed_state", new_callable=AsyncMock) as persist,
+    ):
+        agent.ainvoke = AsyncMock()
+        response = await client.post(
+            "/api/v1/semantic/101/chat", json={"message": "Create metric", "proposal_mode": mode}, headers=auth_headers
+        )
+    assert response.status_code == 200
+    assert "quy\u1ec1n" in response.json()["chat_response"]
+    agent.ainvoke.assert_not_awaited()
+    persist.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["resolved", "reuse", "selection"])
+async def test_dump_query_reports_unsupported_without_executing(client, auth_headers, chat_mocks, path):
+    from fastapi import HTTPException
+
+    payload = {"message": "Show revenue"}
+    if path == "reuse":
+        payload["reuse_metric_id"] = 1
+    if path == "selection":
+        payload["clarification_selection"] = {"assistant_message_id": "a", "option_id": "opt"}
+    previous = SimpleNamespace(
+        metadata_json={
+            "clarification": {
+                "options": [{"id": "opt", "spec": {"metric_ids": [1], "dimensions": [], "filters": [], "limit": 100}}]
+            }
+        }
+    )
+    resolved = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "resolved",
+        "interpretation": {
+            "status": "resolved",
+            "spec": {"metric_ids": [1], "dimensions": [], "filters": [], "limit": 100},
+        },
+    }
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch(
+            "src.api.routes._query_target",
+            new=AsyncMock(side_effect=HTTPException(400, "Query only supported for Live DB connections")),
+        ),
+    ):
+        agent.ainvoke = AsyncMock(return_value=resolved)
+        response = await client.post("/api/v1/semantic/101/chat", json=payload, headers=auth_headers)
+    assert response.status_code == 200
+    assert "SQL Dump" in response.json()["chat_response"]
+    chat_mocks.mock_exec.assert_not_awaited()

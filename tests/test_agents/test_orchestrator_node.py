@@ -167,3 +167,12 @@ async def test_existing_out_of_scope_intent_preserves_response() -> None:
 
     assert result["intent"] == "out_of_scope"
     assert "Tôi là trợ lý AI chuyên về Semantic Layer" in result["chat_response"]
+
+
+def test_classifier_prompt_distinguishes_metric_values_from_definitions() -> None:
+    from src.agents.roles.orchestrator_agent import _CLASSIFY_PROMPT
+
+    assert "Giúp tôi thực hiện truy vấn chỉ số tính toán tổng số khách hàng" in _CLASSIFY_PROMPT
+    assert "không cần chiều phân tích hoặc bộ lọc" in _CLASSIFY_PROMPT
+    assert "Định nghĩa công thức AOV" in _CLASSIFY_PROMPT
+    assert "không kèm yêu cầu trích xuất bảng báo cáo" not in _CLASSIFY_PROMPT
