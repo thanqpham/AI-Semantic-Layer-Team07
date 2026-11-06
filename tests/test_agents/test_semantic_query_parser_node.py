@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.agents.nodes.chat.semantic_query_parser_node import semantic_query_parser_node
+from src.agents.roles.semantic_query_parser_agent import _build_parse_prompt
 
 
 @pytest.fixture
@@ -58,20 +59,26 @@ def sample_catalog() -> dict:
     }
 
 
+def test_prompt_requires_empty_top_level_metric_ids_for_unresolved_queries(sample_catalog: dict) -> None:
+    prompt = _build_parse_prompt("Xem lợi nhuận", sample_catalog, False, [])
+    assert 'status "missing_metric" hoặc "needs_clarification", metric_ids cấp cao nhất phải là []' in prompt
+    assert '"status": "missing_metric", "metric_name": "Tỷ lệ giữ chân khách hàng", "metric_ids": []' in prompt
+
+
 @pytest.mark.asyncio
 async def test_empty_catalog_returns_needs_clarification() -> None:
-    """When catalog has no metrics, node immediately returns clarification without calling LLM."""
+    """An ambiguous request remains a clarification even with an empty catalog."""
     state = {
         "user_message": "Tổng doanh thu 2024",
         "parser_catalog": {"metrics": []},
     }
-    with patch("src.agents.roles.semantic_query_parser_agent.get_llm") as mock_get_llm:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
+        mock_json.return_value = {"status": "needs_clarification", "clarification": {"prompt": "Chỉ số nào?"}}
         result = await semantic_query_parser_node(state)
-        mock_get_llm.assert_not_called()
 
     assert result["intent"] == "semantic_query"
     assert result["interpretation"]["status"] == "needs_clarification"
-    assert "chưa có business metric" in result["chat_response"].lower()
+    assert result["semantic_parse_status"] == "needs_clarification"
 
 
 @pytest.mark.asyncio
@@ -202,7 +209,8 @@ async def test_llm_exception_falls_back_gracefully(sample_catalog: dict) -> None
 async def test_missing_metric_returns_create_metric_option_for_lead(sample_catalog: dict) -> None:
     """When requested metric is missing and user is Lead/Admin, returns clean prompt and Tạo Business Metric option."""
     llm_payload = {
-        "status": "needs_clarification",
+        "status": "missing_metric",
+        "metric_name": "Tỷ lệ giữ chân khách hàng (Retention Rate)",
         "clarification": {
             "prompt": "Hệ thống hiện chưa có chỉ số 'Tỷ lệ giữ chân khách hàng (Retention Rate)'. Các chỉ số liên quan hiện có gồm ID 8. Bạn có muốn tạo mới không?",
             "options": [],
@@ -236,7 +244,8 @@ async def test_missing_metric_returns_create_metric_option_for_lead(sample_catal
 async def test_missing_metric_returns_submit_request_option_for_member(sample_catalog: dict) -> None:
     """When requested metric is missing and user is Member, returns prompt for Data Lead proposal."""
     llm_payload = {
-        "status": "needs_clarification",
+        "status": "missing_metric",
+        "metric_name": "Tỷ lệ giữ chân khách hàng",
         "clarification": {
             "prompt": "Hệ thống hiện chưa có chỉ số 'Tỷ lệ giữ chân khách hàng'. Bạn có muốn tạo không?",
             "options": [],
@@ -288,9 +297,8 @@ async def test_forced_mismatch_intercepted_and_converted_to_clarification(sample
     assert interp["status"] == "needs_clarification"
     assert result["clarification"] is not None
     assert "tỷ lệ giữ chân khách hàng" in result["chat_response"].lower()
-    assert len(result["clarification"]["options"]) == 1
-    assert result["clarification"]["options"][0]["id"] == "create_metric"
-    assert "tỷ lệ giữ chân khách hàng" in result["clarification"]["options"][0]["label"].lower()
+    assert result["semantic_parse_status"] == "needs_clarification"
+    assert result["clarification"]["options"] == []
 
 
 @pytest.mark.asyncio
@@ -363,3 +371,93 @@ async def test_stale_catalog_metric_id_dropped_from_options(sample_catalog: dict
     assert result["clarification"] is not None
     kept = result["clarification"]["options"]
     assert [o["id"] for o in kept] == ["opt_ok"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("catalog", [{"metrics": []}, {"metrics": [{"id": 1, "name": "orders"}]}])
+async def test_explicit_missing_metric_has_structured_signal(catalog: dict) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {"status": "missing_metric", "metric_name": "Tổng số khách hàng"}
+        result = await semantic_query_parser_node({"user_message": "Xem tổng số khách hàng", "parser_catalog": catalog})
+    assert result["semantic_parse_status"] == "missing_metric"
+    assert result["interpretation"]["status"] == "needs_clarification"
+
+
+@pytest.mark.asyncio
+async def test_empty_catalog_ambiguous_request_does_not_signal_missing() -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {"status": "needs_clarification", "clarification": {"prompt": "Chỉ số nào?", "options": []}}
+        result = await semantic_query_parser_node({"user_message": "Xem số liệu", "parser_catalog": {"metrics": []}})
+    assert result["semantic_parse_status"] == "needs_clarification"
+
+
+@pytest.mark.asyncio
+async def test_parser_error_does_not_signal_missing(sample_catalog: dict) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.side_effect = RuntimeError("unavailable")
+        result = await semantic_query_parser_node({"user_message": "Xem doanh thu", "parser_catalog": sample_catalog})
+    assert result["semantic_parse_status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_clarification_text_alone_does_not_signal_missing(sample_catalog: dict) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {
+            "status": "needs_clarification",
+            "clarification": {"prompt": "Chưa có chỉ số rõ ràng, bạn muốn xem chỉ số nào?", "options": []},
+        }
+        result = await semantic_query_parser_node({"user_message": "Xem số liệu", "parser_catalog": sample_catalog})
+    assert result["semantic_parse_status"] == "needs_clarification"
+    assert result["clarification"]["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_missing_metric_without_name_is_error(sample_catalog: dict) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {"status": "missing_metric", "metric_name": ""}
+        result = await semantic_query_parser_node({"user_message": "Xem số liệu", "parser_catalog": sample_catalog})
+    assert result["semantic_parse_status"] == "error"
+    assert result["clarification"]["options"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["  TỔNG   DOANH THU ", "total_revenue"])
+async def test_missing_metric_matching_catalog_requires_clarification(sample_catalog: dict, name: str) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {"status": "missing_metric", "metric_name": name}
+        result = await semantic_query_parser_node({"user_message": "Xem doanh thu", "parser_catalog": sample_catalog})
+    assert result["semantic_parse_status"] == "needs_clarification"
+    assert result["clarification"]["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_missing_metric_without_name_never_offers_create_action(sample_catalog: dict) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {
+            "status": "missing_metric",
+            "metric_name": "",
+            "clarification": {"prompt": "Chỉ số nào?", "options": []},
+        }
+        result = await semantic_query_parser_node({"user_message": "Xem số liệu", "parser_catalog": sample_catalog})
+    assert result["semantic_parse_status"] == "error"
+    assert result["clarification"]["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_missing_metric_with_selected_ids_does_not_offer_creation(sample_catalog: dict) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {"status": "missing_metric", "metric_name": "Lợi nhuận", "metric_ids": [1]}
+        result = await semantic_query_parser_node({"user_message": "Xem lợi nhuận", "parser_catalog": sample_catalog})
+    assert result["semantic_parse_status"] == "error"
+    assert result["clarification"]["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_resolved_total_without_dimensions(sample_catalog: dict) -> None:
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as llm:
+        llm.return_value = {"status": "resolved", "metric_ids": [1], "dimensions": [], "filters": []}
+        result = await semantic_query_parser_node(
+            {"user_message": "Xem tổng doanh thu", "parser_catalog": sample_catalog}
+        )
+    assert result["semantic_parse_status"] == "resolved"
+    assert result["interpretation"]["spec"]["dimensions"] == []

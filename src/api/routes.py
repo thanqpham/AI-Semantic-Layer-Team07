@@ -2223,6 +2223,41 @@ async def _execute_chat_request_inner(
         raise HTTPException(status_code=404, detail="Chat session or database not found") from exc
 
 
+_NO_LIVE_QUERY_MESSAGE = "SQL Dump kh\u00f4ng h\u1ed7 tr\u1ee3 truy v\u1ea5n d\u1eef li\u1ec7u. H\u00e3y k\u1ebft n\u1ed1i Live DB \u0111\u1ec3 xem k\u1ebft qu\u1ea3."
+
+
+def _is_missing_live_target(exc: HTTPException) -> bool:
+    return exc.status_code == 400 and exc.detail == "Query only supported for Live DB connections"
+
+
+async def _no_live_query_response(
+    db: AsyncSession,
+    session: ChatSessionModel,
+    user: UserModel,
+    db_id: int,
+    body: ChatRequest,
+    can_generate_metrics: bool,
+    org_id: int | None,
+) -> ChatResponse:
+    user_message = await save_chat_message(
+        db, session.id, "user", body.message, client_message_id=body.client_message_id
+    )
+    return await _build_and_save_chat_response(
+        db,
+        session,
+        user,
+        db_id,
+        body,
+        user_message,
+        {"intent": "data_question", "chat_response": _NO_LIVE_QUERY_MESSAGE},
+        can_generate_metrics,
+        True,
+        {"status": "ready"},
+        {},
+        org_id,
+    )
+
+
 async def _reuse_existing_metric(
     db: AsyncSession,
     session: ChatSessionModel,
@@ -2237,7 +2272,14 @@ async def _reuse_existing_metric(
     metric_ids = {item["id"] for item in catalog.get("metrics", [])}
     if body.reuse_metric_id not in metric_ids:
         raise HTTPException(status_code=400, detail="Metric không tồn tại hoặc chưa được phê duyệt")
-    _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+    try:
+        _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+    except HTTPException as exc:
+        if not _is_missing_live_target(exc):
+            raise
+        return await _no_live_query_response(
+            db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id
+        )
     spec = SemanticQuerySpec(metric_ids=[body.reuse_metric_id], dimensions=[], filters=[], limit=100)
     user_message = await save_chat_message(
         db, session.id, "user", body.message, client_message_id=body.client_message_id
@@ -2326,7 +2368,14 @@ async def _handle_clarification_selection(
         catalog = await build_parser_catalog(db, numeric_db_id)
         valid_ids = {m["id"] for m in catalog.get("metrics", [])}
         if set(spec_dict["metric_ids"]).issubset(valid_ids):
-            _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+            try:
+                _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+            except HTTPException as exc:
+                if not _is_missing_live_target(exc):
+                    raise
+                return await _no_live_query_response(
+                    db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id
+                )
             try:
                 spec = SemanticQuerySpec(**spec_dict)
             except ValidationError as exc:
@@ -2367,6 +2416,8 @@ async def _handle_clarification_selection(
             )
 
     if matched_option.get("action") == "create_metric" or matched_option.get("id") == "create_metric":
+        if not can_generate_metrics:
+            await _require_resource_permission(db, current_user.id, numeric_db_id, org_id, "can_submit_metric")
         body_copy = body.model_copy(update={"clarification_selection": None})
         return await _process_standard_chat(
             db,
@@ -2522,6 +2573,27 @@ async def _process_standard_chat_inner(
     preclassified_intent = classification.get("intent", "data_question")
     preclassified_chat_response = classification.get("chat_response")
 
+    if preclassified_intent == "metric_query" and not await _can_propose_missing_metric(
+        db, current_user.id, numeric_db_id, org_id, can_generate_metrics
+    ):
+        return await _build_and_save_chat_response(
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body,
+            user_message,
+            {
+                "intent": "data_question",
+                "chat_response": "B\u1ea1n kh\u00f4ng c\u00f3 quy\u1ec1n t\u1ea1o ho\u1eb7c g\u1eedi y\u00eau c\u1ea7u metric.",
+            },
+            can_generate_metrics,
+            True,
+            {"status": "ready"},
+            {},
+            org_id,
+        )
+
     if preclassified_intent == "out_of_scope":
         return await _build_out_of_scope_response(
             db,
@@ -2536,7 +2608,6 @@ async def _process_standard_chat_inner(
 
     parser_catalog: dict[str, Any] = {}
     if preclassified_intent == "semantic_query":
-        await _query_target(db, numeric_db_id, current_user.id, org_id)
         parser_catalog = await build_parser_catalog(db, numeric_db_id)
 
     with execution_step("context"):
@@ -2583,6 +2654,42 @@ async def _process_standard_chat_inner(
         user_message_id=user_message.id,
         selected_metric_variant=selected_metric_variant,
     )
+    if final_state.get("semantic_parse_status") == "missing_metric":
+        if not await _can_propose_missing_metric(db, current_user.id, numeric_db_id, org_id, can_generate_metrics):
+            message = "Chỉ số chưa có và bạn không có quyền tạo hoặc gửi yêu cầu metric."
+            final_state["interpretation"] = {
+                "status": "needs_clarification",
+                "clarification": {"prompt": message, "options": []},
+            }
+            final_state["chat_response"] = message
+            final_state["clarification"] = None
+        else:
+            try:
+                full_history = await get_metric_requirement_history(
+                    db, session.id, get_settings().metric_context_token_budget
+                )
+                history = [m for m in full_history if m["id"] != user_message.id]
+                context = await _build_chat_context(
+                    db, numeric_db_id, body.message, "metric_query", get_settings().metric_context_token_budget, history
+                )
+            except ValueError as exc:
+                context = MetricContextResult(
+                    schema={}, diagnostic={"status": "needs_clarification", "message": str(exc)}
+                )
+            final_state = await _chat_state_for_context(
+                chat_agent,
+                context,
+                session.id,
+                body.message,
+                history,
+                approved_metrics,
+                can_generate_metrics,
+                "metric_query",
+                existing_metrics,
+                dedupe_performed,
+                proposal_mode="requested",
+                user_message_id=user_message.id,
+            )
     await dedupe_reviewed_suggestions(db, numeric_db_id, final_state)
     await persist_reviewed_state(db, numeric_db_id, current_user.id, final_state)
     return await _build_and_save_chat_response(
@@ -2599,6 +2706,21 @@ async def _process_standard_chat_inner(
         parser_catalog,
         org_id,
     )
+
+
+async def _can_propose_missing_metric(
+    db: AsyncSession, user_id: int, db_id: int, org_id: int | None, can_generate_metrics: bool
+) -> bool:
+    """Check whether the user may propose a missing metric."""
+    if can_generate_metrics:
+        return True
+    try:
+        await _require_resource_permission(db, user_id, db_id, org_id, "can_submit_metric")
+        return True
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
+        raise
 
 
 async def _build_out_of_scope_response(
@@ -2740,7 +2862,12 @@ async def _execute_or_clarify_semantic_query(
     interp_raw = final_state.get("interpretation") or {}
     interp = normalize_interpretation(SemanticQueryInterpretation(**interp_raw), parser_catalog)
     if interp.status == "resolved" and interp.spec:
-        _, live_db = await _query_target(db, numeric_db_id, user_id, org_id)
+        try:
+            _, live_db = await _query_target(db, numeric_db_id, user_id, org_id)
+        except HTTPException as exc:
+            if not _is_missing_live_target(exc):
+                raise
+            return None, None, _NO_LIVE_QUERY_MESSAGE
         try:
             query_result = await execute_natural_language_query(
                 db, numeric_db_id, live_db, interp.spec, parser_catalog, interp.time_ranges

@@ -143,3 +143,48 @@ async def test_admin_ordinary_chat_remains_allowed(client: AsyncClient, async_se
             headers=_workspace_headers(actor, org_id),
         )
     assert res.status_code != 403
+
+
+@pytest.mark.asyncio
+async def test_member_missing_metric_uses_real_graph_and_requires_manual_submit(
+    client: AsyncClient, async_session: AsyncSession
+) -> None:
+    from types import SimpleNamespace
+
+    from src.models.metric_review import MetricReview
+    from src.services.metric_context import MetricContextResult
+    from tests.metric_review_helpers import definition, schema
+
+    actor, org_id, db_id = await _seed_workspace(async_session, "member")
+    proposal = {
+        "name": "Revenue",
+        "final_definition": definition(),
+        "review": MetricReview(status="pass", summary="Valid").model_dump(mode="json"),
+    }
+    with (
+        patch(
+            "src.agents.roles.orchestrator_agent.get_llm",
+            return_value=SimpleNamespace(ainvoke=AsyncMock(return_value=SimpleNamespace(content="semantic_query"))),
+        ),
+        patch("src.agents.roles.semantic_query_parser_agent.get_llm", return_value=None),
+        patch(
+            "src.agents.roles.semantic_query_parser_agent.ainvoke_json",
+            new=AsyncMock(return_value={"status": "missing_metric", "metric_name": "Revenue"}),
+        ),
+        patch(
+            "src.api.routes._build_chat_context",
+            new=AsyncMock(return_value=MetricContextResult(schema=schema(), diagnostic={"status": "ready"})),
+        ),
+        patch("src.agents.nodes.metric.coordinator_node.prepare_proposal_context", return_value={}),
+        patch("src.agents.nodes.metric.coordinator_node.run_metric_workflow", new=AsyncMock(return_value=[proposal])),
+        patch("src.api.routes.persist_reviewed_state", new_callable=AsyncMock),
+    ):
+        response = await client.post(
+            f"/api/v1/semantic/{db_id}/chat",
+            json={"message": "Show revenue"},
+            headers=_workspace_headers(actor, org_id),
+        )
+    assert response.status_code == 200
+    assert response.json()["intent"] == "metric_query"
+    assert response.json()["suggestion_action"] == "submit_metric_request"
+    assert response.json()["suggestions"]

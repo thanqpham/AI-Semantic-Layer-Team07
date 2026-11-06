@@ -47,6 +47,36 @@ describe('AIStudioView', () => {
     metrics: [],
   };
 
+  it('does not load a dump session or offer a new one without a semantic database', () => {
+    const onNewChat = vi.fn();
+    render(<AIStudioView layer={{ ...mockLayer, source_type: 'sql_dump', semantic_db_id: undefined }} theme="light"
+      activeSessionId="dump-session" onNewChat={onNewChat} onMetricsChanged={vi.fn()} />);
+    expect(api.getChatSessionDetailApi).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /chat m/ })).not.toBeInTheDocument();
+  });
+
+  it('offers new chat on an SQL dump before any session is selected', () => {
+    const onNewChat = vi.fn();
+    render(<AIStudioView layer={{ ...mockLayer, source_type: 'sql_dump' }} theme="light"
+      onNewChat={onNewChat} onMetricsChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /chat m/ }));
+    expect(onNewChat).toHaveBeenCalledOnce();
+  });
+
+  it('opens an SQL dump conversation and offers a new chat', async () => {
+    vi.mocked(api.getChatSessionDetailApi).mockResolvedValue({
+      id: 'dump-session', db_id: 101, title: 'Dump', created_at: '', updated_at: '', message_count: 1,
+      messages: [{ id: 'dump-message', session_id: 'dump-session', sequence_no: 1,
+        sender: 'assistant', content: 'Dump metric proposal', created_at: '' }],
+    });
+    const onNewChat = vi.fn();
+    render(<AIStudioView layer={{ ...mockLayer, source_type: 'sql_dump' }} theme="light"
+      activeSessionId="dump-session" onNewChat={onNewChat} onMetricsChanged={vi.fn()} />);
+    expect(await screen.findByText('Dump metric proposal')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '\u0110o\u1ea1n chat m\u1edbi' }));
+    expect(onNewChat).toHaveBeenCalledOnce();
+  });
+
   it('loads prompt suggestions for the active semantic database and renders backend prompts', async () => {
     listMetricPromptSuggestionsApi.mockResolvedValue({
       items: [{ id: 'net-sales', title: 'Doanh thu lũy kế', prompt: 'Tính doanh thu lũy kế', icon: '📈' }],

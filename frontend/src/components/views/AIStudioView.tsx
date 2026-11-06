@@ -265,7 +265,7 @@ export function AIStudioView({
   useEffect(() => {
     const version = ++requestVersion.current;
     setLoading(false);
-    if (!semanticDbId || layer.source_type !== 'live') {
+    if (!semanticDbId) {
       showWelcome();
       return;
     }
@@ -475,7 +475,7 @@ export function AIStudioView({
                   </button>
                 )}
               </>
-            ) : onNewChat && layer.source_type === 'live' && semanticDbId ? (
+            ) : onNewChat && semanticDbId ? (
               <button
                 type="button"
                 onClick={onNewChat}

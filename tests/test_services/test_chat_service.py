@@ -120,8 +120,8 @@ async def test_workspace_data_lead_can_use_data_chat(async_session):
     assert session.db_id == database.id
 
 
-async def test_workspace_member_cannot_use_chat_without_live_data_permission(async_session):
-    """A Workspace member still needs a live data source to start the assistant."""
+async def test_workspace_member_can_use_chat_for_dump_metadata(async_session):
+    """A Workspace member can use chat with an imported schema."""
     other = UserModel(
         id=2,
         email="member@company.com",
@@ -146,5 +146,9 @@ async def test_workspace_member_cannot_use_chat_without_live_data_permission(asy
     async_session.add(database)
     await async_session.commit()
 
+    session = await create_chat_session(async_session, 2, database.id, org_id=organization.id)
+    assert session.db_id == database.id
+    from src.services.chat_service import get_chat_database
+
     with pytest.raises(ChatAuthorizationError, match="only supported for live"):
-        await create_chat_session(async_session, 2, database.id, org_id=organization.id)
+        await get_chat_database(async_session, 2, database.id, require_live=True, org_id=organization.id)

@@ -18,7 +18,7 @@ from src.models.db import (
     SemanticDatabaseModel,
 )
 from src.services.chat_execution import current_execution
-from src.services.organization_service import ROLE_PERMISSIONS, require_permission
+from src.services.organization_service import require_permission
 
 DEFAULT_SESSION_TITLE = "Cuộc trò chuyện mới"
 ALLOWED_SENDERS = {"user", "assistant", "system"}
@@ -67,15 +67,13 @@ async def _fetch_chat_database(
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
-def _verify_chat_membership(membership: OrganizationMemberModel | None) -> bool:
+def _verify_chat_membership(membership: OrganizationMemberModel | None) -> None:
     if membership is None:
-        return False
+        return
     try:
         require_permission(membership, "can_use_chat")
     except PermissionError as exc:
         raise ChatAuthorizationError("Workspace role cannot use AI Chat") from exc
-    perms = ROLE_PERMISSIONS.get(membership.role, {})
-    return not perms.get("can_use_metric_studio", False)
 
 
 async def get_chat_database(
@@ -91,8 +89,8 @@ async def get_chat_database(
             OrganizationMemberModel.user_id == user_id,
         )
     )
-    needs_live = _verify_chat_membership(membership) or require_live
-    if needs_live and not await _has_live_source(db, db_id):
+    _verify_chat_membership(membership)
+    if require_live and not await _has_live_source(db, db_id):
         raise ChatAuthorizationError("Chat is only supported for live databases")
     return database
 
