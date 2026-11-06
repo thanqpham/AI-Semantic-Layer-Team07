@@ -19,6 +19,7 @@ from src.models.db import (
     ChatSessionModel,
     OrganizationMemberModel,
     SemanticDatabaseModel,
+    SemanticMetricModel,
     UserModel,
 )
 from src.models.schemas import ChatResponse
@@ -188,3 +189,61 @@ async def test_member_missing_metric_uses_real_graph_and_requires_manual_submit(
     assert response.json()["intent"] == "metric_query"
     assert response.json()["suggestion_action"] == "submit_metric_request"
     assert response.json()["suggestions"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_approved", [True, False])
+async def test_member_lists_approved_metric_catalog_without_schema_selection(
+    client: AsyncClient, async_session: AsyncSession, has_approved: bool
+) -> None:
+    from types import SimpleNamespace
+
+    actor, org_id, db_id = await _seed_workspace(async_session, "member")
+    metrics = [
+        SemanticMetricModel(
+            db_id=db_id, name="Deleted metric", description="", sql_template="", status="approved", is_deleted=True
+        ),
+        SemanticMetricModel(db_id=db_id, name="Draft metric", description="", sql_template="", status="draft"),
+    ]
+    if has_approved:
+        metrics.append(
+            SemanticMetricModel(db_id=db_id, name="Approved metric", description="", sql_template="", status="approved")
+        )
+    async_session.add_all(metrics)
+    await async_session.commit()
+    with (
+        patch(
+            "src.agents.roles.orchestrator_agent.get_llm",
+            return_value=SimpleNamespace(ainvoke=AsyncMock(return_value=SimpleNamespace(content="data_question"))),
+        ),
+        patch("src.api.routes.build_data_context", new_callable=AsyncMock) as context,
+        patch("src.api.routes._query_target", new_callable=AsyncMock) as query,
+        patch("src.agents.roles.data_assistant_agent.get_llm") as llm,
+    ):
+        response = await client.post(
+            f"/api/v1/semantic/{db_id}/chat",
+            json={"message": "Hiện có những metric nào đã được phê duyệt?"},
+            headers=_workspace_headers(actor, org_id),
+        )
+    assert response.status_code == 200
+    answer = response.json()["chat_response"]
+    assert ("Approved metric" in answer) is has_approved
+    assert "Deleted metric" not in answer
+    assert "Draft metric" not in answer
+    if not has_approved:
+        assert "chưa có metric" in answer
+    context.assert_not_awaited()
+    query.assert_not_awaited()
+    llm.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_schema_question_still_builds_data_context(async_session: AsyncSession) -> None:
+    from src.api.routes import _build_chat_context
+    from src.services.metric_context import MetricContextResult
+
+    expected = MetricContextResult(schema={}, diagnostic={"status": "ready"})
+    with patch("src.api.routes.build_data_context", new=AsyncMock(return_value=expected)) as context:
+        result = await _build_chat_context(async_session, 1, "Bảng customers có những cột nào?", "data_question", 1000)
+    assert result is expected
+    context.assert_awaited_once()
