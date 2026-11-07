@@ -86,6 +86,18 @@ app.include_router(categorical_router, prefix="/api/v1")
 app.include_router(relationship_router, prefix="/api/v1")
 app.include_router(sync_router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
 
+# Prometheus Metrics Instrumentation
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        excluded_handlers=["/health", "/metrics"],
+    ).instrument(app).expose(app, endpoint="/metrics")
+except ImportError:  # pragma: no cover
+    logger.warning("prometheus_fastapi_instrumentator not installed; /metrics disabled.")
+
 
 @app.get("/health")
 async def health():
