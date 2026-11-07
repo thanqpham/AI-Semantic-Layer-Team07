@@ -14,6 +14,7 @@ from typing import Any
 
 from src.models.metric_review import MetricOutputIssue
 from src.observability import activate_trace
+from src.services.semantic_compile_error import SemanticCompileError
 
 LABELS = {
     "orchestrator": "Phân loại yêu cầu",
@@ -48,6 +49,42 @@ AGENTS = {
     "semantic_parse",
 }
 SAFE_ERROR = "Không thể hoàn tất xử lý. Vui lòng thử lại."
+COMPILE_ERROR_MESSAGES = {
+    "AMBIGUOUS_FILTER_SCOPE": "Các điều kiện liên quan cần được làm rõ trước khi truy vấn.",
+    "invalid_sql": "Không thể kiểm tra truy vấn đã biên dịch.",
+    "multi_statement": "Truy vấn chỉ được chứa một câu lệnh SELECT.",
+    "read_only_violation": "Chỉ được phép thực hiện truy vấn SELECT chỉ đọc.",
+    "UNSAFE_FANOUT": "Không thể nhóm theo điều kiện này vì quan hệ dữ liệu có thể làm sai kết quả. Hãy nhờ Data Lead kiểm tra.",
+    "UNSAFE_JOIN": "Quan hệ dữ liệu chưa an toàn cho truy vấn này. Hãy nhờ Data Lead kiểm tra.",
+    "AMBIGUOUS_JOIN_PATH": "Có nhiều quan hệ dữ liệu phù hợp. Hãy nhờ Data Lead xác định quan hệ cần dùng.",
+    "UNREACHABLE_FILTER": "Không tìm thấy quan hệ đã duyệt cho bộ lọc này. Hãy nhờ Data Lead kiểm tra.",
+    "UNREACHABLE_DIMENSION": "Không tìm thấy quan hệ đã duyệt cho chiều phân tích này. Hãy nhờ Data Lead kiểm tra.",
+    "RELATIONSHIP_NEEDS_REVIEW": "Quan hệ dữ liệu cần được Data Lead kiểm tra trước khi truy vấn.",
+    "METRIC_NEEDS_REVIEW": "Chỉ số cần được Data Lead kiểm tra trước khi truy vấn.",
+    "METRIC_NOT_APPROVED": "Chỉ số chưa được phê duyệt hoặc không còn khả dụng.",
+    "UNKNOWN_REFERENCE": "Chỉ số hoặc dữ liệu được chọn không còn khả dụng. Hãy thử lại.",
+    "INCOMPATIBLE_BASE_ENTITY": "Các chỉ số đã chọn không thể truy vấn cùng nhau. Hãy chọn từng chỉ số.",
+    "INCOMPATIBLE_GRAIN": "Chiều phân tích không phù hợp với các chỉ số đã chọn.",
+    "INVALID_FILTER_VALUE": "Giá trị bộ lọc không hợp lệ. Hãy kiểm tra lại.",
+    "UNSUPPORTED_PLAN_FILTER": "Chỉ số này chưa hỗ trợ bộ lọc đã chọn. Hãy nhờ Data Lead kiểm tra.",
+    "INVALID_SORT_METRIC": "Chỉ số sắp xếp không hợp lệ.",
+    "SORT_METRIC_REQUIRED": "Hãy chọn chỉ số dùng để sắp xếp.",
+    "INVALID_TIME_GRAIN": "Khoảng thời gian phân tích không hợp lệ.",
+    "DIMENSION_REQUIRED": "Hãy chọn chiều phân tích cần thiết.",
+    "DUPLICATE_SELECTION": "Chỉ số hoặc chiều phân tích đã được chọn nhiều lần.",
+}
+
+
+def safe_compile_code(error: SemanticCompileError) -> str:
+    """Return only known compiler codes suitable for public output."""
+    return error.code if error.code in COMPILE_ERROR_MESSAGES else "COMPILATION_FAILED"
+
+
+def safe_compile_message(error: SemanticCompileError) -> str:
+    """Return a user-facing message without exposing compiler inputs."""
+    return COMPILE_ERROR_MESSAGES.get(error.code, "Không thể biên dịch truy vấn. Hãy kiểm tra lại yêu cầu.")
+
+
 _CURRENT: ContextVar[ChatExecution | None] = ContextVar("chat_execution", default=None)
 
 
@@ -74,9 +111,11 @@ def execution_step(name: str) -> Iterator[None]:
     step_id = execution.start(name, name) if execution else None
     try:
         yield
-    except Exception:
+    except Exception as exc:
         if execution and step_id:
-            execution.end(step_id, "failed")
+            execution.end(
+                step_id, "failed", error_code=safe_compile_code(exc) if isinstance(exc, SemanticCompileError) else None
+            )
         raise
     else:
         if execution and step_id:
@@ -154,13 +193,15 @@ class ChatExecution:
         self.active.setdefault((node, action), []).append(step_id)
         return step_id
 
-    def end(self, step_id: str, status: str, outcome: str | None = None) -> None:
+    def end(self, step_id: str, status: str, outcome: str | None = None, error_code: str | None = None) -> None:
         """Finish a particular invocation using monotonic elapsed time."""
         event = self.steps.pop(step_id, None)
         if event is None:
             return
         self.active[(event["node"], event["action"])].remove(step_id)
         fields = {"outcome_summary": outcome} if outcome else {}
+        if error_code and error_code != "COMPILATION_FAILED":
+            fields["error_code"] = error_code
         self.emit(
             kind="step",
             node=event["node"],

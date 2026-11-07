@@ -447,8 +447,18 @@ class MetricPlanMetadata:
 
 
 def _contains_fanout(path: list[RelationshipStep], relationships: list[CanonicalRelationshipModel]) -> bool:
-    kinds = {item.id: item.relationship_type.replace("-", "_").lower() for item in relationships}
-    return any(kinds[step.id] in {"one_to_many", "1:n"} for step in path)
+    by_id = {item.id: item for item in relationships}
+    for step in path:
+        relationship = by_id[step.id]
+        kind = relationship.relationship_type.replace("-", "_").lower()
+        reverse = step.from_entity_id != relationship.from_entity_id
+        if kind in {"many_to_many", "n:n", "m:n"}:
+            return True
+        if kind in {"one_to_many", "1:n"} and not reverse:
+            return True
+        if kind in {"many_to_one", "n:1"} and reverse:
+            return True
+    return False
 
 
 def _exists_filter_record(

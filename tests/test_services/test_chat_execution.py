@@ -123,6 +123,73 @@ def test_repeated_invocations_have_distinct_ids_and_errors_are_safe():
     assert "private SQL" not in json.dumps(events)
 
 
+def test_failed_compile_records_only_allowlisted_error_code():
+    from src.services.semantic_compile_error import SemanticCompileError
+
+    execution = ChatExecution()
+    with execution_context(execution), pytest.raises(SemanticCompileError):
+        with execution_step("sql_compile"):
+            raise SemanticCompileError("UNSAFE_FANOUT", "private SQL and secret")
+    failed = execution.snapshot()["events"][-1]
+    assert failed["error_code"] == "UNSAFE_FANOUT"
+    assert "private SQL" not in json.dumps(failed)
+
+
+def test_failed_compile_omits_untrusted_error_code():
+    from src.services.semantic_compile_error import SemanticCompileError
+
+    execution = ChatExecution()
+    with execution_context(execution), pytest.raises(SemanticCompileError):
+        with execution_step("sql_compile"):
+            raise SemanticCompileError("private-secret", "private SQL")
+    assert "private-secret" not in json.dumps(execution.snapshot())
+
+
+@pytest.mark.parametrize("code", ["invalid_sql", "multi_statement", "read_only_violation"])
+def test_guardrail_codes_remain_stable(code):
+    from src.services.chat_execution import safe_compile_code
+    from src.services.semantic_compile_error import SemanticCompileError
+
+    assert safe_compile_code(SemanticCompileError(code, "private SQL")) == code
+
+
+def test_compiler_error_context_keeps_only_safe_metadata_ids():
+    from src.api.routes import _safe_compile_context
+    from src.services.semantic_compile_error import SemanticCompileError
+
+    error = SemanticCompileError(
+        "UNSAFE_FANOUT",
+        "private SQL",
+        {
+            "table_id": 2,
+            "relationship_ids": [4],
+            "paths": [[4, 5]],
+            "metric_ids": ["secret"],
+            "sql": "secret SQL",
+            "value": "private value",
+        },
+    )
+    assert _safe_compile_context(error) == {"table_id": 2, "relationship_ids": [4], "paths": [[4, 5]]}
+
+
+def test_compiler_error_context_preserves_only_allowlisted_plan_reason():
+    from src.api.routes import _safe_compile_context
+    from src.services.semantic_compile_error import SemanticCompileError
+
+    error = SemanticCompileError(
+        "UNSUPPORTED_PLAN_FILTER",
+        "private SQL",
+        {
+            "column_id": None,
+            "reason": "partial_stage_coverage",
+            "stage_names": ["secret value"],
+        },
+    )
+    assert _safe_compile_context(error) == {"column_id": None, "reason": "partial_stage_coverage"}
+    error.context["reason"] = "secret value"
+    assert "reason" not in _safe_compile_context(error)
+
+
 @pytest.mark.asyncio
 async def test_disconnect_reconnect_shares_task_and_replays_snapshot():
     release = asyncio.Event()

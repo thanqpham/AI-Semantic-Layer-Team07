@@ -13,7 +13,7 @@ from src.models.db import (
     SemanticTableModel,
 )
 from src.models.schemas import FilterColumnItem, RecommendedDimensionItem
-from src.services.relationship_runtime import active_relationship_filters, relationship_paths
+from src.services.relationship_runtime import active_relationship_filters, relationship_paths, unique_filter_targets
 
 JUNK_KEYWORDS = {
     "note",
@@ -142,7 +142,7 @@ async def get_dimensions_for_metric(
     db: AsyncSession,
     db_id: int,
     metric_id: int,
-    limit: int = 12,
+    limit: int | None = 12,
 ) -> list[RecommendedDimensionItem]:
     """Recommend high-signal dimensions for a given metric across Tier A, B, and C (Safe N:1/1:1 joins)."""
     stmt_metric = select(SemanticMetricModel).where(
@@ -299,15 +299,7 @@ async def get_filter_columns_for_metric(
     ]
     seen_col_ids = {item.column_id for item in base_items}
 
-    hop1 = _collect_safe_outgoing_table_ids(relationships, base_table.id)
-    hop2 = set()
-    for t_id in hop1:
-        hop2.update(_collect_safe_outgoing_table_ids(relationships, t_id))
-    all_targets = {
-        target
-        for target in (hop1 | hop2) - {base_table.id}
-        if len(relationship_paths(relationships, base_table.id, target)) == 1
-    }
+    all_targets = unique_filter_targets(relationships, base_table.id) & tables_map.keys()
 
     related_items = _collect_related_filter_items(tables_map, all_targets, seen_col_ids)
     return base_items + related_items

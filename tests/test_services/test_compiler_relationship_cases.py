@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -319,8 +321,10 @@ async def test_composite_key_and_multi_hop_safe_path_compile_and_execute(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("reverse", [False, True])
 async def test_one_to_many_exists_groups_same_path_separates_distinct_paths_and_handles_is_null(
     async_session: AsyncSession,
+    reverse: bool,
 ) -> None:
     db = SemanticDatabaseModel(
         created_by=1, display_name="OneToManyExists", db_type="sqlite", conn_url_enc="enc", status="ready"
@@ -358,12 +362,17 @@ async def test_one_to_many_exists_groups_same_path_separates_distinct_paths_and_
     )
     rel_items = CanonicalRelationshipModel(
         connection_id=db.id,
-        from_entity_id=orders.id,
-        to_entity_id=items.id,
-        relationship_type="one_to_many",
+        from_entity_id=items.id if reverse else orders.id,
+        to_entity_id=orders.id if reverse else items.id,
+        relationship_type="many_to_one" if reverse else "one_to_many",
         join_condition="t4_ex_orders.id = t4_ex_items.order_id",
         relationship_key="t4_orders_items",
-        column_pairs=[{"from_column_id": order_cols["id"].id, "to_column_id": item_cols["order_id"].id}],
+        column_pairs=[
+            {
+                "from_column_id": item_cols["order_id"].id if reverse else order_cols["id"].id,
+                "to_column_id": order_cols["id"].id if reverse else item_cols["order_id"].id,
+            }
+        ],
         validation_status="valid",
         review_status="approved",
     )
@@ -390,6 +399,13 @@ async def test_one_to_many_exists_groups_same_path_separates_distinct_paths_and_
     )
     async_session.add(metric)
     await async_session.commit()
+
+    from src.services.dimension_recommender import get_dimensions_for_metric, get_filter_columns_for_metric
+
+    dimensions = await get_dimensions_for_metric(async_session, db.id, metric.id)
+    filters = await get_filter_columns_for_metric(async_session, db.id, metric.id)
+    assert item_cols["product_name"].id not in {item.column_id for item in dimensions}
+    assert item_cols["product_name"].id in {item.column_id for item in filters}
 
     await async_session.execute(text("CREATE TABLE t4_ex_orders (id INTEGER PRIMARY KEY, revenue NUMERIC)"))
     await async_session.execute(
@@ -448,6 +464,204 @@ async def test_one_to_many_exists_groups_same_path_separates_distinct_paths_and_
     null_rows = (await async_session.execute(text(null_compiled.sql), null_compiled.parameters)).mappings().all()
     assert len(null_rows) == 1
     assert float(null_rows[0][f"metric_{metric.id}"]) == 100.0
+
+
+@pytest.mark.asyncio
+async def test_reverse_fanout_composite_multi_hop_preserves_count_sum_and_ratio(async_session: AsyncSession) -> None:
+    db = SemanticDatabaseModel(created_by=1, display_name="ReverseComposite", db_type="sqlite", conn_url_enc="enc")
+    async_session.add(db)
+    await async_session.flush()
+    orders, oc = await _add_table(
+        async_session,
+        db.id,
+        "hop_orders",
+        [
+            ("id", "INTEGER", True),
+            ("tenant_id", "INTEGER", False),
+            ("amount", "NUMERIC", False),
+        ],
+    )
+    items, ic = await _add_table(
+        async_session,
+        db.id,
+        "hop_items",
+        [
+            ("id", "INTEGER", True),
+            ("tenant_id", "INTEGER", False),
+            ("order_id", "INTEGER", False),
+            ("category_id", "INTEGER", False),
+        ],
+    )
+    categories, cc = await _add_table(
+        async_session,
+        db.id,
+        "hop_categories",
+        [
+            ("id", "INTEGER", True),
+            ("name", "TEXT", False),
+        ],
+    )
+    async_session.add_all(
+        [
+            CanonicalRelationshipModel(
+                connection_id=db.id,
+                from_entity_id=items.id,
+                to_entity_id=orders.id,
+                relationship_type="many_to_one",
+                join_condition="composite",
+                relationship_key="hop_items_orders",
+                column_pairs=[
+                    {"from_column_id": ic["tenant_id"].id, "to_column_id": oc["tenant_id"].id},
+                    {"from_column_id": ic["order_id"].id, "to_column_id": oc["id"].id},
+                ],
+                review_status="approved",
+                validation_status="valid",
+            ),
+            CanonicalRelationshipModel(
+                connection_id=db.id,
+                from_entity_id=items.id,
+                to_entity_id=categories.id,
+                relationship_type="many_to_one",
+                join_condition="category",
+                relationship_key="hop_items_categories",
+                column_pairs=[{"from_column_id": ic["category_id"].id, "to_column_id": cc["id"].id}],
+                review_status="approved",
+                validation_status="valid",
+            ),
+        ]
+    )
+    metrics = [
+        _make_sum_metric(db.id, name, "hop_orders", orders.id, oc["amount"].id, oc["id"].id)
+        for name in ("sum", "count", "ratio")
+    ]
+    metrics[1].definition["metric"]["formula"] = {
+        "function": "COUNT_DISTINCT",
+        "expression": "id",
+        "expression_ast": {"kind": "column", "column_id": oc["id"].id},
+    }
+    metrics[2].definition["metric"]["formula"]["ratio"] = {
+        "numerator": {
+            "function": "SUM",
+            "expression": "amount",
+            "expression_ast": {"kind": "column", "column_id": oc["amount"].id},
+        },
+        "denominator": {
+            "function": "COUNT_DISTINCT",
+            "expression": "id",
+            "expression_ast": {"kind": "column", "column_id": oc["id"].id},
+        },
+    }
+    async_session.add_all(metrics)
+    await async_session.commit()
+    await async_session.execute(text("CREATE TABLE hop_orders (id INTEGER, tenant_id INTEGER, amount NUMERIC)"))
+    await async_session.execute(
+        text("CREATE TABLE hop_items (id INTEGER, tenant_id INTEGER, order_id INTEGER, category_id INTEGER)")
+    )
+    await async_session.execute(text("CREATE TABLE hop_categories (id INTEGER, name TEXT)"))
+    await async_session.execute(text("INSERT INTO hop_orders VALUES (1, 1, 100), (2, 1, 200), (3, 1, 300)"))
+    await async_session.execute(
+        text("INSERT INTO hop_items VALUES (11, 1, 1, 1), (12, 1, 1, 1), (13, 2, 3, 1), (14, 1, 2, 1), (15, 1, 3, 2)")
+    )
+    await async_session.execute(text("INSERT INTO hop_categories VALUES (1, 'A'), (2, 'B')"))
+    await async_session.commit()
+    for metric, expected in zip(metrics, (300, 2, 150), strict=True):
+        compiled = await SemanticQueryCompiler(async_session).compile(
+            db.id,
+            SemanticQuerySpec(
+                metric_ids=[metric.id], filters=[SemanticQueryFilter(column_id=cc["name"].id, operator="eq", value="A")]
+            ),
+        )
+        assert "EXISTS" in compiled.sql.upper()
+        row = (await async_session.execute(text(compiled.sql), compiled.parameters)).mappings().one()
+        assert float(row[f"metric_{metric.id}"]) == expected
+
+    await async_session.execute(text("INSERT INTO hop_items VALUES (16, 1, 1, 2)"))
+    with pytest.raises(SemanticCompileError) as error:
+        await SemanticQueryCompiler(async_session).compile(
+            db.id,
+            SemanticQuerySpec(
+                metric_ids=[metrics[0].id],
+                filters=[
+                    SemanticQueryFilter(column_id=ic["id"].id, operator="eq", value=12),
+                    SemanticQueryFilter(column_id=cc["name"].id, operator="eq", value="B"),
+                ],
+            ),
+        )
+    assert error.value.code == "AMBIGUOUS_FILTER_SCOPE"
+
+
+@pytest.mark.asyncio
+async def test_member_question_counts_filtered_orders_without_fanout(async_session: AsyncSession) -> None:
+    from src.agents.roles.semantic_query_parser_agent import parse_semantic_query
+    from src.models.schemas import SemanticQueryInterpretation
+    from src.services.natural_language_query import build_parser_catalog, normalize_interpretation
+
+    db = SemanticDatabaseModel(created_by=1, display_name="MemberFixture", db_type="sqlite", conn_url_enc="enc")
+    async_session.add(db)
+    await async_session.flush()
+    orders, oc = await _add_table(
+        async_session, db.id, "member_orders", [("id", "INTEGER", True), ("ordered_at", "TIMESTAMP", False)]
+    )
+    facts, fc = await _add_table(
+        async_session,
+        db.id,
+        "member_facts",
+        [("id", "INTEGER", True), ("order_id", "INTEGER", False), ("region", "TEXT", False)],
+    )
+    oc["ordered_at"].review_status = "approved"
+    oc["ordered_at"].is_time_dimension = True
+    fc["region"].review_status = "approved"
+    fc["region"].allowed_values = ["North", "South"]
+    fc["region"].allowed_value_mappings = [{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}]
+    metric = _make_sum_metric(
+        db.id, "Tổng số đơn hàng", "member_orders", orders.id, oc["id"].id, oc["id"].id, expression="id"
+    )
+    metric.definition["metric"]["formula"]["function"] = "COUNT_DISTINCT"
+    async_session.add_all(
+        [
+            metric,
+            CanonicalRelationshipModel(
+                connection_id=db.id,
+                from_entity_id=facts.id,
+                to_entity_id=orders.id,
+                relationship_type="many_to_one",
+                join_condition="id",
+                relationship_key="member_facts_orders",
+                column_pairs=[{"from_column_id": fc["order_id"].id, "to_column_id": oc["id"].id}],
+                review_status="approved",
+                validation_status="valid",
+            ),
+        ]
+    )
+    await async_session.flush()
+    await async_session.execute(text("CREATE TABLE member_orders (id INTEGER PRIMARY KEY, ordered_at TIMESTAMP)"))
+    await async_session.execute(
+        text("CREATE TABLE member_facts (id INTEGER PRIMARY KEY, order_id INTEGER, region TEXT)")
+    )
+    await async_session.execute(text("INSERT INTO member_orders VALUES (1, '2024-05-01'), (2, '2025-05-01')"))
+    await async_session.execute(
+        text("INSERT INTO member_facts VALUES (1, 1, 'North'), (2, 1, 'North'), (3, 2, 'North')")
+    )
+    catalog = await build_parser_catalog(async_session, db.id)
+    payload = {
+        "status": "resolved",
+        "metric_ids": [metric.id],
+        "filters": [{"column_id": fc["region"].id, "operator": "eq", "value": "miền Bắc"}],
+        "time_ranges": [
+            {"column_id": oc["ordered_at"].id, "start_date": "2024-01-01", "end_date": "2025-01-01", "label": "2024"}
+        ],
+    }
+    with (
+        patch("src.agents.roles.semantic_query_parser_agent.get_llm", return_value=None),
+        patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)),
+    ):
+        result = await parse_semantic_query("Trong năm 2024, khu vực miền Bắc có bao nhiêu đơn hàng?", catalog)
+    checked = normalize_interpretation(SemanticQueryInterpretation(**result["interpretation"]), catalog)
+    assert checked.status == "resolved" and checked.spec is not None
+    compiled = await SemanticQueryCompiler(async_session).compile(db.id, checked.spec)
+    assert "EXISTS" in compiled.sql.upper()
+    row = (await async_session.execute(text(compiled.sql), compiled.parameters)).mappings().one()
+    assert row[f"metric_{metric.id}"] == 1
 
 
 @pytest.mark.asyncio

@@ -709,3 +709,63 @@ async def test_catalog_returns_relationships_for_live_db(
     assert len(payload["relationships"]) == 1
     assert payload["relationships"][0]["relationship_type"] == "many_to_one"
     assert payload["relationships"][0]["join_condition"] == "orders.order_id = orders.order_id"
+
+
+# A role may change while the parser is running, so access is checked again at the target boundary.
+@pytest.mark.asyncio
+async def test_query_target_rechecks_query_permission_before_target_lookup():
+    from unittest.mock import AsyncMock, patch
+
+    from fastapi import HTTPException
+
+    from src.api.routes import _query_target
+
+    db = AsyncMock()
+    with (
+        patch("src.api.routes._owned_semantic_database", new=AsyncMock(return_value=object())),
+        patch("src.api.routes._require_resource_permission", new=AsyncMock(side_effect=HTTPException(403))),
+        pytest.raises(HTTPException) as error,
+    ):
+        await _query_target(db, 1, 2, 3)
+    assert error.value.status_code == 403
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_query_target_rechecks_fresh_role_not_cached_membership():
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from src.api.routes import _query_target
+
+    db = AsyncMock()
+    db.scalar.return_value = "disabled_role"
+    with (
+        patch("src.api.routes._owned_semantic_database", new=AsyncMock(return_value=SimpleNamespace(org_id=9))),
+        patch("src.api.routes._require_resource_permission", new=AsyncMock()),
+        pytest.raises(HTTPException) as error,
+    ):
+        await _query_target(db, 1, 2, 9)
+    assert error.value.status_code == 403
+    db.scalar.assert_awaited_once()
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", ["invalid_sql", "multi_statement", "read_only_violation"])
+async def test_compile_api_keeps_error_code_without_exposing_query(code):
+    from fastapi import HTTPException
+
+    from src.api.routes import _compile_request
+    from src.models.schemas import SemanticQueryRequest
+    from src.services.semantic_compile_error import SemanticCompileError
+
+    error = SemanticCompileError(code, "secret SQL", {"table_id": 4, "value": "secret value"})
+    compiler = AsyncMock()
+    compiler.compile.side_effect = error
+    with patch("src.api.routes.SemanticQueryCompiler", return_value=compiler), pytest.raises(HTTPException) as caught:
+        await _compile_request(AsyncMock(), 1, SemanticQueryRequest(metric_ids=[1]))
+    assert caught.value.detail["code"] == code
+    assert caught.value.detail["context"] == {"table_id": 4}
+    assert "secret" not in str(caught.value.detail)
