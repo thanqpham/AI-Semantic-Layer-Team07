@@ -2019,6 +2019,7 @@ _COLUMN_SNAPSHOT_FIELDS = (
     "table_name",
     "data_type",
     "is_time_dimension",
+    "_mapping_fingerprint",
 )
 
 
@@ -2030,10 +2031,34 @@ def _selected_metadata_items(
     )
 
 
+def _catalog_mapping_fingerprint(catalog: dict[str, Any]) -> str:
+    """Derive a stable mapping fingerprint without storing raw mapping entries."""
+    from src.services.semantic_value_mappings import mapping_metadata_fingerprint
+
+    explicit = catalog.get("_mapping_fingerprint")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    columns = sorted(catalog.get("filter_columns", []), key=lambda item: int(item.get("column_id", 0)))
+    payload = [
+        (
+            column.get("column_id"),
+            column.get("_mapping_fingerprint")
+            or mapping_metadata_fingerprint(
+                column.get("_approved_mappings", column.get("allowed_value_mappings", [])),
+                column.get("review_status", "approved"),
+                bool(column.get("allowed_values_complete", True)),
+            ),
+        )
+        for column in columns
+    ]
+    return hashlib.sha256(json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+
+
 def _selection_metadata(spec: SemanticQuerySpec, catalog: dict[str, Any]) -> dict[str, Any]:
     """Capture selected metric and column identities without retaining mappings."""
     return {
         "relationship_fingerprint": catalog.get("_relationship_fingerprint"),
+        "mapping_fingerprint": _catalog_mapping_fingerprint(catalog),
         "metrics": _selected_metadata_items(
             catalog.get("metrics", []), set(spec.metric_ids), "id", _METRIC_SNAPSHOT_FIELDS
         ),

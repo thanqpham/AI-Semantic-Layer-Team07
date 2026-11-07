@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from src.agents.roles.semantic_query_parser_agent import parse_semantic_query
+from src.agents.roles.semantic_query_parser_integration import parse_semantic_query
 from src.agents.state import AgentState
 from src.observability import trace_node
 

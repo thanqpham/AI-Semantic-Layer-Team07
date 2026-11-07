@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.agents.nodes.chat.semantic_query_parser_node import semantic_query_parser_node
-from src.agents.roles.semantic_query_parser_agent import _build_parse_prompt
+from src.agents.roles.semantic_query_parser_integration import _build_parse_prompt
 
 
 @pytest.fixture
@@ -58,8 +58,11 @@ def sample_catalog() -> dict:
                 "business_name": "Trạng thái đơn",
                 "table_name": "orders",
                 "data_type": "VARCHAR",
+                "review_status": "approved",
                 "allowed_values": ["completed"],
-                "allowed_value_mappings": [{"db_value": "completed", "business_value": "hoàn tất"}],
+                "allowed_value_mappings": [
+                    {"db_value": "completed", "business_value": "hoàn tất", "status": "approved"}
+                ],
             },
             {"column_id": 11, "column_name": "created_at", "data_type": "TIMESTAMP", "is_time_dimension": True},
         ],
@@ -242,7 +245,9 @@ async def test_parser_accepts_exact_today_range(sample_catalog: dict) -> None:
 @pytest.mark.parametrize("operator,question", [("neq", "Doanh thu miền Bắc"), ("eq", "Doanh thu không phải miền Bắc")])
 async def test_parser_requires_matching_negation(sample_catalog: dict, operator: str, question: str) -> None:
     sample_catalog["filter_columns"][0].update(
-        allowed_values=["North"], _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc"}]
+        review_status="approved",
+        allowed_values=["North"],
+        _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}],
     )
     payload = {
         "status": "resolved",
@@ -257,7 +262,9 @@ async def test_parser_requires_matching_negation(sample_catalog: dict, operator:
 @pytest.mark.asyncio
 async def test_parser_allows_explicit_matching_negation(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
-        allowed_values=["North"], _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc"}]
+        review_status="approved",
+        allowed_values=["North"],
+        _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}],
     )
     payload = {
         "status": "resolved",
@@ -274,7 +281,9 @@ async def test_parser_allows_explicit_matching_negation(sample_catalog: dict) ->
 @pytest.mark.asyncio
 async def test_followup_keeps_previous_filter_with_new_year(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
-        allowed_values=["North"], _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc"}]
+        review_status="approved",
+        allowed_values=["North"],
+        _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}],
     )
     payload = {
         "status": "resolved",
@@ -307,10 +316,11 @@ async def test_followup_keeps_previous_year_when_adding_dimension(sample_catalog
 @pytest.mark.asyncio
 async def test_followup_change_of_region_does_not_require_old_region(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
+        review_status="approved",
         allowed_values=["North", "South"],
         _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc"},
-            {"db_value": "South", "business_value": "miền Nam"},
+            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
+            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
         ],
     )
     payload = {
@@ -331,10 +341,11 @@ async def test_followup_change_of_region_does_not_require_old_region(sample_cata
 @pytest.mark.asyncio
 async def test_followup_replacing_region_does_not_keep_old_value(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
+        review_status="approved",
         allowed_values=["North", "South"],
         _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc"},
-            {"db_value": "South", "business_value": "miền Nam"},
+            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
+            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
         ],
     )
     payload = {
@@ -383,10 +394,11 @@ async def test_ambiguous_same_label_from_different_columns_requires_clarificatio
 @pytest.mark.asyncio
 async def test_or_request_does_not_execute_two_and_filters(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
+        review_status="approved",
         allowed_values=["North", "South"],
         _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc"},
-            {"db_value": "South", "business_value": "miền Nam"},
+            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
+            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
         ],
     )
     payload = {
@@ -420,10 +432,11 @@ async def test_or_request_does_not_execute_two_and_filters(sample_catalog: dict)
 )
 async def test_ascii_conditions_keep_or_negation(sample_catalog: dict, question: str, filters: list[dict]) -> None:
     sample_catalog["filter_columns"][0].update(
+        review_status="approved",
         allowed_values=["North", "South"],
         _approved_mappings=[
-            {"db_value": "North", "business_value": "Miền Bắc"},
-            {"db_value": "South", "business_value": "Miền Nam"},
+            {"db_value": "North", "business_value": "Miền Bắc", "status": "approved"},
+            {"db_value": "South", "business_value": "Miền Nam", "status": "approved"},
         ],
     )
     payload = {"status": "resolved", "metric_ids": [1], "filters": filters}
@@ -624,7 +637,9 @@ async def test_grouping_ignores_columns_only_compatible_with_another_metric(samp
 @pytest.mark.asyncio
 async def test_polite_followup_does_not_drop_prior_filter(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
-        allowed_values=["North"], _approved_mappings=[{"db_value": "North", "business_value": "Miền Bắc"}]
+        review_status="approved",
+        allowed_values=["North"],
+        _approved_mappings=[{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
     )
     payload = {
         "status": "resolved",
@@ -644,10 +659,11 @@ async def test_polite_followup_does_not_drop_prior_filter(sample_catalog: dict) 
 @pytest.mark.asyncio
 async def test_or_request_accepts_single_in_filter(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
+        review_status="approved",
         allowed_values=["North", "South"],
         _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc"},
-            {"db_value": "South", "business_value": "miền Nam"},
+            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
+            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
         ],
     )
     payload = {
@@ -664,7 +680,9 @@ async def test_or_request_accepts_single_in_filter(sample_catalog: dict) -> None
 
 @pytest.mark.asyncio
 async def test_unmapped_region_cannot_be_silently_dropped(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(allowed_values=["North", "South"], allowed_value_mappings=[])
+    sample_catalog["filter_columns"][0].update(
+        review_status="approved", allowed_values=["North", "South"], allowed_value_mappings=[]
+    )
     payload = {"status": "resolved", "metric_ids": [1], "filters": []}
     with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
         result = await semantic_query_parser_node(
@@ -694,10 +712,11 @@ async def test_top_five_requires_order_and_requested_limit(sample_catalog: dict,
 @pytest.mark.asyncio
 async def test_latest_categorical_value_cannot_be_overridden_by_history(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
+        review_status="approved",
         allowed_values=["North", "South"],
         _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc"},
-            {"db_value": "South", "business_value": "miền Nam"},
+            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
+            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
         ],
     )
     payload = {
@@ -739,7 +758,7 @@ async def test_parser_rejects_incompatible_dimension_for_one_metric(sample_catal
 @pytest.mark.asyncio
 async def test_parser_requires_approved_mapping_to_connect_north_with_mien_bac(sample_catalog: dict) -> None:
     column = sample_catalog["filter_columns"][0]
-    column.update(allowed_values=["North"], allowed_value_mappings=[])
+    column.update(review_status="approved", allowed_values=["North"], allowed_value_mappings=[])
     payload = {
         "status": "resolved",
         "metric_ids": [1],
@@ -751,7 +770,7 @@ async def test_parser_requires_approved_mapping_to_connect_north_with_mien_bac(s
     ):
         result = await semantic_query_parser_node(state)
         assert result["interpretation"]["status"] == "needs_clarification"
-        column["_approved_mappings"] = [{"db_value": "North", "business_value": "miền Bắc"}]
+        column["_approved_mappings"] = [{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}]
         result = await semantic_query_parser_node(state)
         assert result["interpretation"]["status"] == "resolved"
 
@@ -781,7 +800,9 @@ async def test_member_query_keeps_approved_region_filter_and_time_range(sample_c
 
     sample_catalog["metrics"][0].update(name="total_orders", business_name="Tổng số đơn hàng")
     sample_catalog["filter_columns"][0].update(
-        allowed_values=["North"], _approved_mappings=[{"db_value": "North", "business_value": "Miền Bắc"}]
+        review_status="approved",
+        allowed_values=["North"],
+        _approved_mappings=[{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
     )
     payload = {
         "status": "resolved",
