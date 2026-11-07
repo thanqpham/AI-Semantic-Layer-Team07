@@ -399,6 +399,9 @@ def _exists_predicates(
     for item in filters:
         key = tuple(step["relationship_id"] for step in item["path"])
         grouped.setdefault(key, []).append(item)
+    keys = list(grouped)
+    if len({key[0] for key in keys}) != len(keys):
+        raise SemanticCompileError("AMBIGUOUS_FILTER_SCOPE", "Filters on overlapping paths cannot be combined safely")
     return [_exists_predicate(items, base, dialect, parameters) for items in grouped.values()]
 
 
@@ -416,7 +419,7 @@ def _exists_predicate(
         next_alias = _quoted(f"t_{step['to_table_id']}", dialect)
         parts.append(
             f"JOIN {_table_name(target[0], target[1], dialect)} AS {next_alias} ON "
-            + " AND ".join(_step_conditions(step, step["from_table_id"], step["to_table_id"], base, dialect))
+            + " AND ".join(_step_conditions(step, base.id, step["to_table_id"], base, dialect))
         )
     conditions.extend(_exists_filter_predicate(item["filter"], dialect, parameters) for item in items)
     return f"EXISTS ({' '.join(parts)} WHERE {' AND '.join(conditions)})"

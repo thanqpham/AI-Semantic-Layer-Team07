@@ -47,6 +47,89 @@ def test_unsafe_fanout(kind):
     assert error.value.code == "UNSAFE_FANOUT"
 
 
+@pytest.mark.parametrize(
+    ("kind", "reverse", "expected"),
+    [
+        ("many_to_one", False, False),
+        ("many_to_one", True, True),
+        ("many-to-one", True, True),
+        ("n:1", False, False),
+        ("n:1", True, True),
+        ("one_to_many", False, True),
+        ("one_to_many", True, False),
+        ("1:n", False, True),
+        ("1:n", True, False),
+        ("one_to_one", False, False),
+        ("one_to_one", True, False),
+        ("1:1", True, False),
+        ("many_to_many", False, True),
+        ("many_to_many", True, True),
+    ],
+)
+def test_filter_fanout_uses_traversal_direction(kind, reverse, expected):
+    from src.services.query_compiler_metadata import _contains_fanout
+    from src.services.relationship_runtime import filter_path
+
+    rel = edge(1, 1, 2, kind)
+    path = filter_path([rel], 2 if reverse else 1, 1 if reverse else 2)
+    assert _contains_fanout(path, [rel]) is expected
+
+
+def test_filter_targets_match_unique_paths_for_cycles_parallel_and_disconnected():
+    from src.services.relationship_runtime import filter_path, unique_filter_targets
+
+    relationships = [
+        edge(1, 1, 2),
+        edge(2, 2, 3),
+        edge(3, 3, 4),
+        edge(4, 4, 2),
+        edge(5, 3, 5),
+        edge(6, 1, 6),
+        edge(7, 6, 7),
+        edge(8, 6, 7),
+        edge(9, 8, 9),
+        edge(10, 1, 10),
+    ]
+    relationships[-1].column_pairs = []
+    actual = unique_filter_targets(relationships, 1)
+    expected = set()
+    for target in range(2, 11):
+        try:
+            filter_path(relationships, 1, target)
+        except SemanticCompileError:
+            continue
+        expected.add(target)
+    assert actual == expected == {2, 6}
+
+
+def test_filter_targets_traverses_large_chain_without_recursion():
+    from src.services.relationship_runtime import unique_filter_targets
+
+    relationships = [edge(i, i, i + 1) for i in range(1, 1500)]
+    assert unique_filter_targets(relationships, 1) == set(range(2, 1501))
+
+
+def test_filter_targets_matches_path_resolution_on_random_multigraphs():
+    import random
+
+    from src.services.relationship_runtime import filter_path, unique_filter_targets
+
+    randomizer = random.Random(23)  # noqa: S311
+    for _ in range(100):
+        relationships = [
+            edge(i + 1, randomizer.randrange(1, 9), randomizer.randrange(1, 9))
+            for i in range(randomizer.randrange(1, 20))
+        ]
+        expected = set()
+        for target in range(2, 9):
+            try:
+                filter_path(relationships, 1, target)
+            except SemanticCompileError:
+                continue
+            expected.add(target)
+        assert unique_filter_targets(relationships, 1) == expected
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("review", "validation", "expected"),
@@ -136,6 +219,23 @@ async def _seed_runtime_metric(async_session, db, tables):
     async_session.add(metric)
     await async_session.commit()
     return metric
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["ambiguous", "invalid_pairs"])
+async def test_filter_recommender_excludes_unusable_paths(async_session, case):
+    from src.services.dimension_recommender import get_filter_columns_for_metric
+
+    db, tables, columns = await _seed_runtime_tables(async_session)
+    first = await _seed_runtime_relationship(async_session, db, tables, columns, "manual", "approved", "valid")
+    if case == "invalid_pairs":
+        first.column_pairs = []
+    else:
+        second = await _seed_runtime_relationship(async_session, db, tables, columns, "manual", "approved", "valid")
+        second.relationship_key = "second"
+    metric = await _seed_runtime_metric(async_session, db, tables)
+    filters = await get_filter_columns_for_metric(async_session, db.id, metric.id)
+    assert all(item.table_id != tables[1].id for item in filters)
 
 
 @pytest.mark.asyncio
