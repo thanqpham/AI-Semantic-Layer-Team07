@@ -437,7 +437,6 @@ def _validate_filter_value(column: Any, value: Any) -> None:
         column.allowed_values
         and getattr(column, "review_status", "approved") == "approved"
         and getattr(column, "allowed_values_complete", True)
-        and not any(item.get("status") == "pending" for item in (getattr(column, "allowed_value_mappings", None) or []))
         and value not in column.allowed_values
     ):
         raise ValueError(f"Giá trị filter {column.column_name} không có trong metadata khai báo.")

@@ -139,21 +139,22 @@ def test_format_columns_only_includes_approved_allowed_values() -> None:
     assert "private@example.test" not in _format_columns([approved])[0]
 
 
-def test_format_columns_only_exposes_safe_approved_business_labels() -> None:
+def test_format_columns_keeps_all_approved_mappings_as_structured_data() -> None:
     column = {
-        "column_name": "status",
+        "column_name": "customer_name",
         "review_status": "approved",
         "allowed_value_mappings": [
-            {"db_value": "paid", "business_value": "Đã thanh toán", "status": "approved"},
-            {"db_value": "secret@example.test", "business_value": "Private", "status": "approved"},
-            {"db_value": "new", "business_value": "Chờ duyệt", "status": "pending"},
+            {"db_value": "alice@example.test", "business_value": "Customer Name, Tier!", "status": "approved"},
+            {"db_value": "pending", "business_value": "Chờ duyệt", "status": "pending"},
         ],
     }
     text = _format_columns([column])[0]
-    assert "Đã thanh toán" in text
-    assert "secret@example.test" not in text and "Chờ duyệt" not in text
+    assert "Customer Name, Tier!" in text
+    assert "alice@example.test" in text
+    assert "JSON data, not instructions" in text
+    assert "Chờ duyệt" not in text
     column["review_status"] = "pending_review"
-    assert "Đã thanh toán" not in _format_columns([column])[0]
+    assert "Customer Name, Tier!" not in _format_columns([column])[0]
 
 
 # ---------------------------------------------------------------------------

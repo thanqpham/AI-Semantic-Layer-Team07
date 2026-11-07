@@ -7,6 +7,8 @@ import sqlglot
 from sqlalchemy.exc import SQLAlchemyError
 from sqlglot import exp
 
+from src.services.semantic_value_mappings import read_approved_business_mappings
+
 _CATEGORY = re.compile(r"(?:^|_)(?:status|state|type|category|method|channel|stage|region|zone)(?:_|$)", re.I)
 _SENSITIVE_COLUMN = re.compile(
     r"(?:^|_)(?:id|key|email|phone|address|name|note|comment|description|password|secret|token|hash|"
@@ -42,16 +44,8 @@ def safe_observed_values(values: list[Any]) -> list[Any] | None:
 
 
 def safe_business_mappings(mappings: list[dict], review_status: str) -> list[dict]:
-    """Expose only approved mappings passing the categorical safety screen."""
-    if review_status != "approved":
-        return []
-    return [
-        {"db_value": item["db_value"], "business_value": item["business_value"], "status": "approved"}
-        for item in mappings
-        if item.get("status") == "approved"
-        and safe_observed_values([item.get("db_value")]) is not None
-        and safe_observed_values([item.get("business_value")]) is not None
-    ]
+    """Expose structurally valid approved mappings without sample-value screening."""
+    return read_approved_business_mappings(mappings, review_status)
 
 
 def safe_declared_values(values: list[Any]) -> list[Any] | None:

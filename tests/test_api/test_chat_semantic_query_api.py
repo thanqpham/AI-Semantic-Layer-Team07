@@ -67,6 +67,7 @@ def chat_mocks():
         )
         mock_catalog.return_value = {
             "_relationship_fingerprint": "graph-v1",
+            "_mapping_fingerprint": "mapping-v1",
             "metrics": [
                 {
                     "id": 1,
@@ -302,6 +303,7 @@ async def test_clarification_revalidates_and_maps_filter_before_execution(client
 
     catalog = {
         "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
         "metrics": [
             {"id": 1, "name": "Orders", "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}
         ],
@@ -310,8 +312,9 @@ async def test_clarification_revalidates_and_maps_filter_before_execution(client
             {
                 "column_id": 11,
                 "data_type": "TEXT",
+                "review_status": "approved",
                 "allowed_values": ["North"],
-                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc"}],
+                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
             }
         ],
     }
@@ -354,13 +357,15 @@ async def test_clarification_does_not_remap_filter_after_catalog_changes(client,
 
     catalog = {
         "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
         "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
         "filter_columns": [
             {
                 "column_id": 11,
                 "data_type": "TEXT",
+                "review_status": "approved",
                 "allowed_values": ["South"],
-                "_approved_mappings": [{"db_value": "South", "business_value": "Miền Bắc"}],
+                "_approved_mappings": [{"db_value": "South", "business_value": "Miền Bắc", "status": "approved"}],
             }
         ],
     }
@@ -401,6 +406,7 @@ async def test_clarification_does_not_remap_filter_after_catalog_changes(client,
 async def test_filtered_legacy_clarification_without_snapshot_does_not_execute(client, auth_headers, chat_mocks):
     catalog = {
         "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
         "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
         "filter_columns": [{"column_id": 11, "data_type": "TEXT", "allowed_values": ["North"]}],
     }
@@ -436,6 +442,7 @@ async def test_clarification_rejects_changed_relationship(client, auth_headers, 
 
     old = {
         "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
         "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [10], "filter_column_ids": []}],
         "dimensions": [{"column_id": 10, "table_name": "customers"}],
     }
@@ -471,13 +478,15 @@ def test_filtered_option_snapshot_binds_normalized_meaning_without_exposing_it()
 
     catalog = {
         "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
         "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
         "filter_columns": [
             {
                 "column_id": 11,
                 "data_type": "TEXT",
+                "review_status": "approved",
                 "allowed_values": ["North"],
-                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc"}],
+                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
             }
         ],
     }
@@ -489,6 +498,55 @@ def test_filtered_option_snapshot_binds_normalized_meaning_without_exposing_it()
     normalized = raw.model_copy(update={"filters": [SemanticQueryFilter(column_id=11, operator="eq", value="North")]})
     assert digest == _option_spec_digest("session", "opt", normalized, catalog)
     assert "North" not in digest and "Miền Bắc" not in digest
+    edited_catalog = {**catalog, "_mapping_fingerprint": "mapping-v2"}
+    assert digest != _option_spec_digest("session", "opt", normalized, edited_catalog)
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_revoked_mapping_or_column_status_before_execution(client, auth_headers, chat_mocks):
+    def catalog(column_status: str, mapping_status: str):
+        return {
+            "_relationship_fingerprint": "graph-v1",
+            "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
+            "filter_columns": [
+                {
+                    "column_id": 11,
+                    "column_name": "channel",
+                    "business_name": "Kênh",
+                    "data_type": "TEXT",
+                    "review_status": column_status,
+                    "allowed_values": [],
+                    "_approved_mappings": [{"db_value": "web", "business_value": "Website", "status": mapping_status}],
+                }
+            ],
+        }
+
+    interpretation = {
+        "intent": "semantic_query",
+        "interpretation": {
+            "status": "resolved",
+            "spec": {"metric_ids": [1], "filters": [{"column_id": 11, "operator": "eq", "value": "Website"}]},
+        },
+    }
+    for fresh in (catalog("approved", "pending"), catalog("pending_review", "approved")):
+        with (
+            patch(
+                "src.api.routes.build_parser_catalog",
+                new=AsyncMock(side_effect=[catalog("approved", "approved"), fresh]),
+            ),
+            patch(
+                "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+                new=AsyncMock(return_value={"intent": "semantic_query"}),
+            ),
+            patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        ):
+            agent.ainvoke = AsyncMock(return_value=interpretation)
+            response = await client.post(
+                "/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Đơn Website"}
+            )
+        assert response.status_code == 200
+        assert response.json()["semantic_query_result"] is None
+    chat_mocks.mock_exec.assert_not_awaited()
 
 
 def test_option_digest_is_not_exposed_in_chat_history():
@@ -630,6 +688,7 @@ async def test_query_rejects_changed_selected_column_metadata(client, auth_heade
     def catalog(table):
         return {
             "_relationship_fingerprint": "graph-v1",
+            "_mapping_fingerprint": "mapping-v1",
             "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [10], "filter_column_ids": []}],
             "dimensions": [{"column_id": 10, "table_name": table, "column_name": "region", "data_type": "TEXT"}],
         }
@@ -662,6 +721,7 @@ async def test_query_rejects_changed_relationship_fingerprint(client, auth_heade
     def catalog(fingerprint):
         return {
             "_relationship_fingerprint": fingerprint,
+            "_mapping_fingerprint": "mapping-v1",
             "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [10], "filter_column_ids": []}],
             "dimensions": [{"column_id": 10, "table_name": "customers", "column_name": "region", "data_type": "TEXT"}],
         }

@@ -12,6 +12,7 @@ from src.models.db import SemanticDatabaseModel
 from src.models.schemas import MetricPromptSuggestionItem
 from src.services.metric_context import load_review_schema
 from src.services.metric_review_validation import schema_tables, technical_review
+from src.services.semantic_value_mappings import read_approved_business_mappings, scalar_value_key
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,15 @@ def _required_values_exist(schema: dict[str, Any], requirements: tuple[tuple[str
             if table
             else None
         )
-        if not column or column.get("review_status") != "approved" or value not in (column.get("allowed_values") or []):
+        mappings = (
+            read_approved_business_mappings(column.get("allowed_value_mappings"), column.get("review_status", ""))
+            if column
+            else []
+        )
+        if not column or column.get("review_status") != "approved":
+            return False
+        if value not in (column.get("allowed_values") or []) and not any(
+            scalar_value_key(item["db_value"]) == scalar_value_key(value) for item in mappings
+        ):
             return False
     return True

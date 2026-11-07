@@ -67,17 +67,34 @@ def test_pending_business_labels_are_not_in_agent_context() -> None:
     assert _column_payload(col)["allowed_value_mappings"] == []
 
 
-def test_context_excludes_unsafe_and_unapproved_business_mappings() -> None:
+def test_context_keeps_approved_mappings_without_sample_value_heuristics() -> None:
+    col = SemanticColumnModel(
+        column_name="customer_name",
+        data_type="TEXT",
+        review_status="approved",
+        allowed_values_complete=False,
+        allowed_value_mappings=[
+            {"db_value": "001", "business_value": "Customer Name, Tier 1!", "status": "approved"},
+            {"db_value": "alice@example.test", "business_value": "VIP Account Manager", "status": "approved"},
+            {"db_value": "pending", "business_value": "Pending", "status": "pending"},
+        ],
+    )
+    payload = _column_payload(col)
+    assert [item["db_value"] for item in payload["allowed_value_mappings"]] == ["001", "alice@example.test"]
+    assert [type(item["db_value"]) for item in payload["allowed_value_mappings"]] == [str, str]
+    assert payload["allowed_values_complete"] is False
+    col.review_status = "pending_review"
+    assert _column_payload(col)["allowed_value_mappings"] == []
+
+
+def test_context_keeps_large_approved_mapping_lists_complete() -> None:
     col = SemanticColumnModel(
         column_name="status",
         data_type="TEXT",
         review_status="approved",
         allowed_value_mappings=[
-            {"db_value": "paid", "business_value": "Đã thanh toán", "status": "approved"},
-            {"db_value": "private@example.test", "business_value": "Private", "status": "approved"},
-            {"db_value": "cancelled", "business_value": "private@example.test", "status": "approved"},
+            {"db_value": index, "business_value": f"Tier {index}!", "status": "approved"} for index in range(25)
         ],
     )
-    assert [item["db_value"] for item in _column_payload(col)["allowed_value_mappings"]] == ["paid"]
-    col.review_status = "pending_review"
-    assert _column_payload(col)["allowed_value_mappings"] == []
+
+    assert len(_column_payload(col)["allowed_value_mappings"]) == 25

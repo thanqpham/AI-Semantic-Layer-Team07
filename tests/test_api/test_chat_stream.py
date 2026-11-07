@@ -161,8 +161,9 @@ async def test_clarification_snapshot_blocks_changed_mapping_without_exposing_di
             {
                 "column_id": 11,
                 "data_type": "TEXT",
+                "review_status": "approved",
                 "allowed_values": ["North"],
-                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc"}],
+                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
             }
         ],
     }
@@ -336,7 +337,7 @@ async def test_query_action_failures_keep_safe_history(client, async_session, ch
 
     session = await create_chat_session(async_session, 1, chat_database)
     body = {"message": "Calculate", "session_id": session.id, "client_message_id": "query-failure"}
-    catalog = {"_relationship_fingerprint": "graph-v1", "metrics": [{"id": 1}]}
+    catalog = {"_relationship_fingerprint": "graph-v1", "_mapping_fingerprint": "mapping-v1", "metrics": [{"id": 1}]}
     if reuse:
         body["reuse_metric_id"] = 1
     else:

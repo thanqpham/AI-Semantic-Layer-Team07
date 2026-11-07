@@ -3,40 +3,105 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.models.schemas import SemanticQuerySpec
 from src.services.metric_knowledge import normalized_text
+from src.services.semantic_value_mappings import (
+    business_label_matches,
+    mentioned_business_values,
+    normalize_business_label,
+    sample_value_candidates,
+    scalar_value_key,
+    value_has_business_evidence,
+)
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+_QUERY_FRAME_WORDS = {
+    "cho",
+    "toi",
+    "xem",
+    "co",
+    "bao",
+    "nhieu",
+    "la",
+    "tong",
+    "so",
+    "luong",
+    "cua",
+    "cac",
+    "trong",
+    "voi",
+    "o",
+    "tai",
+    "tren",
+    "tu",
+    "den",
+    "bang",
+    "ngoai",
+    "khong",
+    "phai",
+    "hoac",
+    "va",
+    "da",
+    "duoc",
+    "ban",
+    "ra",
+    "theo",
+    "tung",
+    "moi",
+    "nam",
+    "thang",
+    "quy",
+    "tuan",
+    "ngay",
+    "hom",
+    "nay",
+    "qua",
+    "truoc",
+    "sau",
+    "it",
+    "nhat",
+    "lon",
+    "hon",
+    "nho",
+    "duoi",
+    "cao",
+    "giam",
+    "tang",
+    "chi",
+    "ket",
+    "hay",
+    "tinh",
+    "liet",
+    "ke",
+    "truy",
+    "van",
+    "xin",
+    "vui",
+    "long",
+    "con",
+    "bay",
+    "gio",
+    "tiep",
+    "them",
+    "don",
+    "hang",
+}
 
 
 def _filter_values_have_evidence(spec: SemanticQuerySpec, catalog: dict[str, Any], evidence: str) -> bool:
     """Require categorical filters to be supported by user text or an approved mapping."""
     columns = {c["column_id"]: c for c in catalog.get("filter_columns", [])}
-    text = unicodedata.normalize("NFKC", evidence).casefold()
     for item in spec.filters:
         column = columns.get(item.column_id, {})
-        if item.operator in {"is_null", "is_not_null"} or not any(
-            typ in str(column.get("data_type", "")).upper() for typ in ("CHAR", "TEXT", "ENUM")
-        ):
+        if item.operator in {"is_null", "is_not_null"} or not _is_categorical(column):
             continue
         values = item.value if isinstance(item.value, list) else [item.value]
-        for value in values:
-            names = [str(value)] + [
-                str(m["business_value"])
-                for m in column.get("_approved_mappings", column.get("allowed_value_mappings", []))
-                if m.get("db_value") == value
-            ]
-            if not any(
-                re.search(r"(?<!\w)" + re.escape(unicodedata.normalize("NFKC", name).casefold()) + r"(?!\w)", text)
-                for name in names
-                if name
-            ):
-                return False
+        if any(not value_has_business_evidence(value, column, evidence) for value in values):
+            return False
     return True
 
 
@@ -100,11 +165,14 @@ def _categorical_requirements_covered(
     prior: str,
     metrics: dict[int, dict[str, Any]],
 ) -> bool:
-    text = normalized_text(_without_metric_names(message, spec, metrics))
-    latest = _mentioned_values(_without_metric_names(message, spec, metrics), columns)
-    if re.search(r"\bmien\s+\w+", text) and not latest:
+    latest_text = _without_metric_names(message, spec, metrics)
+    latest = _mentioned_values(latest_text, columns)
+    if _has_unmapped_query_terms(latest_text, spec, columns, metrics):
         return False
-    historical = _mentioned_values(_without_metric_names(prior, spec, metrics), columns)
+    historical_text = _without_metric_names(prior, spec, metrics)
+    historical = _mentioned_values(historical_text, columns)
+    if prior and _has_unmapped_query_terms(historical_text, spec, columns, metrics):
+        return False
     changed_columns = {column for choices in latest.values() for column, _ in choices}
     if prior and changed_columns and not _replacement_values_match(message, spec, latest, changed_columns):
         return False
@@ -113,9 +181,77 @@ def _categorical_requirements_covered(
         for label, choices in historical.items()
         if not changed_columns.intersection(c for c, _ in choices)
     }
-    return _mentioned_values_covered(message, latest, spec, columns) and _mentioned_values_covered(
-        prior, historical, spec, columns
+    base_tables = {str(metrics[mid].get("base_entity", "")).casefold() for mid in spec.metric_ids if mid in metrics}
+    return _mentioned_values_covered(message, latest, spec, columns, base_tables) and _mentioned_values_covered(
+        prior, historical, spec, columns, base_tables
     )
+
+
+def _has_unmapped_query_terms(
+    text: str,
+    spec: SemanticQuerySpec,
+    columns: dict[int, dict[str, Any]],
+    metrics: dict[int, dict[str, Any]],
+) -> bool:
+    """Detect missing mappings via column labels, mapping prefixes, or residual unfiltered conditions."""
+    normalized = normalize_business_label(text)
+    if not any(_is_categorical(column) for column in columns.values()):
+        return False
+    if any(
+        _explicit_column_has_unmapped_value(normalized, column)
+        for column in columns.values()
+        if _is_categorical(column)
+    ):
+        return True
+    if spec.dimensions or any(_is_categorical(columns.get(item.column_id, {})) for item in spec.filters):
+        return False
+    if _mentioned_values(text, columns):
+        return False
+    return _has_residual_condition_words(normalized, spec, columns, metrics)
+
+
+def _explicit_column_has_unmapped_value(text: str, column: dict[str, Any]) -> bool:
+    labels = [
+        normalize_business_label(str(column.get(k, "")).replace("_", " "))
+        for k in ("column_name", "business_name")
+        if column.get(k)
+    ]
+    first_words = [
+        words[0]
+        for label, _ in mentioned_business_values(column)
+        if len(words := normalize_business_label(label).split()) >= 2 and words[0] not in _QUERY_FRAME_WORDS
+    ]
+    prefixes = {word for word in first_words if first_words.count(word) >= 2}
+    known = [normalize_business_label(label) for label, _ in mentioned_business_values(column)]
+    if any(
+        re.search(r"\b" + re.escape(label) + r"\s+(?:la|bang)\s+(?!duoc\b)", text)
+        and not any(business_label_matches(text, value) for value in known)
+        for label in labels
+        if label
+    ):
+        return True
+    return any(
+        re.search(r"\b" + re.escape(prefix) + r"\s+\w+\b", text)
+        and not any(business_label_matches(text, value) for value in known)
+        for prefix in prefixes
+    )
+
+
+def _has_residual_condition_words(
+    normalized: str,
+    spec: SemanticQuerySpec,
+    columns: dict[int, dict[str, Any]],
+    metrics: dict[int, dict[str, Any]],
+) -> bool:
+    vocab = set(_QUERY_FRAME_WORDS)
+    for mid in spec.metric_ids:
+        for field in ("name", "business_name"):
+            vocab.update(normalize_business_label(str(metrics.get(mid, {}).get(field, ""))).split())
+    for column in columns.values():
+        for field in ("column_name", "business_name", "table_name", "table_business_name"):
+            vocab.update(normalize_business_label(str(column.get(field, "")).replace("_", " ")).split())
+    residual = re.sub(r"\b\d+(?:\.\d+)?\b", " ", normalized)
+    return any(len(word) > 1 and word not in vocab for word in residual.split())
 
 
 def _without_metric_names(text: str, spec: SemanticQuerySpec, metrics: dict[int, dict[str, Any]]) -> str:
@@ -134,6 +270,12 @@ def _latest_time_text(prior: str, spec: SemanticQuerySpec, metrics: dict[int, di
     return ""
 
 
+def _is_categorical(column: dict[str, Any]) -> bool:
+    """Recognize SQL types whose labels can use approved mappings."""
+    dtype = str(column.get("data_type", "")).upper()
+    return any(kind in dtype for kind in ("CHAR", "TEXT", "ENUM"))
+
+
 def _replacement_values_match(
     message: str, spec: SemanticQuerySpec, latest: dict[str, set[tuple[int, str]]], columns: set[int]
 ) -> bool:
@@ -141,7 +283,7 @@ def _replacement_values_match(
         return False
     mentioned = {pair for choices in latest.values() for pair in choices}
     selected = {
-        (item.column_id, str(value))
+        (item.column_id, scalar_value_key(value))
         for item in spec.filters
         if item.column_id in columns
         for value in (item.value if isinstance(item.value, list) else [item.value])
@@ -252,9 +394,21 @@ def _time_requirements_covered(text: str, spec: SemanticQuerySpec, columns: dict
         bounds = _explicit_bounds(text)
         if bounds is not None:
             return _has_exact_interval(spec, columns, *bounds)
-        if len(years) != 1 or re.search(r"\b(thang|quy|ngay|truoc|sau|tu|den)\b", text):
+        if len(years) != 1:
             return False
         year = next(iter(years))
+        month_group_columns = {
+            item.column_id
+            for item in spec.dimensions
+            if item.time_grain == "month" and _is_temporal(columns.get(item.column_id, {}))
+        }
+        if re.search(r"\bthang\b", text) and month_group_columns:
+            return _has_exact_interval(spec, columns, date(year, 1, 1), date(year + 1, 1, 1)) and any(
+                item.column_id in month_group_columns and _is_temporal(columns.get(item.column_id, {}))
+                for item in spec.filters
+            )
+        if re.search(r"\b(thang|quy|ngay|truoc|sau|tu|den)\b", text):
+            return False
         return _has_exact_interval(spec, columns, date(year, 1, 1), date(year + 1, 1, 1))
     bounds = _relative_bounds(relative.group())
     return bool(bounds and _has_exact_interval(spec, columns, *bounds))
@@ -396,24 +550,71 @@ def _requested_dimensions_covered(spec: SemanticQuerySpec, catalog: dict[str, An
     return True
 
 
+def _column_value_keys(column_id: int, value: Any, column: dict[str, Any]) -> set[tuple[int, str]]:
+    """Keep approved JSON scalars distinct from equivalent legacy sample values."""
+    choices = {(column_id, scalar_value_key(value))}
+    choices.update((column_id, scalar_value_key(sample)) for sample in sample_value_candidates(value, column))
+    return choices
+
+
 def _mentioned_values(text: str, columns: dict[int, dict[str, Any]]) -> dict[str, set[tuple[int, str]]]:
-    """Find approved labels and values explicitly present in one user message."""
+    """Find values mentioned through shared label normalization, preferring longest non-overlapping labels."""
     mentioned: dict[str, set[tuple[int, str]]] = {}
     for column_id, column in columns.items():
-        mappings = column.get("_approved_mappings", column.get("allowed_value_mappings", []))
-        pairs = [(str(value), str(value)) for value in column.get("allowed_values", [])]
-        pairs += [(str(item.get("business_value", "")), str(item.get("db_value", ""))) for item in mappings]
-        for label, value in pairs:
-            if label and _contains_term(text, label):
-                mentioned.setdefault(normalized_text(label), set()).add((column_id, value))
-    return mentioned
+        for label, value in mentioned_business_values(column):
+            if business_label_matches(text, label):
+                mentioned.setdefault(normalize_business_label(label), set()).update(
+                    _column_value_keys(column_id, value, column)
+                )
+    return _drop_subsumed_mentions(normalize_business_label(text), mentioned)
+
+
+def _drop_subsumed_mentions(
+    normalized_text_value: str, mentioned: dict[str, set[tuple[int, str]]]
+) -> dict[str, set[tuple[int, str]]]:
+    """Ignore a shorter label when every occurrence in text is part of a longer matched label."""
+    keys = sorted(mentioned, key=len, reverse=True)
+    kept: dict[str, set[tuple[int, str]]] = {}
+    for key in keys:
+        longer = [other for other in keys if len(other) > len(key) and business_label_matches(other, key)]
+        residual = normalized_text_value
+        for other in longer:
+            residual = re.sub(r"(?<!\w)" + re.escape(other) + r"(?!\w)", " ", residual)
+        if not longer or business_label_matches(residual, key):
+            kept[key] = mentioned[key]
+    return kept
+
+
+def _narrow_column_choices(
+    text: str,
+    choices: set[tuple[int, str]],
+    columns: dict[int, dict[str, Any]],
+    base_tables: set[str],
+) -> set[tuple[int, str]] | None:
+    """Narrow duplicate label matches by explicit table/column mention or metric base table context."""
+    explicitly_named = {
+        c
+        for c, _ in choices
+        if any(_contains_term(text, str(columns[c].get(key, ""))) for key in ("table_name", "table_business_name"))
+    }
+    if len(explicitly_named) == 1:
+        return {(c, v) for c, v in choices if c in explicitly_named}
+    col_names = {str(columns[c].get("column_name", "")).casefold() for c, _ in choices}
+    base_cols = {c for c, _ in choices if str(columns[c].get("table_name", "")).casefold() in base_tables}
+    if len(col_names) == 1 and len(base_cols) == 1:
+        return {(c, v) for c, v in choices if c in base_cols}
+    return None
 
 
 def _mentioned_values_covered(
-    text: str, mentioned: dict[str, set[tuple[int, str]]], spec: SemanticQuerySpec, columns: dict[int, dict[str, Any]]
+    text: str,
+    mentioned: dict[str, set[tuple[int, str]]],
+    spec: SemanticQuerySpec,
+    columns: dict[int, dict[str, Any]],
+    base_tables: set[str] | None = None,
 ) -> bool:
     selected = [
-        (item.column_id, str(value), item.operator)
+        (item.column_id, scalar_value_key(value), item.operator)
         for item in spec.filters
         for value in (item.value if isinstance(item.value, list) else [item.value])
     ]
@@ -421,18 +622,12 @@ def _mentioned_values_covered(
         return False
     for label, choices in mentioned.items():
         if len({column for column, _ in choices}) > 1:
-            explicitly_named = {
-                c
-                for c, _ in choices
-                if any(
-                    _contains_term(text, str(columns[c].get(key, ""))) for key in ("table_name", "table_business_name")
-                )
-            }
-            choices = {(c, v) for c, v in choices if c in explicitly_named}
-            if len(explicitly_named) != 1:
+            narrowed = _narrow_column_choices(text, choices, columns, base_tables or set())
+            if narrowed is None:
                 return False
-        before = normalized_text(text).split(label, 1)[0]
-        negative = bool(re.search(r"\b(khong|khac|tru|ngoai)(?:\s+\w+){0,3}$", normalized_text(before).strip()))
+            choices = narrowed
+        before = normalize_business_label(text).split(label, 1)[0]
+        negative = bool(re.search(r"\b(khong|khac|tru|ngoai)(?:\s+\w+){0,3}$", before.strip()))
         operators = {"neq", "not_in"} if negative else {"eq", "in"}
         if not any((column, value) in choices and operator in operators for column, value, operator in selected):
             return False
@@ -444,13 +639,14 @@ def _disjunction_covered(text: str, mentioned: dict[str, set[tuple[int, str]]], 
         return True
     return any(
         item.operator == "in"
-        and all(any((item.column_id, str(value)) in choices for value in item.value) for choices in mentioned.values())
+        and all(
+            any((item.column_id, scalar_value_key(value)) in choices for value in item.value)
+            for choices in mentioned.values()
+        )
         for item in spec.filters
         if isinstance(item.value, list)
     )
 
 
 def _contains_term(text: str, value: str) -> bool:
-    value = normalized_text(value.strip())
-    text = normalized_text(text)
-    return bool(value and re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", text))
+    return business_label_matches(text, value)

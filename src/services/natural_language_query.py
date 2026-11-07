@@ -29,7 +29,7 @@ from src.models.schemas import (
     SemanticQuerySpec,
     SemanticTimeRange,
 )
-from src.services.categorical_discovery_policy import eligible_column, safe_business_mappings, safe_observed_values
+from src.services.categorical_discovery_policy import safe_observed_values
 from src.services.chat_execution import execution_step
 from src.services.database import decrypt_conn_url
 from src.services.dimension_recommender import (
@@ -48,6 +48,7 @@ from src.services.relationship_runtime import (
 )
 from src.services.semantic_compile_error import SemanticCompileError
 from src.services.semantic_query_values import _normalize_filter_values
+from src.services.semantic_value_mappings import mapping_metadata_fingerprint, read_approved_business_mappings
 
 
 async def build_parser_catalog(db: AsyncSession, db_id: int) -> dict[str, Any]:
@@ -60,12 +61,14 @@ async def build_parser_catalog(db: AsyncSession, db_id: int) -> dict[str, Any]:
     )
     approved_metrics = list((await db.execute(stmt)).scalars().all())
     relationship_fingerprint = await _relationship_fingerprint(db, db_id)
+    mapping_fingerprint = await _mapping_fingerprint(db, db_id)
     if not approved_metrics:
         return {
             "metrics": [],
             "dimensions": [],
             "filter_columns": [],
             "_relationship_fingerprint": relationship_fingerprint,
+            "_mapping_fingerprint": mapping_fingerprint,
         }
 
     metric_items = [_format_metric_item(m) for m in approved_metrics]
@@ -77,7 +80,30 @@ async def build_parser_catalog(db: AsyncSession, db_id: int) -> dict[str, Any]:
         "dimensions": dim_items,
         "filter_columns": filter_items,
         "_relationship_fingerprint": relationship_fingerprint,
+        "_mapping_fingerprint": mapping_fingerprint,
     }
+
+
+async def _mapping_fingerprint(db: AsyncSession, db_id: int) -> str:
+    """Fingerprint approved column mappings without exposing their values."""
+    rows = (
+        await db.scalars(
+            select(SemanticColumnModel)
+            .join(SemanticTableModel, SemanticColumnModel.table_id == SemanticTableModel.id)
+            .where(SemanticTableModel.db_id == db_id)
+            .order_by(SemanticColumnModel.id)
+        )
+    ).all()
+    payload = [
+        (
+            row.id,
+            mapping_metadata_fingerprint(
+                row.allowed_value_mappings, row.review_status, getattr(row, "allowed_values_complete", True)
+            ),
+        )
+        for row in rows
+    ]
+    return hashlib.sha256(json.dumps(payload, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 async def _relationship_fingerprint(db: AsyncSession, db_id: int) -> str:
@@ -219,7 +245,7 @@ def _eligible_query_dimension(col: SemanticColumnModel) -> bool:
 
 
 async def _add_filter_values(db: AsyncSession, filter_items: list[dict[str, Any]]) -> None:
-    """Attach only approved, screened categorical values to the parser catalog."""
+    """Attach approved mappings and independently screened sample values."""
     ids = [item["column_id"] for item in filter_items]
     if not ids:
         return
@@ -227,23 +253,61 @@ async def _add_filter_values(db: AsyncSession, filter_items: list[dict[str, Any]
     by_id = {column.id: column for column in rows}
     for item in filter_items:
         column = by_id.get(item["column_id"])
-        if not column or column.review_status != "approved" or not eligible_column(column):
+        if not column or column.review_status != "approved":
             continue
-        item["allowed_values"] = safe_observed_values(column.allowed_values or []) or []
-        item["allowed_value_mappings"] = safe_business_mappings(
-            column.allowed_value_mappings or [], column.review_status
-        )
-        item["_approved_mappings"] = [
-            {"db_value": mapping["db_value"], "business_value": mapping["business_value"]}
-            for mapping in column.allowed_value_mappings or []
-            if isinstance(mapping, dict)
-            and mapping.get("status") == "approved"
-            and isinstance(mapping.get("db_value"), str)
-            and isinstance(mapping.get("business_value"), str)
-            and mapping["db_value"].strip()
-            and mapping["business_value"].strip()
-            and safe_observed_values([mapping["db_value"]]) is not None
-        ]
+        _attach_filter_value_metadata(item, column)
+
+
+def _eligible_query_column(column: SemanticColumnModel) -> bool:
+    """Preserve existing sensitive/identifier exclusions for both samples and mappings."""
+    name = column.column_name.casefold()
+    blocked = ("name", "email", "phone", "address", "secret", "token", "password", "comment", "description")
+    return not column.is_primary_key and not column.is_foreign_key and not any(term in name for term in blocked)
+
+
+def _attach_filter_value_metadata(item: dict[str, Any], column: SemanticColumnModel) -> None:
+    """Keep approved mapping metadata separate from screened sample values."""
+    mappings = read_approved_business_mappings(column.allowed_value_mappings, column.review_status)
+    item["review_status"] = column.review_status
+    item["allowed_values"] = (
+        safe_observed_values(column.allowed_values or []) or [] if _eligible_query_column(column) else []
+    )
+    item["allowed_values_complete"] = getattr(column, "allowed_values_complete", True)
+    item["allowed_value_mappings"] = mappings
+    item["_approved_mappings"] = mappings
+    item["_mapping_fingerprint"] = mapping_metadata_fingerprint(
+        column.allowed_value_mappings, column.review_status, item["allowed_values_complete"]
+    )
+    item["_mapping_count"] = len(item["_approved_mappings"])
+    item["_mapping_overflow"] = len(item["_approved_mappings"]) > 100
+
+
+def _ensure_catalog_mapping_capacity(catalog: dict[str, Any]) -> str | None:
+    """Reject oversized prompt catalogs instead of silently omitting approved mappings."""
+    if any(column.get("_mapping_overflow") for column in catalog.get("filter_columns", [])):
+        return "Một cột có hơn 100 ánh xạ đã duyệt; hãy yêu cầu quản lý ánh xạ chia phạm vi trước khi truy vấn."
+    serialized = json.dumps(catalog, ensure_ascii=False, default=str)
+    if len(serialized) > 100_000:
+        return "Danh mục ánh xạ nghiệp vụ quá lớn để xử lý đầy đủ. Hãy thu hẹp metric hoặc phạm vi bảng."
+    return None
+
+
+def _approved_mapping_prompt_catalog(catalog: dict[str, Any]) -> dict[str, Any]:
+    """Build the LLM-facing catalog with private fingerprints and sample internals removed."""
+    safe = {key: value for key, value in catalog.items() if not key.startswith("_")}
+    safe["metrics"] = [
+        {key: value for key, value in metric.items() if not key.startswith("_")}
+        for metric in catalog.get("metrics", [])
+    ]
+    safe["filter_columns"] = [
+        {key: value for key, value in column.items() if not key.startswith("_")}
+        for column in catalog.get("filter_columns", [])
+    ]
+    safe["dimensions"] = [
+        {key: value for key, value in dimension.items() if not key.startswith("_")}
+        for dimension in catalog.get("dimensions", [])
+    ]
+    return safe
 
 
 def normalize_interpretation(
@@ -256,14 +320,47 @@ def normalize_interpretation(
         return interpretation
 
     spec = interpretation.spec
+    capacity_error = _ensure_catalog_mapping_capacity(catalog)
+    if capacity_error:
+        return _invalid_selection_clarification(capacity_error)
     error = _validate_query_selection(interpretation, catalog)
     if error is not None:
         return error
-    normalized_filters = _normalize_filter_values(_merge_time_ranges(spec.filters, interpretation.time_ranges), catalog)
+    merged_filters = _merge_time_ranges(spec.filters, interpretation.time_ranges)
+    normalized_filters = _normalize_filter_values(merged_filters, catalog)
     if normalized_filters is None:
-        return _invalid_selection_clarification("Giá trị bộ lọc chưa được xác định rõ trong metadata đã duyệt.")
+        return _invalid_selection_clarification(_filter_normalization_message(merged_filters, catalog, spec.metric_ids))
     updated_spec = spec.model_copy(update={"filters": normalized_filters, "limit": min(max(spec.limit, 1), 1000)})
     return interpretation.model_copy(update={"spec": updated_spec})
+
+
+def _column_has_approved_mappings(column: dict[str, Any]) -> bool:
+    """Check whether the filter column has any usable approved business mapping."""
+    return bool(read_approved_business_mappings(column.get("_approved_mappings", []), column.get("review_status", "")))
+
+
+def _filter_normalization_message(
+    filters: list[SemanticQueryFilter], catalog: dict[str, Any], metric_ids: list[int]
+) -> str:
+    """Explain whether a filter is missing, ambiguous, or incompatible with approved metadata."""
+    from src.services.semantic_query_values import filter_value_resolution
+
+    metrics = {metric["id"]: metric for metric in catalog.get("metrics", [])}
+    compatible = set.intersection(*(set(metrics[mid].get("filter_column_ids", [])) for mid in metric_ids))
+    columns = {column["column_id"]: column for column in catalog.get("filter_columns", [])}
+    for item in filters:
+        column = columns.get(item.column_id)
+        if column is None or item.column_id not in compatible:
+            return "Cột lọc không tương thích với metric đã chọn. Hãy chọn cột lọc được hỗ trợ cho metric này."
+        reason = filter_value_resolution(item, column)
+        if reason == "ambiguous":
+            return f"Nhãn lọc có nhiều cách hiểu trong cột '{column.get('business_name') or column.get('column_name')}'. Hãy chỉ rõ giá trị hoặc cột."
+        if reason == "unmapped":
+            source = "Chưa có ánh xạ đã duyệt" if _column_has_approved_mappings(column) else "Chưa có ánh xạ được duyệt"
+            return f"{source} cho giá trị trong cột '{column.get('business_name') or column.get('column_name')}'. Hãy chọn nhãn đã duyệt hoặc làm rõ giá trị."
+        if reason == "malformed":
+            return f"Giá trị lọc không đúng kiểu dữ liệu của cột '{column.get('business_name') or column.get('column_name')}'."
+    return "Giá trị bộ lọc không phù hợp với kiểu dữ liệu metadata đã duyệt."
 
 
 def _validate_query_selection(
@@ -272,6 +369,10 @@ def _validate_query_selection(
     """Validate selected metrics and columns before normalizing filter values."""
     spec = interpretation.spec
     assert spec is not None
+    if not spec.metric_ids and (spec.filters or spec.dimensions or interpretation.time_ranges):
+        return _invalid_selection_clarification(
+            "Hãy chọn metric đã được phê duyệt trước khi chỉ định dimension hoặc filter."
+        )
     valid_metrics = {m["id"]: m for m in catalog.get("metrics", [])}
     if not set(spec.metric_ids).issubset(valid_metrics.keys()):
         return _invalid_selection_clarification("Chỉ số không tồn tại trong danh mục đã duyệt.")
@@ -284,11 +385,38 @@ def _validate_query_selection(
             )
         return _incompatible_bases_clarification(spec.metric_ids, valid_metrics)
 
-    if not _selections_are_compatible(spec, interpretation.time_ranges, valid_metrics) or not _valid_time_ranges(
-        interpretation.time_ranges, catalog
-    ):
-        return _invalid_selection_clarification("Chiều hoặc bộ lọc không phù hợp với chỉ số đã chọn.")
+    if not _selections_are_compatible(spec, interpretation.time_ranges, valid_metrics):
+        return _incompatible_column_clarification(spec, interpretation, valid_metrics, catalog)
+    if not _valid_time_ranges(interpretation.time_ranges, catalog):
+        return _invalid_selection_clarification("Khoảng thời gian không hợp lệ với metadata đã duyệt.")
     return None
+
+
+def _incompatible_column_clarification(
+    spec: SemanticQuerySpec,
+    interpretation: SemanticQueryInterpretation,
+    metrics: dict[int, dict[str, Any]],
+    catalog: dict[str, Any],
+) -> SemanticQueryInterpretation:
+    """Identify the exact selected column incompatible with one or more metrics."""
+    dimensions = {item.column_id for item in spec.dimensions}
+    filters = {item.column_id for item in spec.filters} | {item.column_id for item in interpretation.time_ranges}
+    if not spec.metric_ids:
+        return _invalid_selection_clarification("Hãy chọn metric đã được phê duyệt trước khi lọc.")
+    for metric_id in spec.metric_ids:
+        metric = metrics[metric_id]
+        if not dimensions <= set(metric.get("dimension_ids", [])):
+            return _invalid_selection_clarification(
+                "Dimension không tương thích (không phù hợp) với metric đã chọn. Hãy chọn dimension hỗ trợ metric này."
+            )
+        if not filters <= set(metric.get("filter_column_ids", [])):
+            return _invalid_selection_clarification(
+                "Cột lọc không tương thích (không phù hợp) với metric đã chọn. Hãy chọn cột lọc hỗ trợ metric này."
+            )
+        catalogued = {column["column_id"] for column in catalog.get("filter_columns", [])}
+        if not filters <= catalogued:
+            return _invalid_selection_clarification("Cột lọc không có trong catalog đã duyệt. Hãy làm rõ cột muốn lọc.")
+    return _invalid_selection_clarification("Cột truy vấn không tương thích với metric đã chọn.")
 
 
 def _selections_are_compatible(

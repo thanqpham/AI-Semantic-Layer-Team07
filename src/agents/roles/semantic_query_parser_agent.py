@@ -60,9 +60,14 @@ QUY TẮC BẮT BUỘC:
      + Trả status: "missing_metric", metric_name là tên chỉ số cụ thể; không chọn metric_ids.
      + Nếu chưa rõ chỉ số hoặc có nhiều cách hiểu, trả "needs_clarification", không kết luận thiếu metric.
 3. Nếu câu hỏi rõ ràng và map được metric/dimension/filter hợp lệ:
-   - Mỗi metric có dimension_ids và filter_column_ids riêng; chỉ dùng các cột hợp lệ cho tất cả metric đã chọn.
-   - "miền Bắc" là giá trị bộ lọc; "theo từng khu vực" là dimension. Giữ nguyên văn giá trị người dùng trong filters, không tự dịch sang giá trị cơ sở dữ liệu.
-   - status: "resolved"
+    - xác định mục đích của từng cụm: chọn metric, lọc giá trị, nhóm kết quả (dimension) hoặc giới hạn thời gian; một câu có thể kết hợp nhiều mục đích.
+    - Chọn cột từ catalog tương thích với tất cả metric đã chọn: dimension thuộc dimension_ids, filter thuộc filter_column_ids.
+    - Giữ nguyên văn giá trị nghiệp vụ người dùng nêu trong filters để backend đối chiếu ánh xạ đã duyệt; không tự dịch, chuẩn hóa hay suy ra giá trị database khi thiếu căn cứ.
+    - Giữ đúng ý nghĩa "không phải"/"ngoài" (phủ định), "hoặc" (một filter nhiều giá trị, không AND), "ít nhất" (ngưỡng) và mọi điều kiện thời gian.
+    - Chỉ thêm dimension khi người dùng muốn nhóm hoặc so sánh; không tự thêm dimension cho câu hỏi cần một giá trị tổng.
+    - Với "theo tháng trong năm YYYY", chọn dimension thời gian có time_grain="month" và giữ filter khoảng lọc cả năm YYYY.
+    - Nếu metric, cột, giá trị hoặc cách hiểu không thể xác định phù hợp từ catalog, trả "needs_clarification"; không được bỏ điều kiện để tạo truy vấn rộng hơn.
+    - status: "resolved"
    - metric_ids: danh sách ID chỉ số đã chọn (ví dụ [1])
    - dimensions: danh sách {{"column_id": int, "time_grain": "day"|"week"|"month"|"quarter"|"year"|null}}
    - filters: danh sách {{"column_id": int, "operator": "eq"|"neq"|"gt"|"gte"|"lt"|"lte"|"in"|"not_in"|"is_null"|"is_not_null", "value": any}}
@@ -76,6 +81,12 @@ QUY TẮC BẮT BUỘC:
        {{"id": "opt_1", "label": "Nhãn hiển thị ngắn", "description": "Mô tả chi tiết", "spec": {{"metric_ids": [...], "dimensions": [...], "filters": [], "limit": 100}}}}
      ]}} (tối đa 3 options có spec phân tích theo các dimension/filter hợp lệ của chính metric đó).
 5. rationale: Giải thích ngắn gọn lý do chọn metric/dimension hoặc lý do cần làm rõ.
+
+VÍ DỤ MINH HỌA (KHÔNG PHẢI GIÁ TRỊ BẮT BUỘC):
+- Ví dụ - Khu vực: "Số đơn hàng miền Bắc" là filter giá trị khu vực nếu catalog có cột tương thích và giá trị được ánh xạ; nếu không, hỏi làm rõ.
+- Ví dụ - Trạng thái đơn hàng: "đơn đã hoàn tất" là filter trạng thái; "đơn theo từng trạng thái" là dimension, không phải filter một trạng thái.
+- Ví dụ - Phương thức thanh toán: "doanh thu đơn thanh toán bằng thẻ" là filter phương thức thanh toán nếu catalog có metadata tương thích.
+- Các ví dụ chỉ minh họa quy tắc chung, không bắt buộc catalog nào cũng có các cột hoặc giá trị này; áp dụng cùng quy tắc cho kênh bán hàng và giá trị nghiệp vụ khác trong metadata đã duyệt.
 
 VÍ DỤ MẪU BẮT BUỘC TUÂN THEO:
 - Ví dụ 1 (Khớp đúng): User "Xem tổng doanh thu 2024", Catalog có "Tổng doanh thu" (id=1) -> status: "resolved", metric_ids: [1]

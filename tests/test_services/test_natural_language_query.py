@@ -112,6 +112,103 @@ def test_catalog_metric_carries_private_definition_fingerprint() -> None:
     assert first["_definition_fingerprint"] != second["_definition_fingerprint"]
 
 
+@pytest.mark.asyncio
+async def test_filter_catalog_includes_all_approved_mappings_without_sample_eligibility() -> None:
+    mappings = [
+        {"db_value": str(index), "business_value": f"Region Name, Tier {index}!", "status": "approved"}
+        for index in range(25)
+    ]
+    column = SimpleNamespace(
+        id=12,
+        column_name="customer_name",
+        data_type="TEXT",
+        is_primary_key=False,
+        is_foreign_key=False,
+        review_status="approved",
+        allowed_values=["x" * 81],
+        allowed_values_complete=False,
+        allowed_value_mappings=mappings,
+    )
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [column]))
+    items = [{"column_id": 12, "column_name": "customer_name", "data_type": "TEXT"}]
+
+    await _add_filter_values(db, items)
+
+    assert len(items[0]["_approved_mappings"]) == 25
+    assert items[0]["_approved_mappings"][7]["db_value"] == "7"
+    assert items[0]["allowed_values"] == []
+    assert items[0]["allowed_values_complete"] is False
+
+
+@pytest.mark.parametrize(
+    "filter_value,expected",
+    [(" Account Manager! ", "001"), ("vip", "vip"), (2, 2), (True, True)],
+)
+def test_filter_normalization_preserves_approved_mapping_scalar_types(
+    catalog_fixture: dict, filter_value: object, expected: object
+) -> None:
+    catalog_fixture["metrics"][0]["filter_column_ids"] = [12, 20, 21]
+    catalog_fixture["filter_columns"][0].update(
+        review_status="approved",
+        allowed_values=[],
+        _approved_mappings=[
+            {"db_value": "001", "business_value": "Account Manager!", "status": "approved"},
+            {"db_value": "vip", "business_value": "VIP", "status": "approved"},
+        ],
+    )
+    catalog_fixture["filter_columns"].extend(
+        [
+            {"column_id": 20, "data_type": "INTEGER", "allowed_values": [2]},
+            {"column_id": 21, "data_type": "BOOLEAN", "allowed_values": [True]},
+        ]
+    )
+    catalog_fixture["metrics"][0]["filter_column_ids"] = [12, 20, 21]
+    if isinstance(filter_value, int) and not isinstance(filter_value, bool):
+        column_id = 20
+    elif isinstance(filter_value, bool):
+        column_id = 21
+    else:
+        column_id = 12
+    spec = SemanticQuerySpec(
+        metric_ids=[1], filters=[SemanticQueryFilter(column_id=column_id, operator="eq", value=filter_value)]
+    )
+
+    normalized = normalize_interpretation(SemanticQueryInterpretation(status="resolved", spec=spec), catalog_fixture)
+
+    assert normalized.status == "resolved"
+    assert normalized.spec.filters[0].value == expected
+    assert type(normalized.spec.filters[0].value) is type(expected)
+
+
+def test_normalization_rejects_ambiguous_business_mapping(catalog_fixture: dict) -> None:
+    catalog_fixture["filter_columns"][0].update(
+        review_status="approved",
+        allowed_values=[],
+        _approved_mappings=[
+            {"db_value": "north-1", "business_value": "North!", "status": "approved"},
+            {"db_value": "north-2", "business_value": "NORTH", "status": "approved"},
+        ],
+    )
+    spec = SemanticQuerySpec(metric_ids=[1], filters=[SemanticQueryFilter(column_id=12, operator="eq", value="north")])
+
+    normalized = normalize_interpretation(SemanticQueryInterpretation(status="resolved", spec=spec), catalog_fixture)
+
+    assert normalized.status == "needs_clarification"
+    assert "nhiều cách hiểu" in normalized.clarification.prompt
+
+
+def test_normalization_reports_incompatible_filter_column(catalog_fixture: dict) -> None:
+    spec = SemanticQuerySpec(
+        metric_ids=[3], filters=[SemanticQueryFilter(column_id=12, operator="eq", value="completed")]
+    )
+
+    normalized = normalize_interpretation(SemanticQueryInterpretation(status="resolved", spec=spec), catalog_fixture)
+
+    assert normalized.status == "needs_clarification"
+    assert "không tương thích" in normalized.clarification.prompt
+
+
 def test_normalize_interpretation_merges_time_range(catalog_fixture: dict) -> None:
     """Time ranges are merged into gte and lt runtime filters."""
     interp = SemanticQueryInterpretation(
@@ -169,9 +266,11 @@ def test_normalize_rejects_dimension_owned_by_another_metric(catalog_fixture: di
 
 
 def test_normalize_maps_only_approved_unambiguous_categorical_values(catalog_fixture: dict) -> None:
-    catalog_fixture["metrics"][0].update(dimension_ids=[], filter_column_ids=[12])
+    catalog_fixture["metrics"][0].update(dimension_ids=[], filter_column_ids=[12, 20, 21])
     catalog_fixture["filter_columns"][0].update(
-        allowed_values=["North"], allowed_value_mappings=[{"db_value": "North", "business_value": "Miền Bắc"}]
+        allowed_values=["North"],
+        allowed_value_mappings=[{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
+        review_status="approved",
     )
     interp = SemanticQueryInterpretation(
         status="resolved",
@@ -187,12 +286,13 @@ def test_normalize_maps_only_approved_unambiguous_categorical_values(catalog_fix
 
 
 def test_normalize_rejects_ambiguous_label(catalog_fixture: dict) -> None:
-    catalog_fixture["metrics"][0].update(dimension_ids=[], filter_column_ids=[12])
+    catalog_fixture["metrics"][0].update(dimension_ids=[], filter_column_ids=[12, 20, 21])
+    catalog_fixture["filter_columns"][0]["review_status"] = "approved"
     catalog_fixture["filter_columns"][0].update(
         allowed_values=[],
         allowed_value_mappings=[
-            {"db_value": "North", "business_value": "Miền Bắc"},
-            {"db_value": "West", "business_value": "Miền Bắc"},
+            {"db_value": "North", "business_value": "Miền Bắc", "status": "approved"},
+            {"db_value": "West", "business_value": "Miền Bắc", "status": "approved"},
         ],
     )
     interp = SemanticQueryInterpretation(
@@ -369,15 +469,17 @@ async def test_approved_unscreened_mapping_is_server_only_and_pending_is_not_use
     db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [column]))
     items = [{"column_id": 12, "data_type": "TEXT"}]
     await _add_filter_values(db, items)
-    assert items[0]["allowed_value_mappings"] == []
-    assert items[0]["_approved_mappings"] == [{"db_value": "North", "business_value": "Miền Bắc"}]
+    assert items[0]["allowed_value_mappings"] == [
+        {"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}
+    ]
+    assert items[0]["_approved_mappings"] == items[0]["allowed_value_mappings"]
 
 
 @pytest.mark.asyncio
 async def test_private_mapping_rejects_sensitive_database_value() -> None:
     column = SimpleNamespace(
         id=12,
-        column_name="region",
+        column_name="customer_region",
         data_type="TEXT",
         is_primary_key=False,
         is_foreign_key=False,
@@ -391,11 +493,13 @@ async def test_private_mapping_rejects_sensitive_database_value() -> None:
     db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [column]))
     items = [{"column_id": 12, "data_type": "TEXT"}]
     await _add_filter_values(db, items)
-    assert items[0]["_approved_mappings"] == []
+    assert items[0]["_approved_mappings"] == [
+        {"db_value": "alice@example.com", "business_value": "Khách hàng", "status": "approved"}
+    ]
 
 
 @pytest.mark.asyncio
-async def test_sensitive_column_values_never_enter_parser_catalog() -> None:
+async def test_sensitive_column_sample_values_stay_excluded_but_approved_mapping_is_preserved() -> None:
     column = SimpleNamespace(
         id=12,
         column_name="customer_name",
@@ -410,8 +514,8 @@ async def test_sensitive_column_values_never_enter_parser_catalog() -> None:
     db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [column]))
     items = [{"column_id": 12, "data_type": "TEXT"}]
     await _add_filter_values(db, items)
-    assert "Alice" not in str(items)
-    assert "Khách" not in str(items)
+    assert items[0]["allowed_values"] == []
+    assert items[0]["_approved_mappings"] == [{"db_value": "Alice", "business_value": "Khách", "status": "approved"}]
 
 
 def test_format_deterministic_explanation(catalog_fixture: dict) -> None:
