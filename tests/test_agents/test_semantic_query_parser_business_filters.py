@@ -474,6 +474,69 @@ async def test_longer_business_label_suppresses_subsumed_prefix_label() -> None:
 
 
 @pytest.mark.asyncio
+async def test_both_short_and_long_overlapping_labels_with_other_column_filter_pass() -> None:
+    catalog = copy.deepcopy(SYNTHETIC_CATALOG)
+    catalog["metrics"][0]["filter_column_ids"].append(16)
+    catalog["filter_columns"].append(
+        {
+            "column_id": 16,
+            "column_name": "device_type",
+            "business_name": "Thiết bị",
+            "table_name": "orders",
+            "data_type": "VARCHAR",
+            "review_status": "approved",
+            "allowed_values": ["Desktop", "Tablet"],
+            "_approved_mappings": [
+                {"db_value": "Desktop", "business_value": "Máy tính", "status": "approved"},
+                {"db_value": "Tablet", "business_value": "Máy tính bảng", "status": "approved"},
+            ],
+        }
+    )
+    payload = {
+        "status": "resolved",
+        "metric_ids": [1],
+        "filters": [
+            {"column_id": 13, "operator": "eq", "value": "Miền Bắc"},
+            {"column_id": 16, "operator": "in", "value": ["Máy tính", "Máy tính bảng"]},
+        ],
+    }
+    mock_llm = AsyncMock(return_value=payload)
+    with (
+        patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=mock_llm),
+        patch("src.agents.roles.semantic_query_parser_agent.get_llm", return_value=object()),
+    ):
+        result = await semantic_query_parser_node(
+            {
+                "user_message": "Số đơn hàng ở miền Bắc trên máy tính hoặc máy tính bảng",
+                "parser_catalog": catalog,
+            }
+        )
+    assert result["interpretation"]["status"] == "resolved"
+
+
+@pytest.mark.asyncio
+async def test_negated_status_variant_bi_huy_matches_approved_da_huy_mapping() -> None:
+    catalog = copy.deepcopy(SYNTHETIC_CATALOG)
+    payload = {
+        "status": "resolved",
+        "metric_ids": [1],
+        "filters": [
+            {"column_id": 13, "operator": "eq", "value": "Miền Bắc"},
+            {"column_id": 12, "operator": "neq", "value": "cancelled"},
+        ],
+    }
+    mock_llm = AsyncMock(return_value=payload)
+    with (
+        patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=mock_llm),
+        patch("src.agents.roles.semantic_query_parser_agent.get_llm", return_value=object()),
+    ):
+        result = await semantic_query_parser_node(
+            {"user_message": "Số đơn hàng ở miền Bắc không bị hủy", "parser_catalog": catalog}
+        )
+    assert result["interpretation"]["status"] == "resolved"
+
+
+@pytest.mark.asyncio
 async def test_duplicate_same_name_column_narrows_to_metric_base_entity() -> None:
     catalog = copy.deepcopy(SYNTHETIC_CATALOG)
     catalog["filter_columns"][1]["table_name"] = "orders"

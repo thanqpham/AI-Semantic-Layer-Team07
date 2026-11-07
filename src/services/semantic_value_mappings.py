@@ -135,16 +135,24 @@ def approved_mapping_candidates(value: Any, column: dict[str, Any]) -> list[Any]
     )
     candidates: dict[str, Any] = {}
     if isinstance(value, str):
-        for key in (normalize_business_label(value), _stripped_label_key(value, column)):
+        exact_key = normalize_business_label(value)
+        stripped_key = _stripped_label_key(value, column)
+        for mapping in mappings:
+            keys = {
+                normalize_business_label(mapping[field])
+                for field in ("db_value", "business_value")
+                if isinstance(mapping[field], str)
+            }
+            if exact_key in keys:
+                candidates[scalar_value_key(mapping["db_value"])] = mapping["db_value"]
+        if not candidates and len(stripped_key) >= 3:
             for mapping in mappings:
-                if key in {
-                    normalize_business_label(mapping[field])
-                    for field in ("db_value", "business_value")
-                    if isinstance(mapping[field], str)
-                }:
+                bval = mapping.get("business_value")
+                m_keys = {normalize_business_label(bval)} if isinstance(bval, str) else set()
+                if isinstance(bval, str) and re.match(r"^(?:da|bi|dang)\s+", normalize_business_label(bval)):
+                    m_keys.add(_stripped_label_key(bval, column))
+                if stripped_key in m_keys:
                     candidates[scalar_value_key(mapping["db_value"])] = mapping["db_value"]
-            if candidates:
-                break
     else:
         value_key = scalar_value_key(value)
         candidates = {
@@ -158,6 +166,23 @@ def approved_mapping_candidates(value: Any, column: dict[str, Any]) -> list[Any]
     return list(candidates.values())
 
 
+def _status_label_variants(business_value: str) -> list[str]:
+    """Generate natural-language status prefix variants for labels starting with Đã/Bị/Đang."""
+    normalized = normalize_business_label(business_value)
+    match = re.match(r"^(?:da|bi|dang)\s+(.+)$", normalized)
+    if not match:
+        return [business_value]
+    stem = match.group(1).strip()
+    if len(stem) < 3:
+        return [business_value]
+    variants = [business_value, f"da {stem}", f"bi {stem}", f"dang {stem}"]
+    if " " in stem:
+        variants.append(stem)
+    else:
+        variants.extend([f"don {stem}", f"trang thai {stem}"])
+    return variants
+
+
 def mentioned_business_values(column: dict[str, Any]) -> list[tuple[str, Any]]:
     """List labels and raw values usable as evidence for this catalog column."""
     pairs = [(sample, sample) for sample in column.get("allowed_values", []) if isinstance(sample, str)]
@@ -165,7 +190,8 @@ def mentioned_business_values(column: dict[str, Any]) -> list[tuple[str, Any]]:
         column.get("_approved_mappings", column.get("allowed_value_mappings", [])),
         column.get("review_status", "approved"),
     ):
-        pairs.append((mapping["business_value"], mapping["db_value"]))
+        for variant in _status_label_variants(mapping["business_value"]):
+            pairs.append((variant, mapping["db_value"]))
         pairs.append((str(mapping["db_value"]), mapping["db_value"]))
         pairs.extend((sample, mapping["db_value"]) for sample in sample_value_candidates(mapping["db_value"], column))
     return pairs

@@ -490,11 +490,28 @@ def _mentions_grouping(message: str, prior: str) -> bool:
     return bool(re.search(r"\b(theo|tung|moi|nhom|phan|so sanh|top)\b", text))
 
 
+_DIMENSION_ALIASES: dict[str, tuple[str, ...]] = {
+    "region": ("khu vuc", "vung"),
+    "status": ("trang thai",),
+    "order_status": ("trang thai don hang", "trang thai"),
+    "channel": ("kenh ban hang", "kenh"),
+    "customer_id": ("khach hang",),
+    "customer_name": ("ten khach hang", "khach hang"),
+    "customer_segment": ("nhom khach hang", "phan khuc khach hang", "phan khuc"),
+    "product_id": ("san pham",),
+    "product_name": ("ten san pham",),
+    "category_name": ("danh muc san pham", "danh muc"),
+    "traffic_source": ("nguon truy cap",),
+    "device_type": ("loai thiet bi", "thiet bi"),
+    "payment_method": ("phuong thuc thanh toan", "hinh thuc thanh toan"),
+}
+
+
 def _requests_grouping(text: str) -> bool:
     """Recognize common explicit requests to break results down by a dimension."""
     return bool(
         re.search(
-            r"\btop\s+\d+\b|\btheo\s+(?:tung\s+|moi\s+)?(?:khu vuc|san pham|kenh|khach hang|trang thai|chi nhanh|thang|ngay|quy)\b|\btheo\s+nam\b(?!\s+\d)",
+            r"\btop\s+\d+\b|\btheo\s+(?:tung\s+|moi\s+)?(?:khu vuc|ten san pham|danh muc|san pham|kenh|khach hang|nhom khach hang|phan khuc|trang thai|nguon truy cap|loai thiet bi|thiet bi|phuong thuc thanh toan|chi nhanh|thang|ngay|quy)\b|\btheo\s+nam\b(?!\s+\d)",
             text,
         )
     )
@@ -505,19 +522,12 @@ def _dimensions_match(spec: SemanticQuerySpec, catalog: dict[str, Any], text: st
     columns = {item["column_id"]: item for item in catalog.get("dimensions", [])}
     grains = {"day": "ngay", "week": "tuan", "month": "thang", "quarter": "quy", "year": "nam"}
     requested = re.search(r"\btheo\s+(?:tung\s+|moi\s+)?(ngay|tuan|thang|quy|nam)\b", normalized_text(text))
-    aliases = {
-        "region": ("khu vuc", "vung"),
-        "status": ("trang thai",),
-        "channel": ("kenh",),
-        "customer_id": ("khach hang",),
-        "product_id": ("san pham",),
-    }
     for dimension in spec.dimensions:
         column = columns.get(dimension.column_id, {})
         if requested and _is_temporal(column) and grains.get(dimension.time_grain) != requested.group(1):
             return False
         name = str(column.get("column_name", "")).lower()
-        labels = [name.replace("_", " "), str(column.get("business_name", "")), *aliases.get(name, ())]
+        labels = [name.replace("_", " "), str(column.get("business_name", "")), *_DIMENSION_ALIASES.get(name, ())]
         if dimension.time_grain in grains:
             labels.append(grains[dimension.time_grain])
         if not any(_contains_term(text, label) for label in labels if label):
@@ -530,22 +540,21 @@ def _requested_dimensions_covered(spec: SemanticQuerySpec, catalog: dict[str, An
     if not re.search(r"\btheo\b", text):
         return True
     grouping = re.split(r"\btheo\b", text, maxsplit=1)[1]
+    dims_by_id = {item["column_id"]: item for item in catalog.get("dimensions", [])}
     selected = {item.column_id for item in spec.dimensions}
+    selected_names = {str(dims_by_id.get(cid, {}).get("column_name", "")).lower() for cid in selected}
     metrics = {item["id"]: item for item in catalog.get("metrics", [])}
     compatible = set.intersection(*(set(metrics[mid].get("dimension_ids", [])) for mid in spec.metric_ids))
-    aliases = {
-        "region": ("khu vuc", "vung"),
-        "status": ("trang thai",),
-        "channel": ("kenh",),
-        "customer_id": ("khach hang",),
-        "product_id": ("san pham",),
-    }
     for column in catalog.get("dimensions", []):
         if column["column_id"] not in compatible:
             continue
         name = str(column.get("column_name", "")).lower()
-        labels = [name.replace("_", " "), str(column.get("business_name", "")), *aliases.get(name, ())]
-        if any(_contains_term(grouping, label) for label in labels if label) and column["column_id"] not in selected:
+        labels = [name.replace("_", " "), str(column.get("business_name", "")), *_DIMENSION_ALIASES.get(name, ())]
+        if (
+            any(_contains_term(grouping, label) for label in labels if label)
+            and column["column_id"] not in selected
+            and name not in selected_names
+        ):
             return False
     return True
 
@@ -635,17 +644,36 @@ def _mentioned_values_covered(
 
 
 def _disjunction_covered(text: str, mentioned: dict[str, set[tuple[int, str]]], spec: SemanticQuerySpec) -> bool:
-    if len(mentioned) <= 1 or not re.search(r"\b(hoac|or)\b", normalized_text(text)):
+    norm = normalize_business_label(text)
+    if len(mentioned) <= 1 or not re.search(r"\b(hoac|or)\b", norm):
         return True
-    return any(
-        item.operator == "in"
-        and all(
-            any((item.column_id, scalar_value_key(value)) in choices for value in item.value)
-            for choices in mentioned.values()
-        )
-        for item in spec.filters
-        if isinstance(item.value, list)
-    )
+    for match in re.finditer(r"\b(hoac|or)\b", norm):
+        left, right = norm[: match.start()], norm[match.end() :]
+        left_labels = [
+            (m.end(), label)
+            for label in mentioned
+            for m in re.finditer(r"(?<!\w)" + re.escape(label) + r"(?!\w)", left)
+        ]
+        right_labels = [
+            (m.start(), label)
+            for label in mentioned
+            for m in re.finditer(r"(?<!\w)" + re.escape(label) + r"(?!\w)", right)
+        ]
+        if not left_labels or not right_labels:
+            return False
+        _, l_label = max(left_labels, key=lambda x: (x[0], len(x[1])))
+        _, r_label = min(right_labels, key=lambda x: (x[0], -len(x[1])))
+        common_cols = {c for c, _ in mentioned[l_label]} & {c for c, _ in mentioned[r_label]}
+        if not common_cols or not any(
+            item.operator == "in"
+            and item.column_id in common_cols
+            and isinstance(item.value, list)
+            and any((item.column_id, scalar_value_key(v)) in mentioned[l_label] for v in item.value)
+            and any((item.column_id, scalar_value_key(v)) in mentioned[r_label] for v in item.value)
+            for item in spec.filters
+        ):
+            return False
+    return True
 
 
 def _contains_term(text: str, value: str) -> bool:

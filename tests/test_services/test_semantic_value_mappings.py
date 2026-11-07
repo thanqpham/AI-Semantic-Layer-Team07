@@ -91,6 +91,102 @@ def test_leading_grammatical_or_column_prefix_resolves_without_matching_suffix_v
     assert approved_mapping_candidates("hoàn tất một phần", column) == []
 
 
+def test_metric_technical_review_resolves_approved_business_mapping_filter_values() -> None:
+    from src.services.metric_review_validation import technical_review
+
+    schema = {
+        "tables": [
+            {
+                "id": 1,
+                "table_name": "orders",
+                "columns": [
+                    {"id": 10, "column_name": "id", "data_type": "INT", "is_primary_key": True, "is_nullable": False},
+                    {
+                        "id": 11,
+                        "column_name": "amount",
+                        "data_type": "DECIMAL(10,2)",
+                        "is_primary_key": False,
+                        "is_nullable": False,
+                    },
+                    {
+                        "id": 12,
+                        "column_name": "region",
+                        "business_name": "Khu vực",
+                        "data_type": "VARCHAR(32)",
+                        "is_primary_key": False,
+                        "is_nullable": False,
+                        "review_status": "approved",
+                        "allowed_values": None,
+                        "allowed_values_complete": True,
+                        "allowed_value_mappings": [
+                            {"db_value": "North", "business_value": "Miền Bắc", "status": "approved"},
+                            {"db_value": "South", "business_value": "Miền Nam", "status": "approved"},
+                        ],
+                    },
+                ],
+            }
+        ],
+        "relationships": [],
+    }
+    raw = {
+        "metric": {
+            "name": "Doanh thu khu vực miền Bắc",
+            "base_entity": "orders",
+            "formula": {"function": "SUM", "expression": "amount"},
+            "filters": [{"field": "region", "operator": "eq", "value": "khu vực miền Bắc"}],
+        }
+    }
+    definition, review = technical_review(raw, {"schema": schema})
+    assert review is None
+    assert definition is not None
+    assert definition.metric.filters[0].value == "North"
+
+
+def test_metric_technical_review_rejects_ambiguous_business_mapping_filter_value() -> None:
+    from src.services.metric_review_validation import technical_review
+
+    schema = {
+        "tables": [
+            {
+                "id": 1,
+                "table_name": "orders",
+                "columns": [
+                    {"id": 10, "column_name": "id", "data_type": "INT", "is_primary_key": True, "is_nullable": False},
+                    {
+                        "id": 12,
+                        "column_name": "region",
+                        "business_name": "Khu vực",
+                        "data_type": "VARCHAR(32)",
+                        "is_primary_key": False,
+                        "is_nullable": False,
+                        "review_status": "approved",
+                        "allowed_values": None,
+                        "allowed_values_complete": True,
+                        "allowed_value_mappings": [
+                            {"db_value": "north_1", "business_value": "Miền Bắc", "status": "approved"},
+                            {"db_value": "north_2", "business_value": "MIỀN BẮC!", "status": "approved"},
+                        ],
+                    },
+                ],
+            }
+        ],
+        "relationships": [],
+    }
+    raw = {
+        "metric": {
+            "name": "Số đơn miền Bắc",
+            "base_entity": "orders",
+            "formula": {"function": "COUNT_DISTINCT", "expression": "id"},
+            "filters": [{"field": "region", "operator": "eq", "value": "Miền Bắc"}],
+        }
+    }
+    definition, review = technical_review(raw, {"schema": schema})
+    assert definition is None
+    assert review is not None
+    assert review.status == "needs_revision"
+    assert "mơ hồ" in review.issues[0].evidence
+
+
 def test_mapping_fingerprint_changes_without_exposing_mapping_content() -> None:
     from src.services.semantic_value_mappings import mapping_metadata_fingerprint
 
