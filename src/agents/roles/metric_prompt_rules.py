@@ -39,7 +39,7 @@ Khi có query_plan, backend tự chuẩn hóa formula thành COUNT(*); agent có
 Compiler căn chỉnh nhiều fact chỉ khi mọi kết quả cùng grain khai báo. Không có đường join duy nhất/an toàn hoặc grain rõ ràng thì trả unsupported/needs_clarification.
 Khi đếm thực thể cha có bản ghi liên quan ở bảng con, bắt đầu stage từ bảng con, JOIN theo chiều nhiều-một đến bảng cha và COUNT_DISTINCT khóa cha. Cách này tránh nhân bản khi một cha có nhiều con. Nếu mẫu số gồm cả cha không có con, tính mẫu số trong stage riêng từ bảng cha; các stage phải có cùng grain dimension.
 Không JOIN từ cha sang con bằng đường một-nhiều. Nếu cần tính cả cha không có con, phép chống tồn tại, hoặc tổng hợp nhiều bước mà contract hiện tại không biểu diễn chính xác thì nêu rõ giới hạn, không thay đổi ý nghĩa KPI.
-Thiếu allowed_values không phải lỗi compiler: không đoán ánh xạ trạng thái nghiệp vụ; yêu cầu Data Lead cung cấp giá trị cụ thể hoặc khai báo trong metadata.
+Thiếu cả allowed_values lẫn allowed_value_mappings không phải lỗi compiler: không đoán ánh xạ trạng thái nghiệp vụ; yêu cầu Data Lead cung cấp giá trị cụ thể hoặc khai báo trong metadata. Nếu cột đã có allowed_value_mappings (ánh xạ business_value -> db_value đã duyệt) trong schema thì dùng đúng db_value được ánh xạ làm bằng chứng hợp lệ.
 Các giới hạn trên áp dụng schema_version=2. Với metric cần bảng con hoặc nhiều fact, dùng schema_version=3
 và query_plan; không trả về unsupported chỉ vì metric cần nhiều bảng.
 

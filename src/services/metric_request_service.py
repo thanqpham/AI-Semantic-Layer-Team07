@@ -46,6 +46,7 @@ async def create_metric_request(
     db.add(request)
     await db.flush()
     proposal.request_id = request.id
+    proposal.rejection_reason = None
     recipients = await _notify_data_leads(db, db_id, request)
     await db.commit()
     await db.refresh(request)
@@ -123,6 +124,7 @@ async def approve_metric_request(
         proposal_owner_id=proposal.created_by,
     )
     await approve_metric(db, metric.id, reviewer_id)
+    proposal.rejection_reason = None
     request.definition = chosen.model_dump(mode="json")
     request.status, request.reviewed_by, request.review_note = "approved", reviewer_id, note
     request.metric_id, request.reviewed_at = metric.id, datetime.now(UTC)
