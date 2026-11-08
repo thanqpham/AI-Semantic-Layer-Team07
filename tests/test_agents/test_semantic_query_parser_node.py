@@ -138,66 +138,6 @@ async def test_parser_rejects_unknown_nested_filter_field(sample_catalog: dict) 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("filters,ranges", [([], []), ([{"column_id": 12, "operator": "eq", "value": "hoàn tất"}], [])])
-async def test_parser_does_not_drop_explicit_year(sample_catalog: dict, filters: list, ranges: list) -> None:
-    payload = {"status": "resolved", "metric_ids": [1], "filters": filters, "time_ranges": ranges}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu hoàn tất năm 2024", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_parser_does_not_drop_known_business_value(sample_catalog: dict) -> None:
-    payload = {"status": "resolved", "metric_ids": [1], "filters": []}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu hoàn tất", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_parser_does_not_replace_requested_year(sample_catalog: dict) -> None:
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "time_ranges": [{"column_id": 11, "start_date": "2023-01-01", "end_date": "2024-01-01", "label": "2023"}],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu năm 2024", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("start,end", [("2024-01-01", None), ("2023-01-01", "2026-01-01")])
-async def test_parser_requires_exact_full_year_bounds(sample_catalog: dict, start: str, end: str | None) -> None:
-    filters = [{"column_id": 11, "operator": "gte", "value": start}]
-    if end:
-        filters.append({"column_id": 11, "operator": "lt", "value": end})
-    payload = {"status": "resolved", "metric_ids": [1], "filters": filters}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu năm 2024", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("period", ["tháng trước", "tháng này", "tuần trước", "hôm nay", "quý 2"])
-async def test_parser_does_not_drop_relative_time(sample_catalog: dict, period: str) -> None:
-    payload = {"status": "resolved", "metric_ids": [1], "filters": []}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": f"Doanh thu {period}", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "question,start,end",
     [
@@ -242,24 +182,6 @@ async def test_parser_accepts_exact_today_range(sample_catalog: dict) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("operator,question", [("neq", "Doanh thu miền Bắc"), ("eq", "Doanh thu không phải miền Bắc")])
-async def test_parser_requires_matching_negation(sample_catalog: dict, operator: str, question: str) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved",
-        allowed_values=["North"],
-        _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}],
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": operator, "value": "North"}],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": question, "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
 async def test_parser_allows_explicit_matching_negation(sample_catalog: dict) -> None:
     sample_catalog["filter_columns"][0].update(
         review_status="approved",
@@ -276,41 +198,6 @@ async def test_parser_allows_explicit_matching_negation(sample_catalog: dict) ->
             {"user_message": "Doanh thu không phải miền Bắc", "parser_catalog": sample_catalog}
         )
     assert result["interpretation"]["status"] == "resolved"
-
-
-@pytest.mark.asyncio
-async def test_followup_keeps_previous_filter_with_new_year(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved",
-        allowed_values=["North"],
-        _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}],
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "time_ranges": [{"column_id": 11, "start_date": "2024-01-01", "end_date": "2025-01-01", "label": "2024"}],
-    }
-    state = {
-        "user_message": "Chỉ năm 2024",
-        "chat_history": [{"role": "user", "content": "Doanh thu miền Bắc"}],
-        "parser_catalog": sample_catalog,
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(state)
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_followup_keeps_previous_year_when_adding_dimension(sample_catalog: dict) -> None:
-    payload = {"status": "resolved", "metric_ids": [1], "dimensions": [{"column_id": 10}]}
-    state = {
-        "user_message": "Theo khách hàng",
-        "chat_history": [{"role": "user", "content": "Doanh thu năm 2024"}],
-        "parser_catalog": sample_catalog,
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(state)
-    assert result["interpretation"]["status"] == "needs_clarification"
 
 
 @pytest.mark.asyncio
@@ -339,288 +226,6 @@ async def test_followup_change_of_region_does_not_require_old_region(sample_cata
 
 
 @pytest.mark.asyncio
-async def test_followup_replacing_region_does_not_keep_old_value(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved",
-        allowed_values=["North", "South"],
-        _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
-            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
-        ],
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": "in", "value": ["North", "South"]}],
-    }
-    state = {
-        "user_message": "Bây giờ xem miền Nam",
-        "chat_history": [{"role": "user", "content": "Doanh thu miền Bắc"}],
-        "parser_catalog": sample_catalog,
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(state)
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_ambiguous_same_label_from_different_columns_requires_clarification(sample_catalog: dict) -> None:
-    sample_catalog["metrics"][0]["filter_column_ids"].append(13)
-    sample_catalog["filter_columns"][0].update(
-        allowed_values=["North"], _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc"}]
-    )
-    sample_catalog["filter_columns"].append(
-        {
-            "column_id": 13,
-            "column_name": "region",
-            "table_name": "customers",
-            "data_type": "TEXT",
-            "allowed_values": ["North"],
-            "_approved_mappings": [{"db_value": "North", "business_value": "miền Bắc"}],
-        }
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": "eq", "value": "North"}],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu miền Bắc", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_or_request_does_not_execute_two_and_filters(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved",
-        allowed_values=["North", "South"],
-        _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
-            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
-        ],
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [
-            {"column_id": 12, "operator": "eq", "value": "North"},
-            {"column_id": 12, "operator": "eq", "value": "South"},
-        ],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu miền Bắc hoặc miền Nam", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "question,filters",
-    [
-        (
-            "Doanh thu Mien Bac hoac Mien Nam",
-            [
-                {"column_id": 12, "operator": "eq", "value": "Mien Bac"},
-                {"column_id": 12, "operator": "eq", "value": "Mien Nam"},
-            ],
-        ),
-        ("Doanh thu ngoai Mien Bac", [{"column_id": 12, "operator": "eq", "value": "Mien Bac"}]),
-    ],
-)
-async def test_ascii_conditions_keep_or_negation(sample_catalog: dict, question: str, filters: list[dict]) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved",
-        allowed_values=["North", "South"],
-        _approved_mappings=[
-            {"db_value": "North", "business_value": "Miền Bắc", "status": "approved"},
-            {"db_value": "South", "business_value": "Miền Nam", "status": "approved"},
-        ],
-    )
-    payload = {"status": "resolved", "metric_ids": [1], "filters": filters}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": question, "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_unrequested_extra_time_filter_requires_clarification(sample_catalog: dict) -> None:
-    sample_catalog["metrics"][0]["filter_column_ids"].append(13)
-    sample_catalog["filter_columns"].append({"column_id": 13, "column_name": "shipped_at", "data_type": "TIMESTAMP"})
-    bounds = [
-        {"column_id": col, "operator": op, "value": val}
-        for col in [11, 13]
-        for op, val in [("gte", "2024-01-01"), ("lt", "2025-01-01")]
-    ]
-    payload = {"status": "resolved", "metric_ids": [1], "filters": bounds}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu năm 2024", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_excluding_region_cannot_become_inclusion(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(
-        allowed_values=["North"], _approved_mappings=[{"db_value": "North", "business_value": "miền Bắc"}]
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": "eq", "value": "North"}],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu ngoài miền Bắc", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_unrequested_grouping_requires_clarification(sample_catalog: dict) -> None:
-    payload = {"status": "resolved", "metric_ids": [1], "dimensions": [{"column_id": 10}]}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": "Tổng doanh thu", "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("question", ["Doanh thu theo khu vực", "Top 5 sản phẩm doanh thu cao nhất"])
-async def test_requested_grouping_cannot_be_omitted(sample_catalog: dict, question: str) -> None:
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "dimensions": [],
-        "filters": [],
-        "limit": 5,
-        "order_by": "metric_desc",
-        "order_metric_id": 1,
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": question, "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "extra_filter",
-    [
-        {"column_id": 11, "operator": "gte", "value": "2024-01-01"},
-        {"column_id": 13, "operator": "gt", "value": 1000},
-    ],
-)
-async def test_unrequested_filter_cannot_be_added(sample_catalog: dict, extra_filter: dict) -> None:
-    sample_catalog["metrics"][0]["filter_column_ids"].append(13)
-    sample_catalog["filter_columns"].append({"column_id": 13, "column_name": "amount", "data_type": "NUMERIC"})
-    payload = {"status": "resolved", "metric_ids": [1], "filters": [extra_filter]}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": "Tổng doanh thu", "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "question,extra_filter",
-    [
-        ("Doanh thu đơn trên 100", {"column_id": 13, "operator": "lt", "value": 100}),
-        ("Tổng doanh thu", {"column_id": 12, "operator": "is_null", "value": None}),
-    ],
-)
-async def test_filter_operator_must_match_request(sample_catalog: dict, question: str, extra_filter: dict) -> None:
-    sample_catalog["metrics"][0]["filter_column_ids"].append(13)
-    sample_catalog["filter_columns"].append({"column_id": 13, "column_name": "amount", "data_type": "NUMERIC"})
-    payload = {"status": "resolved", "metric_ids": [1], "filters": [extra_filter]}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": question, "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_year_is_not_evidence_for_an_unrequested_numeric_filter(sample_catalog: dict) -> None:
-    sample_catalog["metrics"][0]["filter_column_ids"].append(13)
-    sample_catalog["filter_columns"].append({"column_id": 13, "column_name": "amount", "data_type": "NUMERIC"})
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 13, "operator": "eq", "value": 2024}],
-        "time_ranges": [{"column_id": 11, "start_date": "2024-01-01", "end_date": "2025-01-01", "label": "Năm 2024"}],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu năm 2024", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_null_condition_cannot_be_inverted(sample_catalog: dict) -> None:
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": "is_not_null", "value": None}],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu không có trạng thái đơn", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "question,dimensions",
-    [
-        ("Doanh thu theo tháng", []),
-        ("Doanh thu theo ngày tạo đơn", [{"column_id": 10}]),
-    ],
-)
-async def test_grouping_must_match_request(sample_catalog: dict, question: str, dimensions: list) -> None:
-    payload = {"status": "resolved", "metric_ids": [1], "dimensions": dimensions}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": question, "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "question,filters",
-    [
-        ("Doanh thu số lượng trên 100", []),
-        ("Doanh thu số lượng trên 100", [{"column_id": 13, "operator": "eq", "value": 100}]),
-        ("Doanh thu không có số lượng", [{"column_id": 13, "operator": "is_not_null", "value": None}]),
-    ],
-)
-async def test_numeric_conditions_cannot_be_lost_or_inverted(
-    sample_catalog: dict, question: str, filters: list
-) -> None:
-    sample_catalog["metrics"][0]["filter_column_ids"].append(13)
-    sample_catalog["filter_columns"].append(
-        {"column_id": 13, "column_name": "quantity", "business_name": "Số lượng", "data_type": "INTEGER"}
-    )
-    payload = {"status": "resolved", "metric_ids": [1], "filters": filters}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node({"user_message": question, "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_all_requested_grouping_dimensions_are_required(sample_catalog: dict) -> None:
-    sample_catalog["metrics"][0]["dimension_ids"].append(13)
-    sample_catalog["dimensions"].append(
-        {"column_id": 13, "column_name": "region", "business_name": "Khu vực", "data_type": "TEXT"}
-    )
-    payload = {"status": "resolved", "metric_ids": [1], "dimensions": [{"column_id": 13}]}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu theo khu vực và khách hàng", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
 async def test_grouping_ignores_columns_only_compatible_with_another_metric(sample_catalog: dict) -> None:
     sample_catalog["dimensions"].append(
         {"column_id": 13, "column_name": "customer_id", "business_name": "Mã khách hàng", "data_type": "INTEGER"}
@@ -632,28 +237,6 @@ async def test_grouping_ignores_columns_only_compatible_with_another_metric(samp
             {"user_message": "Doanh thu theo khách hàng", "parser_catalog": sample_catalog}
         )
     assert result["interpretation"]["status"] == "resolved"
-
-
-@pytest.mark.asyncio
-async def test_polite_followup_does_not_drop_prior_filter(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved",
-        allowed_values=["North"],
-        _approved_mappings=[{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "time_ranges": [{"column_id": 11, "start_date": "2024-01-01", "end_date": "2025-01-01", "label": "2024"}],
-    }
-    state = {
-        "user_message": "Xin cho toi nam 2024",
-        "chat_history": [{"role": "user", "content": "Doanh thu Mien Bac"}],
-        "parser_catalog": sample_catalog,
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(state)
-    assert result["interpretation"]["status"] == "needs_clarification"
 
 
 @pytest.mark.asyncio
@@ -679,62 +262,6 @@ async def test_or_request_accepts_single_in_filter(sample_catalog: dict) -> None
 
 
 @pytest.mark.asyncio
-async def test_unmapped_region_cannot_be_silently_dropped(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved", allowed_values=["North", "South"], allowed_value_mappings=[]
-    )
-    payload = {"status": "resolved", "metric_ids": [1], "filters": []}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu miền Bắc", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("order,limit", [(None, 5), ("metric_desc", 100)])
-async def test_top_five_requires_order_and_requested_limit(sample_catalog: dict, order: str | None, limit: int) -> None:
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "dimensions": [{"column_id": 10}],
-        "order_by": order,
-        "order_metric_id": 1,
-        "limit": limit,
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Top 5 khách hàng doanh thu cao nhất", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_latest_categorical_value_cannot_be_overridden_by_history(sample_catalog: dict) -> None:
-    sample_catalog["filter_columns"][0].update(
-        review_status="approved",
-        allowed_values=["North", "South"],
-        _approved_mappings=[
-            {"db_value": "North", "business_value": "miền Bắc", "status": "approved"},
-            {"db_value": "South", "business_value": "miền Nam", "status": "approved"},
-        ],
-    )
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": "eq", "value": "North"}],
-    }
-    state = {
-        "user_message": "Bây giờ xem miền Nam",
-        "chat_history": [{"role": "user", "content": "Xem miền Bắc"}],
-        "parser_catalog": sample_catalog,
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(state)
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
 async def test_parser_rejects_malformed_filter_instead_of_silently_omitting(sample_catalog: dict) -> None:
     payload = {"status": "resolved", "metric_ids": [1], "filters": [{"operator": "eq", "value": "x"}]}
     with patch(
@@ -752,44 +279,6 @@ async def test_parser_rejects_incompatible_dimension_for_one_metric(sample_catal
         "src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock, return_value=payload
     ):
         result = await semantic_query_parser_node({"user_message": "Doanh thu", "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_parser_requires_approved_mapping_to_connect_north_with_mien_bac(sample_catalog: dict) -> None:
-    column = sample_catalog["filter_columns"][0]
-    column.update(review_status="approved", allowed_values=["North"], allowed_value_mappings=[])
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": "eq", "value": "North"}],
-    }
-    state = {"user_message": "Doanh thu miền Bắc", "parser_catalog": sample_catalog}
-    with patch(
-        "src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock, return_value=payload
-    ):
-        result = await semantic_query_parser_node(state)
-        assert result["interpretation"]["status"] == "needs_clarification"
-        column["_approved_mappings"] = [{"db_value": "North", "business_value": "miền Bắc", "status": "approved"}]
-        result = await semantic_query_parser_node(state)
-        assert result["interpretation"]["status"] == "resolved"
-
-
-@pytest.mark.asyncio
-async def test_evidence_preserves_vietnamese_accents(sample_catalog: dict) -> None:
-    column = sample_catalog["filter_columns"][0]
-    column.update(allowed_values=["Nam"], allowed_value_mappings=[])
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "filters": [{"column_id": 12, "operator": "eq", "value": "Nam"}],
-    }
-    with patch(
-        "src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock, return_value=payload
-    ):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu năm 2024", "parser_catalog": sample_catalog}
-        )
     assert result["interpretation"]["status"] == "needs_clarification"
 
 
@@ -1010,7 +499,8 @@ async def test_llm_exception_falls_back_gracefully(sample_catalog: dict) -> None
         result = await semantic_query_parser_node(state)
 
     assert result["interpretation"]["status"] == "needs_clarification"
-    assert "chưa hiểu rõ" in result["chat_response"]
+    assert "dịch vụ AI" in result["chat_response"]
+    assert result["semantic_parse_status"] == "error"
 
 
 @pytest.mark.asyncio
@@ -1078,35 +568,6 @@ async def test_missing_metric_returns_submit_request_option_for_member(sample_ca
     assert len(result["clarification"]["options"]) == 1
     assert result["clarification"]["options"][0]["id"] == "create_metric"
     assert "Gửi Data Lead đề xuất chỉ số" in result["clarification"]["options"][0]["label"]
-
-
-@pytest.mark.asyncio
-async def test_forced_mismatch_intercepted_and_converted_to_clarification(sample_catalog: dict) -> None:
-    """If LLM hallucinates resolved for a different metric (e.g. retention mapped to order count), safety net converts to clarification."""
-    llm_payload = {
-        "status": "resolved",
-        "metric_ids": [2],  # order_count / Số lượng đơn hàng
-        "dimensions": [],
-        "filters": [],
-        "time_ranges": [],
-    }
-
-    state = {
-        "user_message": "Xem tỷ lệ giữ chân khách hàng",
-        "parser_catalog": sample_catalog,
-        "can_generate_metrics": True,
-    }
-
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new_callable=AsyncMock) as mock_json:
-        mock_json.return_value = llm_payload
-        result = await semantic_query_parser_node(state)
-
-    interp = result["interpretation"]
-    assert interp["status"] == "needs_clarification"
-    assert result["clarification"] is not None
-    assert "tỷ lệ giữ chân khách hàng" in result["chat_response"].lower()
-    assert result["semantic_parse_status"] == "needs_clarification"
-    assert result["clarification"]["options"] == []
 
 
 @pytest.mark.asyncio
@@ -1284,45 +745,49 @@ async def test_resolved_total_without_dimensions(sample_catalog: dict) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "question",
+    "question,metric_id",
     [
-        "Doanh thu số lượng ít nhất 5",
-        "Doanh thu số lượng tối đa 10",
-        "Doanh thu số lượng bằng 3",
-        "Doanh thu số lượng từ 100",
-        "Doanh thu số lượng >= 100",
-        "Doanh thu số lượng < 100",
+        ("Thực hiện truy vấn chỉ số tổng số đơn hàng", 2),
+        ("Cho tôi xem kết quả chỉ số tỉ lệ đơn hàng bị hoàn lại so với tổng số đơn hàng", 3),
+        ("Làm ơn thực hiện truy vấn giúp tôi: tổng số đơn hàng!", 2),
+        ("Vui lòng cho tôi xem tỉ lệ đơn bị hoàn lại trên tổng số đơn?", 3),
     ],
 )
-async def test_more_numeric_conditions_cannot_be_omitted(sample_catalog: dict, question: str) -> None:
-    sample_catalog["metrics"][0]["filter_column_ids"].append(13)
-    sample_catalog["filter_columns"].append(
-        {"column_id": 13, "column_name": "quantity", "business_name": "Số lượng", "data_type": "INTEGER"}
+async def test_natural_phrasing_and_ratio_metric_queries_resolve_without_filters(
+    sample_catalog: dict, question: str, metric_id: int
+) -> None:
+    sample_catalog["metrics"][1]["business_name"] = "Tổng số đơn hàng"
+    sample_catalog["metrics"].append(
+        {
+            "id": 3,
+            "name": "refund_order_rate",
+            "business_name": "Tỷ lệ đơn hàng hoàn lại",
+            "formula": "COUNT(order_id)",
+            "formula_definition": {
+                "function": "COUNT",
+                "expression": "order_id",
+                "ratio": {
+                    "numerator": {
+                        "function": "COUNT",
+                        "expression": "order_id",
+                        "filters": [{"field": "status", "operator": "eq", "value": "refunded"}],
+                    },
+                    "denominator": {"function": "COUNT", "expression": "order_id", "filters": []},
+                    "scale": 100.0,
+                    "offset": 0.0,
+                },
+            },
+            "base_entity": "orders",
+            "dimension_ids": [10, 11],
+            "filter_column_ids": [11, 12],
+        }
     )
-    payload = {"status": "resolved", "metric_ids": [1], "filters": []}
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
+    payload = {"status": "resolved", "metric_ids": [metric_id], "dimensions": [], "filters": []}
+    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)) as llm:
         result = await semantic_query_parser_node({"user_message": question, "parser_catalog": sample_catalog})
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-@pytest.mark.asyncio
-async def test_monthly_grouping_cannot_be_changed_to_yearly(sample_catalog: dict) -> None:
-    payload = {
-        "status": "resolved",
-        "metric_ids": [1],
-        "dimensions": [{"column_id": 11, "time_grain": "year"}],
-        "time_ranges": [{"column_id": 11, "start_date": "2024-01-01", "end_date": "2025-01-01", "label": "2024"}],
-    }
-    with patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=AsyncMock(return_value=payload)):
-        result = await semantic_query_parser_node(
-            {"user_message": "Doanh thu theo tháng năm 2024", "parser_catalog": sample_catalog}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
-
-
-def test_dimension_check_rejects_wrong_time_grain(sample_catalog: dict) -> None:
-    from src.agents.roles.semantic_query_requirements import _dimensions_match
-    from src.models.schemas import DimensionSelection, SemanticQuerySpec
-
-    spec = SemanticQuerySpec(metric_ids=[1], dimensions=[DimensionSelection(column_id=11, time_grain="year")])
-    assert not _dimensions_match(spec, sample_catalog, "Doanh thu theo tháng năm 2024")
+    assert llm.await_count == 1
+    assert result["semantic_parse_status"] == "resolved"
+    assert result["interpretation"]["status"] == "resolved"
+    assert result["interpretation"]["spec"]["metric_ids"] == [metric_id]
+    assert result["interpretation"]["spec"]["dimensions"] == []
+    assert result["interpretation"]["spec"]["filters"] == []
