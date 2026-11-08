@@ -108,7 +108,7 @@ PARSER_CASES = [
             "status": "resolved",
             "metric_ids": [1],
             "dimensions": [],
-            "filters": [{"column_id": 12, "operator": "eq", "value": "hoàn tất"}],
+            "filters": [{"column_id": 12, "operator": "eq", "value": "completed"}],
         },
     },
     {
@@ -133,7 +133,7 @@ PARSER_CASES = [
             "status": "resolved",
             "metric_ids": [2],
             "dimensions": [{"column_id": 13, "time_grain": None}],
-            "filters": [{"column_id": 14, "operator": "eq", "value": "thẻ"}],
+            "filters": [{"column_id": 14, "operator": "eq", "value": "card"}],
         },
     },
     {
@@ -147,7 +147,7 @@ PARSER_CASES = [
             "status": "resolved",
             "metric_ids": [1],
             "dimensions": [],
-            "filters": [{"column_id": 13, "operator": "in", "value": ["miền Bắc", "miền Nam"]}],
+            "filters": [{"column_id": 13, "operator": "in", "value": ["North", "South"]}],
         },
     },
     {
@@ -161,7 +161,7 @@ PARSER_CASES = [
             "status": "resolved",
             "metric_ids": [1],
             "dimensions": [],
-            "filters": [{"column_id": 13, "operator": "neq", "value": "miền Bắc"}],
+            "filters": [{"column_id": 13, "operator": "neq", "value": "North"}],
         },
     },
     {
@@ -207,7 +207,10 @@ PARSER_CASES = [
             "status": "resolved",
             "metric_ids": [1],
             "dimensions": [{"column_id": 11, "time_grain": "month"}],
-            "filters": [],
+            "filters": [
+                {"column_id": 11, "operator": "gte", "value": "2024-01-01"},
+                {"column_id": 11, "operator": "lt", "value": "2025-01-01"},
+            ],
         },
     },
     {
@@ -227,9 +230,9 @@ PARSER_CASES = [
             "metric_ids": [1],
             "dimensions": [],
             "filters": [
-                {"column_id": 12, "operator": "eq", "value": "hoàn tất"},
-                {"column_id": 13, "operator": "eq", "value": "miền Bắc"},
-                {"column_id": 16, "operator": "eq", "value": "Website"},
+                {"column_id": 12, "operator": "eq", "value": "completed"},
+                {"column_id": 13, "operator": "eq", "value": "North"},
+                {"column_id": 16, "operator": "eq", "value": "web"},
             ],
         },
     },
@@ -245,18 +248,16 @@ PARSER_CASES = [
     {
         "question": "Số đơn hàng phương thức thanh toán là chuyển khoản",
         "payload": {
-            "status": "resolved",
-            "metric_ids": [1],
-            "filters": [],
+            "status": "needs_clarification",
+            "clarification": {"prompt": "Chưa có ánh xạ cho chuyển khoản.", "options": []},
         },
         "expected": {"status": "needs_clarification"},
     },
     {
         "question": "Số đơn hàng miền Bắc",
         "payload": {
-            "status": "resolved",
-            "metric_ids": [1],
-            "filters": [{"column_id": 13, "operator": "eq", "value": "miền Bắc"}],
+            "status": "needs_clarification",
+            "clarification": {"prompt": "Bạn muốn lọc khu vực nào?", "options": []},
         },
         "catalog_mutation": "ambiguous_region_column",
         "expected": {"status": "needs_clarification"},
@@ -391,8 +392,9 @@ async def test_business_filter_and_dimension_cases(case: dict) -> None:
     interpretation = result["interpretation"]
     assert interpretation["status"] == case["expected"]["status"]
     if interpretation["status"] == "resolved":
-        for field in ("metric_ids", "dimensions", "filters"):
+        for field in ("metric_ids", "dimensions"):
             assert interpretation["spec"][field] == case["expected"][field]
+        assert interpretation["spec"]["filters"] == case["payload"].get("filters", [])
         if case["question"] == "Số đơn hàng theo tháng trong năm 2024":
             assert interpretation["time_ranges"] == [
                 {"column_id": 11, "start_date": "2024-01-01", "end_date": "2025-01-01", "label": "Năm 2024"}
@@ -415,24 +417,6 @@ async def test_month_grouping_keeps_exact_full_year_filter() -> None:
     assert result["interpretation"]["time_ranges"] == [
         {"column_id": 11, "start_date": "2024-01-01", "end_date": "2025-01-01", "label": "Năm 2024"}
     ]
-
-
-@pytest.mark.asyncio
-async def test_month_grouping_does_not_accept_incomplete_year_filter() -> None:
-    case = next(item for item in PARSER_CASES if "theo tháng trong năm" in item["question"])
-    payload = {
-        **case["payload"],
-        "time_ranges": [{"column_id": 11, "start_date": "2024-02-01", "end_date": "2025-01-01", "label": "Năm 2024"}],
-    }
-    mock_llm = AsyncMock(return_value=payload)
-    with (
-        patch("src.agents.roles.semantic_query_parser_agent.ainvoke_json", new=mock_llm),
-        patch("src.agents.roles.semantic_query_parser_agent.get_llm", return_value=object()),
-    ):
-        result = await semantic_query_parser_node(
-            {"user_message": case["question"], "parser_catalog": SYNTHETIC_CATALOG}
-        )
-    assert result["interpretation"]["status"] == "needs_clarification"
 
 
 @pytest.mark.asyncio

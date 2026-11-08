@@ -112,6 +112,27 @@ def test_catalog_metric_carries_private_definition_fingerprint() -> None:
     assert first["_definition_fingerprint"] != second["_definition_fingerprint"]
 
 
+def test_catalog_preserves_ratio_definition_for_semantic_parser() -> None:
+    formula = {"function": "COUNT", "expression": "id", "ratio": {"scale": 100, "numerator": {"filters": []}}}
+    metric = SimpleNamespace(
+        id=1, name="Rate", base_entity="orders", version=1, definition={"metric": {"formula": formula}}
+    )
+    assert _format_metric_item(metric)["formula_definition"] == formula
+
+
+def test_normalizing_time_range_twice_does_not_duplicate_filters(catalog_fixture: dict) -> None:
+    interpretation = SemanticQueryInterpretation(
+        status="resolved",
+        spec=SemanticQuerySpec(metric_ids=[1]),
+        time_ranges=[SemanticTimeRange(column_id=11, start_date="2026-05-08", end_date="2026-11-09", label="6 tháng")],
+    )
+    first = normalize_interpretation(interpretation, catalog_fixture)
+    second = normalize_interpretation(first, catalog_fixture)
+    assert first.status == second.status == "resolved"
+    assert len(first.spec.filters) == 2
+    assert second.spec == first.spec
+
+
 @pytest.mark.asyncio
 async def test_filter_catalog_includes_all_approved_mappings_without_sample_eligibility() -> None:
     mappings = [

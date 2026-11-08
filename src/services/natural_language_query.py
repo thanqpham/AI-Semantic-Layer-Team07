@@ -47,6 +47,7 @@ from src.services.relationship_runtime import (
     valid_pairs,
 )
 from src.services.semantic_compile_error import SemanticCompileError
+from src.services.semantic_query_parser_context import catalog_capacity_error
 from src.services.semantic_query_values import _normalize_filter_values
 from src.services.semantic_value_mappings import mapping_metadata_fingerprint, read_approved_business_mappings
 
@@ -135,6 +136,7 @@ def _format_metric_item(metric: SemanticMetricModel) -> dict[str, Any]:
         ).hexdigest(),
         "business_name": metric_body.get("business_name") or metric.name,
         "formula": formula_str,
+        "formula_definition": formula_obj,
         "base_entity": metric_body.get("base_entity") or metric.base_entity,
         "filters": metric_body.get("filters", []),
     }
@@ -286,10 +288,7 @@ def _ensure_catalog_mapping_capacity(catalog: dict[str, Any]) -> str | None:
     """Reject oversized prompt catalogs instead of silently omitting approved mappings."""
     if any(column.get("_mapping_overflow") for column in catalog.get("filter_columns", [])):
         return "Một cột có hơn 100 ánh xạ đã duyệt; hãy yêu cầu quản lý ánh xạ chia phạm vi trước khi truy vấn."
-    serialized = json.dumps(catalog, ensure_ascii=False, default=str)
-    if len(serialized) > 100_000:
-        return "Danh mục ánh xạ nghiệp vụ quá lớn để xử lý đầy đủ. Hãy thu hẹp metric hoặc phạm vi bảng."
-    return None
+    return catalog_capacity_error(catalog)
 
 
 def _approved_mapping_prompt_catalog(catalog: dict[str, Any]) -> dict[str, Any]:
@@ -452,8 +451,10 @@ def _merge_time_ranges(
     """Convert half-open [start_date, end_date) time ranges to gte and lt filters."""
     merged = list(filters)
     for tr in time_ranges:
-        merged.append(SemanticQueryFilter(column_id=tr.column_id, operator="gte", value=tr.start_date))
-        merged.append(SemanticQueryFilter(column_id=tr.column_id, operator="lt", value=tr.end_date))
+        for operator, value in (("gte", tr.start_date), ("lt", tr.end_date)):
+            item = SemanticQueryFilter(column_id=tr.column_id, operator=operator, value=value)
+            if item not in merged:
+                merged.append(item)
     return merged
 
 
