@@ -2,6 +2,7 @@
 
 PROVIDERS = {
     "openrouter": ("OpenRouter", "https://openrouter.ai/api/v1", "openai"),
+    "shopaikey": ("ShopAIKey", "https://api.shopaikey.com/v1", "openai"),
     "gemini": ("Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "openai"),
     "openai": ("OpenAI", "https://api.openai.com/v1", "openai"),
     "anthropic": ("Anthropic (Claude)", "https://api.anthropic.com", "anthropic"),
@@ -16,6 +17,6 @@ PROVIDERS = {
     "cerebras": ("Cerebras", "https://api.cerebras.ai/v1", "openai"),
     "qwen": ("Alibaba Qwen (DashScope)", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "openai"),
     "moonshot": ("Moonshot AI (Kimi)", "https://api.moonshot.ai/v1", "openai"),
-        "cohere": ("Cohere", "https://api.cohere.com/compatibility/v1", "openai"),
+    "cohere": ("Cohere", "https://api.cohere.com/compatibility/v1", "openai"),
     "glm": ("Zhipu AI (GLM)", "https://open.bigmodel.cn/api/paas/v4", "openai"),
 }

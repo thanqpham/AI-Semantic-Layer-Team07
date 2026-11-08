@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.models.db_base import Base
 
 Provider = Literal[
+    "shopaikey",
     "openrouter",
     "gemini",
     "openai",
