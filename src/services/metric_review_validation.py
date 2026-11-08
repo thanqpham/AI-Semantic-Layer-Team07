@@ -21,6 +21,11 @@ from src.services.metric_definition_resolver import _resolve_filters, _resolve_r
 from src.services.metric_definitions import _validate_expression_columns, _validate_filter_columns
 from src.services.metric_hygiene import hygiene_flag_filters
 from src.services.relationship_runtime import relationship_paths
+from src.services.semantic_value_mappings import (
+    approved_mapping_candidates,
+    read_approved_business_mappings,
+    scalar_value_key,
+)
 
 
 def schema_tables(schema: dict[str, Any]) -> list[dict[str, Any]]:
@@ -252,9 +257,9 @@ def _validate_query_plan(definition: MetricDefinition, schema: dict[str, Any]) -
             if len(matches) != 1:
                 raise ValueError(f"Metric plan scope filter must map to one common source column: {item.field}")
             table_name, column = matches[0]
-            _validate_plan_filter(
-                item.model_copy(update={"field": f"{table_name}.{column['column_name']}"}), shared_tables, tables
-            )
+            checked = item.model_copy(update={"field": f"{table_name}.{column['column_name']}"})
+            _validate_plan_filter(checked, shared_tables, tables)
+            item.value = checked.value
             item.column_id = column.get("id")
     if first_source is None:
         raise ValueError("Metric plan must include a source table")
@@ -327,19 +332,20 @@ def _validate_plan_filter(item: Any, allowed_tables: set[str], tables: dict[str,
     if item.operator in {"is_null", "is_not_null"}:
         return
     values = item.value if item.operator in {"in", "not_in"} else [item.value]
-    for value in values:
-        _validate_filter_value(
-            SimpleNamespace(
-                **{
-                    "column_name": column["column_name"],
-                    "data_type": column.get("data_type", ""),
-                    "allowed_values": column.get("allowed_values"),
-                    "allowed_values_complete": column.get("allowed_values_complete", True),
-                    "is_nullable": column.get("is_nullable", True),
-                }
-            ),
-            value,
-        )
+    col_ns = SimpleNamespace(
+        **{
+            "column_name": column["column_name"],
+            "business_name": column.get("business_name", ""),
+            "data_type": column.get("data_type", ""),
+            "allowed_values": column.get("allowed_values"),
+            "allowed_value_mappings": column.get("allowed_value_mappings"),
+            "allowed_values_complete": column.get("allowed_values_complete", True),
+            "review_status": column.get("review_status", "approved"),
+            "is_nullable": column.get("is_nullable", True),
+        }
+    )
+    resolved = [_validate_filter_value(col_ns, value) for value in values]
+    item.value = resolved if item.operator in {"in", "not_in"} else resolved[0]
 
 
 def _resolve_metadata(definition: MetricDefinition, table: dict[str, Any], columns: dict[str, Any]) -> None:
@@ -361,12 +367,15 @@ def _columns(table: dict[str, Any]) -> dict[str, Any]:
             **{
                 **c,
                 "column_name": c.get("column_name", c.get("name")),
+                "business_name": c.get("business_name", ""),
                 "id": c.get("id", i),
                 "data_type": c.get("data_type", ""),
                 "is_primary_key": c.get("is_primary_key", False),
                 "is_nullable": c.get("is_nullable", True),
                 "allowed_values": c.get("allowed_values"),
+                "allowed_value_mappings": c.get("allowed_value_mappings"),
                 "allowed_values_complete": c.get("allowed_values_complete", True),
+                "review_status": c.get("review_status", "approved"),
             }
         )
         for i, c in enumerate(table.get("columns", []), 1)
@@ -425,20 +434,49 @@ def _validate_filters(definition: MetricDefinition, columns: dict[str, Any]) -> 
         values = item.value if item.operator in {"in", "not_in"} else [item.value]
         if not isinstance(values, list) or not values:
             raise ValueError("Filter IN cần danh sách giá trị không rỗng.")
-        for value in values:
-            _validate_filter_value(column, value)
+        resolved = [_validate_filter_value(column, value) for value in values]
+        item.value = resolved if item.operator in {"in", "not_in"} else resolved[0]
 
 
-def _validate_filter_value(column: Any, value: Any) -> None:
+def _declared_column_values(column: Any) -> tuple[list[Any], list[dict[str, Any]]]:
+    """Collect declared sample values and approved business mappings for a column."""
+    review_status = getattr(column, "review_status", "approved")
+    mappings = read_approved_business_mappings(getattr(column, "allowed_value_mappings", None), review_status)
+    declared = list(getattr(column, "allowed_values", None) or [])
+    seen = {scalar_value_key(v) for v in declared}
+    for item in mappings:
+        key = scalar_value_key(item["db_value"])
+        if key not in seen:
+            seen.add(key)
+            declared.append(item["db_value"])
+    return declared, mappings
+
+
+def _validate_filter_value(column: Any, value: Any) -> Any:
     dtype = column.data_type.upper()
     if value is None or isinstance(value, (dict, list)):
         raise ValueError(f"Filter {column.column_name} cần literal khác NULL.")
+    review_status = getattr(column, "review_status", "approved")
+    declared, mappings = _declared_column_values(column)
+    declared_keys = {scalar_value_key(v) for v in declared}
+    if isinstance(value, str) and mappings and scalar_value_key(value) not in declared_keys:
+        col_dict = {
+            "column_name": column.column_name,
+            "business_name": getattr(column, "business_name", ""),
+            "review_status": review_status,
+            "allowed_values": declared,
+            "_approved_mappings": mappings,
+        }
+        candidates = approved_mapping_candidates(value, col_dict)
+        if len(candidates) > 1:
+            raise ValueError(f"Giá trị filter {column.column_name} mơ hồ trong ánh xạ nghiệp vụ.")
+        if len(candidates) == 1:
+            value = candidates[0]
     if (
-        column.allowed_values
-        and getattr(column, "review_status", "approved") == "approved"
+        declared
+        and review_status == "approved"
         and getattr(column, "allowed_values_complete", True)
-        and not any(item.get("status") == "pending" for item in (getattr(column, "allowed_value_mappings", None) or []))
-        and value not in column.allowed_values
+        and scalar_value_key(value) not in declared_keys
     ):
         raise ValueError(f"Giá trị filter {column.column_name} không có trong metadata khai báo.")
     if "BOOL" in dtype and not isinstance(value, bool):
@@ -448,3 +486,4 @@ def _validate_filter_value(column: Any, value: Any) -> None:
             raise ValueError(f"Filter {column.column_name} cần giá trị số.")
     if any(t in dtype for t in ("CHAR", "TEXT", "DATE", "TIME")) and not isinstance(value, str):
         raise ValueError(f"Filter {column.column_name} cần giá trị chuỗi.")
+    return value

@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import SemanticColumnModel, SemanticDatabaseModel, SemanticTableModel
 from src.models.metric_definition import MetricDefinition
@@ -143,6 +144,38 @@ async def test_unavailable_catalog_preserves_suggestion_and_reports_incomplete()
 
     assert len(state["suggested_metrics"]) == 1
     assert state["dedupe_performed"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_plan", [True, False])
+async def test_query_plan_catalog_allows_complete_proposal_dedupe(async_session: AsyncSession, same_plan: bool) -> None:
+    db_id = await _seed_order_table(async_session)
+    draft = _definition("Saved plan")
+    draft["metric"]["query_plan"] = {
+        "stages": [
+            {
+                "name": "total",
+                "base_entity": "order_header",
+                "aggregates": [{"name": "count", "function": "COUNT_DISTINCT", "expression": "id"}],
+            }
+        ],
+        "output_expression": "total.count",
+    }
+    existing = await create_metric(async_session, db_id, {"definition": draft}, 1, status_override="approved")
+    draft["metric"]["name"] = "New proposal"
+    if not same_plan:
+        draft["metric"]["query_plan"]["output_expression"] = "total.count * 100"
+    state = {"suggested_metrics": [{"definition": draft}], "suggestion_action": "save_metric"}
+
+    await dedupe_reviewed_suggestions(async_session, db_id, state)
+
+    assert state["dedupe_performed"] is True
+    if same_plan:
+        assert state["suggested_metrics"] == []
+        assert state["duplicate_notices"][0]["existing_metric_id"] == existing.id
+    else:
+        assert len(state["suggested_metrics"]) == 1
+        assert state["duplicate_notices"] == []
 
 
 async def test_persistence_cannot_reclassify_reviewed_decision():

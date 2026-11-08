@@ -2,6 +2,7 @@ import YAML from 'yaml';
 import {
   FilterOperator,
   MetricDefinition,
+  MetricFilter,
   MetricRecord,
   MetricSuggestion,
   MetricStatus,
@@ -38,6 +39,37 @@ export function formatMetricFormula(definition: MetricDefinition): string {
   const offset = formula.ratio.offset ?? 0;
   const ratio = `${scale} × (${numerator}) / (${denominator})`;
   return offset ? `${offset} + ${ratio}` : ratio;
+}
+
+const filterOperators: Record<FilterOperator, string> = {
+  eq: '=', neq: '≠', gt: '>', gte: '≥', lt: '<', lte: '≤',
+  in: 'thuộc', not_in: 'không thuộc', is_null: 'là NULL', is_not_null: 'khác NULL',
+};
+
+function formatMetricFilter(filter: MetricFilter): string {
+  const operator = filterOperators[filter.operator] ?? filter.operator;
+  if (filter.operator === 'is_null' || filter.operator === 'is_not_null') return `${filter.field} ${operator}`;
+  const value = Array.isArray(filter.value)
+    ? `[${filter.value.map((item) => JSON.stringify(item)).join(', ')}]`
+    : JSON.stringify(filter.value) ?? 'null';
+  return `${filter.field} ${operator} ${value}`;
+}
+
+export function formatMetricFilters(definition: MetricDefinition): string[] {
+  const { filters, formula, query_plan: plan } = definition.metric;
+  const groups: { scope: string; filters: MetricFilter[] }[] = [
+    { scope: formula.ratio ? 'Chung (cả tử và mẫu)' : 'Chung', filters: filters || [] },
+    { scope: 'Tử số', filters: formula.ratio?.numerator.filters || [] },
+    { scope: 'Mẫu số', filters: formula.ratio?.denominator.filters || [] },
+  ];
+  for (const stage of plan?.stages || []) {
+    groups.push({ scope: `Bước ${stage.name}`, filters: stage.filters || [] });
+    for (const aggregate of stage.aggregates) {
+      groups.push({ scope: `Bước ${stage.name}, phép tính ${aggregate.name}`, filters: aggregate.filters || [] });
+    }
+  }
+  return groups.filter((group) => group.filters.length)
+    .map((group) => `${group.scope}: ${group.filters.map(formatMetricFilter).join(' VÀ ')}`);
 }
 
 export function getMetricUsedColumns(definition: MetricDefinition): string[] {

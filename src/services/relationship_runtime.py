@@ -1,6 +1,7 @@
 """Shared eligibility and directed traversal for runtime relationships."""
 
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from sqlalchemy.sql.elements import ColumnElement
@@ -62,7 +63,7 @@ def _graph(relationships: list[CanonicalRelationshipModel], allow_fanout: bool) 
         kind = rel.relationship_type.replace("-", "_").lower()
         if allow_fanout or kind in {"many_to_one", "n:1", "one_to_one", "1:1"}:
             graph.setdefault(rel.from_entity_id, []).append(_step(rel))
-        if allow_fanout or kind in {"one_to_one", "1:1"}:
+        if allow_fanout or kind in {"one_to_one", "1:1", "one_to_many", "1:n"}:
             graph.setdefault(rel.to_entity_id, []).append(_step(rel, True))
     return graph
 
@@ -124,12 +125,56 @@ def relationship_paths(
     return [first]
 
 
+def _filter_bridges(graph: dict[int, list[RelationshipStep]], start: int) -> set[int]:
+    """Find bridge relationship IDs with an iterative depth-first search."""
+    seen = {start: 0}
+    low = {start: 0}
+    parents: dict[int, RelationshipStep] = {}
+    bridges: set[int] = set()
+    stack: list[tuple[int, Iterator[RelationshipStep]]] = [(start, iter(graph.get(start, [])))]
+    while stack:
+        current, steps = stack[-1]
+        step = next(steps, None)
+        if step is None:
+            stack.pop()
+            if current in parents:
+                parent = parents[current]
+                low[parent.from_entity_id] = min(low[parent.from_entity_id], low[current])
+                if low[current] > seen[parent.from_entity_id]:
+                    bridges.add(parent.id)
+            continue
+        if current in parents and step.id == parents[current].id:
+            continue
+        if step.to_entity_id in seen:
+            low[current] = min(low[current], seen[step.to_entity_id])
+            continue
+        parents[step.to_entity_id] = step
+        seen[step.to_entity_id] = low[step.to_entity_id] = len(seen)
+        stack.append((step.to_entity_id, iter(graph.get(step.to_entity_id, []))))
+    return bridges
+
+
+def unique_filter_targets(relationships: list[CanonicalRelationshipModel], start: int) -> set[int]:
+    """Return tables reachable by exactly one usable undirected filter path."""
+    graph = _graph([rel for rel in relationships if valid_pairs(rel.column_pairs)], allow_fanout=True)
+    bridges = _filter_bridges(graph, start)
+    visited = {start}
+    pending = deque([start])
+    while pending:
+        for step in graph.get(pending.popleft(), []):
+            if step.id in bridges and step.to_entity_id not in visited:
+                visited.add(step.to_entity_id)
+                pending.append(step.to_entity_id)
+    return visited - {start}
+
+
 def filter_path(relationships: list[CanonicalRelationshipModel], start: int, target: int) -> list[RelationshipStep]:
     """Resolve a unique path suitable for a correlated filter EXISTS subquery."""
     if start == target:
         return []
     context = {"table_id": target, "base_table_id": start}
-    paths = relationship_paths(relationships, start, target, allow_fanout=True)
+    eligible = [rel for rel in relationships if valid_pairs(rel.column_pairs)]
+    paths = relationship_paths(eligible, start, target, allow_fanout=True)
     if len(paths) > 1:
         context["paths"] = [[step.id for step in path] for path in paths]
         raise SemanticCompileError("AMBIGUOUS_JOIN_PATH", "Multiple filter paths exist", context)

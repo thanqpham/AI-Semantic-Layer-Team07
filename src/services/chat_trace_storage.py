@@ -23,7 +23,8 @@ async def execute_with_trace(
     with execution_context(execution):
         try:
             response = await operation()
-        except Exception:
+        except Exception as exc:
+            logger.error("Chat processing failed (run_id=%s type=%s)", execution.trace["run_id"], type(exc).__name__)
             execution.finish("error")
             try:
                 await _persist_failure(db, body, execution)

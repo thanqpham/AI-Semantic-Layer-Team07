@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.agents.nodes.chat.data_assistant_node import data_assistant_node
-from src.agents.roles.data_assistant_agent import _format_context
+from src.agents.roles.data_assistant_agent import _asks_for_metric_catalog, _format_context
 
 
 @pytest.mark.asyncio
@@ -42,6 +42,39 @@ async def test_metric_catalog_question_lists_approved_metrics_without_llm() -> N
     mock_get_llm.assert_not_called()
     assert "2 metric" in result["chat_response"]
     assert "Doanh thu thuần" in result["chat_response"]
+
+
+@pytest.mark.parametrize("question", ["Liệt kê metric doanh thu", "Có những metric nào theo khu vực?"])
+def test_filtered_metric_catalog_questions_do_not_match_whole_catalog(question: str) -> None:
+    assert not _asks_for_metric_catalog(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Có những chỉ số nào đã được duyệt?",
+        "Liệt kê các metrics đã phê duyệt",
+        "Những metric nào đã được phê duyệt?",
+        "Cho tôi xem các metric đã được phê duyệt",
+        "Liệt kê tất cả các metric đã được phê duyệt giúp tôi",
+    ],
+)
+def test_unfiltered_catalog_questions_support_synonyms(question: str) -> None:
+    assert _asks_for_metric_catalog(question)
+
+
+@pytest.mark.asyncio
+async def test_filtered_catalog_question_does_not_return_every_metric() -> None:
+    llm = AsyncMock()
+    llm.ainvoke.return_value = MagicMock(content="Chỉ số doanh thu.")
+    with patch("src.agents.roles.data_assistant_agent.get_llm", return_value=llm):
+        result = await data_assistant_node(
+            {
+                "user_message": "Liệt kê metric doanh thu",
+                "approved_metrics": [{"name": "Doanh thu"}, {"name": "Số đơn"}],
+            }
+        )
+    assert result["chat_response"] == "Chỉ số doanh thu."
 
 
 @pytest.mark.asyncio

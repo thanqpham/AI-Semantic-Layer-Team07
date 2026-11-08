@@ -1,6 +1,9 @@
 """API Routes for Semantic Layer Flow 1, Business Metrics, Live DB, and HITL inline edits."""
 
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 from typing import Any, NoReturn
 
@@ -11,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
+from src.agents.roles.data_assistant_agent import _asks_for_metric_catalog
 from src.api.auth import get_current_user
 from src.config import get_settings
 from src.models.db import (
@@ -94,7 +98,15 @@ from src.models.schemas import (
 from src.observability.langfuse_tracing import observation, trace_summary
 from src.services import enrichment_progress
 from src.services.categorical_discovery_policy import safe_business_mappings, safe_observed_values
-from src.services.chat_execution import SAFE_ERROR, ChatExecution, current_execution, execution_step, stream_execution
+from src.services.chat_execution import (
+    SAFE_ERROR,
+    ChatExecution,
+    current_execution,
+    execution_step,
+    safe_compile_code,
+    safe_compile_message,
+    stream_execution,
+)
 from src.services.chat_service import (
     ChatAuthorizationError,
     auto_generate_session_title,
@@ -878,6 +890,7 @@ async def _load_approved_metric_context(db: AsyncSession, db_id: int) -> list[di
     stmt = select(SemanticMetricModel).where(
         SemanticMetricModel.db_id == db_id,
         SemanticMetricModel.status == "approved",
+        SemanticMetricModel.is_deleted.is_(False),
     )
     metrics = (await db.execute(stmt)).scalars().all()
     return [
@@ -1734,6 +1747,15 @@ async def _query_target(
     semantic_db = await _owned_semantic_database(db, db_id, user_id, org_id)
     if semantic_db is None:
         raise HTTPException(status_code=404, detail="Semantic database not found")
+    await _require_resource_permission(db, user_id, db_id, org_id, "can_query")
+    if semantic_db.org_id is not None:
+        role = await db.scalar(
+            select(OrganizationMemberModel.role).where(
+                OrganizationMemberModel.org_id == semantic_db.org_id, OrganizationMemberModel.user_id == user_id
+            )
+        )
+        if not ROLE_PERMISSIONS.get(role or "", {}).get("can_query", False):
+            raise HTTPException(status_code=403, detail="Insufficient Workspace permission")
 
     live_stmt = select(LiveTargetDbModel).where(LiveTargetDbModel.semantic_db_id == db_id)
     live_db = (await db.execute(live_stmt)).scalar_one_or_none()
@@ -1761,9 +1783,44 @@ async def _compile_request(
     try:
         return await SemanticQueryCompiler(db).compile(db_id, body.to_spec())
     except SemanticCompileError as exc:
-        raise HTTPException(status_code=400, detail=exc.to_detail()) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": safe_compile_code(exc),
+                "message": safe_compile_message(exc),
+                "context": _safe_compile_context(exc),
+            },
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail="Truy vấn không hợp lệ. Chỉ SELECT được hỗ trợ.") from exc
+
+
+def _safe_compile_context(error: SemanticCompileError) -> dict[str, Any]:
+    """Retain numeric metadata identifiers while omitting query data and compiler text."""
+    singles = {"table_id", "base_table_id", "metric_id", "column_id"}
+    lists = {"metric_ids", "column_ids", "relationship_ids"}
+    result = {key: value for key, value in error.context.items() if key in singles and type(value) is int}
+    if error.code == "UNSUPPORTED_PLAN_FILTER":
+        if error.context.get("column_id") is None and "column_id" in error.context:
+            result["column_id"] = None
+        reason = error.context.get("reason")
+        if isinstance(reason, str) and reason in {
+            "unresolved_lineage",
+            "unknown_column",
+            "not_in_plan",
+            "partial_stage_coverage",
+        }:
+            result["reason"] = reason
+    for key in lists:
+        value = error.context.get(key)
+        if isinstance(value, list) and all(type(item) is int for item in value):
+            result[key] = value
+    paths = error.context.get("paths")
+    if isinstance(paths, list) and all(
+        isinstance(path, list) and all(type(item) is int for item in path) for path in paths
+    ):
+        result["paths"] = paths
+    return result
 
 
 @router.post(
@@ -1864,7 +1921,10 @@ def _session_summary(session: ChatSessionModel) -> ChatSessionSummaryResponse:
 
 def _message_response(message: ChatMessageModel) -> ChatMessageResponse:
     """Serialize one persisted chat message."""
-    return ChatMessageResponse.model_validate(message)
+    response = ChatMessageResponse.model_validate(message)
+    if isinstance(response.metadata_json, dict):
+        response.metadata_json = {k: v for k, v in response.metadata_json.items() if k != "semantic_option_digests"}
+    return response
 
 
 async def _lifecycle_map(db: AsyncSession, messages: list[ChatMessageModel]) -> dict[str, dict[str, Any]]:
@@ -1939,6 +1999,113 @@ def _assistant_metadata(
         "interpretation": interpretation,
         "error": None,
     }
+
+
+_METRIC_SNAPSHOT_FIELDS = (
+    "id",
+    "name",
+    "business_name",
+    "base_entity",
+    "formula",
+    "filters",
+    "version",
+    "_definition_fingerprint",
+)
+_COLUMN_SNAPSHOT_FIELDS = (
+    "column_id",
+    "column_name",
+    "business_name",
+    "table_id",
+    "table_name",
+    "data_type",
+    "is_time_dimension",
+    "_mapping_fingerprint",
+)
+
+
+def _selected_metadata_items(
+    items: list[dict[str, Any]], ids: set[int], id_key: str, fields: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    return sorted(
+        ({k: item.get(k) for k in fields} for item in items if item.get(id_key) in ids), key=lambda x: x[id_key]
+    )
+
+
+def _catalog_mapping_fingerprint(catalog: dict[str, Any]) -> str:
+    """Derive a stable mapping fingerprint without storing raw mapping entries."""
+    from src.services.semantic_value_mappings import mapping_metadata_fingerprint
+
+    explicit = catalog.get("_mapping_fingerprint")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    columns = sorted(catalog.get("filter_columns", []), key=lambda item: int(item.get("column_id", 0)))
+    payload = [
+        (
+            column.get("column_id"),
+            column.get("_mapping_fingerprint")
+            or mapping_metadata_fingerprint(
+                column.get("_approved_mappings", column.get("allowed_value_mappings", [])),
+                column.get("review_status", "approved"),
+                bool(column.get("allowed_values_complete", True)),
+            ),
+        )
+        for column in columns
+    ]
+    return hashlib.sha256(json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+
+
+def _selection_metadata(spec: SemanticQuerySpec, catalog: dict[str, Any]) -> dict[str, Any]:
+    """Capture selected metric and column identities without retaining mappings."""
+    return {
+        "relationship_fingerprint": catalog.get("_relationship_fingerprint"),
+        "mapping_fingerprint": _catalog_mapping_fingerprint(catalog),
+        "metrics": _selected_metadata_items(
+            catalog.get("metrics", []), set(spec.metric_ids), "id", _METRIC_SNAPSHOT_FIELDS
+        ),
+        "dimensions": _selected_metadata_items(
+            catalog.get("dimensions", []), {x.column_id for x in spec.dimensions}, "column_id", _COLUMN_SNAPSHOT_FIELDS
+        ),
+        "filters": _selected_metadata_items(
+            catalog.get("filter_columns", []), {x.column_id for x in spec.filters}, "column_id", _COLUMN_SNAPSHOT_FIELDS
+        ),
+    }
+
+
+def _option_spec_digest(
+    session_id: str, option_id: str, spec: SemanticQuerySpec, catalog: dict[str, Any]
+) -> str | None:
+    """Bind a normalized query to its option without persisting filter values."""
+    key = get_settings().encryption_key
+    if (
+        not key
+        or not isinstance(catalog.get("_relationship_fingerprint"), str)
+        or not catalog["_relationship_fingerprint"]
+    ):
+        return None
+    data = json.dumps(
+        [session_id, option_id, spec.model_dump(mode="json"), _selection_metadata(spec, catalog)],
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    return hmac.new(key.encode("utf-8"), data.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _option_digests(
+    clarification: ChatClarificationPayload | None, catalog: dict[str, Any], session_id: str
+) -> dict[str, str]:
+    """Snapshot the meaning of filtered options against the catalog used to propose them."""
+    digests = {}
+    for option in clarification.options if clarification else []:
+        if option.spec:
+            checked = normalize_interpretation(
+                SemanticQueryInterpretation(status="resolved", spec=option.spec), catalog
+            )
+            if checked.status == "resolved" and checked.spec:
+                digest = _option_spec_digest(session_id, option.id, checked.spec, catalog)
+                if digest:
+                    digests[option.id] = digest
+    return digests
 
 
 @router.get("/notifications", response_model=NotificationListResponse)
@@ -2223,6 +2390,41 @@ async def _execute_chat_request_inner(
         raise HTTPException(status_code=404, detail="Chat session or database not found") from exc
 
 
+_NO_LIVE_QUERY_MESSAGE = "SQL Dump kh\u00f4ng h\u1ed7 tr\u1ee3 truy v\u1ea5n d\u1eef li\u1ec7u. H\u00e3y k\u1ebft n\u1ed1i Live DB \u0111\u1ec3 xem k\u1ebft qu\u1ea3."
+
+
+def _is_missing_live_target(exc: HTTPException) -> bool:
+    return exc.status_code == 400 and exc.detail == "Query only supported for Live DB connections"
+
+
+async def _no_live_query_response(
+    db: AsyncSession,
+    session: ChatSessionModel,
+    user: UserModel,
+    db_id: int,
+    body: ChatRequest,
+    can_generate_metrics: bool,
+    org_id: int | None,
+) -> ChatResponse:
+    user_message = await save_chat_message(
+        db, session.id, "user", body.message, client_message_id=body.client_message_id
+    )
+    return await _build_and_save_chat_response(
+        db,
+        session,
+        user,
+        db_id,
+        body,
+        user_message,
+        {"intent": "data_question", "chat_response": _NO_LIVE_QUERY_MESSAGE},
+        can_generate_metrics,
+        True,
+        {"status": "ready"},
+        {},
+        org_id,
+    )
+
+
 async def _reuse_existing_metric(
     db: AsyncSession,
     session: ChatSessionModel,
@@ -2237,7 +2439,14 @@ async def _reuse_existing_metric(
     metric_ids = {item["id"] for item in catalog.get("metrics", [])}
     if body.reuse_metric_id not in metric_ids:
         raise HTTPException(status_code=400, detail="Metric không tồn tại hoặc chưa được phê duyệt")
-    _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+    try:
+        _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+    except HTTPException as exc:
+        if not _is_missing_live_target(exc):
+            raise
+        return await _no_live_query_response(
+            db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id
+        )
     spec = SemanticQuerySpec(metric_ids=[body.reuse_metric_id], dimensions=[], filters=[], limit=100)
     user_message = await save_chat_message(
         db, session.id, "user", body.message, client_message_id=body.client_message_id
@@ -2245,7 +2454,9 @@ async def _reuse_existing_metric(
     try:
         result = await execute_natural_language_query(db, numeric_db_id, live_db, spec, catalog)
     except SemanticCompileError as exc:
-        raise HTTPException(status_code=400, detail=exc.message) from exc
+        return await _invalid_clarification_option_response(
+            db, session, current_user, body, can_generate_metrics, org_id, user_message, safe_compile_message(exc), True
+        )
     return await _save_reused_metric_response(
         db, session, current_user, body, result, can_generate_metrics, user_message
     )
@@ -2326,7 +2537,14 @@ async def _handle_clarification_selection(
         catalog = await build_parser_catalog(db, numeric_db_id)
         valid_ids = {m["id"] for m in catalog.get("metrics", [])}
         if set(spec_dict["metric_ids"]).issubset(valid_ids):
-            _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+            try:
+                _, live_db = await _query_target(db, numeric_db_id, current_user.id, org_id)
+            except HTTPException as exc:
+                if not _is_missing_live_target(exc):
+                    raise
+                return await _no_live_query_response(
+                    db, session, current_user, numeric_db_id, body, can_generate_metrics, org_id
+                )
             try:
                 spec = SemanticQuerySpec(**spec_dict)
             except ValidationError as exc:
@@ -2334,15 +2552,41 @@ async def _handle_clarification_selection(
                 return await _invalid_clarification_option_response(
                     db, session, current_user, body, can_generate_metrics, org_id
                 )
+            checked = normalize_interpretation(SemanticQueryInterpretation(status="resolved", spec=spec), catalog)
+            if checked.status != "resolved" or checked.spec is None:
+                return await _invalid_clarification_option_response(
+                    db, session, current_user, body, can_generate_metrics, org_id
+                )
+            digests = prev_msg.metadata_json.get("semantic_option_digests")
+            previous_digest = digests.get(selection.option_id) if isinstance(digests, dict) else None
+            current_digest = _option_spec_digest(session.id, selection.option_id, checked.spec, catalog)
+            if (
+                not isinstance(previous_digest, str)
+                or not previous_digest.isascii()
+                or not current_digest
+                or not hmac.compare_digest(previous_digest, current_digest)
+            ):
+                return await _invalid_clarification_option_response(
+                    db, session, current_user, body, can_generate_metrics, org_id
+                )
+            spec = checked.spec
             user_msg = await save_chat_message(
                 db, session.id, "user", body.message, client_message_id=body.client_message_id
             )
             try:
                 query_result = await execute_natural_language_query(db, numeric_db_id, live_db, spec, catalog)
             except SemanticCompileError as exc:
-                logger.warning("Semantic compile error for clarification option: %s (%s)", exc.message, exc.code)
+                logger.warning("Semantic compile error for clarification option: %s", safe_compile_code(exc))
                 return await _invalid_clarification_option_response(
-                    db, session, current_user, body, can_generate_metrics, org_id, user_msg
+                    db,
+                    session,
+                    current_user,
+                    body,
+                    can_generate_metrics,
+                    org_id,
+                    user_msg,
+                    safe_compile_message(exc),
+                    True,
                 )
             resp_text = query_result.explanation
             assistant = await save_chat_message(
@@ -2367,6 +2611,8 @@ async def _handle_clarification_selection(
             )
 
     if matched_option.get("action") == "create_metric" or matched_option.get("id") == "create_metric":
+        if not can_generate_metrics:
+            await _require_resource_permission(db, current_user.id, numeric_db_id, org_id, "can_submit_metric")
         body_copy = body.model_copy(update={"clarification_selection": None})
         return await _process_standard_chat(
             db,
@@ -2429,6 +2675,8 @@ async def _invalid_clarification_option_response(
     can_generate_metrics: bool,
     org_id: int | None = None,
     user_msg: ChatMessageModel | None = None,
+    message: str = _INVALID_OPTION_NOTICE,
+    failed: bool = False,
 ) -> ChatResponse:
     """Persist and return the stable invalid-option Vietnamese notice for a bad clarification selection."""
     if user_msg is None:
@@ -2439,15 +2687,16 @@ async def _invalid_clarification_option_response(
         db,
         session.id,
         "assistant",
-        _INVALID_OPTION_NOTICE,
+        message,
         intent="semantic_query",
-        metadata_json=_assistant_metadata(),
+        metadata_json=_assistant_metadata(run_status="error" if failed else None),
         client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
     )
     refreshed = await get_chat_session_with_messages(db, session.id, current_user.id)
     return ChatResponse(
         intent="semantic_query",
-        chat_response=_INVALID_OPTION_NOTICE,
+        chat_response=message,
+        run_status="error" if failed else None,
         session_id=session.id,
         user_message_id=user_msg.id,
         assistant_message_id=assistant.id,
@@ -2522,6 +2771,27 @@ async def _process_standard_chat_inner(
     preclassified_intent = classification.get("intent", "data_question")
     preclassified_chat_response = classification.get("chat_response")
 
+    if preclassified_intent == "metric_query" and not await _can_propose_missing_metric(
+        db, current_user.id, numeric_db_id, org_id, can_generate_metrics
+    ):
+        return await _build_and_save_chat_response(
+            db,
+            session,
+            current_user,
+            numeric_db_id,
+            body,
+            user_message,
+            {
+                "intent": "data_question",
+                "chat_response": "B\u1ea1n kh\u00f4ng c\u00f3 quy\u1ec1n t\u1ea1o ho\u1eb7c g\u1eedi y\u00eau c\u1ea7u metric.",
+            },
+            can_generate_metrics,
+            True,
+            {"status": "ready"},
+            {},
+            org_id,
+        )
+
     if preclassified_intent == "out_of_scope":
         return await _build_out_of_scope_response(
             db,
@@ -2536,7 +2806,6 @@ async def _process_standard_chat_inner(
 
     parser_catalog: dict[str, Any] = {}
     if preclassified_intent == "semantic_query":
-        await _query_target(db, numeric_db_id, current_user.id, org_id)
         parser_catalog = await build_parser_catalog(db, numeric_db_id)
 
     with execution_step("context"):
@@ -2583,6 +2852,42 @@ async def _process_standard_chat_inner(
         user_message_id=user_message.id,
         selected_metric_variant=selected_metric_variant,
     )
+    if final_state.get("semantic_parse_status") == "missing_metric":
+        if not await _can_propose_missing_metric(db, current_user.id, numeric_db_id, org_id, can_generate_metrics):
+            message = "Chỉ số chưa có và bạn không có quyền tạo hoặc gửi yêu cầu metric."
+            final_state["interpretation"] = {
+                "status": "needs_clarification",
+                "clarification": {"prompt": message, "options": []},
+            }
+            final_state["chat_response"] = message
+            final_state["clarification"] = None
+        else:
+            try:
+                full_history = await get_metric_requirement_history(
+                    db, session.id, get_settings().metric_context_token_budget
+                )
+                history = [m for m in full_history if m["id"] != user_message.id]
+                context = await _build_chat_context(
+                    db, numeric_db_id, body.message, "metric_query", get_settings().metric_context_token_budget, history
+                )
+            except ValueError as exc:
+                context = MetricContextResult(
+                    schema={}, diagnostic={"status": "needs_clarification", "message": str(exc)}
+                )
+            final_state = await _chat_state_for_context(
+                chat_agent,
+                context,
+                session.id,
+                body.message,
+                history,
+                approved_metrics,
+                can_generate_metrics,
+                "metric_query",
+                existing_metrics,
+                dedupe_performed,
+                proposal_mode="requested",
+                user_message_id=user_message.id,
+            )
     await dedupe_reviewed_suggestions(db, numeric_db_id, final_state)
     await persist_reviewed_state(db, numeric_db_id, current_user.id, final_state)
     return await _build_and_save_chat_response(
@@ -2599,6 +2904,21 @@ async def _process_standard_chat_inner(
         parser_catalog,
         org_id,
     )
+
+
+async def _can_propose_missing_metric(
+    db: AsyncSession, user_id: int, db_id: int, org_id: int | None, can_generate_metrics: bool
+) -> bool:
+    """Check whether the user may propose a missing metric."""
+    if can_generate_metrics:
+        return True
+    try:
+        await _require_resource_permission(db, user_id, db_id, org_id, "can_submit_metric")
+        return True
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
+        raise
 
 
 async def _build_out_of_scope_response(
@@ -2682,24 +3002,28 @@ async def _build_and_save_chat_response(
 
     if final_state.get("error"):
         response_text = SAFE_ERROR
+    option_digests = _option_digests(clar_payload, parser_catalog, session.id) if intent == "semantic_query" else {}
     assistant = await save_chat_message(
         db,
         session.id,
         "assistant",
         response_text,
         intent=intent,
-        metadata_json=_assistant_metadata(
-            raw_metrics,
-            suggestion_action,
-            duplicates=notices,
-            dedupe_performed=performed,
-            diagnostics=context_diagnostic,
-            semantic_query_result=query_res.model_dump(mode="json") if query_res else None,
-            clarification=clar_payload.model_dump(mode="json") if clar_payload else None,
-            blocked_candidates=final_state.get("blocked_candidates", []),
-            run_status=final_state.get("run_status"),
-            proposal_mode=body.proposal_mode,
-        ),
+        metadata_json={
+            **_assistant_metadata(
+                raw_metrics,
+                suggestion_action,
+                duplicates=notices,
+                dedupe_performed=performed,
+                diagnostics=context_diagnostic,
+                semantic_query_result=query_res.model_dump(mode="json") if query_res else None,
+                clarification=clar_payload.model_dump(mode="json") if clar_payload else None,
+                blocked_candidates=final_state.get("blocked_candidates", []),
+                run_status=final_state.get("run_status"),
+                proposal_mode=body.proposal_mode,
+            ),
+            **({"semantic_option_digests": option_digests} if option_digests else {}),
+        },
         client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,
     )
     refreshed = await get_chat_session_with_messages(db, session.id, current_user.id)
@@ -2728,6 +3052,38 @@ async def _build_and_save_chat_response(
     )
 
 
+async def _revalidate_query_interpretation(
+    db: AsyncSession, db_id: int, raw: dict[str, Any], catalog: dict[str, Any]
+) -> tuple[SemanticQueryInterpretation, dict[str, Any]]:
+    """Reject changed query semantics before executing against fresh metadata."""
+    original = SemanticQueryInterpretation(**raw)
+    initial = normalize_interpretation(original, catalog)
+    fresh = await build_parser_catalog(db, db_id)
+    current = normalize_interpretation(original, fresh)
+    if initial.status == "resolved" and current.status == "resolved":
+        changed = (
+            initial.spec is None
+            or current.spec is None
+            or initial.spec != current.spec
+            or not isinstance(catalog.get("_relationship_fingerprint"), str)
+            or not catalog["_relationship_fingerprint"]
+            or not isinstance(fresh.get("_relationship_fingerprint"), str)
+            or not fresh["_relationship_fingerprint"]
+        )
+        if not changed:
+            changed = _selection_metadata(initial.spec, catalog) != _selection_metadata(current.spec, fresh)
+        if changed:
+            current = SemanticQueryInterpretation(
+                status="needs_clarification",
+                clarification=ChatClarificationPayload(
+                    prompt="Dữ liệu truy vấn đã thay đổi. Vui lòng xác nhận lại yêu cầu.", options=[]
+                ),
+            )
+    if initial.status != "resolved" and current.status == "resolved":
+        current = initial
+    return current, fresh
+
+
 async def _execute_or_clarify_semantic_query(
     db: AsyncSession,
     numeric_db_id: int,
@@ -2737,26 +3093,49 @@ async def _execute_or_clarify_semantic_query(
     parser_catalog: dict[str, Any],
 ) -> tuple[ChatSemanticQueryResult | None, ChatClarificationPayload | None, str]:
     """Execute normalized semantic query on Live DB or prepare clarification payload."""
-    interp_raw = final_state.get("interpretation") or {}
-    interp = normalize_interpretation(SemanticQueryInterpretation(**interp_raw), parser_catalog)
+    interp, parser_catalog = await _revalidate_query_interpretation(
+        db, numeric_db_id, final_state.get("interpretation") or {}, parser_catalog
+    )
     if interp.status == "resolved" and interp.spec:
-        _, live_db = await _query_target(db, numeric_db_id, user_id, org_id)
-        try:
-            query_result = await execute_natural_language_query(
-                db, numeric_db_id, live_db, interp.spec, parser_catalog, interp.time_ranges
-            )
-            return query_result, None, query_result.explanation
-        except SemanticCompileError as exc:
-            logger.warning("Semantic query compile error: %s (%s)", exc.message, exc.code)
-            return None, None, f"Không thể biên dịch câu hỏi này: {exc.message}."
-        except Exception as exc:
-            logger.error("Failed to execute semantic query: %s", exc, exc_info=True)
-            return None, None, "Không thể thực thi truy vấn trên cơ sở dữ liệu. Vui lòng thử lại."
+        return await _execute_checked_query(db, numeric_db_id, user_id, org_id, interp, parser_catalog)
     clar = interp.clarification or (
         ChatClarificationPayload(**final_state["clarification"]) if final_state.get("clarification") else None
     )
     prompt = clar.prompt if clar else (final_state.get("chat_response") or "Vui lòng làm rõ câu hỏi số liệu.")
     return None, clar, prompt
+
+
+async def _execute_checked_query(
+    db: AsyncSession,
+    db_id: int,
+    user_id: int,
+    org_id: int | None,
+    interp: SemanticQueryInterpretation,
+    catalog: dict[str, Any],
+) -> tuple[ChatSemanticQueryResult | None, ChatClarificationPayload | None, str]:
+    """Execute one revalidated query, reporting only safe diagnostics."""
+    try:
+        _, live_db = await _query_target(db, db_id, user_id, org_id)
+    except HTTPException as exc:
+        if not _is_missing_live_target(exc):
+            raise
+        return None, None, _NO_LIVE_QUERY_MESSAGE
+    try:
+        query_result = await execute_natural_language_query(
+            db, db_id, live_db, interp.spec, catalog, interp.time_ranges
+        )
+        return query_result, None, query_result.explanation
+    except SemanticCompileError as exc:
+        logger.warning("Semantic query compile error: %s", safe_compile_code(exc))
+        return None, None, safe_compile_message(exc)
+    except Exception as exc:
+        execution = current_execution()
+        logger.error(
+            "Query execution failed (run_id=%s type=%s)",
+            execution.trace["run_id"] if execution else None,
+            type(exc).__name__,
+        )
+        return None, None, "Không thể thực thi truy vấn trên cơ sở dữ liệu. Vui lòng thử lại."
 
 
 async def _chat_state_for_context(
@@ -2830,6 +3209,8 @@ async def _build_chat_context(
             )
         return await build_metric_context(db, db_id, query, token_budget)
     if intent == "data_question":
+        if _asks_for_metric_catalog(message):
+            return MetricContextResult(schema={}, diagnostic={"status": "ready"})
         return await build_data_context(db, db_id, query, token_budget)
     return MetricContextResult(schema={}, diagnostic={"status": "ready", "tables": [], "relationship_count": 0})
 

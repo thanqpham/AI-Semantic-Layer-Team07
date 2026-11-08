@@ -103,6 +103,9 @@ class AgentState(TypedDict, total=False):
     parser_catalog: dict[str, Any]
     """Bounded catalog of approved metrics, safe dimensions, and safe filter columns."""
 
+    semantic_parse_status: str
+    """Internal parser outcome for routing missing metrics safely."""
+
     interpretation: dict[str, Any]
     """Validated SemanticQueryInterpretation from semantic_query_parser_node."""
 

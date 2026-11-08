@@ -14,12 +14,13 @@ from sqlalchemy.orm import selectinload
 from src.models.db import CanonicalRelationshipModel, SemanticTableModel
 from src.models.metric_review import MetricScopeSelection
 from src.models.schemas import ChatClarificationOption, ChatClarificationPayload
-from src.services.categorical_discovery_policy import safe_business_mappings, safe_observed_values
+from src.services.categorical_discovery_policy import safe_observed_values
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 from src.services.metric_context_graph import expand_bridges, table_key
 from src.services.metric_runtime import MetricCallError, invoke_metric_json
 from src.services.relationship_runtime import active_relationship_filters
+from src.services.semantic_value_mappings import read_approved_business_mappings
 
 _CLARIFICATION_OPTIONS_PROMPT = """
 Khi needs_clarification=true và có các cách hiểu cụ thể để người dùng chọn,
@@ -84,6 +85,8 @@ async def build_metric_context(
     schema = _expand_context(tables, relationships, selected)
     if _token_estimate({"schema": schema, "question": question}) > token_budget:
         return _clarification("Phạm vi KPI quá rộng; hãy nêu rõ bảng hoặc dimension cần tính.")
+    if _token_estimate(schema) > token_budget:
+        return _clarification("Context vượt ngân sách vì phải giữ đầy đủ các ánh xạ đã duyệt; hãy thu hẹp bảng/domain.")
     return MetricContextResult(schema=schema, diagnostic=_ready_diagnostic(schema))
 
 
@@ -360,12 +363,9 @@ def _column_payload(column: Any) -> dict[str, Any]:
             and safe_observed_values(list(column.allowed_values)) is not None
             else None
         ),
-        "allowed_values_complete": getattr(column, "allowed_values_complete", True) is not False
-        and not any(
-            item.get("status") == "pending" for item in (getattr(column, "allowed_value_mappings", None) or [])
-        ),
-        "allowed_value_mappings": safe_business_mappings(
-            getattr(column, "allowed_value_mappings", None) or [], column.review_status
+        "allowed_values_complete": getattr(column, "allowed_values_complete", True) is not False,
+        "allowed_value_mappings": read_approved_business_mappings(
+            getattr(column, "allowed_value_mappings", None), column.review_status
         ),
         "review_status": column.review_status,
         "is_foreign_key": column.is_foreign_key,

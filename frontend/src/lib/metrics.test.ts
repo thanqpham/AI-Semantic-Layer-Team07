@@ -7,10 +7,22 @@ import {
   createMetricDefinition,
   getMetricUsedColumns,
   formatMetricFormula,
+  formatMetricFilters,
   renderMetricYaml,
 } from '@/lib/metrics';
 
 describe('metric definition utilities', () => {
+  it('joins conditions within a scope and keeps false, zero and null operators clear', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.filters = [
+      { field: 'active', operator: 'eq', value: false },
+      { field: 'amount', operator: 'gte', value: 0 },
+      { field: 'deleted_at', operator: 'is_not_null', value: null },
+    ];
+    expect(formatMetricFilters(definition)).toEqual([
+      'Chung: active = false VÀ amount ≥ 0 VÀ deleted_at khác NULL',
+    ]);
+  });
   it('renders stable Unicode YAML without empty filters', () => {
     const definition = createMetricDefinition('OrderItem');
     definition.metric.name = 'Doanh thu';

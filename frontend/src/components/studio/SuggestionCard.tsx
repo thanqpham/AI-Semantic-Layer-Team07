@@ -2,6 +2,7 @@
 
 import { Check, Code2, Copy, Edit3, MessageSquareWarning, RefreshCw, Save } from 'lucide-react';
 import React, { useState } from 'react';
+import { stringify } from 'yaml';
 
 import { Button } from '@/components/ui/button';
 import { MetricSuggestion, SuggestionLifecycle } from '@/lib/api';
@@ -9,7 +10,7 @@ import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { cn } from '@/lib/utils';
 import { StatusPill } from '@/components/workspace/shared';
 import { ConflictWarningStrip } from '@/components/studio/DedupeWarnings';
-import { getMetricUsedColumns } from '@/lib/metrics';
+import { formatMetricFilters, formatMetricFormula, getMetricUsedColumns } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 
 export function SuggestionCard({
@@ -61,12 +62,7 @@ export function SuggestionCard({
   const def = suggestion.definition.metric;
   const yamlContent = suggestion.yaml_preview || JSON.stringify(suggestion.definition, null, 2);
   const usedColumns = getMetricUsedColumns(suggestion.definition);
-  const ratio = def.formula.ratio;
-  const filters = [
-    ...(def.filters || []).map((filter) => ({ ...filter, scope: '' })),
-    ...(ratio?.numerator.filters || []).map((filter) => ({ ...filter, scope: 'Tử số' })),
-    ...(ratio?.denominator.filters || []).map((filter) => ({ ...filter, scope: 'Mẫu số' })),
-  ];
+  const filters = formatMetricFilters(suggestion.definition);
 
   const handleSave = async () => {
     setSaving(true);
@@ -193,9 +189,11 @@ export function SuggestionCard({
               <Translated text={"Công thức tính"} />
             </span>
             <p className="mt-0.5 break-words font-mono text-xs font-medium text-foreground">
-              <span className="text-primary font-bold">{def.formula.function}</span>(
-              <span>{def.formula.expression}</span>)
+              {formatMetricFormula(suggestion.definition)}
             </p>
+            {def.query_plan?.stages.map((stage) => (
+              <pre key={stage.name} className="mt-2 whitespace-pre-wrap break-all font-mono text-xs">{stringify(stage)}</pre>
+            ))}
           </div>
           <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
@@ -221,17 +219,9 @@ export function SuggestionCard({
             <span className="font-mono text-[10px] uppercase text-muted-foreground">
               <Translated text={"Bộ lọc điều kiện"} />
             </span>
-            <p className="mt-1 break-words text-xs text-muted-foreground">
-              {filters.length
-                ? filters.map((filter) => {
-                  const scope = filter.scope ? `${filter.scope}: ` : '';
-                  const value = Array.isArray(filter.value)
-                    ? filter.value.join(', ')
-                    : String(filter.value ?? '');
-                  return `${scope}${filter.field} ${filter.operator}${value ? ` ${value}` : ''}`;
-                }).join(' · ')
-                : 'Không có bộ lọc'}
-            </p>
+            <div className="mt-1 space-y-1 break-words font-mono text-xs font-medium text-foreground">
+              {filters.length ? filters.map((filter, index) => <p key={index}>{filter}</p>) : 'Không có bộ lọc'}
+            </div>
           </div>
         </div>
       </div>
