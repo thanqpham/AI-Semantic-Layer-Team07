@@ -262,7 +262,7 @@ async def test_get_dimensions_for_metric_tiers(async_session: AsyncSession):
     assert group_map["city"] == "related"
     assert "region_name" in group_map
     assert group_map["region_name"] == "related"
-    assert "category" not in group_map
+    assert group_map["category"] == "related"  # Related filters use EXISTS across fanout paths.
 
 
 @pytest.mark.asyncio

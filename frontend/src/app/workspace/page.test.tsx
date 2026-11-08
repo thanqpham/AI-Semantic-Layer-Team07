@@ -125,6 +125,44 @@ describe('WorkspacePage tab persistence', () => {
     vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([]);
   });
 
+  it('does not enable chat or load sessions for a dump without a semantic database', async () => {
+    state.permissions = { can_use_chat: true, can_use_data_assistant: true };
+    vi.mocked(apiModule.listImportedSchemas).mockResolvedValueOnce([{ id: 2, semantic_db_id: null,
+      display_name: 'Dump', dialect: 'postgresql', created_at: '', updated_at: '', table_count: 1 }]);
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByTestId('active-database')).toHaveTextContent('2'));
+    await waitFor(() => expect(screen.getByTestId('active-view')).toHaveTextContent('catalog'));
+    expect(apiModule.listChatSessionsApi).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('page-select-database-2'));
+    expect(screen.getByTestId('active-view')).toHaveTextContent('catalog');
+  });
+
+  it('switches from a live database to SQL dump chat', async () => {
+    state.permissions = { can_use_chat: true, can_use_data_assistant: true };
+    vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([{ id: 1, display_name: 'Live',
+      dialect: 'postgresql', updated_at: '', created_at: '', semantic_db_id: 1, table_count: 1 }]);
+    vi.mocked(apiModule.listImportedSchemas).mockResolvedValueOnce([{ id: 2, semantic_db_id: 2,
+      display_name: 'Dump', dialect: 'postgresql', created_at: '', updated_at: '', table_count: 1 }]);
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByTestId('active-database')).toHaveTextContent('1'));
+    fireEvent.click(screen.getByText('page-select-database-2'));
+    await waitFor(() => expect(screen.getByTestId('active-database')).toHaveTextContent('2'));
+    await waitFor(() => expect(screen.getByTestId('active-view')).toHaveTextContent('ai-studio'));
+    await waitFor(() => expect(apiModule.listChatSessionsApi).toHaveBeenCalledWith('2'));
+  });
+
+  it('opens chat and loads sessions for an SQL dump when permitted', async () => {
+    state.permissions = { can_use_chat: true, can_use_data_assistant: true };
+    vi.mocked(apiModule.listImportedSchemas).mockResolvedValueOnce([{
+      id: 2, semantic_db_id: 2, display_name: 'Dump', dialect: 'postgresql',
+      created_at: '', updated_at: '', table_count: 1,
+    }]);
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByTestId('active-view')).toHaveTextContent('ai-studio'));
+    await waitFor(() => expect(apiModule.listChatSessionsApi).toHaveBeenCalledWith('2'));
+    expect(screen.getByTestId('active-database')).toHaveTextContent('2');
+  });
+
   it('opens Studio on a fresh visit and restores the last tab after reload', async () => {
     state.permissions = { can_use_chat: true, can_use_data_assistant: true };
     vi.mocked(apiModule.listLiveTargetDbs).mockResolvedValue([{

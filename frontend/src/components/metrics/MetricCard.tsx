@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { MetricRecord } from '@/lib/api';
 import { YamlCodeViewer } from '@/components/studio/YamlCodeViewer';
 import { StatusPill } from '@/components/workspace/shared';
-import { formatMetricFormula, metricName, renderMetricYaml } from '@/lib/metrics';
+import { formatMetricFilters, formatMetricFormula, metricName, renderMetricYaml } from '@/lib/metrics';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -254,10 +254,10 @@ export function MetricCard({
                     <dt className="text-muted-foreground">{t('Source table', 'Bảng nguồn')}</dt>
                     <dd className="break-all font-mono">{definition.metric.base_entity}</dd>
                     {metric.description && <><dt className="text-muted-foreground"><Translated text="Mô tả nghiệp vụ" /></dt><dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{metric.description}</dd></>}
-                    {definition.metric.filters.length > 0 && <>
+                    {formatMetricFilters(definition).length > 0 && <>
                       <dt className="text-muted-foreground"><Translated text="Bộ lọc cố định" /></dt>
-                      <dd className="min-w-0 space-y-1 font-mono">{definition.metric.filters.map((filter, index) => (
-                        <div key={index} className="whitespace-pre-wrap break-all">{filter.field} {filter.operator} {JSON.stringify(filter.value)}</div>
+                      <dd className="min-w-0 space-y-1 font-mono">{formatMetricFilters(definition).map((filter, index) => (
+                        <div key={index} className="whitespace-pre-wrap break-all">{filter}</div>
                       ))}</dd>
                     </>}
                     {definition.metric.excluded_notes && <><dt className="text-muted-foreground"><Translated text="Ghi chú loại trừ" /></dt><dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{definition.metric.excluded_notes}</dd></>}

@@ -250,7 +250,7 @@ export default function WorkspacePage() {
     [layers, selectedId],
   );
   const activeLayerId = activeLayer?.id;
-  const semanticDbId = activeLayer?.semantic_db_id || (activeLayer ? Number(activeLayer.id) : undefined);
+  const semanticDbId = activeLayer?.semantic_db_id || (activeLayer?.source_type === 'live' ? Number(activeLayer.id) : undefined);
   const canUseDataAssistant = Boolean(permissions.can_use_data_assistant);
   const canUseMetricStudio = Boolean(permissions.can_use_metric_studio);
   const canManageSchema = Boolean(permissions.can_manage_schema);
@@ -262,8 +262,7 @@ export default function WorkspacePage() {
   const canChat = Boolean(
     permissions.can_use_chat &&
     (canUseDataAssistant || canUseMetricStudio) &&
-    semanticDbId &&
-    activeLayer?.source_type === 'live',
+    semanticDbId,
   );
   const studioMode = canUseMetricStudio ? 'metric_studio' : 'data_assistant';
 
@@ -539,7 +538,7 @@ export default function WorkspacePage() {
   useEffect(() => {
     setActiveSessionId(null);
     setSessions([]);
-    if (!semanticDbId || activeLayer?.source_type !== 'live') return;
+    if (!semanticDbId) return;
     void loadSessions(String(semanticDbId));
   }, [activeLayer?.source_type, activeLayerId, loadSessions, semanticDbId]);
 
@@ -885,7 +884,7 @@ export default function WorkspacePage() {
         const nextCanChat = Boolean(
           permissions.can_use_chat &&
           (canUseDataAssistant || canUseMetricStudio) &&
-          nextLayer?.source_type === 'live',
+          (nextLayer?.semantic_db_id || (nextLayer?.source_type === 'live' && Number(nextLayer.id))),
         );
         setTab(nextCanChat ? 'studio' : 'metrics');
       }}

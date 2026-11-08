@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
+import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +18,73 @@ from src.models.db import (
     SemanticTableModel,
 )
 from src.services.export_service import build_semantic_layer_dict, serialize_to_json, serialize_to_yaml
+
+
+@pytest.mark.asyncio
+async def test_export_formula_preserves_structured_calculation(async_session, seeded_db):
+    metric = (
+        (await async_session.execute(select(SemanticMetricModel).where(SemanticMetricModel.db_id == seeded_db)))
+        .scalars()
+        .first()
+    )
+    metric.formula = ""
+    metric.definition = {
+        "metric": {
+            "formula": {
+                "function": "SUM",
+                "expression": "amount",
+                "ratio": {
+                    "numerator": {"function": "SUM", "expression": "amount"},
+                    "denominator": {"function": "COUNT", "expression": "id"},
+                    "scale": 100,
+                },
+            },
+            "filters": [{"field": "status", "operator": "eq", "value": "paid"}],
+        }
+    }
+    await async_session.flush()
+    exported = json.loads(serialize_to_json(await build_semantic_layer_dict(async_session, seeded_db)))
+    result = next(item for item in exported["canonical_metrics"] if item["id"] == metric.id)
+    assert "denominator" in result["formula"]
+    assert "paid" in result["formula"]
+
+
+@pytest.mark.asyncio
+async def test_export_yaml_contains_query_plan_in_formula_and_versions(async_session, seeded_db):
+    metric = (
+        (await async_session.execute(select(SemanticMetricModel).where(SemanticMetricModel.name == "Total Orders")))
+        .scalars()
+        .first()
+    )
+    definition = {
+        "metric": {
+            "base_entity": "orders",
+            "query_plan": {
+                "stages": [
+                    {
+                        "name": "totals",
+                        "aggregates": [{"name": "revenue", "function": "SUM", "expression": "orders.amount"}],
+                    }
+                ],
+                "output_expression": "totals.revenue",
+            },
+        }
+    }
+    metric.formula, metric.definition = "", definition
+    version = (
+        (await async_session.execute(select(MetricVersionModel).where(MetricVersionModel.metric_id == metric.id)))
+        .scalars()
+        .first()
+    )
+    version.formula, version.definition = "", definition
+    await async_session.flush()
+    exported = yaml.safe_load(serialize_to_yaml(await build_semantic_layer_dict(async_session, seeded_db)))
+    result = next(item for item in exported["canonical_metrics"] if item["id"] == metric.id)
+    assert "orders.amount" in result["formula"]
+    assert "totals.revenue" in result["formula"]
+    assert "orders.amount" in result["versions"][0]["formula"]
+    assert "orders.amount" in next(item for item in exported["metric_versions"] if item["id"] == version.id)["formula"]
+
 
 # ---------------------------------------------------------------------------
 # Fixtures — seed a full canonical schema

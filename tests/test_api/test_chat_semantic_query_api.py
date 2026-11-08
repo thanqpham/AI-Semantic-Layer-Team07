@@ -66,6 +66,8 @@ def chat_mocks():
             SimpleNamespace(id=1, dialect="sqlite", conn_url_enc="enc"),
         )
         mock_catalog.return_value = {
+            "_relationship_fingerprint": "graph-v1",
+            "_mapping_fingerprint": "mapping-v1",
             "metrics": [
                 {
                     "id": 1,
@@ -73,6 +75,8 @@ def chat_mocks():
                     "business_name": "Doanh thu",
                     "formula": "SUM(amount)",
                     "base_entity": "orders",
+                    "dimension_ids": [10],
+                    "filter_column_ids": [],
                 }
             ],
             "dimensions": [
@@ -102,6 +106,7 @@ def chat_mocks():
             mock_can=mock_can,
             mock_exec=mock_exec,
             mock_save=mock_save,
+            mock_catalog=mock_catalog,
         )
 
 
@@ -246,6 +251,8 @@ async def test_clarification_selection_click_executes_spec(
     chat_mocks: SimpleNamespace,
 ) -> None:
     """Clicking a clarification option executes the pre-validated spec without LLM parsing."""
+    from src.api.routes import _option_spec_digest
+
     prev_msg = SimpleNamespace(
         id="msg-prev-clar",
         session_id="sess-nl-1",
@@ -262,6 +269,12 @@ async def test_clarification_selection_click_executes_spec(
             }
         },
     )
+    spec = SemanticQuerySpec(metric_ids=[1], dimensions=[DimensionSelection(column_id=10)])
+    prev_msg.metadata_json["semantic_option_digests"] = {
+        "opt_by_customer": _option_spec_digest(
+            "sess-nl-1", "opt_by_customer", spec, chat_mocks.mock_catalog.return_value
+        )
+    }
     mock_get_msg.return_value = prev_msg
 
     res = await client.post(
@@ -281,6 +294,480 @@ async def test_clarification_selection_click_executes_spec(
     assert body["intent"] == "semantic_query"
     assert body["semantic_query_result"] is not None
     assert body["semantic_query_result"]["columns"] == ["customer_id", "revenue"]
+
+
+@pytest.mark.asyncio
+async def test_clarification_revalidates_and_maps_filter_before_execution(client, auth_headers, chat_mocks):
+    from src.api.routes import _option_spec_digest
+    from src.models.schemas import SemanticQueryFilter
+
+    catalog = {
+        "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
+        "metrics": [
+            {"id": 1, "name": "Orders", "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}
+        ],
+        "dimensions": [],
+        "filter_columns": [
+            {
+                "column_id": 11,
+                "data_type": "TEXT",
+                "review_status": "approved",
+                "allowed_values": ["North"],
+                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
+            }
+        ],
+    }
+    normalized = SemanticQuerySpec(
+        metric_ids=[1], filters=[SemanticQueryFilter(column_id=11, operator="eq", value="North")]
+    )
+    previous = SimpleNamespace(
+        metadata_json={
+            "semantic_option_digests": {"opt": _option_spec_digest("sess-nl-1", "opt", normalized, catalog)},
+            "clarification": {
+                "options": [
+                    {
+                        "id": "opt",
+                        "spec": {
+                            "metric_ids": [1],
+                            "filters": [{"column_id": 11, "operator": "eq", "value": "Miền Bắc"}],
+                        },
+                    }
+                ]
+            },
+        }
+    )
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes.build_parser_catalog", new=AsyncMock(return_value=catalog)),
+    ):
+        response = await client.post(
+            "/api/v1/semantic/101/chat",
+            headers=auth_headers,
+            json={"message": "Miền Bắc", "clarification_selection": {"assistant_message_id": "a", "option_id": "opt"}},
+        )
+    assert response.status_code == 200
+    assert chat_mocks.mock_exec.await_args.args[3].filters[0].value == "North"
+
+
+@pytest.mark.asyncio
+async def test_clarification_does_not_remap_filter_after_catalog_changes(client, auth_headers, chat_mocks):
+    from src.api.routes import _option_spec_digest
+    from src.models.schemas import SemanticQueryFilter
+
+    catalog = {
+        "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
+        "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
+        "filter_columns": [
+            {
+                "column_id": 11,
+                "data_type": "TEXT",
+                "review_status": "approved",
+                "allowed_values": ["South"],
+                "_approved_mappings": [{"db_value": "South", "business_value": "Miền Bắc", "status": "approved"}],
+            }
+        ],
+    }
+    before = SemanticQuerySpec(
+        metric_ids=[1], filters=[SemanticQueryFilter(column_id=11, operator="eq", value="North")]
+    )
+    previous = SimpleNamespace(
+        metadata_json={
+            "semantic_option_digests": {"opt": _option_spec_digest("sess-nl-1", "opt", before, catalog)},
+            "clarification": {
+                "options": [
+                    {
+                        "id": "opt",
+                        "spec": {
+                            "metric_ids": [1],
+                            "filters": [{"column_id": 11, "operator": "eq", "value": "Miền Bắc"}],
+                        },
+                    }
+                ]
+            },
+        }
+    )
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes.build_parser_catalog", new=AsyncMock(return_value=catalog)),
+    ):
+        response = await client.post(
+            "/api/v1/semantic/101/chat",
+            headers=auth_headers,
+            json={"message": "Miền Bắc", "clarification_selection": {"assistant_message_id": "a", "option_id": "opt"}},
+        )
+    assert response.status_code == 200
+    assert response.json()["semantic_query_result"] is None
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_filtered_legacy_clarification_without_snapshot_does_not_execute(client, auth_headers, chat_mocks):
+    catalog = {
+        "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
+        "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
+        "filter_columns": [{"column_id": 11, "data_type": "TEXT", "allowed_values": ["North"]}],
+    }
+    previous = SimpleNamespace(
+        metadata_json={
+            "clarification": {
+                "options": [
+                    {
+                        "id": "opt",
+                        "spec": {"metric_ids": [1], "filters": [{"column_id": 11, "operator": "eq", "value": "North"}]},
+                    }
+                ]
+            }
+        }
+    )
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes.build_parser_catalog", new=AsyncMock(return_value=catalog)),
+    ):
+        response = await client.post(
+            "/api/v1/semantic/101/chat",
+            headers=auth_headers,
+            json={"message": "North", "clarification_selection": {"assistant_message_id": "a", "option_id": "opt"}},
+        )
+    assert response.status_code == 200
+    assert response.json()["semantic_query_result"] is None
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_clarification_rejects_changed_relationship(client, auth_headers, chat_mocks):
+    from src.api.routes import _option_spec_digest
+
+    old = {
+        "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
+        "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [10], "filter_column_ids": []}],
+        "dimensions": [{"column_id": 10, "table_name": "customers"}],
+    }
+    fresh = {**old, "_relationship_fingerprint": "graph-v2"}
+    spec = SemanticQuerySpec(metric_ids=[1], dimensions=[DimensionSelection(column_id=10)])
+    previous = SimpleNamespace(
+        metadata_json={
+            "semantic_option_digests": {"opt": _option_spec_digest("sess-nl-1", "opt", spec, old)},
+            "clarification": {"options": [{"id": "opt", "spec": spec.model_dump(mode="json")}]},
+        }
+    )
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes.build_parser_catalog", new=AsyncMock(return_value=fresh)),
+    ):
+        response = await client.post(
+            "/api/v1/semantic/101/chat",
+            headers=auth_headers,
+            json={
+                "message": "Theo khách hàng",
+                "clarification_selection": {"assistant_message_id": "a", "option_id": "opt"},
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["semantic_query_result"] is None
+    assert "graph-v1" not in str(response.json()) and "graph-v2" not in str(response.json())
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+def test_filtered_option_snapshot_binds_normalized_meaning_without_exposing_it():
+    from src.api.routes import _option_digests, _option_spec_digest
+    from src.models.schemas import ChatClarificationOption, ChatClarificationPayload, SemanticQueryFilter
+
+    catalog = {
+        "_relationship_fingerprint": "graph-v1",
+        "_mapping_fingerprint": "mapping-v1",
+        "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
+        "filter_columns": [
+            {
+                "column_id": 11,
+                "data_type": "TEXT",
+                "review_status": "approved",
+                "allowed_values": ["North"],
+                "_approved_mappings": [{"db_value": "North", "business_value": "Miền Bắc", "status": "approved"}],
+            }
+        ],
+    }
+    raw = SemanticQuerySpec(
+        metric_ids=[1], filters=[SemanticQueryFilter(column_id=11, operator="eq", value="Miền Bắc")]
+    )
+    option = ChatClarificationOption(id="opt", label="Lựa chọn", spec=raw)
+    digest = _option_digests(ChatClarificationPayload(prompt="Chọn", options=[option]), catalog, "session")["opt"]
+    normalized = raw.model_copy(update={"filters": [SemanticQueryFilter(column_id=11, operator="eq", value="North")]})
+    assert digest == _option_spec_digest("session", "opt", normalized, catalog)
+    assert "North" not in digest and "Miền Bắc" not in digest
+    edited_catalog = {**catalog, "_mapping_fingerprint": "mapping-v2"}
+    assert digest != _option_spec_digest("session", "opt", normalized, edited_catalog)
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_revoked_mapping_or_column_status_before_execution(client, auth_headers, chat_mocks):
+    def catalog(column_status: str, mapping_status: str):
+        return {
+            "_relationship_fingerprint": "graph-v1",
+            "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
+            "filter_columns": [
+                {
+                    "column_id": 11,
+                    "column_name": "channel",
+                    "business_name": "Kênh",
+                    "data_type": "TEXT",
+                    "review_status": column_status,
+                    "allowed_values": [],
+                    "_approved_mappings": [{"db_value": "web", "business_value": "Website", "status": mapping_status}],
+                }
+            ],
+        }
+
+    interpretation = {
+        "intent": "semantic_query",
+        "interpretation": {
+            "status": "resolved",
+            "spec": {"metric_ids": [1], "filters": [{"column_id": 11, "operator": "eq", "value": "Website"}]},
+        },
+    }
+    for fresh in (catalog("approved", "pending"), catalog("pending_review", "approved")):
+        with (
+            patch(
+                "src.api.routes.build_parser_catalog",
+                new=AsyncMock(side_effect=[catalog("approved", "approved"), fresh]),
+            ),
+            patch(
+                "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+                new=AsyncMock(return_value={"intent": "semantic_query"}),
+            ),
+            patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        ):
+            agent.ainvoke = AsyncMock(return_value=interpretation)
+            response = await client.post(
+                "/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Đơn Website"}
+            )
+        assert response.status_code == 200
+        assert response.json()["semantic_query_result"] is None
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+def test_option_digest_is_not_exposed_in_chat_history():
+    from src.api.routes import _message_response
+
+    source = SimpleNamespace(
+        id="a",
+        session_id="s",
+        client_message_id=None,
+        sequence_no=1,
+        sender="assistant",
+        content="Choose",
+        intent="semantic_query",
+        metadata_json={"semantic_option_digests": {"a": "private"}, "status": "completed"},
+        created_at=datetime(2026, 1, 1),
+    )
+    result = _message_response(source)
+    assert "semantic_option_digests" not in result.metadata_json
+    assert "semantic_option_digests" in source.metadata_json
+
+
+@pytest.mark.asyncio
+async def test_clarification_rejects_stale_column_before_execution(client, auth_headers, chat_mocks):
+    previous = SimpleNamespace(
+        metadata_json={
+            "clarification": {
+                "options": [
+                    {"id": "opt", "spec": {"metric_ids": [1], "dimensions": [{"column_id": 999}], "filters": []}}
+                ]
+            }
+        }
+    )
+    with patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)):
+        response = await client.post(
+            "/api/v1/semantic/101/chat",
+            headers=auth_headers,
+            json={"message": "Lựa chọn", "clarification_selection": {"assistant_message_id": "a", "option_id": "opt"}},
+        )
+    assert response.status_code == 200
+    assert "không hợp lệ" in response.json()["chat_response"].lower()
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_compile_failure_reports_safe_reason_instead_of_attribute_error(client, auth_headers, chat_mocks):
+    from src.services.semantic_compile_error import SemanticCompileError
+
+    interpretation = {
+        "intent": "semantic_query",
+        "interpretation": {"status": "resolved", "spec": {"metric_ids": [1], "dimensions": [], "filters": []}},
+    }
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+    ):
+        agent.ainvoke = AsyncMock(return_value=interpretation)
+        chat_mocks.mock_exec.side_effect = SemanticCompileError("UNSAFE_FANOUT", "secret SQL")
+        response = await client.post("/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Xem chỉ số"})
+    assert response.status_code == 200
+    result = response.json()["chat_response"]
+    assert "quan hệ" in result.lower()
+    assert "secret SQL" not in result
+
+
+@pytest.mark.asyncio
+async def test_query_revalidates_against_refreshed_catalog_before_executor(client, auth_headers, chat_mocks):
+    old = {"metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [10], "filter_column_ids": []}]}
+    new = {"metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": []}]}
+    interpretation = {
+        "intent": "semantic_query",
+        "interpretation": {
+            "status": "resolved",
+            "spec": {"metric_ids": [1], "dimensions": [{"column_id": 10}], "filters": []},
+        },
+    }
+    with (
+        patch("src.api.routes.build_parser_catalog", new=AsyncMock(side_effect=[old, new])),
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+    ):
+        agent.ainvoke = AsyncMock(return_value=interpretation)
+        response = await client.post(
+            "/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Theo khách hàng"}
+        )
+    assert response.status_code == 200
+    assert "không phù hợp" in response.json()["chat_response"]
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_query_does_not_remap_business_value_when_catalog_changes(client, auth_headers, chat_mocks):
+    def catalog(value):
+        return {
+            "_relationship_fingerprint": "graph-v1",
+            "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": [11]}],
+            "dimensions": [],
+            "filter_columns": [
+                {
+                    "column_id": 11,
+                    "data_type": "TEXT",
+                    "allowed_values": [value],
+                    "_approved_mappings": [{"db_value": value, "business_value": "Miền Bắc"}],
+                }
+            ],
+        }
+
+    interpretation = {
+        "intent": "semantic_query",
+        "interpretation": {
+            "status": "resolved",
+            "spec": {"metric_ids": [1], "filters": [{"column_id": 11, "operator": "eq", "value": "Miền Bắc"}]},
+        },
+    }
+    with (
+        patch("src.api.routes.build_parser_catalog", new=AsyncMock(side_effect=[catalog("North"), catalog("South")])),
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+    ):
+        agent.ainvoke = AsyncMock(return_value=interpretation)
+        response = await client.post(
+            "/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Xem miền Bắc"}
+        )
+    assert response.status_code == 200
+    assert response.json()["semantic_query_result"] is None
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_changed_selected_column_metadata(client, auth_headers, chat_mocks):
+    def catalog(table):
+        return {
+            "_relationship_fingerprint": "graph-v1",
+            "_mapping_fingerprint": "mapping-v1",
+            "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [10], "filter_column_ids": []}],
+            "dimensions": [{"column_id": 10, "table_name": table, "column_name": "region", "data_type": "TEXT"}],
+        }
+
+    interpretation = {
+        "intent": "semantic_query",
+        "interpretation": {"status": "resolved", "spec": {"metric_ids": [1], "dimensions": [{"column_id": 10}]}},
+    }
+    with (
+        patch(
+            "src.api.routes.build_parser_catalog", new=AsyncMock(side_effect=[catalog("customers"), catalog("orders")])
+        ),
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+    ):
+        agent.ainvoke = AsyncMock(return_value=interpretation)
+        response = await client.post(
+            "/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Theo khu vực"}
+        )
+    assert response.status_code == 200
+    assert response.json()["semantic_query_result"] is None
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_changed_relationship_fingerprint(client, auth_headers, chat_mocks):
+    def catalog(fingerprint):
+        return {
+            "_relationship_fingerprint": fingerprint,
+            "_mapping_fingerprint": "mapping-v1",
+            "metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [10], "filter_column_ids": []}],
+            "dimensions": [{"column_id": 10, "table_name": "customers", "column_name": "region", "data_type": "TEXT"}],
+        }
+
+    interpretation = {
+        "intent": "semantic_query",
+        "interpretation": {"status": "resolved", "spec": {"metric_ids": [1], "dimensions": [{"column_id": 10}]}},
+    }
+    with (
+        patch(
+            "src.api.routes.build_parser_catalog",
+            new=AsyncMock(side_effect=[catalog("join_before"), catalog("join_after")]),
+        ),
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+    ):
+        agent.ainvoke = AsyncMock(return_value=interpretation)
+        response = await client.post(
+            "/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Theo khu vực"}
+        )
+    assert response.status_code == 200
+    assert response.json()["semantic_query_result"] is None
+    assert "join_before" not in str(response.json()) and "join_after" not in str(response.json())
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_query_fails_closed_when_relationship_fingerprint_missing(client, auth_headers, chat_mocks):
+    catalog = {"metrics": [{"id": 1, "base_entity": "orders", "dimension_ids": [], "filter_column_ids": []}]}
+    interpretation = {"intent": "semantic_query", "interpretation": {"status": "resolved", "spec": {"metric_ids": [1]}}}
+    with (
+        patch("src.api.routes.build_parser_catalog", new=AsyncMock(return_value=catalog)),
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+    ):
+        agent.ainvoke = AsyncMock(return_value=interpretation)
+        response = await client.post("/api/v1/semantic/101/chat", headers=auth_headers, json={"message": "Xem chỉ số"})
+    assert response.status_code == 200
+    assert response.json()["semantic_query_result"] is None
+    chat_mocks.mock_exec.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -444,3 +931,191 @@ async def test_clarification_selection_with_stale_metric_id_delegates_to_standar
     body = res.json()
     assert body["intent"] != "semantic_query"
     chat_mocks.mock_exec.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "can_generate,denied,expected",
+    [(True, False, "metric_query"), (False, False, "metric_query"), (False, True, "semantic_query")],
+)
+async def test_missing_metric_routes_by_permission(client, auth_headers, chat_mocks, can_generate, denied, expected):
+    from fastapi import HTTPException
+
+    chat_mocks.mock_can.return_value = can_generate
+    missing = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "missing_metric",
+        "interpretation": {"status": "needs_clarification", "clarification": {"prompt": "missing", "options": []}},
+    }
+    proposal = {"intent": "metric_query", "suggested_metrics": [], "blocked_candidates": []}
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes.get_metric_requirement_history", new=AsyncMock(return_value=[])),
+        patch(
+            "src.api.routes._require_resource_permission",
+            new=AsyncMock(side_effect=HTTPException(403) if denied else None),
+        ),
+    ):
+        agent.ainvoke = AsyncMock(side_effect=[missing, proposal])
+        res = await client.post(
+            "/api/v1/semantic/101/chat", json={"message": "Xem tổng số khách hàng"}, headers=auth_headers
+        )
+    assert res.status_code == 200
+    assert res.json()["intent"] == expected
+    assert agent.ainvoke.await_count == (1 if denied else 2)
+    assert chat_mocks.mock_save.await_count == 2
+    chat_mocks.mock_exec.assert_not_awaited()
+    if denied:
+        assert "quyền" in res.json()["chat_response"]
+
+
+@pytest.mark.asyncio
+async def test_dump_missing_metric_is_not_blocked_by_live_query_check(client, auth_headers, chat_mocks):
+    from fastapi import HTTPException
+
+    missing = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "missing_metric",
+        "interpretation": {"status": "needs_clarification", "clarification": {"prompt": "missing", "options": []}},
+    }
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes.get_metric_requirement_history", new=AsyncMock(return_value=[])),
+        patch("src.api.routes._query_target", new=AsyncMock(side_effect=HTTPException(400, "live only"))) as target,
+    ):
+        agent.ainvoke = AsyncMock(side_effect=[missing, {"intent": "metric_query"}])
+        res = await client.post(
+            "/api/v1/semantic/101/chat", json={"message": "Xem tổng số khách hàng"}, headers=auth_headers
+        )
+    assert res.status_code == 200
+    assert res.json()["intent"] == "metric_query"
+    target.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_query_does_not_start_metric_proposal(client, auth_headers, chat_mocks):
+    ambiguous = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "needs_clarification",
+        "interpretation": {
+            "status": "needs_clarification",
+            "clarification": {"prompt": "Which metric?", "options": []},
+        },
+    }
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes._require_resource_permission", new_callable=AsyncMock) as permission,
+    ):
+        agent.ainvoke = AsyncMock(return_value=ambiguous)
+        res = await client.post("/api/v1/semantic/101/chat", json={"message": "Which metric?"}, headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json()["chat_response"] == "Which metric?"
+    assert agent.ainvoke.await_count == 1
+    permission.assert_not_awaited()
+    chat_mocks.mock_exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_select_create_metric(client, auth_headers, chat_mocks):
+    from fastapi import HTTPException
+
+    chat_mocks.mock_can.return_value = False
+    previous = SimpleNamespace(
+        metadata_json={"clarification": {"options": [{"id": "create_metric", "action": "create_metric"}]}}
+    )
+    with (
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch("src.api.routes._require_resource_permission", new=AsyncMock(side_effect=HTTPException(403))),
+        patch("src.api.routes._process_standard_chat", new_callable=AsyncMock) as process,
+    ):
+        res = await client.post(
+            "/api/v1/semantic/101/chat",
+            json={
+                "message": "Create",
+                "clarification_selection": {"assistant_message_id": "a", "option_id": "create_metric"},
+            },
+            headers=auth_headers,
+        )
+    assert res.status_code == 403
+    process.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["requested", "discovery"])
+async def test_admin_cannot_start_metric_generation(client, auth_headers, chat_mocks, mode):
+    from fastapi import HTTPException
+
+    chat_mocks.mock_can.return_value = False
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "metric_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes._require_resource_permission", new=AsyncMock(side_effect=HTTPException(403))),
+        patch("src.api.routes.persist_reviewed_state", new_callable=AsyncMock) as persist,
+    ):
+        agent.ainvoke = AsyncMock()
+        response = await client.post(
+            "/api/v1/semantic/101/chat", json={"message": "Create metric", "proposal_mode": mode}, headers=auth_headers
+        )
+    assert response.status_code == 200
+    assert "quy\u1ec1n" in response.json()["chat_response"]
+    agent.ainvoke.assert_not_awaited()
+    persist.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["resolved", "reuse", "selection"])
+async def test_dump_query_reports_unsupported_without_executing(client, auth_headers, chat_mocks, path):
+    from fastapi import HTTPException
+
+    payload = {"message": "Show revenue"}
+    if path == "reuse":
+        payload["reuse_metric_id"] = 1
+    if path == "selection":
+        payload["clarification_selection"] = {"assistant_message_id": "a", "option_id": "opt"}
+    previous = SimpleNamespace(
+        metadata_json={
+            "clarification": {
+                "options": [{"id": "opt", "spec": {"metric_ids": [1], "dimensions": [], "filters": [], "limit": 100}}]
+            }
+        }
+    )
+    resolved = {
+        "intent": "semantic_query",
+        "semantic_parse_status": "resolved",
+        "interpretation": {
+            "status": "resolved",
+            "spec": {"metric_ids": [1], "dimensions": [], "filters": [], "limit": 100},
+        },
+    }
+    with (
+        patch(
+            "src.agents.nodes.chat.orchestrator_node.orchestrator_node",
+            new=AsyncMock(return_value={"intent": "semantic_query"}),
+        ),
+        patch("src.agents.graphs.chat_graph.chat_agent") as agent,
+        patch("src.api.routes.get_chat_message", new=AsyncMock(return_value=previous)),
+        patch(
+            "src.api.routes._query_target",
+            new=AsyncMock(side_effect=HTTPException(400, "Query only supported for Live DB connections")),
+        ),
+    ):
+        agent.ainvoke = AsyncMock(return_value=resolved)
+        response = await client.post("/api/v1/semantic/101/chat", json=payload, headers=auth_headers)
+    assert response.status_code == 200
+    assert "SQL Dump" in response.json()["chat_response"]
+    chat_mocks.mock_exec.assert_not_awaited()

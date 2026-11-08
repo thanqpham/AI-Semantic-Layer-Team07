@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import unicodedata
 from typing import Any
 
@@ -94,11 +95,55 @@ def _approved_metric_list_response(user_message: str, metrics: Any) -> str | Non
     return f"Hiện Semantic Layer có {len(names)} metric đã được phê duyệt:\n\n{items}"
 
 
+_CATALOG_WORDS = {
+    "hien",
+    "co",
+    "nhung",
+    "metric",
+    "metrics",
+    "chi",
+    "so",
+    "nao",
+    "gi",
+    "giup",
+    "da",
+    "duoc",
+    "phe",
+    "duyet",
+    "trong",
+    "semantic",
+    "layer",
+    "danh",
+    "sach",
+    "liet",
+    "ke",
+    "tat",
+    "ca",
+    "bao",
+    "nhieu",
+    "vui",
+    "long",
+    "toi",
+    "cho",
+    "xem",
+    "cac",
+    "la",
+    "het",
+    "business",
+    "hay",
+    "he",
+    "thong",
+}
+
+
 def _asks_for_metric_catalog(user_message: str) -> bool:
-    """Recognize a request to list the approved metric catalog."""
+    """Recognize unfiltered requests for the approved metric catalog."""
     normalized = _without_accents(user_message).lower()
-    markers = ("co nhung", "danh sach", "liet ke", "bao nhieu", "metric gi")
-    return "metric" in normalized and any(marker in normalized for marker in markers)
+    words = set(re.findall(r"\w+", normalized))
+    has_metric = bool({"metric", "metrics"} & words) or {"chi", "so"} <= words
+    listing = any(marker in normalized for marker in ("danh sach", "liet ke", "bao nhieu", "metric gi"))
+    listing = listing or {"nhung", "nao"} <= words or {"xem", "cac"} <= words
+    return has_metric and listing and words <= _CATALOG_WORDS
 
 
 def _without_accents(value: str) -> str:
