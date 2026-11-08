@@ -135,3 +135,43 @@ def test_ratio_identity_includes_both_sides_transforms_and_scoped_filters(change
     assert metric_identity(MetricDefinition.model_validate(first["definition"])) != metric_identity(
         MetricDefinition.model_validate(second["definition"])
     )
+
+
+def _plan_metric(metric_id: int, name: str) -> dict:
+    metric = _metric(metric_id, name)
+    metric["definition"]["metric"]["query_plan"] = {
+        "stages": [
+            {
+                "name": "total",
+                "base_entity": "orders",
+                "aggregates": [{"name": "amount", "function": "SUM", "expression": "amount"}],
+                "filters": [{"field": "orders.status", "operator": "in", "value": ["paid", "done"]}],
+            }
+        ],
+        "output_expression": "total.amount",
+    }
+    return metric
+
+
+def test_same_query_plan_is_exact_duplicate() -> None:
+    first = _plan_metric(1, "Revenue A")
+    second = _plan_metric(2, "Revenue B")
+    groups = compare_catalog_metrics([first, second])
+    assert [group.group_type for group in groups] == ["exact_duplicate"]
+    assert [member.metric_id for member in groups[0].members] == [1, 2]
+
+
+@pytest.mark.parametrize("change", ["aggregate", "filter", "output", "no_plan"])
+def test_different_query_plans_are_not_duplicates(change: str) -> None:
+    first = _plan_metric(1, "Revenue A")
+    second = _plan_metric(2, "Revenue B")
+    plan = second["definition"]["metric"]["query_plan"]
+    if change == "aggregate":
+        plan["stages"][0]["aggregates"][0]["function"] = "AVG"
+    elif change == "filter":
+        plan["stages"][0]["filters"][0]["value"] = ["paid"]
+    elif change == "output":
+        plan["output_expression"] = "total.amount * 100"
+    else:
+        second["definition"]["metric"].pop("query_plan")
+    assert compare_catalog_metrics([first, second]) == []
