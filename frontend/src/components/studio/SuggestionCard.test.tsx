@@ -39,6 +39,42 @@ describe('SuggestionCard lifecycle states', () => {
     cleanup();
   });
 
+  it('shows the numerator, denominator and scaling for a ratio', () => {
+    const suggestion = makeSuggestion();
+    suggestion.definition.metric.formula.ratio = {
+      numerator: { function: 'SUM', expression: 'amount' },
+      denominator: { function: 'COUNT_DISTINCT', expression: 'id' }, scale: 100, offset: 1,
+    };
+    render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
+    expect(screen.getByText(/1 \+ 100 × \(SUM\(amount\)\) \/ \(COUNT_DISTINCT\(id\)\)/)).toBeInTheDocument();
+  });
+
+  it('shows the sources and calculations of each query plan stage', () => {
+    const suggestion = makeSuggestion();
+    suggestion.definition.metric.query_plan = {
+      output_expression: 'totals.revenue',
+      stages: [{ name: 'totals', base_entity: 'orders', joins: [], group_by: [],
+        aggregates: [{ name: 'revenue', function: 'SUM', expression: 'orders.amount', filters: [] }], filters: [] }],
+    };
+    render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
+    expect(screen.getByText(/totals.revenue/)).toBeInTheDocument();
+    expect(screen.getByText(/orders.amount/)).toBeInTheDocument();
+  });
+
+  it('lists stage and aggregate filters with their separate scopes', () => {
+    const suggestion = makeSuggestion();
+    suggestion.definition.metric.query_plan = {
+      output_expression: 'totals.revenue', stages: [{ name: 'totals', base_entity: 'orders', joins: [], group_by: [],
+        filters: [{ field: 'orders.status', operator: 'eq', value: '' }],
+        aggregates: [{ name: 'revenue', function: 'SUM', expression: 'orders.amount',
+          filters: [{ field: 'orders.region', operator: 'in', value: ['north', 'south'] }] }] }],
+    };
+    render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
+    expect(screen.getByText('Bước totals: orders.status = ""')).toBeInTheDocument();
+    expect(screen.getByText('Bước totals, phép tính revenue: orders.region thuộc ["north", "south"]')).toBeInTheDocument();
+    expect(screen.queryByText('Không có bộ lọc')).not.toBeInTheDocument();
+  });
+
   it('fresh suggestion: black save button, no status pill, no reject-reason tab', () => {
     renderCard(undefined);
 

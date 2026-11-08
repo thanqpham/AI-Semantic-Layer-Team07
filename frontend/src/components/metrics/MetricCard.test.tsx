@@ -36,13 +36,26 @@ describe('MetricCard compact rows', () => {
     expect(row).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText(metric.description!)).toBeInTheDocument();
     expect(screen.getByText(/Giữ nguyên toàn bộ ghi chú/)).toHaveClass('whitespace-pre-wrap');
-    expect(screen.getByText('status eq "completed"')).toBeInTheDocument();
+    expect(screen.getByText('Chung: status = "completed"')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'YAML' }));
     expect(screen.getByText('Metric definition (YAML)')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Định nghĩa' }));
     expect(screen.getByText(metric.description!)).toBeInTheDocument();
     fireEvent.click(row);
     expect(screen.queryByText(metric.description!)).not.toBeInTheDocument();
+  });
+
+  it('shows ratio filters in the expanded metric details', () => {
+    const definition = structuredClone(metric.definition!);
+    definition.metric.formula.ratio = {
+      numerator: { function: 'SUM', expression: 'amount', filters: [{ field: 'deleted_at', operator: 'is_null', value: null }] },
+      denominator: { function: 'COUNT', expression: 'id', filters: [{ field: 'active', operator: 'eq', value: false }] },
+    };
+    render(<MetricCard metric={{ ...metric, definition }} onHistory={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByText('Chung (cả tử và mẫu): status = "completed"')).toBeInTheDocument();
+    expect(screen.getByText('Tử số: deleted_at là NULL')).toBeInTheDocument();
+    expect(screen.getByText('Mẫu số: active = false')).toBeInTheDocument();
   });
 
   it('keeps checkbox selection separate from expanding and approval', () => {
