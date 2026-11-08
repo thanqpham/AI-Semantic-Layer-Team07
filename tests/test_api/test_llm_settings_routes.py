@@ -124,6 +124,13 @@ async def test_settings_are_isolated_by_account(client, async_session):
 
 
 @pytest.mark.asyncio
+async def test_shopaikey_provider_is_available_in_settings(client, async_session):
+    response = await client.get('/api/v1/settings/llm', headers=await _headers(async_session))
+    assert {'id': 'shopaikey', 'name': 'ShopAIKey'} in response.json()['providers']
+    assert service.PROVIDERS['shopaikey'] == ('ShopAIKey', 'https://api.shopaikey.com/v1', 'openai')
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("provider", list(service.PROVIDERS))
 async def test_all_requested_providers_resolve_to_official_endpoints(client, async_session, provider):
     saved = await client.put("/api/v1/settings/llm", headers=await _headers(async_session), json={
@@ -167,7 +174,7 @@ class ModelClient:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["openrouter", "gemini", "openai", "anthropic", "deepseek"])
+@pytest.mark.parametrize("provider", ["openrouter", "gemini", "openai", "anthropic", "deepseek", "shopaikey"])
 async def test_loads_models_with_provider_specific_protocol(client, async_session, monkeypatch, provider):
     factory = Mock(return_value=ModelClient())
     target = "anthropic.AsyncAnthropic" if provider == "anthropic" else "src.services.llm_settings_service.AsyncOpenAI"
