@@ -110,13 +110,22 @@ def _dimension_to_dict(col: SemanticColumnModel) -> dict[str, Any]:
     }
 
 
+def _export_formula(formula: str | None, definition: dict[str, Any] | None) -> str:
+    """Preserve legacy formulas or render the structured calculation for export."""
+    if formula or not isinstance(definition, dict):
+        return formula or ""
+    metric = definition.get("metric") or {}
+    calculation = {key: metric[key] for key in ("base_entity", "formula", "filters", "query_plan") if metric.get(key)}
+    return yaml.safe_dump(calculation, allow_unicode=True, sort_keys=False).strip() if calculation else ""
+
+
 def _metric_to_dict(met: SemanticMetricModel) -> dict[str, Any]:
     """Convert a metric model to a canonical metric dictionary with version info."""
     versions = [
         {
             "id": v.id,
             "version": v.version,
-            "formula": v.formula,
+            "formula": _export_formula(v.formula, v.definition),
             "definition": v.definition,
             "changed_by": v.changed_by,
             "change_reason": v.change_reason,
@@ -130,7 +139,7 @@ def _metric_to_dict(met: SemanticMetricModel) -> dict[str, Any]:
         "description": met.description,
         "sql_template": met.sql_template,
         "source": met.source,
-        "formula": met.formula,
+        "formula": _export_formula(met.formula, met.definition),
         "definition": met.definition,
         "aggregation_type": met.aggregation_type,
         "version": met.version,
@@ -161,7 +170,7 @@ def _metric_version_to_dict(ver: MetricVersionModel) -> dict[str, Any]:
         "id": ver.id,
         "metric_id": ver.metric_id,
         "version": ver.version,
-        "formula": ver.formula,
+        "formula": _export_formula(ver.formula, ver.definition),
         "definition": ver.definition,
         "changed_by": ver.changed_by,
         "change_reason": ver.change_reason,
