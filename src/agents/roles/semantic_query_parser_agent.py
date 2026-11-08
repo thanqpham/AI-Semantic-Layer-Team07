@@ -11,7 +11,6 @@ from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 
-from src.agents.roles.semantic_query_requirements import _filter_values_have_evidence, _requirements_covered
 from src.models.schemas import (
     ChatClarificationOption,
     ChatClarificationPayload,
@@ -22,10 +21,12 @@ from src.models.schemas import (
     SemanticTimeRange,
 )
 from src.observability import trace_action
+from src.services.chat_execution import current_execution
 from src.services.llm import get_llm
 from src.services.llm_json import ainvoke_json
 from src.services.metric_knowledge import normalized_text
-from src.services.natural_language_query import normalize_interpretation
+from src.services.natural_language_query import _merge_time_ranges, normalize_interpretation
+from src.services.semantic_query_parser_context import catalog_capacity_error, prompt_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,11 @@ QUY TẮC BẮT BUỘC:
      + Nếu chưa rõ chỉ số hoặc có nhiều cách hiểu, trả "needs_clarification", không kết luận thiếu metric.
 3. Nếu câu hỏi rõ ràng và map được metric/dimension/filter hợp lệ:
     - xác định mục đích của từng cụm: chọn metric, lọc giá trị, nhóm kết quả (dimension) hoặc giới hạn thời gian; một câu có thể kết hợp nhiều mục đích.
+    - Các lời đề nghị như "thực hiện truy vấn" hoặc "cho tôi xem kết quả" không phải là điều kiện lọc.
+    - Đối chiếu tên và formula_definition đã duyệt, gồm tử số, mẫu số và bộ lọc trong định nghĩa; không thêm lại điều kiện vốn đã nằm trong metric. Nếu không đủ căn cứ để xác định định nghĩa phù hợp, hỏi làm rõ.
+    - Xét lịch sử khi người dùng trả lời làm rõ: giữ metric và điều kiện cũ, chỉ thay đổi điều người dùng yêu cầu. Không mang điều kiện cũ sang câu hỏi mới độc lập.
+    - Với "N tháng gần nhất", dùng khoảng từ ngày hiện tại lùi N tháng lịch đến hết hôm nay (nếu ngày không tồn tại thì dùng ngày cuối tháng); end_date là ngày mai. Với N tháng trọn vẹn, dùng các tháng hoàn chỉnh.
+    - Trước khi trả lời, đối chiếu các điều kiện, chiều, thời gian và xếp hạng với toàn bộ yêu cầu; nếu không ánh xạ được điều kiện, hỏi rõ điều kiện đó, không bỏ qua.
     - Chọn cột từ catalog tương thích với tất cả metric đã chọn: dimension thuộc dimension_ids, filter thuộc filter_column_ids.
     - Giữ nguyên văn giá trị nghiệp vụ người dùng nêu trong filters để backend đối chiếu ánh xạ đã duyệt; không tự dịch, chuẩn hóa hay suy ra giá trị database khi thiếu căn cứ.
     - Giữ đúng ý nghĩa "không phải"/"ngoài" (phủ định), "hoặc" (một filter nhiều giá trị, không AND), "ít nhất" (ngưỡng) và mọi điều kiện thời gian.
@@ -115,30 +121,60 @@ async def parse_semantic_query(
 ) -> dict[str, Any]:
     """Parse user query against catalog using LLM without direct DB execution."""
     catalog = parser_catalog or {}
+    capacity_error = catalog_capacity_error(catalog)
+    if capacity_error:
+        output = _build_node_output(_fallback_interpretation(capacity_error))
+        output["semantic_parse_status"] = "needs_clarification"
+        return output
     metrics = catalog.get("metrics") or []
     user_message = user_message.strip()
     prompt = _build_parse_prompt(user_message, catalog, can_generate_metrics, chat_history or [])
+    raw_status = "error"
     try:
         raw_json = await trace_action(
             "semantic_parse", {"catalog_metrics": len(metrics)}, ainvoke_json(get_llm(), prompt, retries=1)
         )
         raw_json = _guard_missing_metric(raw_json, catalog)
-        prior_user_messages = [
-            item.get("content", "") for item in (chat_history or [])[-6:] if item.get("role") == "user"
-        ]
-        evidence = "\n".join([*prior_user_messages, user_message])
-        interpretation = _parse_interpretation(raw_json, catalog, can_generate_metrics, user_message, evidence)
+        raw_status = (
+            raw_json.get("status")
+            if raw_json.get("status") in {"resolved", "needs_clarification", "missing_metric"}
+            else "error"
+        )
+        interpretation = _parse_interpretation(raw_json, catalog, can_generate_metrics, user_message)
         parse_status = _semantic_parse_status(raw_json, interpretation)
     except Exception as exc:
         logger.warning("Semantic parse node failed: %s", type(exc).__name__)
         parse_status = "error"
         interpretation = _fallback_interpretation(
-            "Tôi chưa hiểu rõ câu hỏi số liệu của bạn. Bạn có thể diễn đạt cụ thể hơn không?"
+            "Không thể phân tích yêu cầu do dịch vụ AI trả lỗi hoặc dữ liệu không hợp lệ. Vui lòng thử lại."
         )
 
+    _log_parse_summary(raw_status, parse_status, interpretation)
     output = _build_node_output(interpretation)
     output["semantic_parse_status"] = parse_status
+    if parse_status == "error":
+        output["run_status"] = "error"
     return output
+
+
+def _log_parse_summary(raw_status: str, status: str, interpretation: SemanticQueryInterpretation) -> None:
+    """Log only bounded parser outcomes, never prompts or values."""
+    execution = current_execution()
+    stage = (
+        "llm" if status == "error" else "validation" if raw_status == "resolved" and status != "resolved" else "parser"
+    )
+    spec = interpretation.spec
+    logger.info(
+        "Semantic parse summary run_id=%s llm_status=%s status=%s stage=%s metrics=%d dimensions=%d filters=%d time_ranges=%d",
+        execution.trace["run_id"] if execution else "-",
+        raw_status,
+        status,
+        stage,
+        len(spec.metric_ids) if spec else 0,
+        len(spec.dimensions) if spec else 0,
+        len(spec.filters) if spec else 0,
+        len(interpretation.time_ranges),
+    )
 
 
 def _guard_missing_metric(raw: dict[str, Any], catalog: dict[str, Any]) -> dict[str, Any]:
@@ -184,17 +220,7 @@ def _build_parse_prompt(
     """Format catalog, history, and current Vietnam time into the prompt."""
     now_vn = datetime.now(_VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
     history_str = _format_history(chat_history)
-    safe_catalog = {
-        **{key: value for key, value in catalog.items() if key != "_relationship_fingerprint"},
-        "metrics": [
-            {key: value for key, value in metric.items() if key != "_definition_fingerprint"}
-            for metric in catalog.get("metrics", [])
-        ],
-        "filter_columns": [
-            {key: value for key, value in column.items() if key != "_approved_mappings"}
-            for column in catalog.get("filter_columns", [])
-        ],
-    }
+    safe_catalog = prompt_catalog(catalog)
     compact_catalog = json.dumps(safe_catalog, ensure_ascii=False, indent=2)
     if can_generate_metrics:
         role_desc = "Data Lead / Quản trị viên (có quyền tạo và phê duyệt Metric)"
@@ -226,34 +252,8 @@ def _format_history(history: list[dict[str, str]]) -> str:
     return "\n".join(lines) or "(none)"
 
 
-def _is_forced_mismatch(user_message: str, metric_ids: list[int], catalog: dict[str, Any]) -> bool:
-    """Detect if distinct concepts (like retention rate) were forcefully mapped to unrelated metrics."""
-    lowered = user_message.lower()
-    valid_metrics = {m["id"]: m for m in catalog.get("metrics", [])}
-    for m_id in metric_ids:
-        m = valid_metrics.get(m_id)
-        if not m:
-            continue
-        m_name = (m.get("business_name") or m.get("name") or "").lower()
-        if ("giữ chân" in lowered or "retention" in lowered) and (
-            "giữ chân" not in m_name and "retention" not in m_name
-        ):
-            return True
-        if ("thuần" in lowered or "net" in lowered) and ("thuần" not in m_name and "net" not in m_name):
-            return True
-        if ("chuyển đổi" in lowered or "conversion" in lowered) and (
-            "chuyển đổi" not in m_name and "conversion" not in m_name
-        ):
-            return True
-        if ("aov" in lowered or "trung bình đơn" in lowered) and (
-            "aov" not in m_name and "trung bình" not in m_name and "average" not in m_name
-        ):
-            return True
-    return False
-
-
 def _parse_interpretation(
-    raw: dict[str, Any], catalog: dict[str, Any], can_generate_metrics: bool, user_message: str, evidence: str
+    raw: dict[str, Any], catalog: dict[str, Any], can_generate_metrics: bool, user_message: str
 ) -> SemanticQueryInterpretation:
     """Convert raw LLM dict into validated SemanticQueryInterpretation."""
     status = raw.get("status")
@@ -261,33 +261,17 @@ def _parse_interpretation(
         raw = {**raw, "clarification": {"prompt": f"Chưa có chỉ số '{raw['metric_name'].strip()}'.", "options": []}}
     if status == "resolved":
         spec = _build_spec(raw, catalog)
-        if spec is not None:
-            if _is_forced_mismatch(user_message, spec.metric_ids, catalog):
-                raw = {
-                    "status": "needs_clarification",
-                    "clarification": {
-                        "prompt": f"Chưa xác định được chỉ số phù hợp cho '{user_message.strip()}'. Vui lòng làm rõ.",
-                        "options": [],
-                    },
-                    "rationale": "Chỉ số được hỏi chưa tồn tại chính xác trong danh mục.",
-                }
-            else:
-                time_ranges = _build_time_ranges(raw.get("time_ranges", []))
-                interpretation = SemanticQueryInterpretation(
-                    status="resolved",
-                    spec=spec,
-                    time_ranges=time_ranges,
-                    rationale=raw.get("rationale"),
-                )
-                checked = normalize_interpretation(interpretation, catalog)
-                if checked.status != "resolved":
-                    return checked
-                if not _requirements_covered(checked.spec, catalog, user_message, evidence):
-                    return _fallback_interpretation("Vui lòng làm rõ điều kiện lọc hoặc thời gian của bạn.")
-                if not _filter_values_have_evidence(checked.spec, catalog, evidence):
-                    return _fallback_interpretation("Vui lòng xác nhận giá trị bộ lọc bạn muốn sử dụng.")
-                return interpretation
-    return _build_clarification_interpretation(raw, catalog, can_generate_metrics, user_message, evidence)
+        if spec is None:
+            raise ValueError("Invalid semantic query output")
+        interpretation = SemanticQueryInterpretation(
+            status="resolved",
+            spec=spec,
+            time_ranges=_build_time_ranges(raw.get("time_ranges", [])),
+            rationale=raw.get("rationale"),
+        )
+        checked = normalize_interpretation(interpretation, catalog)
+        return interpretation if checked.status == "resolved" else checked
+    return _build_clarification_interpretation(raw, catalog, can_generate_metrics, user_message)
 
 
 def _build_spec(raw: dict[str, Any], catalog: dict[str, Any]) -> SemanticQuerySpec | None:
@@ -359,7 +343,6 @@ def _build_clarification_interpretation(
     catalog: dict[str, Any],
     can_generate_metrics: bool = False,
     user_message: str = "",
-    evidence: str = "",
 ) -> SemanticQueryInterpretation:
     """Build a needs_clarification interpretation from clarification payload."""
     clar_data = raw.get("clarification")
@@ -409,16 +392,10 @@ def _build_clarification_interpretation(
                                     ),
                                     catalog,
                                 )
-                                if (
-                                    checked.status != "resolved"
-                                    or not _requirements_covered(
-                                        checked.spec, catalog, user_message, evidence, suggested_grouping=True
-                                    )
-                                    or not _filter_values_have_evidence(checked.spec, catalog, evidence)
-                                ):
+                                if checked.status != "resolved":
                                     continue
                                 spec_obj = spec_obj.model_copy(
-                                    update={"filters": spec_obj.filters + checked.spec.filters[len(spec_obj.filters) :]}
+                                    update={"filters": _merge_time_ranges(spec_obj.filters, time_ranges)}
                                 )
                             except ValidationError as exc:
                                 logger.debug("Skipping invalid option spec: %s", exc)
