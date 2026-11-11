@@ -126,13 +126,12 @@ async def _invoke_bounded(llm: Any, contract: type[_ModelT], messages: Any, stag
 
 
 async def _submit(llm: Any, contract: type[BaseModel], messages: Any, structured: bool) -> Any:
+    # No per-call temperature: reasoning models reject 0.0; get_llm()/account settings decide it.
     if structured:
         method = "json_mode" if getattr(llm, "_llm_type", None) == "openai-chat" else "function_calling"
         prompt = _json_messages(contract, messages) if method == "json_mode" else messages
-        return await llm.with_structured_output(contract, method=method).ainvoke(
-            prompt, temperature=0.0, max_tokens=4096
-        )
-    raw = await llm.ainvoke(messages, temperature=0.0, max_tokens=4096)
+        return await llm.with_structured_output(contract, method=method).ainvoke(prompt, max_tokens=4096)
+    raw = await llm.ainvoke(messages, max_tokens=4096)
     try:
         return extract_json(response_text(raw))
     except (ValueError, TypeError):

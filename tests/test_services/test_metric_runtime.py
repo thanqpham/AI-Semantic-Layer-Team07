@@ -80,7 +80,16 @@ async def test_unsupported_structured_output_has_exactly_one_plain_attempt():
     client.ainvoke.return_value = SimpleNamespace(content='{"value":7}')
     with patch("src.services.metric_runtime.get_llm", return_value=client):
         assert (await invoke_metric_json(Answer, "payload")).value == 7
-    client.ainvoke.assert_awaited_once_with("payload", temperature=0.0, max_tokens=4096)
+    client.ainvoke.assert_awaited_once_with("payload", max_tokens=4096)
+
+
+async def test_invoke_does_not_override_client_temperature():
+    """Reasoning models reject temperature 0.0; calls must use the client's configured value."""
+    client = _client([{"value": 3}])
+    with patch("src.services.metric_runtime.get_llm", return_value=client):
+        await invoke_metric_json(Answer, "payload")
+    kwargs = client.with_structured_output.return_value.ainvoke.call_args.kwargs
+    assert "temperature" not in kwargs
 
 
 async def test_invalid_json_is_not_transport_retried():
