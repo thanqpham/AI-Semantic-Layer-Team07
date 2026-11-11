@@ -117,12 +117,63 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function ConfigDetails({ config }: { config: EavConfig }) {
+  const rows: Array<[string, string]> = [
+    ['Bảng entity', config.entity_table],
+    ['Cột định danh', config.entity_id_column],
+    ['Kiểu nhận diện', config.attribute_mode],
+    ['Cột mã thuộc tính', config.attribute_column ?? '—'],
+    ['Cột liên kết từ điển', config.attribute_fk_column ?? '—'],
+    ['Bảng từ điển', config.dict_table ?? '—'],
+    ['Cột mã từ điển', config.dict_key_column ?? '—'],
+    ['Cột nhãn từ điển', config.dict_label_column ?? '—'],
+    ...Object.entries(config.value_columns).map(([type, column]): [string, string] => [`Cột giá trị ${type}`, column]),
+    ['Cột hiệu lực (history)', config.history?.effective_column ?? '—'],
+    ['Cột kết thúc (history)', config.history?.end_column ?? '—'],
+  ];
+  return (
+    <div aria-label="Chi tiết cấu hình EAV" className="mt-2 flex flex-col gap-2 rounded-md border border-border bg-secondary/30 p-3 text-xs">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 md:grid-cols-4">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex flex-col">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-medium text-foreground">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="py-1 pr-2 font-medium">Khóa</th>
+            <th className="py-1 pr-2 font-medium">Tên hiển thị</th>
+            <th className="py-1 pr-2 font-medium">Kiểu</th>
+            <th className="py-1 pr-2 font-medium">Quy tắc đa giá trị</th>
+            <th className="py-1 font-medium">History</th>
+          </tr>
+        </thead>
+        <tbody>
+          {config.attributes.map((attribute) => (
+            <tr key={attribute.id} className="border-t border-border">
+              <td className="py-1 pr-2">{attribute.attribute_key}</td>
+              <td className="py-1 pr-2">{attribute.label}</td>
+              <td className="py-1 pr-2">{attribute.data_type}</td>
+              <td className="py-1 pr-2">{attribute.multi_value_rule}</td>
+              <td className="py-1">{attribute.history_enabled ? 'Bật' : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNotify, onMetricsChanged }: Props) {
   const [configs, setConfigs] = useState<EavConfig[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -414,17 +465,28 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
                     {config.review_status}
                   </span>
                 </div>
-                {config.review_status === 'pending_review' && canApproveMetrics && (
-                  <div className="flex gap-2">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-7 text-xs"
+                    aria-label={expandedId === config.id ? 'Ẩn cấu hình' : 'Xem cấu hình'}
+                    onClick={() => setExpandedId(expandedId === config.id ? null : config.id)}
+                  >
+                    {expandedId === config.id ? <Translated text="Ẩn cấu hình" /> : <Translated text="Xem cấu hình" />}
+                  </Button>
+                  {config.review_status === 'pending_review' && canApproveMetrics && (
                     <Button variant="default" className="h-7 text-xs" onClick={() => void review(config.id, 'approve')}>
                       <Translated text="Duyệt" />
                     </Button>
+                  )}
+                  {config.review_status === 'pending_review' && canApproveMetrics && (
                     <Button variant="outline" className="h-7 text-xs" onClick={() => void review(config.id, 'reject')}>
                       <Translated text="Từ chối" />
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
+              {expandedId === config.id && <ConfigDetails config={config} />}
               <ul className="mt-2 flex flex-wrap gap-2">
                 {config.attributes.map((attribute) => (
                   <li key={attribute.id} className="flex items-center gap-2 rounded-full border border-border px-2 py-1 text-xs">

@@ -156,6 +156,19 @@ it('shows backend validation errors in Vietnamese', async () => {
   expect(await screen.findByText(/Cột "ghost" không tồn tại/)).toBeInTheDocument();
 });
 
+it('reveals saved config details when toggling Xem cấu hình', async () => {
+  render(<EavSourcesPanel dbId={5} canManageSchema canApproveMetrics />);
+  await screen.findByText('EAV chính');
+  expect(screen.queryByLabelText(/chi tiết cấu hình eav/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /xem cấu hình/i }));
+  const details = await screen.findByLabelText(/chi tiết cấu hình eav/i);
+  expect(details).toHaveTextContent('entity_id');
+  expect(details).toHaveTextContent('attr_code');
+  expect(details).toHaveTextContent('value_num');
+  expect(details).toHaveTextContent('value_str');
+  expect(details).toHaveTextContent('reject');
+});
+
 it('hides management actions without permission', async () => {
   render(<EavSourcesPanel dbId={5} canManageSchema={false} canApproveMetrics={false} />);
   await screen.findByText('EAV chính');
