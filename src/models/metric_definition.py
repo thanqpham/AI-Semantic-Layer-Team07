@@ -355,6 +355,17 @@ class MetricQueryPlan(BaseModel):
 MetricFormula.model_rebuild()
 
 
+class EavAttributeRef(BaseModel):
+    """Reference from one metric to an approved EAV attribute."""
+
+    config_id: int
+    attribute_id: int
+    attribute_key: str
+    data_type: str
+    multi_value_rule: str
+    history_enabled: bool
+
+
 class MetricSpec(BaseModel):
     """Canonical business metric persisted in the metadata store."""
 
@@ -368,6 +379,7 @@ class MetricSpec(BaseModel):
     status: MetricStatus = "pending_approval"
     confidence: MetricConfidence | None = None
     excluded_notes: str = Field(default="", max_length=2000)
+    eav: EavAttributeRef | None = None
 
     @model_validator(mode="before")
     @classmethod

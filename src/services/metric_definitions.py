@@ -32,6 +32,10 @@ async def validate_metric_definition(
     """Validate entity and fields against persisted semantic metadata."""
     table = await _load_base_entity(db, db_id, definition.metric.base_entity)
     definition.metric.base_entity = table.table_name
+    if definition.metric.eav is not None:
+        # EAV attributes are validated against their approved source config,
+        # not against physical columns of the base entity.
+        return table
     columns = await _load_columns(db, table.id)
     column_map = {column.column_name: column for column in columns}
     _validate_expression_columns(definition, column_map)
