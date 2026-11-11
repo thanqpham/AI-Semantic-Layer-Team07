@@ -53,8 +53,10 @@ import {
   CatalogTable,
   compileSemanticQueryApi,
   DimensionSelection,
+  EavConfig,
   executeSemanticQueryApi,
   getMetricRecommendedDimensionsApi,
+  listEavConfigsApi,
   MetricDimensionsResponse,
   MetricRecord,
   RecommendedDimensionItem,
@@ -314,6 +316,10 @@ export function MetricExplorerView({
   const [loadingDims, setLoadingDims] = useState(false);
   const [filters, setFilters] = useState<SemanticQueryFilter[]>([]);
   const [dashboardFilterActive, setDashboardFilterActive] = useState(false);
+  const [eavConfigs, setEavConfigs] = useState<EavConfig[]>([]);
+  const [eavDimIds, setEavDimIds] = useState<number[]>([]);
+  const [asOf, setAsOf] = useState('');
+  const eavLoadedDb = useRef<string | null>(null);
   const appliedSelectionKey = useRef<number | null>(null);
   const lastPreviewRequest = useRef<SemanticQueryRequest | null>(null);
   const previousRefresh = useRef(refreshKey);
@@ -354,6 +360,38 @@ export function MetricExplorerView({
     () => metrics.filter((item) => item.status === 'approved' && item.definition),
     [metrics],
   );
+
+  const eavMetricSelected = useMemo(
+    () =>
+      metricIds.some(
+        (id) => Boolean(approved.find((m) => m.metric_id === id)?.definition?.metric.eav),
+      ),
+    [metricIds, approved],
+  );
+  const eavAttributes = useMemo(() => eavConfigs.flatMap((c) => c.attributes), [eavConfigs]);
+  const eavHistoryNeeded = useMemo(
+    () =>
+      eavDimIds.some((id) => eavAttributes.find((a) => a.id === id)?.history_enabled) ||
+      Boolean(
+        metricIds.find((id) => approved.find((m) => m.metric_id === id)?.definition?.metric.eav?.history_enabled),
+      ),
+    [eavDimIds, eavAttributes, metricIds, approved],
+  );
+
+  useEffect(() => {
+    if (!dbId || !eavMetricSelected || eavLoadedDb.current === String(dbId)) return;
+    eavLoadedDb.current = String(dbId);
+    listEavConfigsApi(String(dbId))
+      .then((items) => setEavConfigs(items.filter((c) => c.review_status === 'approved')))
+      .catch(() => setEavConfigs([]));
+  }, [dbId, eavMetricSelected]);
+
+  useEffect(() => {
+    if (!eavMetricSelected) {
+      setEavDimIds([]);
+      setAsOf('');
+    }
+  }, [eavMetricSelected]);
 
   const displayedMetrics = useMemo(() => {
     if (!metricSearch.trim()) return approved;
@@ -586,6 +624,8 @@ export function MetricExplorerView({
     dimensions,
     filters,
     limit,
+    ...(eavDimIds.length > 0 ? { eav_dimensions: eavDimIds.map((id) => ({ attribute_id: id })) } : {}),
+    ...(eavMetricSelected && asOf ? { as_of: asOf } : {}),
   });
 
   const toggleMetric = (id: number) => {
@@ -599,6 +639,12 @@ export function MetricExplorerView({
       prev.some((item) => item.column_id === columnId)
         ? prev.filter((item) => item.column_id !== columnId)
         : [...prev, { column_id: columnId, time_grain: undefined }],
+    );
+  };
+
+  const toggleEavDimension = (attributeId: number) => {
+    setEavDimIds((prev) =>
+      prev.includes(attributeId) ? prev.filter((id) => id !== attributeId) : [...prev, attributeId],
     );
   };
 
@@ -679,6 +725,8 @@ export function MetricExplorerView({
     setDimSearch('');
     setOutput(null);
     setError('');
+    setEavDimIds([]);
+    setAsOf('');
   };
 
   const handleRemoveDashboardFilter = () => {
@@ -1015,6 +1063,58 @@ export function MetricExplorerView({
               )}
             </div>
           </div>
+
+          {/* 2b. EAV Attributes (chỉ hiện khi chọn metric EAV) */}
+          {eavMetricSelected && (
+            <div className="space-y-2 rounded-xl border border-border bg-card/60 p-3.5">
+              <SectionLabel><Translated text={"2b. THUỘC TÍNH EAV"} /></SectionLabel>
+              {eavAttributes.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground italic">
+                  <Translated text={"Chưa có cấu hình EAV nào được phê duyệt cho database này."} />
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {eavAttributes.map((attr) => {
+                    const isAttrChecked = eavDimIds.includes(attr.id);
+                    return (
+                      <button
+                        key={attr.id}
+                        type="button"
+                        aria-label={attr.label}
+                        onClick={() => toggleEavDimension(attr.id)}
+                        className={cn(
+                          'group inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all cursor-pointer select-none',
+                          isAttrChecked
+                            ? 'border-primary bg-primary text-primary-foreground shadow-2xs font-semibold'
+                            : 'border-border bg-background text-foreground hover:border-primary/60 hover:bg-accent/40',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isAttrChecked}
+                          onChange={() => {}}
+                          className="h-3 w-3 rounded accent-primary pointer-events-none"
+                        />
+                        <span>{attr.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {eavHistoryNeeded && (
+                <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <Translated text={"As of (ngày hiệu lực):"} />
+                  <Input
+                    type="date"
+                    aria-label="As of"
+                    value={asOf}
+                    onChange={(e) => setAsOf(e.target.value)}
+                    className="h-7 w-36 text-xs bg-background"
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
           {/* 3. Time Dimension & Grain */}
           <div className="space-y-2 rounded-xl border border-border bg-card/60 p-3.5 shadow-2xs">

@@ -1208,3 +1208,167 @@ it.each(['success','failure'])('ignores an old manual preview %s after the relat
  expect(screen.getByText('SELECT fresh')).toBeInTheDocument();
  cleanup();vi.restoreAllMocks();
 });
+
+it('sends eav_dimensions and as_of when an EAV metric is selected', async () => {
+  const eavMetric: MetricRecord = {
+    metric_id: 9,
+    name: 'Tổng doanh thu EAV',
+    source: 'ai',
+    version: 1,
+    status: 'approved',
+    created_at: '2026-01-01',
+    definition: {
+      schema_version: 2,
+      metric: {
+        name: 'Tổng doanh thu EAV',
+        base_entity: 'entity_eav',
+        base_entity_id: 10,
+        grain: { column_ids: [101] },
+        formula: { function: 'SUM', expression: 'value_num' },
+        filters: [],
+        status: 'approved',
+        confidence: 'high',
+        excluded_notes: '',
+        eav: {
+          config_id: 3,
+          attribute_id: 11,
+          attribute_key: 'revenue',
+          data_type: 'number',
+          multi_value_rule: 'reject',
+          history_enabled: true,
+        },
+      },
+    },
+  };
+  const catalog: SemanticCatalog = {
+    db_id: 3,
+    source_type: 'live',
+    query_supported: true,
+    tables: [],
+    relationships: [],
+  };
+  const eavConfigs: apiModule.EavConfig[] = [
+    {
+      id: 3,
+      name: 'EAV chính',
+      entity_table: 'entity_eav',
+      entity_id_column: 'entity_id',
+      attribute_mode: 'direct',
+      attribute_column: 'attr_code',
+      attribute_fk_column: null,
+      dict_table: null,
+      dict_key_column: null,
+      dict_label_column: null,
+      value_columns: { number: 'value_num', string: 'value_str' },
+      history: { effective_column: 'eff_at', end_column: null },
+      review_status: 'approved',
+      reviewed_by: null,
+      reviewed_at: null,
+      created_at: '2026-11-11T00:00:00',
+      attributes: [
+        {
+          attribute_key: 'revenue',
+          label: 'Doanh thu',
+          description: '',
+          data_type: 'number',
+          value_column: null,
+          multi_value_rule: 'reject',
+          history_enabled: true,
+          id: 11,
+        },
+        {
+          attribute_key: 'region',
+          label: 'Khu vực',
+          description: '',
+          data_type: 'string',
+          value_column: null,
+          multi_value_rule: 'reject',
+          history_enabled: false,
+          id: 12,
+        },
+      ],
+    },
+  ];
+  vi.spyOn(apiModule, 'listEavConfigsApi').mockResolvedValue(eavConfigs);
+  const exec = vi
+    .spyOn(apiModule, 'executeSemanticQueryApi')
+    .mockResolvedValue({ sql: 'SELECT 1', parameters: {}, columns: ['Khu vực'], rows: [['Bắc']], row_count: 1 });
+
+  render(<MetricExplorerView dbId={3} metrics={[eavMetric]} catalog={catalog} theme="light" />);
+
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Tổng doanh thu EAV/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /khu vực/i }));
+  fireEvent.change(screen.getByLabelText(/as of/i), { target: { value: '2026-05-01' } });
+  fireEvent.click(screen.getByRole('button', { name: /thực thi/i }));
+
+  await waitFor(() =>
+    expect(exec).toHaveBeenCalledWith(
+      '3',
+      expect.objectContaining({
+        metric_ids: [9],
+        eav_dimensions: [{ attribute_id: 12 }],
+        as_of: '2026-05-01',
+      }),
+    ),
+  );
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+it('sends as_of for a history EAV metric even without an EAV dimension', async () => {
+  const eavMetric: MetricRecord = {
+    metric_id: 9,
+    name: 'Tổng doanh thu EAV',
+    source: 'ai',
+    version: 1,
+    status: 'approved',
+    created_at: '2026-01-01',
+    definition: {
+      schema_version: 2,
+      metric: {
+        name: 'Tổng doanh thu EAV',
+        base_entity: 'entity_eav',
+        base_entity_id: 10,
+        grain: { column_ids: [101] },
+        formula: { function: 'SUM', expression: 'value_num' },
+        filters: [],
+        status: 'approved',
+        confidence: 'high',
+        excluded_notes: '',
+        eav: {
+          config_id: 3,
+          attribute_id: 11,
+          attribute_key: 'revenue',
+          data_type: 'number',
+          multi_value_rule: 'reject',
+          history_enabled: true,
+        },
+      },
+    },
+  };
+  const catalog: SemanticCatalog = {
+    db_id: 3,
+    source_type: 'live',
+    query_supported: true,
+    tables: [],
+    relationships: [],
+  };
+  const exec = vi
+    .spyOn(apiModule, 'executeSemanticQueryApi')
+    .mockResolvedValue({ sql: 'SELECT 1', parameters: {}, columns: ['Tổng'], rows: [[425]], row_count: 1 });
+  vi.spyOn(apiModule, 'listEavConfigsApi').mockResolvedValue([]);
+
+  render(<MetricExplorerView dbId={3} metrics={[eavMetric]} catalog={catalog} theme="light" />);
+
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Tổng doanh thu EAV/i }));
+  fireEvent.change(screen.getByLabelText(/as of/i), { target: { value: '2026-05-01' } });
+  fireEvent.click(screen.getByRole('button', { name: /thực thi/i }));
+
+  await waitFor(() => {
+    const payload = exec.mock.calls[0][1] as apiModule.SemanticQueryRequest;
+    expect(payload).toEqual(expect.objectContaining({ metric_ids: [9], as_of: '2026-05-01' }));
+    expect(payload).not.toHaveProperty('eav_dimensions');
+  });
+  cleanup();
+  vi.restoreAllMocks();
+});

@@ -63,6 +63,14 @@ export interface MetricDefinition {
     confidence?: MetricConfidence | null;
     excluded_notes: string;
     query_plan?: MetricQueryPlan | null;
+    eav?: {
+      config_id: number;
+      attribute_id: number;
+      attribute_key: string;
+      data_type: string;
+      multi_value_rule: string;
+      history_enabled: boolean;
+    } | null;
   };
   diagnostics?: Array<{ code: string; message: string }>;
 }
@@ -291,6 +299,9 @@ export interface SemanticQueryRequest {
   order_metric_id?: number | null;
   dimensions?: DimensionSelection[];
   dimension_ids?: number[];
+  eav_dimensions?: Array<{ attribute_id: number }>;
+  eav_filters?: Array<{ attribute_id: number; operator: FilterOperator; value?: unknown }>;
+  as_of?: string | null;
   filters: SemanticQueryFilter[];
   limit: number;
   order_by?: 'metric_desc' | 'dimension_desc';
@@ -2041,4 +2052,110 @@ export async function listSyncLogsApi(
   dbId: number | string,
 ): Promise<SchemaSyncLog[]> {
   return semanticRequest<SchemaSyncLog[]>(`/api/v1/semantic/${dbId}/sync-logs`);
+}
+
+export type EavDataType = 'string' | 'number' | 'boolean' | 'date' | 'datetime';
+export type EavMultiValueRule = 'reject' | 'first' | 'last' | 'sum' | 'avg' | 'min' | 'max';
+
+export interface EavAttributePayload {
+  attribute_key: string;
+  label: string;
+  data_type: EavDataType;
+  value_column?: string | null;
+  multi_value_rule?: EavMultiValueRule;
+  history_enabled?: boolean;
+  description?: string;
+}
+
+export interface EavHistoryRule {
+  effective_column: string;
+  end_column?: string | null;
+}
+
+export interface EavSourceConfigPayload {
+  name: string;
+  entity_table: string;
+  entity_id_column: string;
+  attribute_mode: 'direct' | 'dictionary';
+  attribute_column?: string | null;
+  attribute_fk_column?: string | null;
+  dict_table?: string | null;
+  dict_key_column?: string | null;
+  dict_label_column?: string | null;
+  value_columns: Partial<Record<EavDataType, string>>;
+  history?: EavHistoryRule | null;
+  attributes: EavAttributePayload[];
+}
+
+export interface EavAttribute extends EavAttributePayload {
+  id: number;
+}
+
+export interface EavConfig {
+  id: number;
+  name: string;
+  entity_table: string;
+  entity_id_column: string;
+  attribute_mode: 'direct' | 'dictionary';
+  attribute_column: string | null;
+  attribute_fk_column: string | null;
+  dict_table: string | null;
+  dict_key_column: string | null;
+  dict_label_column: string | null;
+  value_columns: Record<string, string>;
+  history: EavHistoryRule | null;
+  review_status: string;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  created_at: string;
+  attributes: EavAttribute[];
+}
+
+export async function listEavConfigsApi(dbId: number | string): Promise<EavConfig[]> {
+  const data = await semanticRequest<{ items: EavConfig[] }>(`/api/v1/semantic/${dbId}/eav-configs`);
+  return data.items;
+}
+
+export async function createEavConfigApi(
+  dbId: number | string,
+  payload: EavSourceConfigPayload,
+): Promise<EavConfig> {
+  return semanticRequest<EavConfig>(`/api/v1/semantic/${dbId}/eav-configs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateEavConfigApi(
+  dbId: number | string,
+  configId: number,
+  payload: EavSourceConfigPayload,
+): Promise<EavConfig> {
+  return semanticRequest<EavConfig>(`/api/v1/semantic/${dbId}/eav-configs/${configId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function reviewEavConfigApi(
+  dbId: number | string,
+  configId: number,
+  action: 'approve' | 'reject',
+): Promise<EavConfig> {
+  return semanticRequest<EavConfig>(`/api/v1/semantic/${dbId}/eav-configs/${configId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  });
+}
+
+export async function createEavMetricApi(
+  dbId: number | string,
+  configId: number,
+  attributeId: number,
+  body: { aggregation: 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT'; name?: string; description?: string },
+): Promise<{ metric_id: number; name: string; status: string }> {
+  return semanticRequest<{ metric_id: number; name: string; status: string }>(
+    `/api/v1/semantic/${dbId}/eav-configs/${configId}/attributes/${attributeId}/metric`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
 }
