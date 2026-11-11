@@ -211,6 +211,44 @@ it('edits an existing config and saves through the update API', async () => {
   );
 });
 
+const filePayload = {
+  name: 'EAV từ file',
+  entity_table: 'entity_eav',
+  entity_id_column: 'entity_id',
+  attribute_mode: 'direct',
+  attribute_column: 'attr_code',
+  attribute_fk_column: null,
+  dict_table: null,
+  dict_key_column: null,
+  dict_label_column: null,
+  value_columns: { number: 'value_num', string: 'value_str' },
+  history: { effective_column: 'eff_at', end_column: 'end_at' },
+  attributes: [
+    { attribute_key: 'revenue', label: 'Doanh thu', data_type: 'number', multi_value_rule: 'reject', history_enabled: false },
+    { attribute_key: 'segment', label: 'Phân khúc', data_type: 'string', multi_value_rule: 'reject', history_enabled: true },
+  ],
+};
+
+it('prefills the declaration form from an uploaded JSON file', async () => {
+  const onNotify = vi.fn();
+  render(<EavSourcesPanel dbId={5} canManageSchema canApproveMetrics onNotify={onNotify} />);
+  const file = new File([JSON.stringify(filePayload)], 'eav.json', { type: 'application/json' });
+  fireEvent.change(await screen.findByLabelText(/chọn file cấu hình eav/i), { target: { files: [file] } });
+  expect(await screen.findByLabelText(/tên cấu hình/i)).toHaveValue('EAV từ file');
+  expect(screen.getByLabelText(/cột hiệu lực history tùy chọn/i)).toHaveValue('eff_at');
+  fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }));
+  await waitFor(() => expect(createEavConfigApi).toHaveBeenCalledWith(5, filePayload));
+});
+
+it('notifies an error and keeps the form closed for an invalid config file', async () => {
+  const onNotify = vi.fn();
+  render(<EavSourcesPanel dbId={5} canManageSchema canApproveMetrics onNotify={onNotify} />);
+  const file = new File(['{ not json'], 'bad.json', { type: 'application/json' });
+  fireEvent.change(await screen.findByLabelText(/chọn file cấu hình eav/i), { target: { files: [file] } });
+  await waitFor(() => expect(onNotify).toHaveBeenCalledWith(expect.stringMatching(/không đọc được|không hợp lệ/i)));
+  expect(screen.queryByRole('button', { name: /lưu cấu hình/i })).not.toBeInTheDocument();
+});
+
 it('hides management actions without permission', async () => {
   render(<EavSourcesPanel dbId={5} canManageSchema={false} canApproveMetrics={false} />);
   await screen.findByText('EAV chính');

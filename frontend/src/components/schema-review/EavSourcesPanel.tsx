@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -134,6 +134,43 @@ function formFromConfig(config: EavConfig): FormState {
   };
 }
 
+function formFromJson(raw: unknown): FormState | null {
+  const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+  if (typeof raw !== 'object' || raw === null) return null;
+  const data = raw as Record<string, unknown>;
+  const valueColumns = (data.value_columns ?? {}) as Record<string, unknown>;
+  const history = (data.history ?? null) as Record<string, unknown> | null;
+  const attributes = (Array.isArray(data.attributes) ? data.attributes : []).map((item) => {
+    const attr = (item ?? {}) as Record<string, unknown>;
+    return {
+      key: str(attr.attribute_key),
+      label: str(attr.label),
+      data_type: DATA_TYPES.includes(attr.data_type as EavDataType) ? (attr.data_type as EavDataType) : 'string',
+      rule: RULES.includes(attr.multi_value_rule as EavMultiValueRule)
+        ? (attr.multi_value_rule as EavMultiValueRule)
+        : 'reject',
+      history: attr.history_enabled === true,
+    };
+  });
+  if (!str(data.name) || !str(data.entity_table) || attributes.length === 0) return null;
+  return {
+    name: str(data.name),
+    entity_table: str(data.entity_table),
+    entity_id_column: str(data.entity_id_column),
+    attribute_mode: data.attribute_mode === 'dictionary' ? 'dictionary' : 'direct',
+    attribute_column: str(data.attribute_column),
+    attribute_fk_column: str(data.attribute_fk_column),
+    dict_table: str(data.dict_table),
+    dict_key_column: str(data.dict_key_column),
+    dict_label_column: str(data.dict_label_column),
+    value_number: str(valueColumns.number),
+    value_string: str(valueColumns.string),
+    history_effective: history ? str(history.effective_column) : '',
+    history_end: history ? str(history.end_column) : '',
+    attributes,
+  };
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
@@ -201,6 +238,21 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
   const [busy, setBusy] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const mapped = formFromJson(JSON.parse(await file.text()));
+      if (mapped === null) throw new Error('File cấu hình không hợp lệ: thiếu name, entity_table hoặc attributes.');
+      setForm(mapped);
+      setEditingId(null);
+      setFormOpen(true);
+      onNotify?.('Đã nạp cấu hình từ file. Kiểm tra rồi bấm Lưu cấu hình.');
+    } catch {
+      onNotify?.('Không đọc được file cấu hình. Kiểm tra JSON hợp lệ và đủ name, entity_table, attributes.');
+    }
+  };
 
   const reload = useCallback(async () => {
     try {
@@ -266,18 +318,38 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
           <Translated text="Nguồn dữ liệu EAV" />
         </h3>
         {canManageSchema && (
-          <Button
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => {
-              setForm(emptyForm);
-              setEditingId(null);
-              setFormOpen((open) => !open);
-            }}
-            aria-label="Khai báo nguồn EAV"
-          >
-            <Translated text="Khai báo nguồn EAV" />
-          </Button>
+          <div className="flex gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              aria-label="Chọn file cấu hình EAV"
+              onChange={(event) => {
+                void importFile(event.target.files?.[0]);
+                event.target.value = '';
+              }}
+            />
+            <Button
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => fileRef.current?.click()}
+            >
+              <Translated text="Nhập từ file" />
+            </Button>
+            <Button
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => {
+                setForm(emptyForm);
+                setEditingId(null);
+                setFormOpen((open) => !open);
+              }}
+              aria-label="Khai báo nguồn EAV"
+            >
+              <Translated text="Khai báo nguồn EAV" />
+            </Button>
+          </div>
         )}
       </div>
 
