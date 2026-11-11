@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.observability import trace_action
 from src.services.query_compiler import CompiledQuery, validate_read_only
+from src.services.semantic_compile_error import SemanticCompileError
 
 
 @dataclass
@@ -71,6 +72,7 @@ async def _execute_validated_query(
                 transaction = await connection.begin()
                 try:
                     await _set_read_only(connection, dialect, timeout_seconds)
+                    await _run_prechecks(connection, compiled, dialect)
                     params = _normalize_parameters(compiled.parameters, dialect)
                     result = await connection.execute(text(compiled.sql), params)
                     rows = [[_json_safe_value(cell) for cell in row] for row in result.fetchall()]
@@ -85,6 +87,18 @@ async def _execute_validated_query(
         raise
     finally:
         await engine.dispose()
+
+
+async def _run_prechecks(connection: Any, compiled: CompiledQuery, dialect: str) -> None:
+    """Reject multi-valued attributes before the main statement runs."""
+    for precheck_sql, precheck_params in compiled.prechecks:
+        validate_read_only(precheck_sql, "postgres" if dialect == "postgresql" else dialect)
+        result = await connection.execute(text(precheck_sql), _normalize_parameters(precheck_params, dialect))
+        if (result.scalar() or 0) > 0:
+            raise SemanticCompileError(
+                "EAV_MULTI_VALUE",
+                "Thuộc tính có nhiều giá trị trên một thực thể (quy tắc reject)",
+            )
 
 
 def _normalize_value(value: Any) -> Any:

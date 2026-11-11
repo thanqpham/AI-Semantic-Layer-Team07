@@ -13,3 +13,4 @@ class CompiledQuery:
     sql: str
     parameters: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    prechecks: list[tuple[str, dict[str, Any]]] = field(default_factory=list)

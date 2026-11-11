@@ -12,6 +12,7 @@ from sqlglot import exp
 from src.models.db import SemanticMetricModel, SemanticTableModel
 from src.models.metric_definition import MetricDefinition, MetricQueryPlan
 from src.models.schemas import SemanticQuerySpec
+from src.services.query_compiler_eav import build_eav_sql, load_eav_context
 from src.services.query_compiler_lowering import lower_simple_metric
 from src.services.query_compiler_metadata import QueryCompilerMetadata
 from src.services.query_compiler_plan import compile_plan_sql
@@ -91,6 +92,7 @@ class QueryCompileOrchestrator:
     """Load and validate semantic metadata before selecting a SQL renderer."""
 
     def __init__(self, db: AsyncSession) -> None:
+        self._db = db
         self._metadata = QueryCompilerMetadata(db)
 
     async def compile(self, connection_id: int, spec: SemanticQuerySpec, trace: CompileTraceBuilder) -> CompiledQuery:
@@ -99,6 +101,13 @@ class QueryCompileOrchestrator:
         definitions = canonical_definitions(metrics)
         record_loaded_trace(trace, metrics, definitions, spec.limit)
         _validate_sort_metric(spec, metrics)
+        if not any(item.metric.eav is not None for item in definitions) and (spec.eav_dimensions or spec.eav_filters):
+            raise SemanticCompileError(
+                "EAV_MIXED_SELECTION", "eav_dimensions/eav_filters chỉ dùng được khi metric là EAV"
+            )
+        if any(item.metric.eav is not None for item in definitions):
+            trace.record(plan_type="eav")
+            return await self._compile_eav(connection_id, spec, metrics, definitions, dialect, trace)
         if len(definitions) > 1:
             trace.record(plan_type="metric_plan_bundle")
             bundle = await self._prepare_metric_plan_bundle(connection_id, spec, metrics, definitions, dialect, trace)
@@ -112,6 +121,35 @@ class QueryCompileOrchestrator:
         trace.record(plan_type="single_table")
         context = await self._prepare_simple_metric(connection_id, spec, metrics, definitions, dialect, trace)
         return self._render_simple_metric(context, trace)
+
+    async def _compile_eav(
+        self,
+        connection_id: int,
+        spec: SemanticQuerySpec,
+        metrics: list[SemanticMetricModel],
+        definitions: list[MetricDefinition],
+        dialect: str,
+        trace: CompileTraceBuilder,
+    ) -> CompiledQuery:
+        """Compile a selection where every metric references an EAV attribute."""
+        if not all(item.metric.eav is not None for item in definitions) or spec.dimensions or spec.filters:
+            raise SemanticCompileError(
+                "EAV_MIXED_SELECTION", "Metric EAV không trộn được với metric/dimension/filter quan hệ"
+            )
+        attribute_ids = _eav_attribute_ids(definitions, spec)
+        config, attributes = await load_eav_context(self._db, connection_id, attribute_ids)
+        built = build_eav_sql(
+            config, attributes, list(zip((m.id for m in metrics), definitions, strict=True)), spec, dialect
+        )
+        validate_read_only(built.sql, dialect)
+        for precheck_sql, _ in built.prechecks:
+            validate_read_only(precheck_sql, dialect)
+        trace.step("render_sql")
+        trace.step("validate_guardrails")
+        trace.record(base_entity={"table_name": config.entity_table, "config_id": config.id})
+        return CompiledQuery(
+            sql=built.sql, parameters=built.parameters, metadata=built.metadata, prechecks=built.prechecks
+        )
 
     async def _prepare_simple_metric(
         self,
@@ -363,6 +401,14 @@ class QueryCompileOrchestrator:
         metadata = _metric_plan_bundle_metadata(context)
         metadata["trace"] = trace.snapshot()
         return CompiledQuery(sql=sql, parameters=parameters, metadata=metadata)
+
+
+def _eav_attribute_ids(definitions: list[MetricDefinition], spec: SemanticQuerySpec) -> list[int]:
+    """Collect every attribute id referenced by metrics, dimensions, and filters."""
+    ids = [item.metric.eav.attribute_id for item in definitions if item.metric.eav is not None]
+    ids.extend(item.attribute_id for item in spec.eav_dimensions)
+    ids.extend(item.attribute_id for item in spec.eav_filters)
+    return ids
 
 
 def _compiled_metadata(

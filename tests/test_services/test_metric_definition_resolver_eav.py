@@ -1,6 +1,7 @@
 """Resolver behavior for metric definitions that reference EAV attributes."""
 
 import pytest
+from sqlalchemy import select
 
 from src.models.db import SemanticColumnModel, SemanticDatabaseModel, SemanticTableModel
 from src.models.db_eav import EavAttributeModel, EavSourceConfigModel
@@ -71,6 +72,21 @@ async def test_resolve_eav_metric_fills_reference_and_base_entity(async_session)
     assert resolved.metric.eav.multi_value_rule == "reject"
     assert resolved.metric.base_entity == "entity_eav"
     assert resolved.metric.base_entity_id is not None
+
+
+@pytest.mark.asyncio
+async def test_resolve_eav_metric_sets_grain_from_entity_id_column(async_session):
+    config, attribute = await _seed(async_session)
+    resolved = await MetricDefinitionResolver(async_session).resolve(
+        config.semantic_db_id, _eav_draft(attribute, config)
+    )
+    assert resolved.schema_version == 2
+    assert resolved.diagnostics == []
+    result = await async_session.execute(
+        select(SemanticColumnModel).where(SemanticColumnModel.table_id == resolved.metric.base_entity_id)
+    )
+    entity_column = result.scalars().one()
+    assert resolved.metric.grain.column_ids == [entity_column.id]
 
 
 @pytest.mark.asyncio

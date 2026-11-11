@@ -116,10 +116,14 @@ async def _resolve_eav_definition(db: AsyncSession, db_id: int, draft: MetricDef
     if function not in eav_allowed_aggregations(attribute.data_type):
         raise ValueError(f"Phép {function} không áp dụng cho thuộc tính EAV kiểu {attribute.data_type}.")
     table = await validate_metric_definition(db, db_id, draft)
+    grain = _eav_grain(config, table, await _load_columns(db, table.id))
+    diagnostics = _grain_diagnostics(grain)
     metric = draft.metric.model_copy(
         update={
             "base_entity": table.table_name,
             "base_entity_id": table.id,
+            "grain": grain,
+            "status": "needs_review" if diagnostics else draft.metric.status,
             "eav": EavAttributeRef(
                 config_id=config.id,
                 attribute_id=attribute.id,
@@ -130,7 +134,15 @@ async def _resolve_eav_definition(db: AsyncSession, db_id: int, draft: MetricDef
             ),
         }
     )
-    return MetricDefinition(schema_version=2, metric=metric)
+    return MetricDefinition(schema_version=2, metric=metric, diagnostics=diagnostics)
+
+
+def _eav_grain(
+    config: EavSourceConfigModel, table: SemanticTableModel, columns: list[SemanticColumnModel]
+) -> MetricGrain:
+    """EAV grain is the entity id column declared by the configuration."""
+    entity_ids = [column.id for column in columns if column.column_name.lower() == config.entity_id_column.lower()]
+    return MetricGrain(column_ids=entity_ids or _primary_key_ids(table.primary_key_column, columns))
 
 
 async def _resolve_plan_column_ids(
