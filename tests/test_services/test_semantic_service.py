@@ -44,6 +44,14 @@ from src.services.semantic_service import (
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def mock_database_overview_generation(monkeypatch):
+    """Keep schema service unit tests independent of external LLM providers."""
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr("src.services.semantic_service._generate_initial_overview", AsyncMock())
+
+
 def _make_raw_schema(
     tables: tuple[TableMetadata, ...] | None = None,
     dialect: SchemaDialect = SchemaDialect.POSTGRESQL,

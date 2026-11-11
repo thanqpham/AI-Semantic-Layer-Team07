@@ -14,6 +14,7 @@ import {
 } from '@/lib/api';
 import { SchemaReviewView } from './SchemaReviewView';
 
+vi.mock('@/components/schema-review/DatabaseOverview', () => ({ DatabaseOverview: () => null }));
 vi.mock('@/components/schema-review/RelationshipsPanel', () => ({RelationshipsPanel:()=> <div>Relationship queue</div>}));
 vi.mock('@/lib/api', () => ({
   getSchemaReviewApi: vi.fn(),

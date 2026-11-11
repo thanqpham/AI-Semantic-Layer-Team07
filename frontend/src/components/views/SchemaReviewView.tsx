@@ -18,6 +18,7 @@ import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { Translated } from '@/components/ui/translated';
 import { EnrichmentProgressBanner } from '@/components/schema-review/EnrichmentProgressBanner';
 import { TableReviewCard, columnKey, tableKey, type Draft, type DraftMap } from '@/components/schema-review/TableReviewCard';
+import { DatabaseOverview } from '@/components/schema-review/DatabaseOverview';
 import { RelationshipsPanel } from '@/components/schema-review/RelationshipsPanel';
 import { ValueMappingBatchImport } from '@/components/schema-review/ValueMappingBatchImport';
 import { useLanguage } from '@/context/LanguageContext';
@@ -233,6 +234,7 @@ export function SchemaReviewView({
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        {dbId && canManageSchema && <DatabaseOverview key={dbId} dbId={String(dbId)} canManage={canManageSchema} canApprove={canApproveSchema} refreshKey={enrich?.status === 'succeeded' ? pollTick + 1 : 0} />}
         {enrich && enrich.status !== 'idle' && (
           <EnrichmentProgressBanner status={enrich} onRetry={() => void onGenerate()} />
         )}

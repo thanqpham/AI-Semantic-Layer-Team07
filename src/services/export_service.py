@@ -221,6 +221,7 @@ async def build_semantic_layer_dict(db: AsyncSession, db_id: int) -> dict[str, A
         "database": {
             "id": database.id,
             "display_name": database.display_name,
+            "description": database.description,
             "db_type": database.db_type,
             "status": database.status,
         },
