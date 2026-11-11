@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import {
@@ -7,6 +7,7 @@ import {
   listEavConfigsApi,
   reviewEavConfigApi,
   SemanticApiError,
+  updateEavConfigApi,
   type EavConfig,
 } from '@/lib/api';
 import { EavSourcesPanel } from './EavSourcesPanel';
@@ -19,6 +20,7 @@ vi.mock('@/lib/api', async () => {
     createEavConfigApi: vi.fn(),
     reviewEavConfigApi: vi.fn(),
     createEavMetricApi: vi.fn(),
+    updateEavConfigApi: vi.fn(),
   };
 });
 
@@ -67,6 +69,7 @@ beforeEach(() => {
   vi.mocked(listEavConfigsApi).mockResolvedValue([config('approved')]);
   vi.mocked(reviewEavConfigApi).mockResolvedValue(config('approved'));
   vi.mocked(createEavMetricApi).mockResolvedValue({ metric_id: 42, name: 'Tổng doanh thu', status: 'draft' });
+  vi.mocked(updateEavConfigApi).mockResolvedValue(config('pending_review'));
 });
 
 afterEach(() => {
@@ -169,9 +172,49 @@ it('reveals saved config details when toggling Xem cấu hình', async () => {
   expect(details).toHaveTextContent('reject');
 });
 
+it('shows column headers above attribute inputs in the declaration form', async () => {
+  render(<EavSourcesPanel dbId={5} canManageSchema canApproveMetrics />);
+  fireEvent.click(await screen.findByRole('button', { name: /khai báo nguồn eav/i }));
+  const headers = within(screen.getByLabelText('Tiêu đề cột thuộc tính'));
+  expect(headers.getByText('Khóa thuộc tính')).toBeInTheDocument();
+  expect(headers.getByText('Tên hiển thị')).toBeInTheDocument();
+  expect(headers.getByText('Kiểu dữ liệu')).toBeInTheDocument();
+  expect(headers.getByText('Quy tắc đa giá trị')).toBeInTheDocument();
+  expect(headers.getByText('History')).toBeInTheDocument();
+});
+
+it('edits an existing config and saves through the update API', async () => {
+  render(<EavSourcesPanel dbId={5} canManageSchema canApproveMetrics />);
+  fireEvent.click(await screen.findByRole('button', { name: /sửa cấu hình/i }));
+  const nameInput = await screen.findByLabelText(/tên cấu hình/i);
+  expect(nameInput).toHaveValue('EAV chính');
+  fireEvent.change(nameInput, { target: { value: 'EAV chính sửa' } });
+  fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }));
+  await waitFor(() =>
+    expect(updateEavConfigApi).toHaveBeenCalledWith(5, 3, {
+      name: 'EAV chính sửa',
+      entity_table: 'entity_eav',
+      entity_id_column: 'entity_id',
+      attribute_mode: 'direct',
+      attribute_column: 'attr_code',
+      attribute_fk_column: null,
+      dict_table: null,
+      dict_key_column: null,
+      dict_label_column: null,
+      value_columns: { number: 'value_num', string: 'value_str' },
+      history: null,
+      attributes: [
+        { attribute_key: 'revenue', label: 'Doanh thu', data_type: 'number', multi_value_rule: 'reject', history_enabled: false },
+        { attribute_key: 'region', label: 'Khu vực', data_type: 'string', multi_value_rule: 'reject', history_enabled: false },
+      ],
+    }),
+  );
+});
+
 it('hides management actions without permission', async () => {
   render(<EavSourcesPanel dbId={5} canManageSchema={false} canApproveMetrics={false} />);
   await screen.findByText('EAV chính');
   expect(screen.queryByRole('button', { name: /khai báo nguồn eav/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /tạo metric/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /sửa cấu hình/i })).not.toBeInTheDocument();
 });

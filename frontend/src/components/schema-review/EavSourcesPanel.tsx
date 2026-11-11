@@ -11,6 +11,7 @@ import {
   listEavConfigsApi,
   reviewEavConfigApi,
   SemanticApiError,
+  updateEavConfigApi,
   type EavAttribute,
   type EavConfig,
   type EavDataType,
@@ -108,6 +109,31 @@ function validationDetail(error: unknown): string {
   return error instanceof Error ? error.message : 'Không thể lưu cấu hình EAV.';
 }
 
+function formFromConfig(config: EavConfig): FormState {
+  return {
+    name: config.name,
+    entity_table: config.entity_table,
+    entity_id_column: config.entity_id_column,
+    attribute_mode: config.attribute_mode,
+    attribute_column: config.attribute_column ?? '',
+    attribute_fk_column: config.attribute_fk_column ?? '',
+    dict_table: config.dict_table ?? '',
+    dict_key_column: config.dict_key_column ?? '',
+    dict_label_column: config.dict_label_column ?? '',
+    value_number: config.value_columns.number ?? '',
+    value_string: config.value_columns.string ?? '',
+    history_effective: config.history?.effective_column ?? '',
+    history_end: config.history?.end_column ?? '',
+    attributes: config.attributes.map((item) => ({
+      key: item.attribute_key,
+      label: item.label,
+      data_type: item.data_type,
+      rule: item.multi_value_rule ?? 'reject',
+      history: item.history_enabled ?? false,
+    })),
+  };
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
@@ -174,6 +200,7 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -193,10 +220,17 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
     setBusy(true);
     setErrors([]);
     try {
-      await createEavConfigApi(dbId, payloadFromForm(form));
+      const payload = payloadFromForm(form);
+      if (editingId !== null) {
+        await updateEavConfigApi(dbId, editingId, payload);
+        onNotify?.('Đã cập nhật cấu hình EAV. Trạng thái: chờ phê duyệt.');
+      } else {
+        await createEavConfigApi(dbId, payload);
+        onNotify?.('Đã lưu cấu hình EAV. Trạng thái: chờ phê duyệt.');
+      }
       setForm(emptyForm);
+      setEditingId(null);
       setFormOpen(false);
-      onNotify?.('Đã lưu cấu hình EAV. Trạng thái: chờ phê duyệt.');
       await reload();
     } catch (error) {
       setErrors([validationDetail(error)]);
@@ -235,7 +269,11 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
           <Button
             variant="outline"
             className="h-7 text-xs"
-            onClick={() => setFormOpen((open) => !open)}
+            onClick={() => {
+              setForm(emptyForm);
+              setEditingId(null);
+              setFormOpen((open) => !open);
+            }}
             aria-label="Khai báo nguồn EAV"
           >
             <Translated text="Khai báo nguồn EAV" />
@@ -345,6 +383,13 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
           </div>
 
           <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-5" aria-label="Tiêu đề cột thuộc tính">
+              <span className="text-xs font-medium text-muted-foreground">Khóa thuộc tính</span>
+              <span className="text-xs font-medium text-muted-foreground">Tên hiển thị</span>
+              <span className="text-xs font-medium text-muted-foreground">Kiểu dữ liệu</span>
+              <span className="text-xs font-medium text-muted-foreground">Quy tắc đa giá trị</span>
+              <span className="text-xs font-medium text-muted-foreground">History</span>
+            </div>
             {form.attributes.map((attribute, index) => (
               <div key={index} className="grid grid-cols-2 gap-2 md:grid-cols-5">
                 <Input
@@ -474,6 +519,20 @@ export function EavSourcesPanel({ dbId, canManageSchema, canApproveMetrics, onNo
                   >
                     {expandedId === config.id ? <Translated text="Ẩn cấu hình" /> : <Translated text="Xem cấu hình" />}
                   </Button>
+                  {canManageSchema && (
+                    <Button
+                      variant="outline"
+                      className="h-7 text-xs"
+                      aria-label={`Sửa cấu hình "${config.name}"`}
+                      onClick={() => {
+                        setForm(formFromConfig(config));
+                        setEditingId(config.id);
+                        setFormOpen(true);
+                      }}
+                    >
+                      <Translated text="Sửa cấu hình" />
+                    </Button>
+                  )}
                   {config.review_status === 'pending_review' && canApproveMetrics && (
                     <Button variant="default" className="h-7 text-xs" onClick={() => void review(config.id, 'approve')}>
                       <Translated text="Duyệt" />
