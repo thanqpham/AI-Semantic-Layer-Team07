@@ -61,6 +61,27 @@ from src.services.semantic_fill import (
 
 logger = logging.getLogger(__name__)
 
+
+async def _generate_initial_overview(db: AsyncSession, db_id: int) -> None:
+    """Create a first draft without disrupting schema enrichment on failure."""
+    from src.services.database_overview import generate_overview
+
+    try:
+        record = await db.get(SemanticDatabaseModel, db_id)
+        if record is None or record.description or record.draft_description:
+            return
+        revision = record.overview_revision
+        description = await generate_overview(db, record)
+        await lock_semantic_database(db, db_id)
+        await db.refresh(record)
+        if record.overview_revision == revision and not record.description and not record.draft_description:
+            record.ai_description = record.draft_description = description
+            record.overview_revision += 1
+            await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception("Database overview generation failed for db_id=%s", db_id)
+
 _TIME_DIMENSION_TYPES = {"TIMESTAMP", "TIMESTAMP WITHOUT TIME ZONE", "TIMESTAMP WITH TIME ZONE", "DATE", "DATETIME"}
 
 # Backward-compatible alias for the private name used by the API layer.
@@ -243,6 +264,7 @@ async def enrich_and_save_canonical_schema(
 
     await db.commit()
     if publish_progress:
+        await _generate_initial_overview(db, connection_id)
         enrichment_progress.finish(connection_id)
     logger.info("[AI Semantic Agent] Canonical schema enrichment completed for connection_id=%d", connection_id)
 

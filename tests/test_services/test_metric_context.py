@@ -150,6 +150,23 @@ def test_temporal_context_lists_fields_across_schema() -> None:
 
 
 @pytest.mark.asyncio
+async def test_metric_context_uses_approved_overview_and_counts_it_in_budget() -> None:
+    from src.services.metric_context import build_metric_context
+
+    table = _table("orders")
+    table.id = 1
+    db = SimpleNamespace(get=AsyncMock(return_value=SimpleNamespace(description="Bán hàng", draft_description="Nháp")))
+    with (
+        patch("src.services.metric_context._load_metadata", AsyncMock(return_value=([table], []))),
+        patch("src.services.metric_context._select_tables", AsyncMock(return_value=({"orders"}, None))) as select,
+    ):
+        result = await build_metric_context(db, 1, "KPI", 10000)
+        assert result.schema["database_overview"] == "Bán hàng"
+        assert select.await_args.kwargs["overview"] == "Bán hàng"
+        assert (await build_metric_context(db, 1, "KPI", 1)).diagnostic["status"] == "needs_clarification"
+
+
+@pytest.mark.asyncio
 async def test_metric_context_adds_approved_bridge_without_unrelated_tables() -> None:
     from src.services.metric_context import build_metric_context
 

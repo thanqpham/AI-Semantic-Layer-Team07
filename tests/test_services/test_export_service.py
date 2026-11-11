@@ -21,6 +21,19 @@ from src.services.export_service import build_semantic_layer_dict, serialize_to_
 
 
 @pytest.mark.asyncio
+async def test_export_only_includes_approved_database_overview(async_session, seeded_db):
+    database = await async_session.get(SemanticDatabaseModel, seeded_db)
+    database.description = "Bán hàng"
+    database.draft_description = "Nháp chưa duyệt"
+    database.ai_description = "Đề xuất AI"
+    await async_session.flush()
+    exported = await build_semantic_layer_dict(async_session, seeded_db)
+    assert exported["database"]["description"] == "Bán hàng"
+    assert "Nháp chưa duyệt" not in serialize_to_json(exported)
+    assert "Đề xuất AI" not in serialize_to_yaml(exported)
+
+
+@pytest.mark.asyncio
 async def test_export_formula_preserves_structured_calculation(async_session, seeded_db):
     metric = (
         (await async_session.execute(select(SemanticMetricModel).where(SemanticMetricModel.db_id == seeded_db)))

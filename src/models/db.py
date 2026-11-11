@@ -195,7 +195,9 @@ class UserModel(Base):
     sessions: Mapped[list["UserSessionModel"]] = relationship(
         "UserSessionModel", back_populates="user", cascade="all, delete-orphan"
     )
-    databases: Mapped[list["SemanticDatabaseModel"]] = relationship("SemanticDatabaseModel", back_populates="creator")
+    databases: Mapped[list["SemanticDatabaseModel"]] = relationship(
+        "SemanticDatabaseModel", back_populates="creator", foreign_keys="SemanticDatabaseModel.created_by"
+    )
     chat_sessions: Mapped[list["ChatSessionModel"]] = relationship(
         "ChatSessionModel", back_populates="user", cascade="all, delete-orphan"
     )
@@ -307,6 +309,14 @@ class SemanticDatabaseModel(Base):
     )
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    draft_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overview_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    overview_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    overview_reviewed_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     db_type: Mapped[str] = mapped_column(String(50), nullable=False)
     conn_url_enc: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
@@ -318,7 +328,9 @@ class SemanticDatabaseModel(Base):
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
 
-    creator: Mapped["UserModel | None"] = relationship("UserModel", back_populates="databases")
+    creator: Mapped["UserModel | None"] = relationship(
+        "UserModel", back_populates="databases", foreign_keys=[created_by]
+    )
     organization: Mapped["OrganizationModel | None"] = relationship(
         "OrganizationModel", back_populates="semantic_databases"
     )
