@@ -1,7 +1,6 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, Save, X, XCircle, Ban } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Translated } from '@/components/ui/translated';
 import { type RelationshipDraft, type RelationshipEntity, type RelationshipItem, type RelationshipPreview, qualifiedEntity, type RelationshipType } from '@/lib/relationshipReviewApi';
 import { useLanguage } from '@/context/LanguageContext';
@@ -38,9 +37,6 @@ function TypeFields({ draft, onChange }: Pick<Props, 'draft' | 'onChange'>) {
         <select aria-label={t('Kiểu liên kết')} className="mt-1 block w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground" value={draft.relationship_type} onChange={e => onChange({ ...draft, relationship_type: e.target.value as RelationshipType })}>
           {Object.entries(cardinality).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
-      </label>
-      <label className="block text-xs text-muted-foreground">{t('Xác nhận cardinality khi thiếu bằng chứng khóa')}
-        <Input className="mt-1 h-8 text-xs" value={draft.cardinality_confirmation ?? ''} onChange={e => onChange({ ...draft, cardinality_confirmation: e.target.value || null })} />
       </label>
     </div>
   );

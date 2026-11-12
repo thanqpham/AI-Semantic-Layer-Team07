@@ -100,6 +100,8 @@ async def list_relationship_reviews(
     for model, kind in ((Active, "active"), (Candidate, "candidate")):
         rows = (await db.scalars(select(model).where(model.connection_id == db_id).order_by(model.id))).all()
         for row in rows:
+            if kind == "candidate" and row.status != "pending_review":
+                continue
             item = await review_item(db, db_id, row, kind)
             if (status is None or item.status == status) and search.lower() in json.dumps(
                 item.model_dump(), default=str

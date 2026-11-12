@@ -9,9 +9,82 @@ from sqlalchemy import select
 from src.models.db import CanonicalRelationshipModel, SemanticColumnModel, SemanticTableModel
 from src.models.db_relationships import RelationshipCandidateModel
 from src.services.relationship_runtime import safe_join_path
-from src.services.relationship_suggestions import metadata_projection, suggest_relationships
+from src.services.relationship_suggestions import RelationshipSuggestion, metadata_projection, suggest_relationships
 from src.services.semantic_compile_error import SemanticCompileError
 from tests.test_services.test_relationship_review import seed
+
+
+@pytest.mark.asyncio
+async def test_ai_cardinality_correction_targets_existing_fk_and_requires_review(async_session):
+    from tests.test_services.test_relationship_review import approve
+
+    db_id, tables, _, draft = await seed(async_session)
+    active = CanonicalRelationshipModel(
+        connection_id=db_id,
+        from_entity_id=tables[0].id,
+        to_entity_id=tables[1].id,
+        column_pairs=draft.model_dump()["column_pairs"],
+        relationship_type="many_to_one",
+        source="fk",
+        join_condition="",
+        relationship_key="physical",
+        evidence={},
+    )
+    async_session.add(active)
+    await async_session.flush()
+    item = {
+        **draft.model_dump(exclude={"expected_revision", "cardinality_confirmation"}),
+        "relationship_type": "one_to_one",
+        "reason": "Both join columns are primary keys",
+        "confidence": 0.99,
+        "unresolved_questions": [],
+    }
+    with patch(
+        "src.services.relationship_suggestions.request_all_suggestions",
+        AsyncMock(return_value=[RelationshipSuggestion.model_validate(item)]),
+    ):
+        rows = await suggest_relationships(async_session, db_id, 1)
+        assert len(rows) == 1
+        candidate = await async_session.get(RelationshipCandidateModel, rows[0].id)
+        assert candidate.target_relationship_id == active.id
+        assert candidate.source == "ai" and candidate.status == "pending_review"
+        assert active.relationship_type == "many_to_one"
+        assert (await suggest_relationships(async_session, db_id, 1))[0].id == candidate.id
+    await approve(async_session, db_id, rows[0])
+    assert active.relationship_type == "one_to_one"
+    assert len((await async_session.scalars(select(CanonicalRelationshipModel))).all()) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [("human_modified", True), ("review_status", "disabled"), ("source", "manual"), ("validation_status", "invalid")],
+)
+async def test_ai_does_not_correct_protected_relationships(async_session, field, value):
+    db_id, tables, _, draft = await seed(async_session)
+    active = CanonicalRelationshipModel(
+        connection_id=db_id,
+        from_entity_id=tables[0].id,
+        to_entity_id=tables[1].id,
+        column_pairs=draft.model_dump()["column_pairs"],
+        relationship_type="many_to_one",
+        source="fk",
+        join_condition="",
+        relationship_key="physical",
+        evidence={},
+    )
+    setattr(active, field, value)
+    async_session.add(active)
+    await async_session.flush()
+    item = RelationshipSuggestion(
+        **draft.model_dump(exclude={"expected_revision", "cardinality_confirmation", "relationship_type"}),
+        relationship_type="one_to_one",
+        reason="PK evidence",
+        confidence=0.99,
+        unresolved_questions=[],
+    )
+    with patch("src.services.relationship_suggestions.request_all_suggestions", AsyncMock(return_value=[item])):
+        assert await suggest_relationships(async_session, db_id, 1) == []
 
 
 @pytest.mark.asyncio
@@ -41,6 +114,31 @@ async def test_batches_cover_all_table_pairs_and_collect_more_than_one_batch():
 
 
 @pytest.mark.asyncio
+async def test_batches_exclude_external_relationship_ids_without_mutating_metadata():
+    from src.services.relationship_suggestions import SuggestionBatch, request_all_suggestions
+
+    metadata = [
+        {
+            "id": i,
+            "columns": [],
+            "existing_relationships": [
+                {"to_entity_id": (i + 6) % 12, "column_pairs": [], "relationship_type": "many_to_one"}
+            ],
+        }
+        for i in range(12)
+    ]
+
+    async def request(batch):
+        ids = {table["id"] for table in batch}
+        assert all(rel["to_entity_id"] in ids for table in batch for rel in table["existing_relationships"])
+        return SuggestionBatch(suggestions=[])
+
+    with patch("src.services.relationship_suggestions.request_suggestions", request):
+        assert await request_all_suggestions(metadata) == []
+    assert all(len(table["existing_relationships"]) == 1 for table in metadata)
+
+
+@pytest.mark.asyncio
 async def test_failed_or_saturated_batch_aborts_with_scope_diagnostic():
     from src.services.relationship_suggestions import SuggestionBatch, request_all_suggestions
 
@@ -63,8 +161,7 @@ async def test_failed_or_saturated_batch_aborts_with_scope_diagnostic():
         "unresolved_questions": [],
     }
     existing_fk = [
-        {"to_entity_id": 1, "column_pairs": [{"from_column_id": i + 1, "to_column_id": i + 101}]}
-        for i in range(25)
+        {"to_entity_id": 1, "column_pairs": [{"from_column_id": i + 1, "to_column_id": i + 101}]} for i in range(25)
     ]
     metadata[0]["existing_relationships"] = existing_fk
     repeated_fk = [{**item, "column_pairs": rel["column_pairs"]} for rel in existing_fk]
