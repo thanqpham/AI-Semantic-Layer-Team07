@@ -2158,4 +2158,23 @@ export async function createEavMetricApi(
     `/api/v1/semantic/${dbId}/eav-configs/${configId}/attributes/${attributeId}/metric`,
     { method: 'POST', body: JSON.stringify(body) },
   );
+export interface DatabaseOverview {
+  description: string | null;
+  draft_description: string | null;
+  ai_description: string | null;
+  revision: number;
+  reviewed_at: string | null;
+  reviewed_by: number | null;
+}
+export async function getDatabaseOverviewApi(dbId: string): Promise<DatabaseOverview> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/overview`);
+}
+export async function saveDatabaseOverviewApi(dbId: string, draft_description: string, revision: number): Promise<DatabaseOverview> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/overview/published`, { method: 'PUT', body: JSON.stringify({ draft_description, revision }) });
+}
+export async function generateDatabaseOverviewApi(dbId: string, revision: number): Promise<DatabaseOverview> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/overview/generate`, { method: 'POST', body: JSON.stringify({ revision }) });
+}
+export async function approveDatabaseOverviewApi(dbId: string, revision: number): Promise<DatabaseOverview> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/overview/approve`, { method: 'POST', body: JSON.stringify({ revision }) });
 }

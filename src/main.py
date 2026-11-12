@@ -16,6 +16,7 @@ from src.api.eav_routes import eav_router
 from src.api.llm_settings_routes import router as llm_settings_router
 from src.api.llm_settings_routes import use_account_llm
 from src.api.organization_routes import router as organization_router
+from src.api.overview_routes import overview_router
 from src.api.relationship_review_routes import relationship_router
 from src.api.review_routes import review_router
 from src.api.routes import router
@@ -83,6 +84,7 @@ app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(llm_settings_router, prefix="/api/v1")
 app.include_router(router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
 app.include_router(review_router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
+app.include_router(overview_router, prefix="/api/v1", dependencies=[Depends(use_account_llm)])
 app.include_router(categorical_router, prefix="/api/v1")
 app.include_router(eav_router, prefix="/api/v1")
 app.include_router(relationship_router, prefix="/api/v1")
