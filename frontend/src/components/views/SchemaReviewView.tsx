@@ -290,7 +290,7 @@ export function SchemaReviewView({
             ? `${review.pending_relationships} liên kết chờ xác nhận riêng; duyệt bảng & cột không duyệt liên kết.`
             : 'Tất cả liên kết đã được phê duyệt; bạn có thể dùng AI đề xuất hoặc thêm liên kết thủ công.'}
         </p>
-        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'} className={cn("min-h-0 flex-1 flex-col", reviewTab==='relationships' ? "flex" : "hidden")}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
+        {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'} className={cn("min-h-[560px] flex-1 shrink-0 flex-col", reviewTab==='relationships' ? "flex" : "hidden")}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
         <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {error && (
           <p className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">

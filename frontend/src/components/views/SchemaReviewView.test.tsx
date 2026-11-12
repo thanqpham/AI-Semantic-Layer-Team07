@@ -52,6 +52,7 @@ it('shows pending relationship tab and bulk approves only tables and columns', a
  vi.mocked(approveSchemaReviewApi).mockResolvedValue({db_id:7,status:'approved',approved_tables:1,approved_columns:2,pending_tables:0,pending_columns:0,pending_relationships:3});
  render(<SchemaReviewView dbId={7} canManageSchema canApproveSchema/>);
  const tab=await screen.findByRole('tab',{name:'Liên kết (3)'});fireEvent.click(tab);expect(tab).toHaveAttribute('aria-selected','true');
+ expect(screen.getByRole('tabpanel', { name: /Liên kết/ })).toHaveClass('min-h-[560px]', 'shrink-0');
  expect(screen.getByText('Relationship queue')).toBeVisible();expect(screen.getByRole('tab',{name:'Bảng & cột'})).toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Duyệt bảng & cột (3)'})).not.toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Tạo mô tả AI'})).not.toBeInTheDocument();
