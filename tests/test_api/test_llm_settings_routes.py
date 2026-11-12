@@ -141,7 +141,7 @@ async def test_all_requested_providers_resolve_to_official_endpoints(client, asy
     assert config.provider == provider
     assert config.base_url == service.PROVIDERS[provider][1]
     assert config.model == "chosen-model"
-    assert config.temperature == 0.0
+    assert config.temperature == service.get_settings().llm_temperature
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,7 @@ from src.models.db import SemanticDatabaseModel, UserModel
 from src.models.llm_settings import LLMSettingsRequest
 from src.services import llm
 from src.services.database import get_db_session
-from src.services.llm_settings_service import save_llm_settings
+from src.services.llm_settings_service import load_account_llm_config, save_llm_settings
 from src.services.schema_cron_service import _sync_with_owner_llm
 
 
@@ -67,6 +67,18 @@ async def test_dependency_keeps_config_during_stream_and_resets_it(async_session
         result = await client.get("/stream", headers={"Authorization": f"Bearer {create_access_token(user)}"})
     assert result.json() == {"model": "stream-model"}
     assert llm.account_llm_config.get() is None
+
+
+@pytest.mark.asyncio
+async def test_account_config_temperature_follows_env_setting(async_session, monkeypatch):
+    """LLM_TEMPERATURE env must reach the account override (reasoning models reject 0.0)."""
+    await save_llm_settings(async_session, 1, LLMSettingsRequest(provider="openai", model="gpt-6-luna", api_key="key"))
+    monkeypatch.setattr(
+        "src.services.llm_settings_service.get_settings",
+        lambda: Settings(_env_file=None, llm_temperature=1.0),
+    )
+    config = await load_account_llm_config(async_session, 1)
+    assert config.temperature == 1.0
 
 
 @pytest.mark.asyncio

@@ -43,6 +43,10 @@ from src.models.db_categorical_proposals import (
     ColumnValueProposalModel,  # noqa: F401 - registers the table in Base.metadata
 )
 from src.models.db_chat import ChatMessageModel, ChatSessionModel
+from src.models.db_eav import (  # noqa: F401 - registers the tables in Base.metadata
+    EavAttributeModel,
+    EavSourceConfigModel,
+)
 from src.models.db_metric_proposals import MetricProposalModel
 from src.models.db_relationships import RelationshipCandidateModel
 from src.models.llm_settings import UserLLMSettingsModel

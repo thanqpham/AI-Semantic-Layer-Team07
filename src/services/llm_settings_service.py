@@ -64,7 +64,8 @@ async def load_account_llm_config(db: AsyncSession, user_id: int) -> LLMConfig |
         return None
     saved = _credentials(row)[row.provider]
     _, base_url, protocol = PROVIDERS[row.provider]
-    return LLMConfig(row.provider, protocol, saved["api_key"], base_url, saved["model"], 0.0)
+    # Reasoning models reject temperature 0.0, so honor LLM_TEMPERATURE instead of hardcoding it.
+    return LLMConfig(row.provider, protocol, saved["api_key"], base_url, saved["model"], get_settings().llm_temperature)
 
 
 async def list_provider_models(db: AsyncSession, user_id: int, body: LLMKeyRequest) -> list[str]:

@@ -18,6 +18,7 @@ import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { Translated } from '@/components/ui/translated';
 import { EnrichmentProgressBanner } from '@/components/schema-review/EnrichmentProgressBanner';
 import { TableReviewCard, columnKey, tableKey, type Draft, type DraftMap } from '@/components/schema-review/TableReviewCard';
+import { EavSourcesPanel } from '@/components/schema-review/EavSourcesPanel';
 import { DatabaseOverview } from '@/components/schema-review/DatabaseOverview';
 import { RelationshipsPanel } from '@/components/schema-review/RelationshipsPanel';
 import { ValueMappingBatchImport } from '@/components/schema-review/ValueMappingBatchImport';
@@ -60,7 +61,7 @@ export function SchemaReviewView({
   onRelationshipDirtyChange,
 }: SchemaReviewViewProps) {
   const { translate } = useLanguage();
-  const [reviewTab, setReviewTab] = useState<'tables' | 'relationships'>('tables');
+  const [reviewTab, setReviewTab] = useState<'tables' | 'relationships' | 'eav'>('tables');
   const [review, setReview] = useState<SchemaReview | null>(null);
   const [drafts, setDrafts] = useState<DraftMap>({});
   const [baseline, setBaseline] = useState<DraftMap>({});
@@ -242,7 +243,7 @@ export function SchemaReviewView({
         <div role="tablist" onKeyDown={event => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();
-          const names = ['tables', 'relationships'] as const;
+          const names = ['tables', 'relationships', 'eav'] as const;
           const offset = event.key === 'ArrowRight' ? 1 : -1;
           const index = (names.indexOf(reviewTab) + offset + names.length) % names.length;
           setReviewTab(names[index]);
@@ -252,6 +253,9 @@ export function SchemaReviewView({
           <Button role="tab" id="relationships-tab" tabIndex={reviewTab==='relationships'?0:-1} aria-selected={reviewTab==='relationships'} aria-controls="relationships-review" onClick={()=>setReviewTab('relationships')} variant={reviewTab==='relationships'?'default':'outline'}>
             <Translated text="Liên kết" />
             {Boolean(review?.pending_relationships) && ` (${review?.pending_relationships})`}
+          </Button>
+          <Button role="tab" id="eav-tab" tabIndex={reviewTab==='eav'?0:-1} aria-selected={reviewTab==='eav'} aria-controls="eav-review" onClick={()=>setReviewTab('eav')} variant={reviewTab==='eav'?'default':'outline'}>
+            <Translated text="Nguồn EAV" />
           </Button>
         </div>
         <div hidden={reviewTab !== 'tables'} className="ml-auto">
@@ -291,6 +295,7 @@ export function SchemaReviewView({
             : 'Tất cả liên kết đã được phê duyệt; bạn có thể dùng AI đề xuất hoặc thêm liên kết thủ công.'}
         </p>
         {dbId && <div id="relationships-review" role="tabpanel" aria-labelledby="relationships-tab" hidden={reviewTab!=='relationships'} className={cn("min-h-0 flex-1 flex-col", reviewTab==='relationships' ? "flex" : "hidden")}><RelationshipsPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveSchema={canApproveSchema} onNotify={onNotify} onDirtyChange={onRelationshipDirtyChange} onReviewChanged={()=>{void load();onReviewChanged?.();}} /></div>}
+        {dbId && <div id="eav-review" role="tabpanel" aria-labelledby="eav-tab" hidden={reviewTab!=='eav'} className={cn("min-h-0 flex-1 flex-col", reviewTab==='eav' ? "flex" : "hidden")}><EavSourcesPanel key={dbId} dbId={String(dbId)} canManageSchema={canManageSchema} canApproveMetrics={canApproveSchema} onNotify={onNotify} onMetricsChanged={onReviewChanged} /></div>}
         <div id="tables-review" role="tabpanel" aria-labelledby="tables-tab" hidden={reviewTab!=='tables'} className="space-y-4">
         {error && (
           <p className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">

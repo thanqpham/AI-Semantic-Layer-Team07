@@ -549,10 +549,27 @@ class DimensionSelection(BaseModel):
     time_grain: TimeGrain | None = None
 
 
+class EavDimensionSelection(BaseModel):
+    """Group an EAV query by one approved EAV attribute."""
+
+    attribute_id: int
+
+
+class EavQueryFilter(BaseModel):
+    """Runtime predicate over one approved EAV attribute value."""
+
+    attribute_id: int
+    operator: FilterOperator
+    value: Any = None
+
+
 class SemanticQuerySpec(BaseModel):
     metric_ids: list[int] = Field(..., min_length=1)
     dimensions: list[DimensionSelection] = Field(default_factory=list)
     filters: list[SemanticQueryFilter] = Field(default_factory=list)
+    eav_dimensions: list[EavDimensionSelection] = Field(default_factory=list)
+    eav_filters: list[EavQueryFilter] = Field(default_factory=list)
+    as_of: datetime | None = None
     limit: int = Field(default=100, ge=1, le=1000)
     order_by: QueryOrder | None = None
     order_metric_id: int | None = Field(default=None, gt=0)
@@ -565,6 +582,9 @@ class SemanticQueryRequest(BaseModel):
     dimensions: list[DimensionSelection] = Field(default_factory=list)
     dimension_ids: list[int] = Field(default_factory=list, description="Deprecated raw dimension IDs")
     filters: list[SemanticQueryFilter] = Field(default_factory=list)
+    eav_dimensions: list[EavDimensionSelection] = Field(default_factory=list)
+    eav_filters: list[EavQueryFilter] = Field(default_factory=list)
+    as_of: datetime | None = Field(default=None, description="Point in time for historical EAV attributes")
     limit: int = Field(default=100, ge=1, le=1000, description="Max rows to return (default 100, max 1000)")
     order_by: QueryOrder | None = None
     order_metric_id: int | None = Field(default=None, gt=0)
@@ -583,6 +603,9 @@ class SemanticQueryRequest(BaseModel):
             metric_ids=self.metric_ids,
             dimensions=dimensions,
             filters=self.filters,
+            eav_dimensions=self.eav_dimensions,
+            eav_filters=self.eav_filters,
+            as_of=self.as_of,
             limit=self.limit,
             order_by=self.order_by,
             order_metric_id=self.order_metric_id,

@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlglot import exp
 
 from src.models.db import SemanticColumnModel, SemanticTableModel
+from src.models.db_eav import EavAttributeModel, EavSourceConfigModel
 from src.models.metric_definition import (
+    EavAttributeRef,
     MetricDefinition,
     MetricDiagnostic,
     MetricExpressionNode,
@@ -20,6 +22,7 @@ from src.models.metric_definition import (
     MetricRatio,
     is_timestamp_diff_hours,
 )
+from src.services.eav_config_validation import eav_allowed_aggregations
 from src.services.metric_definitions import validate_metric_definition
 from src.services.metric_hygiene import hygiene_flag_filters
 
@@ -40,6 +43,8 @@ class MetricDefinitionResolver:
     async def resolve(self, db_id: int, draft: MetricDefinition) -> MetricDefinition:
         """Resolve canonical identities, expression nodes, filters, and grain."""
         definition = draft.model_copy(deep=True)
+        if definition.metric.eav is not None:
+            return await _resolve_eav_definition(self._db, db_id, definition)
         table = await validate_metric_definition(self._db, db_id, definition)
         columns = await _load_columns(self._db, table.id)
         by_name = {column.column_name.lower(): column for column in columns}
@@ -81,6 +86,63 @@ class MetricDefinitionResolver:
 async def _load_columns(db: AsyncSession, table_id: int) -> list[SemanticColumnModel]:
     result = await db.execute(select(SemanticColumnModel).where(SemanticColumnModel.table_id == table_id))
     return list(result.scalars().all())
+
+
+async def load_approved_eav_attribute(
+    db: AsyncSession, db_id: int, attribute_id: int
+) -> tuple[EavSourceConfigModel, EavAttributeModel]:
+    """Load one EAV attribute and its configuration, enforcing approval state."""
+    result = await db.execute(
+        select(EavAttributeModel, EavSourceConfigModel)
+        .join(EavSourceConfigModel, EavAttributeModel.config_id == EavSourceConfigModel.id)
+        .where(EavAttributeModel.id == attribute_id, EavSourceConfigModel.semantic_db_id == db_id)
+    )
+    row = result.first()
+    if row is None:
+        raise ValueError(f"Thuộc tính EAV {attribute_id} không tồn tại trong cơ sở dữ liệu ngữ nghĩa.")
+    attribute, config = row
+    if config.review_status != "approved":
+        raise ValueError(f"Cấu hình EAV '{config.name}' chưa được phê duyệt.")
+    return config, attribute
+
+
+async def _resolve_eav_definition(db: AsyncSession, db_id: int, draft: MetricDefinition) -> MetricDefinition:
+    """Resolve one EAV-attribute metric against its approved configuration."""
+    eav = draft.metric.eav
+    if eav is None:  # pragma: no cover - guarded by the caller
+        raise ValueError("EAV metric requires an attribute reference.")
+    config, attribute = await load_approved_eav_attribute(db, db_id, eav.attribute_id)
+    function = draft.metric.formula.function
+    if function not in eav_allowed_aggregations(attribute.data_type):
+        raise ValueError(f"Phép {function} không áp dụng cho thuộc tính EAV kiểu {attribute.data_type}.")
+    table = await validate_metric_definition(db, db_id, draft)
+    grain = _eav_grain(config, table, await _load_columns(db, table.id))
+    diagnostics = _grain_diagnostics(grain)
+    metric = draft.metric.model_copy(
+        update={
+            "base_entity": table.table_name,
+            "base_entity_id": table.id,
+            "grain": grain,
+            "status": "needs_review" if diagnostics else draft.metric.status,
+            "eav": EavAttributeRef(
+                config_id=config.id,
+                attribute_id=attribute.id,
+                attribute_key=attribute.attribute_key,
+                data_type=attribute.data_type,
+                multi_value_rule=attribute.multi_value_rule,
+                history_enabled=attribute.history_enabled,
+            ),
+        }
+    )
+    return MetricDefinition(schema_version=2, metric=metric, diagnostics=diagnostics)
+
+
+def _eav_grain(
+    config: EavSourceConfigModel, table: SemanticTableModel, columns: list[SemanticColumnModel]
+) -> MetricGrain:
+    """EAV grain is the entity id column declared by the configuration."""
+    entity_ids = [column.id for column in columns if column.column_name.lower() == config.entity_id_column.lower()]
+    return MetricGrain(column_ids=entity_ids or _primary_key_ids(table.primary_key_column, columns))
 
 
 async def _resolve_plan_column_ids(

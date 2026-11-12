@@ -1775,6 +1775,18 @@ async def _query_target(
     return semantic_db, live_db
 
 
+def _compile_error_http(error: SemanticCompileError) -> HTTPException:
+    """Map one compile failure to the shared 400 response shape."""
+    return HTTPException(
+        status_code=400,
+        detail={
+            "code": safe_compile_code(error),
+            "message": safe_compile_message(error),
+            "context": _safe_compile_context(error),
+        },
+    )
+
+
 async def _compile_request(
     db: AsyncSession,
     db_id: int,
@@ -1783,14 +1795,7 @@ async def _compile_request(
     try:
         return await SemanticQueryCompiler(db).compile(db_id, body.to_spec())
     except SemanticCompileError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": safe_compile_code(exc),
-                "message": safe_compile_message(exc),
-                "context": _safe_compile_context(exc),
-            },
-        ) from exc
+        raise _compile_error_http(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Truy vấn không hợp lệ. Chỉ SELECT được hỗ trợ.") from exc
 
@@ -1878,6 +1883,8 @@ async def execute_semantic_query(
         )
     except TimeoutError as exc:
         raise HTTPException(status_code=504, detail="Query execution timed out") from exc
+    except SemanticCompileError as exc:
+        raise _compile_error_http(exc) from exc
     except Exception as exc:
         logger.exception("Query execution failed for db_id=%s", db_id)
         raise HTTPException(status_code=500, detail="Query execution failed") from exc

@@ -72,6 +72,13 @@ COMPILE_ERROR_MESSAGES = {
     "INVALID_TIME_GRAIN": "Khoảng thời gian phân tích không hợp lệ.",
     "DIMENSION_REQUIRED": "Hãy chọn chiều phân tích cần thiết.",
     "DUPLICATE_SELECTION": "Chỉ số hoặc chiều phân tích đã được chọn nhiều lần.",
+    "EAV_MULTI_VALUE": "Thuộc tính có nhiều giá trị trên một thực thể (quy tắc reject). Hãy nhờ Data Lead kiểm tra dữ liệu nguồn.",
+    "EAV_CONFIG_NOT_APPROVED": "Cấu hình nguồn EAV chưa được phê duyệt.",
+    "EAV_MIXED_SELECTION": "Chỉ số EAV không trộn được với chỉ số hoặc chiều phân tích quan hệ.",
+    "EAV_RULE_UNSUPPORTED": "Quy tắc đa giá trị của thuộc tính EAV không hỗ trợ truy vấn này.",
+    "EAV_VALUE_COLUMN_MISSING": "Cấu hình EAV thiếu cột giá trị cho kiểu dữ liệu này.",
+    "EAV_HISTORY_CONFIG_MISSING": "Thuộc tính bật lịch sử nhưng cấu hình EAV thiếu quy tắc thời gian.",
+    "EAV_AS_OF_REQUIRED": "Hãy chọn thời điểm truy vấn (as_of) cho thuộc tính có lịch sử.",
 }
 
 
