@@ -63,6 +63,15 @@ _DEFAULT_MODELS = {
 # Wire protocol per provider — providers not listed speak the OpenAI protocol
 _PROTOCOL_BY_PROVIDER = {"anthropic": "anthropic"}
 
+# OpenAI reasoning models (o-series, gpt-5/6) reject any temperature != 1 with HTTP 400
+_REASONING_MODEL_PREFIXES = ("o1", "o3", "o4", "gpt-5", "gpt-6")
+
+
+def is_reasoning_model(model: str) -> bool:
+    """True when the model only accepts the API-default temperature of 1."""
+    return model.lower().startswith(_REASONING_MODEL_PREFIXES)
+
+
 # Settings field holding the model override for each call site role
 _ROLE_MODEL_FIELDS = {
     "enrich": "llm_model_enrich",
@@ -258,7 +267,8 @@ def _build_openai_client(config: LLMConfig) -> BaseChatModel:
         model=config.model,
         api_key=config.api_key,  # type: ignore[arg-type]
         base_url=config.base_url,
-        temperature=config.temperature,
+        # Reasoning models 400 on any temperature != 1; 1.0 is valid for every model
+        temperature=1.0 if is_reasoning_model(config.model) else config.temperature,
         callbacks=[BenchmarkUsageCallback(config.provider, config.model), *llm_trace_callbacks()],
         **({"max_retries": config.max_retries} if config.max_retries is not None else {}),
     )

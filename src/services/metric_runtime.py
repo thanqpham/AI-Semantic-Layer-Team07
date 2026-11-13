@@ -14,7 +14,7 @@ from pydantic import BaseModel, ValidationError
 
 from src.models.metric_review import MetricExecutionError, MetricOutputIssue
 from src.observability import trace_action
-from src.services.llm import get_llm
+from src.services.llm import get_llm, is_reasoning_model
 from src.services.llm_json import extract_json, response_text
 
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
@@ -125,14 +125,20 @@ async def _invoke_bounded(llm: Any, contract: type[_ModelT], messages: Any, stag
     raise MetricCallError(execution_failure("PROVIDER_ERROR", stage))
 
 
+def _invoke_kwargs(llm: Any) -> dict[str, Any]:
+    """Reasoning models reject per-call temperature != 1 and max_tokens."""
+    model = str(getattr(llm, "model_name", "") or getattr(llm, "model", "") or "")
+    if is_reasoning_model(model):
+        return {"max_completion_tokens": 4096}
+    return {"temperature": 0.0, "max_tokens": 4096}
+
+
 async def _submit(llm: Any, contract: type[BaseModel], messages: Any, structured: bool) -> Any:
     if structured:
         method = "json_mode" if getattr(llm, "_llm_type", None) == "openai-chat" else "function_calling"
         prompt = _json_messages(contract, messages) if method == "json_mode" else messages
-        return await llm.with_structured_output(contract, method=method).ainvoke(
-            prompt, temperature=0.0, max_tokens=4096
-        )
-    raw = await llm.ainvoke(messages, temperature=0.0, max_tokens=4096)
+        return await llm.with_structured_output(contract, method=method).ainvoke(prompt, **_invoke_kwargs(llm))
+    raw = await llm.ainvoke(messages, **_invoke_kwargs(llm))
     try:
         return extract_json(response_text(raw))
     except (ValueError, TypeError):
