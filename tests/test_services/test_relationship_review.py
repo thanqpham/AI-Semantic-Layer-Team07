@@ -162,6 +162,26 @@ async def test_unproven_cardinality_requires_explicit_attestation(async_session)
 
 
 @pytest.mark.asyncio
+async def test_unique_key_approval_without_typed_confirmation_and_no_duplicate_history(async_session):
+    from unittest.mock import patch
+    from src.services.relationship_review_service import list_relationship_reviews
+
+    db_id, _, columns, draft = await seed(async_session)
+    columns[1].is_primary_key = False
+    item = await save_relationship_candidate(async_session, db_id, 1, draft)
+
+    async def attach(db, database_id, metadata):
+        metadata[1]["unique_keys"] = [[columns[1].id]]
+
+    with patch("src.services.relationship_validation.attach_unique_keys", attach):
+        approved = await approve(async_session, db_id, item)
+    listed = await list_relationship_reviews(async_session, db_id)
+    assert [(row.kind, row.id) for row in listed] == [("active", approved.active_relationship_id)]
+    candidate = await async_session.get(RelationshipCandidateModel, item.id)
+    assert candidate.status == "approved" and candidate.reviewed_by == 1
+
+
+@pytest.mark.asyncio
 async def test_impact_ack_stale_and_atomic_metric_review(async_session):
     db = async_session
     db_id, tables, _, draft = await seed(db)

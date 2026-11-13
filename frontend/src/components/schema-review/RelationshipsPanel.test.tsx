@@ -17,10 +17,11 @@ const setup=(manage=true, approve=true) => render(<RelationshipsPanel dbId="7" c
 it('restores the selected preview after an invalid draft returns to baseline', async () => {
  vi.mocked(api.previewRelationship).mockResolvedValue({on_preview:'invalid',errors:[{message:'Invalid draft'}],warnings:[]});
  setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
- const input=screen.getByLabelText('Xác nhận cardinality khi thiếu bằng chứng khóa');
- fireEvent.change(input,{target:{value:'changed'}});
+ expect(screen.queryByLabelText('Xác nhận cardinality khi thiếu bằng chứng khóa')).not.toBeInTheDocument();
+ const input=screen.getByLabelText('Kiểu liên kết');
+ fireEvent.change(input,{target:{value:'one_to_one'}});
  expect(await screen.findByRole('alert')).toHaveTextContent('Invalid draft');
- fireEvent.change(input,{target:{value:''}});
+ fireEvent.change(input,{target:{value:'many_to_one'}});
  await waitFor(()=>expect(screen.queryByRole('alert')).not.toBeInTheDocument());
  expect(screen.getByRole('button',{name:'Xác nhận'})).toBeEnabled();
  expect(screen.getByText(item.on_preview)).toBeInTheDocument();
@@ -87,7 +88,7 @@ it('clears columns when tables change, supports composite rows, and guards dirty
 it('shows indexed validation errors and blocks save/approve', async () => {
  vi.mocked(api.previewRelationship).mockRejectedValue(new SemanticApiError(422,'Invalid',{errors:[{pair_index:0,field:'to_column_id',message:'Wrong column'}]}));
  setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
- fireEvent.change(screen.getByLabelText('Xác nhận cardinality khi thiếu bằng chứng khóa'),{target:{value:'confirmed'}});
+ fireEvent.change(screen.getByLabelText('Kiểu liên kết'),{target:{value:'one_to_one'}});
  expect(await screen.findByRole('alert')).toHaveTextContent('Cặp 1: to_column_id: Wrong column');
  expect(screen.getByRole('button',{name:'Lưu đề xuất'})).toBeDisabled();expect(screen.getByRole('button',{name:'Xác nhận'})).toBeDisabled();
 });
@@ -95,7 +96,7 @@ it('saves active edits as candidates while retaining the original active row', a
  const active={...item,kind:'active' as const,status:'approved'};vi.mocked(api.listRelationships).mockResolvedValue({items:[active],counts:{pending_relationships:0}});
  vi.mocked(api.saveRelationship).mockResolvedValue({item:{...item,id:2,active_relationship_id:1},counts:{pending_relationships:1}});
  setup();fireEvent.click(await screen.findByRole('button',{name:/sales.orders.*sales.customers/}));
- fireEvent.change(screen.getByLabelText('Xác nhận cardinality khi thiếu bằng chứng khóa'),{target:{value:'confirmed'}});
+ fireEvent.change(screen.getByLabelText('Kiểu liên kết'),{target:{value:'one_to_one'}});
  await waitFor(()=>expect(screen.getByRole('button',{name:'Lưu đề xuất'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Lưu đề xuất'}));
  expect(await screen.findByText(/liên kết gốc vẫn hoạt động/)).toBeInTheDocument();
  expect(api.saveRelationship).toHaveBeenCalledWith('7',expect.objectContaining({expected_revision:2}),expect.objectContaining({kind:'active',id:1}));

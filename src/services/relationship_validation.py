@@ -17,6 +17,7 @@ from src.models.db import (
     SemanticTableModel,
 )
 from src.models.relationship_review import RelationshipDraft
+from src.services.relationship_unique_evidence import attach_unique_keys
 
 
 def invalid(code: str, message: str, pair_index: int | None = None) -> None:
@@ -95,11 +96,32 @@ async def validate_relationship(
         clauses.append(
             f"{column_sql(sides[0][0], columns[0], dialect)} = {column_sql(sides[1][0], columns[1], dialect)}"
         )
-    warnings = cardinality_warnings(sides, seen, draft, approval)
+    unique_keys = await approval_unique_keys(db, db_id, sides) if approval else [[], []]
+    warnings = cardinality_warnings(sides, seen, draft, approval, unique_keys)
     return {"sides": sides, "on_preview": " AND ".join(clauses), "warnings": warnings}
 
 
-def cardinality_warnings(sides: tuple, seen: list[set], draft: RelationshipDraft, approval: bool) -> list[dict]:
+async def approval_unique_keys(db: AsyncSession, db_id: int, sides: tuple) -> list[list[list[int]]]:
+    """Read current UNIQUE evidence for the two endpoints before publication."""
+    metadata = [
+        {
+            "schema": table.physical_schema,
+            "name": table.table_name,
+            "columns": [{"id": column.id, "column_name": column.column_name} for column in columns],
+        }
+        for table, columns in sides
+    ]
+    await attach_unique_keys(db, db_id, metadata)
+    return [table.get("unique_keys", []) for table in metadata]
+
+
+def cardinality_warnings(
+    sides: tuple,
+    seen: list[set],
+    draft: RelationshipDraft,
+    approval: bool,
+    unique_keys: list[list[list[int]]] | None = None,
+) -> list[dict]:
     """Require complete keys or a deliberate human uniqueness attestation."""
     warnings = []
     required = {"many_to_one": [1], "one_to_one": [0, 1], "one_to_many": [0], "many_to_many": []}[
@@ -109,11 +131,12 @@ def cardinality_warnings(sides: tuple, seen: list[set], draft: RelationshipDraft
         keys = {c.id for c in sides[side][1] if c.is_primary_key}
         if keys and seen[side] & keys and not keys <= seen[side]:
             invalid("PARTIAL_COMPOSITE_KEY", "The complete composite key is required", 0)
-        if not keys or not keys <= seen[side]:
+        unique = any(set(key) <= seen[side] for key in (unique_keys or [[], []])[side] if key)
+        if not unique and (not keys or not keys <= seen[side]):
             if approval and not (draft.cardinality_confirmation or "").strip():
-                invalid("UNPROVEN_CARDINALITY", "Explicit human uniqueness confirmation is required")
+                invalid("UNPROVEN_CARDINALITY", "Join columns require PRIMARY KEY or UNIQUE evidence before approval")
             warnings.append(
-                {"code": "UNPROVEN_CARDINALITY", "message": "Uniqueness requires explicit human confirmation"}
+                {"code": "UNPROVEN_CARDINALITY", "message": "Live UNIQUE constraints will be checked on approval"}
             )
     if draft.relationship_type in ("one_to_many", "many_to_many"):
         warnings.append({"code": "UNSAFE_FANOUT", "message": "This cardinality is unsafe for metric joins"})
