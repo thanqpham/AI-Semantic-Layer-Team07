@@ -76,6 +76,13 @@ def test_openai_protocol_builds_chat_openai(monkeypatch: pytest.MonkeyPatch) -> 
     assert any(isinstance(callback, BenchmarkUsageCallback) for callback in client.callbacks)
 
 
+def test_reasoning_model_builds_client_with_default_temperature(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_settings(monkeypatch, llm_provider="openai", openai_api_key="sk-test", model_name="gpt-6-luna")
+    client = llm_module.get_llm()
+    assert isinstance(client, ChatOpenAI)
+    assert client.temperature == 1.0
+
+
 def test_anthropic_protocol_builds_anthropic_client(monkeypatch: pytest.MonkeyPatch) -> None:
     chat_anthropic = pytest.importorskip("langchain_anthropic").ChatAnthropic
     _patch_settings(

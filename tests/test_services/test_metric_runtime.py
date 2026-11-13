@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import BaseModel, SecretStr
 
-from src.services.metric_runtime import MetricCallError, _credential_lock, _retry_after, invoke_metric_json
+from src.services.metric_runtime import (
+    MetricCallError,
+    _credential_lock,
+    _invoke_kwargs,
+    _retry_after,
+    invoke_metric_json,
+)
 
 
 class Answer(BaseModel):
@@ -124,6 +130,13 @@ async def test_same_credential_models_share_a_limiter_and_busy_never_calls_provi
             await invoke_metric_json(Answer, "payload")
     assert raised.value.error.code == "LLM_BUSY"
     first.with_structured_output.assert_not_called()
+
+
+def test_invoke_kwargs_swap_temperature_and_max_tokens_for_reasoning_models():
+    reasoning = SimpleNamespace(model_name="gpt-6-luna")
+    regular = SimpleNamespace(model_name="gpt-4o-mini")
+    assert _invoke_kwargs(reasoning) == {"max_completion_tokens": 4096}
+    assert _invoke_kwargs(regular) == {"temperature": 0.0, "max_tokens": 4096}
 
 
 def test_retry_after_supports_seconds_dates_and_invalid_headers():
