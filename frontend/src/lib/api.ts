@@ -1448,6 +1448,22 @@ export async function updateTableReviewApi(
   });
 }
 
+export interface SchemaReviewBatchBody {
+  tables: { table_id: number; business_name: string; description: string }[];
+  columns: { column_id: number; business_name: string; description: string }[];
+}
+
+/** Save many table/column edits in one transaction; all rows stay pending until approved. */
+export async function saveSchemaReviewBatchApi(
+  dbId: string,
+  body: SchemaReviewBatchBody,
+): Promise<{ db_id: number; updated_tables: number; updated_columns: number }> {
+  return semanticRequest(`/api/v1/semantic/${dbId}/schema/review/batch`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
 /** Save a reviewer's inline edit of a column; the row stays pending until approved. */
 export async function updateColumnReviewApi(
   dbId: string,
