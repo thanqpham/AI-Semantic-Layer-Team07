@@ -798,6 +798,7 @@ class RecommendedDimensionItem(BaseModel):
     requires_reaggregation: bool
     data_type: str
     cardinality_hint: int | None = None
+    join_path: list[str] = Field(default_factory=list)
 
 
 class MetricDimensionsResponse(BaseModel):

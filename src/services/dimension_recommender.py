@@ -200,7 +200,32 @@ async def get_dimensions_for_metric(
         if item.table_id == base_table.id or len(relationship_paths(relationships, base_table.id, item.table_id)) == 1
     ]
     all_candidates.sort(key=lambda x: (x.tier, x.cardinality_hint or 999))
-    return all_candidates[:limit]
+    return _attach_join_paths(all_candidates[:limit], relationships, tables_map, base_table.id)
+
+
+def _attach_join_paths(
+    items: list[RecommendedDimensionItem],
+    relationships: list[CanonicalRelationshipModel],
+    tables_map: dict[int, SemanticTableModel],
+    base_id: int,
+) -> list[RecommendedDimensionItem]:
+    """Describe each dimension's unique join route as business table names from the base table."""
+    for item in items:
+        if item.table_id == base_id:
+            continue
+        paths = relationship_paths(relationships, base_id, item.table_id)
+        if len(paths) != 1:
+            continue
+        hops = [base_id] + [step.to_entity_id for step in paths[0]]
+        item.join_path = [_table_label(tables_map.get(table_id), table_id) for table_id in hops]
+    return items
+
+
+def _table_label(table: SemanticTableModel | None, table_id: int) -> str:
+    """Prefer the reviewed business name so the path reads in business language."""
+    if table is None:
+        return str(table_id)
+    return table.business_name or table.table_name
 
 
 def is_valid_filter_column(col: SemanticColumnModel) -> bool:
