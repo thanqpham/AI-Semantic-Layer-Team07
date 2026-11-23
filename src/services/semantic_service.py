@@ -40,7 +40,11 @@ from src.services.metric_service import (
     soft_delete_metric,
     update_metric,
 )
-from src.services.relationship_sync import invalidate_relationship_columns, reconcile_relationships
+from src.services.relationship_sync import (
+    inferred_relationship_type,
+    invalidate_relationship_columns,
+    reconcile_relationships,
+)
 from src.services.review_notifications import sync_schema_review_notifications
 from src.services.schema_review_service import pending_review_counts
 from src.services.semantic_fill import (
@@ -81,6 +85,7 @@ async def _generate_initial_overview(db: AsyncSession, db_id: int) -> None:
     except Exception:
         await db.rollback()
         logger.exception("Database overview generation failed for db_id=%s", db_id)
+
 
 _TIME_DIMENSION_TYPES = {"TIMESTAMP", "TIMESTAMP WITHOUT TIME ZONE", "TIMESTAMP WITH TIME ZONE", "DATE", "DATETIME"}
 
@@ -449,7 +454,7 @@ async def _extract_and_save_relationships(
                 f"{table.table_name.raw_name}.{a.raw_name} = {fk.referred_table.raw_name}.{b.raw_name}"
                 for a, b in zip(fk.constrained_columns, fk.referred_columns, strict=True)
             ),
-            "relationship_type": "many_to_one",
+            "relationship_type": inferred_relationship_type(table, fk),
         }
         for table in raw_schema.tables
         for fk in table.foreign_keys

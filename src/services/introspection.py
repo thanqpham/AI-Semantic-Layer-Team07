@@ -193,6 +193,7 @@ def _read_live_table(
     primary_keys = list(inspector.get_pk_constraint(table_name, schema=schema).get("constrained_columns") or [])
     foreign_keys = [_foreign_key(item) for item in inspector.get_foreign_keys(table_name, schema=schema)]
     indexes = [_index(item) for item in inspector.get_indexes(table_name, schema=schema)]
+    indexes = _with_unique_constraints(inspector, table_name, schema, indexes)
     references, relationships = _foreign_key_links(table_name, schema, foreign_keys)
     parts = _LiveTableParts(columns, primary_keys, foreign_keys, indexes, references)
     return _table_metadata(context, table_name, parts), relationships
@@ -274,11 +275,29 @@ def _foreign_key(value: ReflectedForeignKeyConstraint) -> ForeignKeyMetadata:
 
 
 def _index(value: ReflectedIndex) -> IndexMetadata:
+    options = value.get("dialect_options") or {}
+    partial = any(key.endswith("_where") and option for key, option in options.items())
     return {
         "index_name": str(value.get("name") or ""),
         "columns": [str(item) for item in value.get("column_names") or []],
-        "is_unique": bool(value.get("unique")),
+        "is_unique": bool(value.get("unique")) and not partial,
     }
+
+
+def _with_unique_constraints(
+    inspector: Inspector, table_name: str, schema: str | None, indexes: list[IndexMetadata]
+) -> list[IndexMetadata]:
+    """Add UNIQUE constraints that a dialect does not report as indexes (for example SQLite)."""
+    try:
+        constraints = inspector.get_unique_constraints(table_name, schema=schema)
+    except NotImplementedError:
+        return indexes
+    known = {tuple(sorted(item["columns"])) for item in indexes if item["is_unique"]}
+    for item in constraints:
+        columns = [str(name) for name in item.get("column_names") or [] if name]
+        if columns and tuple(sorted(columns)) not in known:
+            indexes.append({"index_name": str(item.get("name") or ""), "columns": columns, "is_unique": True})
+    return indexes
 
 
 def _live_result(context: _LiveContext, output: _LiveOutput) -> SchemaExtractionResult:

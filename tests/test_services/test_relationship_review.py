@@ -164,6 +164,7 @@ async def test_unproven_cardinality_requires_explicit_attestation(async_session)
 @pytest.mark.asyncio
 async def test_unique_key_approval_without_typed_confirmation_and_no_duplicate_history(async_session):
     from unittest.mock import patch
+
     from src.services.relationship_review_service import list_relationship_reviews
 
     db_id, _, columns, draft = await seed(async_session)

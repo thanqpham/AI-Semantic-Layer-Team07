@@ -354,8 +354,10 @@ async def test_repeat_uppercase_fk_keeps_approved_metric(async_session):
     from src.models.schema_metadata import Identifier
 
     raw = _make_raw_schema()
+
     def ident(s):
         return Identifier.from_raw(s.upper(), raw.dialect)
+
     raw = raw.model_copy(
         update={
             "tables": tuple(
@@ -440,3 +442,67 @@ async def test_migrated_legacy_payload_survives_sync(async_session):
     await async_session.flush()
     await reconcile_relationships(async_session, 90, raw)
     assert row.column_pairs == "unparsed legacy payload" and row.join_condition == "legacy"
+
+
+def _with_fk_columns(raw, fk_columns, unique_keys=()):
+    """Return a copy whose FK table uses the given child columns and UNIQUE keys."""
+    from src.models.schema_metadata import Identifier
+
+    def ident(name):
+        return Identifier.from_raw(name, raw.dialect)
+
+    table = next(t for t in raw.tables if t.foreign_keys)
+    fk = table.foreign_keys[0]
+    referred = tuple(ident(n) for n in ("user_id", "email")[: len(fk_columns)])
+    changed = fk.model_copy(
+        update={"constrained_columns": tuple(ident(n) for n in fk_columns), "referred_columns": referred}
+    )
+    updated = table.model_copy(
+        update={"foreign_keys": (changed,), "unique_keys": tuple(tuple(ident(n) for n in k) for k in unique_keys)}
+    )
+    return raw.model_copy(update={"tables": tuple(updated if t == table else t for t in raw.tables)})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fk_columns", "unique_keys", "expected"),
+    [
+        (("user_id",), (), "many_to_one"),
+        (("user_id",), (("user_id",),), "one_to_one"),
+        (("order_id",), (), "one_to_one"),
+        (("user_id",), (("user_id", "id"),), "many_to_one"),
+        (("user_id", "id"), (("user_id",),), "one_to_one"),
+    ],
+    ids=["plain_fk", "unique_fk", "primary_key_fk", "partial_unique", "fk_contains_unique"],
+)
+async def test_initial_cardinality_follows_child_keys(async_session, fk_columns, unique_keys, expected):
+    from src.models.db import SemanticDatabaseModel
+
+    async_session.add(
+        SemanticDatabaseModel(id=90, created_by=1, display_name="Sync", db_type="postgresql", conn_url_enc="sync")
+    )
+    await async_session.flush()
+    raw = _with_fk_columns(_make_raw_schema(), fk_columns, unique_keys)
+    await enrich_and_save_canonical_schema(async_session, 1, 90, raw, "postgresql", enrichment={"tables": []})
+    row = await async_session.scalar(select(CanonicalRelationshipModel))
+    assert row.relationship_type == expected and row.source == "fk"
+
+
+@pytest.mark.asyncio
+async def test_inferred_type_does_not_change_fk_identity(async_session):
+    from src.models.db import SemanticDatabaseModel
+    from src.models.db_relationships import RelationshipCandidateModel
+
+    async_session.add(
+        SemanticDatabaseModel(id=90, created_by=1, display_name="Sync", db_type="postgresql", conn_url_enc="sync")
+    )
+    await async_session.flush()
+    unique = _with_fk_columns(_make_raw_schema(), ("user_id",), (("user_id",),))
+    await enrich_and_save_canonical_schema(async_session, 1, 90, unique, "postgresql", enrichment={"tables": []})
+    row = await async_session.scalar(select(CanonicalRelationshipModel))
+    assert row.relationship_type == "one_to_one"
+    plain = _with_fk_columns(_make_raw_schema(), ("user_id",))
+    result = await reconcile_relationships(async_session, 90, plain)
+    assert result == {"added": 0, "unchanged": 1, "changed": 0, "missing": 0}
+    assert row.relationship_type == "one_to_one" and row.validation_status == "valid"
+    assert (await async_session.scalars(select(RelationshipCandidateModel))).all() == []

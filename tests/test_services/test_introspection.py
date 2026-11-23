@@ -197,5 +197,3 @@ async def test_live_extraction_rejects_non_positive_connection_id() -> None:
     }
     with pytest.raises(ConnectionIntrospectionError, match="valid connection ID"):
         await extract_raw_schema(request)
-
-
