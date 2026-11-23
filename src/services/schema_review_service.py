@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 from src.models.db import SemanticColumnModel, SemanticTableModel, utc_now
 from src.models.db_relationships import RelationshipCandidateModel
 from src.models.review_mixin import REVIEW_STATUS_APPROVED, REVIEW_STATUS_PENDING
+from src.models.review_schemas import ReviewBatchColumnEdit, ReviewBatchTableEdit
 from src.services.database import lock_semantic_database
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,51 @@ async def update_column_review(
     _apply_inline_edit(column, business_name, description, actor_id)
     await db.flush()
     return column
+
+
+async def _load_batch_rows(
+    db: AsyncSession, db_id: int, table_ids: list[int], column_ids: list[int]
+) -> tuple[dict[int, SemanticTableModel], dict[int, SemanticColumnModel]]:
+    """Load the requested rows of *db_id*, raising when any ID is missing or foreign."""
+    tables = {
+        row.id: row
+        for row in (
+            await db.execute(
+                select(SemanticTableModel).where(
+                    SemanticTableModel.db_id == db_id, SemanticTableModel.id.in_(table_ids)
+                )
+            )
+        ).scalars()
+    }
+    column_stmt = (
+        select(SemanticColumnModel)
+        .join(SemanticTableModel, SemanticColumnModel.table_id == SemanticTableModel.id)
+        .where(SemanticTableModel.db_id == db_id, SemanticColumnModel.id.in_(column_ids))
+    )
+    columns = {row.id: row for row in (await db.execute(column_stmt)).scalars()}
+    if set(table_ids) - tables.keys() or set(column_ids) - columns.keys():
+        raise SchemaRowNotFoundError(f"Some tables or columns were not found in database {db_id}")
+    return tables, columns
+
+
+async def update_review_batch(
+    db: AsyncSession,
+    db_id: int,
+    tables: list[ReviewBatchTableEdit],
+    columns: list[ReviewBatchColumnEdit],
+    actor_id: int,
+) -> dict[str, int]:
+    """Apply many inline edits atomically: every ID is validated before any row changes."""
+    await lock_semantic_database(db, db_id)
+    table_rows, column_rows = await _load_batch_rows(
+        db, db_id, [item.table_id for item in tables], [item.column_id for item in columns]
+    )
+    for edit in tables:
+        _apply_inline_edit(table_rows[edit.table_id], edit.business_name, edit.description, actor_id)
+    for edit in columns:
+        _apply_inline_edit(column_rows[edit.column_id], edit.business_name, edit.description, actor_id)
+    await db.flush()
+    return {"updated_tables": len(tables), "updated_columns": len(columns)}
 
 
 def _approve_row(row: Any, actor_id: int) -> bool:

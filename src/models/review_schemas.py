@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ReviewColumnItem(BaseModel):
@@ -81,6 +81,52 @@ class SchemaApproveResponse(BaseModel):
     pending_columns: int = 0
     pending_relationships: int = 0
     status: str = "approved"
+
+
+REVIEW_BATCH_MAX_ITEMS = 500
+
+
+class ReviewBatchTableEdit(BaseModel):
+    """One table edit inside a batch save."""
+
+    table_id: int
+    business_name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="", max_length=1000)
+
+
+class ReviewBatchColumnEdit(BaseModel):
+    """One column edit inside a batch save."""
+
+    column_id: int
+    business_name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="", max_length=1000)
+
+
+class SchemaReviewBatchRequest(BaseModel):
+    """Save many inline edits at once; all succeed or none are stored."""
+
+    tables: list[ReviewBatchTableEdit] = Field(default_factory=list)
+    columns: list[ReviewBatchColumnEdit] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_size_and_duplicates(self) -> SchemaReviewBatchRequest:
+        """Reject empty, oversized, or duplicate-ID batches."""
+        total = len(self.tables) + len(self.columns)
+        if not 1 <= total <= REVIEW_BATCH_MAX_ITEMS:
+            raise ValueError(f"Batch must contain 1-{REVIEW_BATCH_MAX_ITEMS} edits")
+        table_ids = [item.table_id for item in self.tables]
+        column_ids = [item.column_id for item in self.columns]
+        if len(set(table_ids)) != len(table_ids) or len(set(column_ids)) != len(column_ids):
+            raise ValueError("Duplicate table_id or column_id in batch")
+        return self
+
+
+class SchemaReviewBatchResponse(BaseModel):
+    """Number of rows saved by a batch."""
+
+    db_id: int
+    updated_tables: int = 0
+    updated_columns: int = 0
 
 
 class MetricVersionDecisionRequest(BaseModel):

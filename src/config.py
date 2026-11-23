@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://dev:devpassword@localhost:5432/semantic_layer_dev"
     encryption_key: str = ""  # Base64 Fernet key — must be set via .env
 
+    # Reject Live DB accounts that can write (INSERT/UPDATE/DELETE/DDL, superuser, owner).
+    target_db_require_read_only: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

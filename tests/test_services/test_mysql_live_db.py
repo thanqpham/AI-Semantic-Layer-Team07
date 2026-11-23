@@ -1,6 +1,6 @@
 """Unit tests for MySQL Live Target Database connection, metadata serialization, and Fernet encryption."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,9 +47,11 @@ def test_mysql_introspect_live_database(mock_create_engine: MagicMock, mock_insp
 
 
 @pytest.mark.asyncio
+@patch("src.services.live_db_service.ensure_read_only_account", new_callable=AsyncMock)
 @patch("src.services.live_db_service.introspect_live_database")
 async def test_create_mysql_live_target_db(
     mock_introspect: MagicMock,
+    _mock_privileges: AsyncMock,
     async_session: AsyncSession,
 ) -> None:
     """Test creating and persisting a MySQL Live Target DB record."""

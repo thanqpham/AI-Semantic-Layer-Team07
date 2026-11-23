@@ -239,3 +239,17 @@ async def test_compile_and_execute_live_database(
         db.id, SemanticQuerySpec(metric_ids=[ratio_metric.id, metrics["refunds_simple"].id])
     )
     assert (await execute_compiled_query(url, dialect, compiled)).rows[0][0] == 0.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("dialect", "variable"), _BACKENDS[:2])
+async def test_privilege_check_accepts_reader_and_flags_owner(dialect: str, variable: str) -> None:
+    """Database-level guard: the isolated reader passes, the fixture creator is write-capable."""
+    from src.models.schema_metadata import SchemaDialect
+    from src.services.target_db_privileges import check_read_only_privileges
+
+    reader_url = _database_url(variable)
+    schema_dialect = SchemaDialect(dialect)
+    assert (await check_read_only_privileges(reader_url, schema_dialect)).violations == []
+    owner_report = await check_read_only_privileges(_setup_url(dialect, reader_url), schema_dialect)
+    assert owner_report.violations

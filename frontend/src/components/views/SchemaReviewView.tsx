@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Save, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -9,16 +9,19 @@ import {
   generateDescriptionsApi,
   getEnrichStatusApi,
   getSchemaReviewApi,
+  saveSchemaReviewBatchApi,
   type EnrichStatus,
   type SchemaReview,
+  type SchemaReviewBatchBody,
 } from '@/lib/api';
-import { SectionLabel, type WorkspaceDatabase } from '@/components/workspace/shared';
+import { SectionLabel, engineLabels, type WorkspaceDatabase } from '@/components/workspace/shared';
 import { cn } from '@/lib/utils';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { Translated } from '@/components/ui/translated';
 import { EnrichmentProgressBanner } from '@/components/schema-review/EnrichmentProgressBanner';
-import { TableReviewCard, columnKey, tableKey, type Draft, type DraftMap } from '@/components/schema-review/TableReviewCard';
-import { DatabaseOverview } from '@/components/schema-review/DatabaseOverview';
+import { TableDetail, columnKey, tableKey, type Draft, type DraftMap } from '@/components/schema-review/TableDetail';
+import { TableTree, pendingCount, tableLabel } from '@/components/schema-review/TableTree';
+import { DatabaseOverview, type OverviewStats } from '@/components/schema-review/DatabaseOverview';
 import { RelationshipsPanel } from '@/components/schema-review/RelationshipsPanel';
 import { ValueMappingBatchImport } from '@/components/schema-review/ValueMappingBatchImport';
 import { useLanguage } from '@/context/LanguageContext';
@@ -50,6 +53,33 @@ function buildDrafts(review: SchemaReview): DraftMap {
   return drafts;
 }
 
+/** Totals for the DB overview panel, derived from the already-loaded review queue. */
+function overviewStats(review: SchemaReview): OverviewStats {
+  const columns = review.tables.flatMap((table) => table.columns);
+  return {
+    tables: review.tables.length,
+    columns: columns.length,
+    pendingTables: review.pending_tables,
+    pendingColumns: review.pending_columns,
+    pendingValues: columns.reduce((total, column) => total + (column.pending_value_count ?? 0), 0),
+    pendingRelationships: review.pending_relationships,
+  };
+}
+
+/** Collect every dirty draft into one batch-save request body. */
+function buildBatch(review: SchemaReview, drafts: DraftMap, isDirty: (key: string) => boolean): SchemaReviewBatchBody {
+  const body: SchemaReviewBatchBody = { tables: [], columns: [] };
+  for (const table of review.tables) {
+    const key = tableKey(table);
+    if (isDirty(key)) body.tables.push({ table_id: table.table_id, ...drafts[key] });
+    for (const column of table.columns) {
+      const colKey = columnKey(table, column);
+      if (isDirty(colKey)) body.columns.push({ column_id: column.column_id, ...drafts[colKey] });
+    }
+  }
+  return body;
+}
+
 export function SchemaReviewView({
   dbId,
   database,
@@ -64,8 +94,10 @@ export function SchemaReviewView({
   const [review, setReview] = useState<SchemaReview | null>(null);
   const [drafts, setDrafts] = useState<DraftMap>({});
   const [baseline, setBaseline] = useState<DraftMap>({});
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<number | 'db' | null>(null);
+  const [described, setDescribed] = useState<boolean | null>(null);
+  const [selectedTables, setSelectedTables] = useState<Set<number>>(new Set());
+  const [savingAll, setSavingAll] = useState(false);
   const [approving, setApproving] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -107,33 +139,33 @@ export function SchemaReviewView({
   const patch = (key: string, value: Partial<Draft>) =>
     setDrafts((current) => ({ ...current, [key]: { ...current[key], ...value } }));
 
-  const saveRow = async (key: string, save: (draft: Draft) => Promise<unknown>) => {
-    const draft = drafts[key];
-    if (!dbId || !draft) return;
-    setSavingKey(key);
+  const saveAll = async () => {
+    if (!dbId || !review) return;
+    setSavingAll(true);
     setError('');
     try {
-      await save(draft);
-      setBaseline((current) => ({ ...current, [key]: { ...draft } }));
-      onNotify?.('Đã lưu bản chỉnh sửa, chờ phê duyệt');
+      const result = await saveSchemaReviewBatchApi(String(dbId), buildBatch(review, drafts, isDirty));
+      onNotify?.(`Đã lưu ${result.updated_tables} bảng và ${result.updated_columns} cột, chờ phê duyệt`);
       await load();
       onReviewChanged?.();
     } catch (caught) {
+      // Nothing was stored server-side; drafts stay so the reviewer can fix and retry.
       setError(caught instanceof Error ? caught.message : 'Không thể lưu chỉnh sửa');
     } finally {
-      setSavingKey(null);
+      setSavingAll(false);
     }
   };
 
-  const approve = async (tableIds?: number[]) => {
+  const approve = async (tableIds?: number[], busyKey = tableIds ? String(tableIds[0]) : '*') => {
     if (!dbId) return;
-    setApproving(tableIds ? String(tableIds[0]) : '*');
+    setApproving(busyKey);
     setError('');
     try {
       const result = await approveSchemaReviewApi(String(dbId), undefined, tableIds);
       onNotify?.(
         `Đã duyệt ${result.approved_tables} bảng và ${result.approved_columns} cột vào Metadata Store`,
       );
+      if (busyKey === 'selected') setSelectedTables(new Set());
       await load();
       onReviewChanged?.();
     } catch (caught) {
@@ -222,6 +254,12 @@ export function SchemaReviewView({
   }
 
   const enriching = enrich?.status === 'running';
+  // Open the DB overview first while it has no description, otherwise the first table awaiting review.
+  const defaultKey: number | 'db' | undefined =
+    described === false ? 'db' : (review?.tables.find((table) => pendingCount(table) > 0) ?? review?.tables[0])?.table_id;
+  const activeKey = activeId ?? defaultKey;
+  const activeTable = review?.tables.find((table) => table.table_id === activeKey);
+  const overviewTitle = database?.name || 'Tổng quan database';
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
@@ -234,7 +272,6 @@ export function SchemaReviewView({
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        {dbId && canManageSchema && <DatabaseOverview key={dbId} dbId={String(dbId)} canManage={canManageSchema} canApprove={canApproveSchema} refreshKey={enrich?.status === 'succeeded' ? pollTick + 1 : 0} />}
         {enrich && enrich.status !== 'idle' && (
           <EnrichmentProgressBanner status={enrich} onRetry={() => void onGenerate()} />
         )}
@@ -269,6 +306,16 @@ export function SchemaReviewView({
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              disabled={!canManageSchema || dirtyCount === 0 || savingAll}
+              onClick={() => void saveAll()}
+              className="gap-2 text-xs"
+            >
+              {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <Translated text={"Lưu tất cả ("} />{dirtyCount})
+            </Button>
+            <Button
+              size="sm"
               disabled={!canApproveSchema || pendingTotal === 0 || approving !== null}
               onClick={() => approve()}
               className="gap-2 text-xs"
@@ -300,7 +347,7 @@ export function SchemaReviewView({
         )}
         {dirtyCount > 0 && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-            {dirtyCount} <Translated text={"chỉnh sửa chưa được lưu. Nhấn Lưu trên từng dòng trước khi phê duyệt."} /></p>
+            {dirtyCount} <Translated text={"chỉnh sửa chưa được lưu. Nhấn Lưu tất cả trước khi phê duyệt."} /></p>
         )}
 
         <div className="flex items-center gap-4">
@@ -316,28 +363,54 @@ export function SchemaReviewView({
           </p>
         )}
 
-        {review?.tables.map((table, index) => (
-          <TableReviewCard
-            key={`${dbId}:${table.table_id}`}
-            dbId={dbId!}
-            tableIndex={index}
-            table={table}
-            review={review}
-            drafts={drafts}
-            expanded={expanded}
-            setExpanded={setExpanded}
-            savingKey={savingKey}
-            approving={approving}
-            canManageSchema={canManageSchema}
-            canApproveSchema={canApproveSchema}
-            enriching={Boolean(enriching)}
-            isDirty={isDirty}
-            patch={patch}
-            saveRow={saveRow}
-            approve={approve}
-            onReviewChanged={refreshValueStatus}
-          />
-        ))}
+        {dbId && review && (
+          <div className="grid items-start gap-4 md:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
+            <TableTree
+              database={{ label: overviewTitle, described, active: !activeTable, onActivate: () => setActiveId('db') }}
+              tables={review.tables}
+              activeId={activeTable?.table_id ?? null}
+              onActivate={setActiveId}
+              selected={selectedTables}
+              onSelectedChange={setSelectedTables}
+              canApprove={canApproveSchema}
+              approving={approving}
+              onApproveSelected={() => void approve([...selectedTables], 'selected')}
+            />
+            {/* Every detail stays mounted (hidden) so unsaved value-mapping drafts survive switching tables. */}
+            <div className="min-w-0">
+              <DatabaseOverview
+                key={dbId}
+                dbId={String(dbId)}
+                canManage={canManageSchema}
+                canApprove={canApproveSchema}
+                refreshKey={enrich?.status === 'succeeded' ? pollTick + 1 : 0}
+                title={overviewTitle}
+                subtitle={database ? `${engineLabels[database.engine]} · ${review.tables.length} bảng` : undefined}
+                stats={overviewStats(review)}
+                hidden={Boolean(activeTable)}
+                onDescribedChange={setDescribed}
+              />
+              {review.tables.map((table) => (
+                <TableDetail
+                  key={`${dbId}:${table.table_id}`}
+                  dbId={dbId!}
+                  table={table}
+                  label={tableLabel(table, review.tables)}
+                  hidden={table.table_id !== activeTable?.table_id}
+                  drafts={drafts}
+                  approving={approving}
+                  canManageSchema={canManageSchema}
+                  canApproveSchema={canApproveSchema}
+                  enriching={Boolean(enriching)}
+                  isDirty={isDirty}
+                  patch={patch}
+                  approve={approve}
+                  onReviewChanged={refreshValueStatus}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>

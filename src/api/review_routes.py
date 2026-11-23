@@ -19,6 +19,8 @@ from src.models.review_schemas import (
     ReviewTableItem,
     SchemaApproveRequest,
     SchemaApproveResponse,
+    SchemaReviewBatchRequest,
+    SchemaReviewBatchResponse,
     SchemaReviewResponse,
 )
 from src.models.schemas import MetricVersionResponse
@@ -32,6 +34,7 @@ from src.services.schema_review_service import (
     approve_schema,
     load_review_tables,
     pending_review_counts,
+    update_review_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,6 +99,25 @@ async def approve_schema_review(
         pending_relationships=result["pending_relationships"],
         status="pending_review" if pending else "approved",
     )
+
+
+@review_router.put("/semantic/{db_id}/schema/review/batch", response_model=SchemaReviewBatchResponse)
+async def save_schema_review_batch(
+    db_id: int,
+    body: SchemaReviewBatchRequest,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> SchemaReviewBatchResponse:
+    """Lưu nhiều chỉnh sửa bảng/cột trong một transaction; các dòng vẫn chờ duyệt."""
+    await _require_resource_permission(db, current_user.id, db_id, org_id, "can_manage_schema")
+    try:
+        result = await update_review_batch(db, db_id, body.tables, body.columns, current_user.id)
+    except SchemaRowNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await db.commit()
+    await sync_schema_review_notifications(db, db_id)
+    return SchemaReviewBatchResponse(db_id=db_id, **result)
 
 
 async def _scoped_metric(db: AsyncSession, db_id: int, metric_id: int) -> SemanticMetricModel:
