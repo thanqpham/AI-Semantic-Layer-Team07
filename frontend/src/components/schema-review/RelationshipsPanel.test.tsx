@@ -100,6 +100,7 @@ it('saves active edits as candidates while retaining the original active row', a
  await waitFor(()=>expect(screen.getByRole('button',{name:'Lưu đề xuất'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Lưu đề xuất'}));
  expect(await screen.findByText(/liên kết gốc vẫn hoạt động/)).toBeInTheDocument();
  expect(api.saveRelationship).toHaveBeenCalledWith('7',expect.objectContaining({expected_revision:2}),expect.objectContaining({kind:'active',id:1}));
+ fireEvent.click(screen.getByRole('button',{name:'Quay lại danh sách'}));
  expect(screen.getByRole('button',{name:/sales.orders.*sales.customers/})).toHaveTextContent('approved');
 });
 it('reloads a stale impact and requires a fresh acknowledgment', async () => {
@@ -130,6 +131,31 @@ it('reloads a stale impact and requires a fresh acknowledgment', async () => {
    expect(await screen.findByRole('button', { name: /sales.orders.*sales.customers/ })).toBeInTheDocument();
    expect(screen.getByText('Table ID: 1')).toBeInTheDocument();
    expect(screen.getByText('customer_id → id')).toBeInTheDocument();
+ });
+
+ it('lists tables on the left and shows outgoing and incoming edges of the chosen table', async () => {
+   setup();
+   const tree = await screen.findByRole('navigation', { name: 'Bảng có liên kết' });
+   expect(within(tree).getByRole('button', { name: /sales\.orders/ })).toHaveAttribute('aria-current', 'true');
+   expect(screen.getByText(/Liên kết đi/)).toBeInTheDocument();
+   fireEvent.click(within(tree).getByRole('button', { name: /sales\.customers/ }));
+   expect(screen.getByText('Table ID: 2')).toBeInTheDocument();
+   expect(screen.getByText(/Liên kết đến/)).toBeInTheDocument();
+   expect(screen.queryByText(/Liên kết đi ·/)).not.toBeInTheDocument();
+ });
+
+ it('opens the detail in the right pane and guards unsaved edits when switching tables', async () => {
+   setup();
+   fireEvent.click(await screen.findByRole('button', { name: /sales.orders.*sales.customers/ }));
+   expect(screen.getByRole('button', { name: 'Quay lại danh sách' })).toBeInTheDocument();
+   expect(screen.getByText(/Liên kết đi/)).not.toBeVisible();
+   fireEvent.click(screen.getByRole('button', { name: 'Thêm cặp cột' }));
+   const tree = screen.getByRole('navigation', { name: 'Bảng có liên kết' });
+   fireEvent.click(within(tree).getByRole('button', { name: /sales\.customers/ }));
+   expect(screen.getByRole('dialog')).toHaveTextContent('Bỏ chỉnh sửa chưa lưu?');
+   fireEvent.click(screen.getByRole('button', { name: 'Bỏ chỉnh sửa' }));
+   expect(screen.queryByRole('button', { name: 'Quay lại danh sách' })).not.toBeInTheDocument();
+   expect(screen.getByText('Table ID: 2')).toBeInTheDocument();
  });
 
  it('displays friendly message when account AI is not configured', async () => {
