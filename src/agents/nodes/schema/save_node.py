@@ -57,6 +57,7 @@ def raw_schema_to_canonical(raw: RawSchema, dialect: str) -> RawSchemaMetadata:
         )
         pk = _convert_primary_key(tbl.get("primary_keys", []), schema_dialect)
         fks = tuple(_convert_fk(fk, schema_dialect) for fk in tbl.get("foreign_keys", []))
+        unique_keys = _convert_unique_keys(tbl.get("indexes", []), columns, schema_dialect)
 
         tables.append(
             TableMetadata(
@@ -64,6 +65,7 @@ def raw_schema_to_canonical(raw: RawSchema, dialect: str) -> RawSchemaMetadata:
                 table_name=Identifier.from_raw(tbl["table_name"], schema_dialect),
                 columns=columns,
                 primary_key=pk,
+                unique_keys=unique_keys,
                 foreign_keys=fks,
             )
         )
@@ -73,6 +75,21 @@ def raw_schema_to_canonical(raw: RawSchema, dialect: str) -> RawSchemaMetadata:
         schemas=tuple(schemas_seen.values()),
         tables=tuple(tables),
     )
+
+
+def _convert_unique_keys(
+    indexes: list[Any], columns: tuple[Any, ...], dialect: SchemaDialect
+) -> tuple[tuple[Identifier, ...], ...]:
+    """Keep unique indexes whose columns all exist (functional indexes are skipped)."""
+    known = {column.column_name.raw_name for column in columns}
+    keys: list[tuple[Identifier, ...]] = []
+    for index in indexes:
+        names = index.get("columns") or []
+        if index.get("is_unique") and names and all(name in known for name in names):
+            key = tuple(Identifier.from_raw(name, dialect) for name in names)
+            if key not in keys:
+                keys.append(key)
+    return tuple(keys)
 
 
 def _default_schema(dialect: SchemaDialect) -> str:

@@ -38,6 +38,7 @@ from src.services.categorical_discovery_policy import (
 from src.services.database import encrypt_conn_url, get_db_session
 from src.services.schema_fingerprint import compute_schema_fingerprint
 from src.services.semantic_service import enrich_and_save_canonical_schema, ensure_semantic_database
+from src.services.unique_key_metadata import build_unique_keys
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ def _introspect_table(
         table_name=Identifier.from_raw(table_name, dialect),
         columns=tuple(columns),
         primary_key=pk_meta,
+        unique_keys=build_unique_keys(inspector, table_name, {col["name"] for col in raw_columns}, dialect),
         foreign_keys=tuple(fk_list),
     )
 

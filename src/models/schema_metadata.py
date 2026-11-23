@@ -162,6 +162,7 @@ class TableMetadata(CanonicalModel):
     table_name: Identifier
     columns: tuple[ColumnMetadata, ...] = Field(min_length=1)
     primary_key: PrimaryKeyMetadata | None = None
+    unique_keys: tuple[tuple[Identifier, ...], ...] = ()
     foreign_keys: tuple[ForeignKeyMetadata, ...] = ()
 
     @field_validator("columns")
@@ -189,6 +190,12 @@ class TableMetadata(CanonicalModel):
     def qualified_identity(self) -> QualifiedIdentifier:
         """Return the table's exact schema-qualified identity."""
         return QualifiedIdentifier(schema_name=self.schema_name, object_name=self.table_name)
+
+    def covers_unique_key(self, column_names: set[str]) -> bool:
+        """Return whether normalized columns contain a complete PRIMARY KEY or UNIQUE key."""
+        keys = [self.primary_key.constrained_columns] if self.primary_key else []
+        keys.extend(self.unique_keys)
+        return any(key and {item.normalized_name for item in key} <= column_names for key in keys)
 
 
 class RawSchemaMetadata(CanonicalModel):
@@ -316,6 +323,9 @@ def _validate_local_column_references(table: TableMetadata, columns: dict[str, C
         local_names = {item.normalized_name for item in foreign_key.constrained_columns}
         if not local_names.issubset(columns):
             raise ValueError("Foreign key references an unknown local column")
+    for unique_key in table.unique_keys:
+        if not unique_key or not {item.normalized_name for item in unique_key} <= columns.keys():
+            raise ValueError("Unique key references an unknown local column")
 
 
 def _iter_identifiers(schema: RawSchemaMetadata) -> tuple[Identifier, ...]:
@@ -327,6 +337,8 @@ def _iter_identifiers(schema: RawSchemaMetadata) -> tuple[Identifier, ...]:
             identifiers.extend(table.primary_key.constrained_columns)
             if table.primary_key.constraint_name:
                 identifiers.append(table.primary_key.constraint_name)
+        for unique_key in table.unique_keys:
+            identifiers.extend(unique_key)
         for foreign_key in table.foreign_keys:
             identifiers.extend(foreign_key.constrained_columns)
             identifiers.extend((foreign_key.referred_schema, foreign_key.referred_table))

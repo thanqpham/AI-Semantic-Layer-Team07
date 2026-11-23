@@ -49,16 +49,37 @@ describe('SuggestionCard lifecycle states', () => {
     expect(screen.getByText(/1 \+ 100 × \(SUM\(amount\)\) \/ \(COUNT_DISTINCT\(id\)\)/)).toBeInTheDocument();
   });
 
-  it('shows the sources and calculations of each query plan stage', () => {
+  it('shows only the calculation without grouping details or query plan YAML', () => {
     const suggestion = makeSuggestion();
     suggestion.definition.metric.query_plan = {
-      output_expression: 'totals.revenue',
-      stages: [{ name: 'totals', base_entity: 'orders', joins: [], group_by: [],
-        aggregates: [{ name: 'revenue', function: 'SUM', expression: 'orders.amount', filters: [] }], filters: [] }],
+      output_expression: 'per_product.order_count',
+      stages: [{ name: 'per_product', base_entity: 'order_items', joins: [],
+        group_by: [{ name: 'product_id', expression: 'order_items.product_id', column_id: 580 }],
+        aggregates: [{ name: 'order_count', function: 'COUNT_DISTINCT', expression: 'order_items.order_id', filters: [] }], filters: [] }],
     };
     render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
-    expect(screen.getByText(/totals.revenue/)).toBeInTheDocument();
-    expect(screen.getByText(/orders.amount/)).toBeInTheDocument();
+    expect(screen.getByText('COUNT_DISTINCT(order_items.order_id)')).toBeInTheDocument();
+    expect(screen.queryByText(/Nhóm theo/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/per_product.order_count/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/column_id:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/source_stage:/)).not.toBeInTheDocument();
+  });
+
+  it('shows the output and intermediate calculations for a multi-stage plan', () => {
+    const suggestion = makeSuggestion();
+    suggestion.definition.metric.query_plan = {
+      output_expression: 'repeat.customers / total.customers',
+      stages: [
+        { name: 'repeat', base_entity: 'orders', joins: [], group_by: [],
+          aggregates: [{ name: 'customers', function: 'COUNT_DISTINCT', expression: 'orders.customer_id', filters: [] }], filters: [] },
+        { name: 'total', base_entity: 'orders', joins: [], group_by: [],
+          aggregates: [{ name: 'customers', function: 'COUNT', expression: '*', filters: [] }], filters: [] },
+      ],
+    };
+    render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
+    expect(screen.getByText('repeat.customers / total.customers')).toBeInTheDocument();
+    expect(screen.getByText('repeat.customers = COUNT_DISTINCT(orders.customer_id)')).toBeInTheDocument();
+    expect(screen.getByText('total.customers = COUNT(*)')).toBeInTheDocument();
   });
 
   it('lists stage and aggregate filters with their separate scopes', () => {

@@ -250,6 +250,11 @@ async def test_get_dimensions_for_metric_tiers(async_session: AsyncSession):
     assert tier_map["region_name"] == "C"  # 2-hop N:1
     assert "category" not in tier_map  # 1:N downstream safely excluded to prevent UNSAFE_FANOUT
 
+    path_map = {d.column_name: d.join_path for d in dims}
+    assert path_map["status"] == []  # Same base table needs no join.
+    assert path_map["city"] == ["Đơn hàng", "Khách hàng"]
+    assert path_map["region_name"] == ["Đơn hàng", "Khách hàng", "Vùng miền"]
+
     # Call get_filter_columns_for_metric
     filter_cols = await get_filter_columns_for_metric(async_session, s_db.id, metric.id)
     group_map = {c.column_name: c.group_type for c in filter_cols}

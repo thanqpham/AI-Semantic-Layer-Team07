@@ -8,7 +8,7 @@ from src.models.db import CanonicalRelationshipModel as Active
 from src.models.db import ImportedSchemaModel, LiveTargetDbModel, SemanticColumnModel, SemanticTableModel, utc_now
 from src.models.db_relationships import RelationshipCandidateModel as Candidate
 from src.models.relationship_review import RelationshipDraft
-from src.models.schema_metadata import ForeignKeyMetadata, RawSchemaMetadata
+from src.models.schema_metadata import ForeignKeyMetadata, RawSchemaMetadata, TableMetadata
 from src.services.relationship_review_service import claim_revision, impact_state, lock_database, published_metrics
 from src.services.relationship_runtime import valid_pairs
 from src.services.relationship_validation import fingerprint
@@ -28,6 +28,12 @@ async def _metadata(db: AsyncSession, db_id: int, raw: RawSchemaMetadata) -> tup
     }, {(c.table_id, c.column_name): c.id for c in columns}
 
 
+def inferred_relationship_type(table: TableMetadata, fk: ForeignKeyMetadata) -> str:
+    """Propose one_to_one when the FK columns contain a full PRIMARY KEY/UNIQUE key of the child table."""
+    names = {item.normalized_name for item in fk.constrained_columns}
+    return "one_to_one" if table.covers_unique_key(names) else "many_to_one"
+
+
 def _detections(raw: RawSchemaMetadata, tables: dict, columns: dict) -> list[dict]:
     detections = []
     for table in raw.tables:
@@ -36,15 +42,18 @@ def _detections(raw: RawSchemaMetadata, tables: dict, columns: dict) -> list[dic
             target = tables.get((fk.referred_schema.normalized_name, fk.referred_table.normalized_name))
             if source is None or target is None:
                 raise ValueError("FK endpoints must be persisted before reconciliation")
-            detections.append(_detection(source, target, fk, columns))
+            detections.append(_detection(source, target, fk, columns, inferred_relationship_type(table, fk)))
     return detections
 
 
-def _detection(source: SemanticTableModel, target: SemanticTableModel, fk: ForeignKeyMetadata, columns: dict) -> dict:
+def _detection(
+    source: SemanticTableModel, target: SemanticTableModel, fk: ForeignKeyMetadata, columns: dict, kind: str
+) -> dict:
     pairs = [
         {"from_column_id": columns[(source.id, a.raw_name)], "to_column_id": columns[(target.id, b.raw_name)]}
         for a, b in zip(fk.constrained_columns, fk.referred_columns, strict=True)
     ]
+    # Identity stays typed many_to_one so a changed proposal never changes the fingerprint of an existing FK.
     draft = RelationshipDraft(
         from_entity_id=source.id, to_entity_id=target.id, column_pairs=pairs, relationship_type="many_to_one"
     )
@@ -56,6 +65,7 @@ def _detection(source: SemanticTableModel, target: SemanticTableModel, fk: Forei
     return {
         "draft": draft,
         "key": fingerprint(draft),
+        "type": kind,
         "snapshot": snapshot,
         "constraint_name": fk.constraint_name.raw_name if fk.constraint_name else None,
         "join": " AND ".join(
@@ -101,7 +111,7 @@ async def _candidate(db: AsyncSession, db_id: int, detection: dict, target: Acti
             from_entity_id=draft.from_entity_id,
             to_entity_id=draft.to_entity_id,
             column_pairs=[p.model_dump() for p in draft.column_pairs],
-            relationship_type="many_to_one",
+            relationship_type=detection["type"],
             source="fk",
             fingerprint=key,
             evidence={
@@ -167,7 +177,7 @@ def _active_detection(db_id: int, detection: dict) -> Active:
         from_entity_id=draft.from_entity_id,
         to_entity_id=draft.to_entity_id,
         column_pairs=[p.model_dump() for p in draft.column_pairs],
-        relationship_type="many_to_one",
+        relationship_type=detection["type"],
         relationship_key=detection["key"],
         constraint_name=detection["constraint_name"],
         join_condition=detection["join"],
