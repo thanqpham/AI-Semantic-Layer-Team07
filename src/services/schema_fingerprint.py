@@ -16,6 +16,7 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import make_url
 
 from src.models.schema_metadata import RawSchemaMetadata, SchemaDialect
+from src.services.target_db_privileges import read_only_connect_args
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,8 @@ def compute_schema_fingerprint(tables_or_schema: RawSchemaMetadata | list[Any] |
 
 def fast_introspect_schema_fingerprint(conn_url: str, dialect: str | SchemaDialect) -> str:
     """Fast inspection of table and column signatures to compute fingerprint in <5ms."""
-    engine = create_engine(_sync_url(conn_url))
+    sync_url = _sync_url(conn_url)
+    engine = create_engine(sync_url, connect_args=read_only_connect_args(sync_url))
     tables_data: list[dict[str, Any]] = []
     try:
         with engine.connect() as conn:

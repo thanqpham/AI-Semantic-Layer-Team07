@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.observability import trace_action
 from src.services.query_compiler import CompiledQuery, validate_read_only
+from src.services.target_db_privileges import read_only_connect_args
 
 
 @dataclass
@@ -64,7 +65,8 @@ async def _execute_validated_query(
     """Run the validated query inside a read-only transaction."""
     read_dialect = "postgres" if dialect == "postgresql" else dialect
     validate_read_only(compiled.sql, read_dialect)
-    engine = create_async_engine(_async_url(conn_url, dialect), pool_pre_ping=True)
+    async_url = _async_url(conn_url, dialect)
+    engine = create_async_engine(async_url, pool_pre_ping=True, connect_args=read_only_connect_args(async_url))
     try:
         async with asyncio.timeout(timeout_seconds):
             async with engine.connect() as connection:

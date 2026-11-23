@@ -680,6 +680,30 @@ docker compose -f infra/docker-compose.compiler-test.yml down
 2. **Fernet Encryption:** Mọi Connection URL của Target DB đều được mã hóa đối xứng trước khi lưu vào database và chỉ giải mã trong RAM khi cần thực thi.
 3. **Double Guardrails trên Flow 2:** Ép kiểm tra AST câu lệnh qua `sqlglot` (bắt buộc duy nhất `SELECT`), tự động inject trần `LIMIT 100` (tối đa 1000 rows) và gán `statement_timeout = 15s`.
 4. **Deterministic Compilation:** Biên dịch SQL theo mô hình quan hệ bảng định danh, không dùng Text-to-SQL tự do khi truy vấn dữ liệu thực tế.
+5. **Tài khoản DB chỉ đọc (kiểm tra tại database):** Khi kết nối Live DB, hệ thống đọc catalog quyền (`pg_roles`, `has_table_privilege`, `SHOW GRANTS`) và **từ chối** tài khoản có quyền ghi (INSERT/UPDATE/DELETE/TRUNCATE/DDL, superuser, chủ sở hữu bảng). Mọi kết nối PostgreSQL tới Target DB còn được ép `default_transaction_read_only = on` ở mức session. Chỉ tắt kiểm tra cho dev/test bằng `TARGET_DB_REQUIRE_READ_ONLY=false`.
+
+### Tạo tài khoản chỉ đọc cho Target DB
+
+PostgreSQL (chạy bằng owner/superuser):
+
+```sql
+CREATE ROLE semantic_reader LOGIN PASSWORD 'mat_khau_manh' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+GRANT CONNECT ON DATABASE app_db TO semantic_reader;
+GRANT USAGE ON SCHEMA public TO semantic_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO semantic_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO semantic_reader;  -- chạy bằng role sở hữu bảng
+ALTER ROLE semantic_reader SET default_transaction_read_only = on;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;  -- PostgreSQL < 15
+```
+
+MySQL / MariaDB:
+
+```sql
+CREATE USER 'semantic_reader'@'%' IDENTIFIED BY 'mat_khau_manh';
+GRANT SELECT, SHOW VIEW ON app_db.* TO 'semantic_reader'@'%';
+```
+
+SQLite không có tài khoản: hãy đặt quyền file ở mức hệ điều hành là chỉ đọc.
 
 ---
 

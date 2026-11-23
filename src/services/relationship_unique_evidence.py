@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from src.models.db import LiveTargetDbModel
 from src.services.database import decrypt_conn_url
 from src.services.introspection import _normalize_url
+from src.services.target_db_privileges import read_only_connect_args
 
 
 def inspect_unique_keys(connection: Connection, metadata: list[dict]) -> list[list[list[str]]]:
@@ -27,7 +28,8 @@ async def attach_unique_keys(db: AsyncSession, db_id: int, metadata: list[dict])
     target = await db.scalar(select(LiveTargetDbModel).where(LiveTargetDbModel.semantic_db_id == db_id))
     if target is None:
         return
-    engine = create_async_engine(_normalize_url(decrypt_conn_url(target.conn_url_enc), target.dialect), echo=False)
+    url = _normalize_url(decrypt_conn_url(target.conn_url_enc), target.dialect)
+    engine = create_async_engine(url, echo=False, connect_args=read_only_connect_args(url))
     try:
         async with engine.connect() as connection:
             keys = await connection.run_sync(inspect_unique_keys, metadata)
