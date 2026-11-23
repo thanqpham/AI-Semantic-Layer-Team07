@@ -147,3 +147,9 @@ plan_*.md
 scratch/
 ~$*
 *.xlsx
+
+# Local outputs & load-test artifacts
+llm-load-cost/
+outputs/
+semantic-loadtest/
+semantic-loadtest.zip
