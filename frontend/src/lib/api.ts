@@ -1894,6 +1894,7 @@ export interface RecommendedDimensionItem {
   requires_reaggregation: boolean;
   data_type: string;
   cardinality_hint?: number | null;
+  join_path?: string[];
 }
 
 export interface MetricDimensionsResponse {

@@ -3130,5 +3130,41 @@
   "Vừa": {
     "vi": "Vừa",
     "en": "Normal"
+  },
+  "Cùng bảng với chỉ số": {
+    "vi": "Cùng bảng với chỉ số",
+    "en": "Same table as the metric"
+  },
+  "Qua 1 liên kết": {
+    "vi": "Qua 1 liên kết",
+    "en": "Via 1 relationship"
+  },
+  "Qua 2 liên kết": {
+    "vi": "Qua 2 liên kết",
+    "en": "Via 2 relationships"
+  },
+  "Chi tiết dòng (1:N)": {
+    "vi": "Chi tiết dòng (1:N)",
+    "en": "Line-level detail (1:N)"
+  },
+  "nên chọn trước": {
+    "vi": "nên chọn trước",
+    "en": "pick these first"
+  },
+  "Cùng tên, ở bảng khác": {
+    "vi": "Cùng tên, ở bảng khác",
+    "en": "Same name, other tables"
+  },
+  "Chỉ chọn khi bạn cần đúng cột ở bảng này; bản ở trên gần chỉ số hơn.": {
+    "vi": "Chỉ chọn khi bạn cần đúng cột ở bảng này; bản ở trên gần chỉ số hơn.",
+    "en": "Pick these only when you need this exact table's column; the copy above sits closer to the metric."
+  },
+  "Đường nối": {
+    "vi": "Đường nối",
+    "en": "Join path"
+  },
+  "Không cần nối bảng": {
+    "vi": "Không cần nối bảng",
+    "en": "No join needed"
   }
 }

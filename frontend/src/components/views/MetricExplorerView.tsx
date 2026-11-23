@@ -76,6 +76,7 @@ import {
 } from '@/lib/dimensions';
 import { SectionLabel, StatusPill, type WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
+import { DimensionPicker } from '@/components/views/DimensionPicker';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -548,6 +549,8 @@ export function MetricExplorerView({
     }
   }, [initialSelection, catalog, approved, allColumns]);
 
+  const selectedDimensionIds = useMemo(() => new Set(dimensions.map((d) => d.column_id)), [dimensions]);
+
   if (!catalog) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-12 text-center text-muted-foreground">
@@ -968,50 +971,12 @@ export function MetricExplorerView({
                   </p>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {displayedDimensions.map((item) => {
-                    const isChecked = dimensions.some((d) => d.column_id === item.column_id);
-
-                    return (
-                      <button
-                        key={item.column_id}
-                        type="button"
-                        onClick={() => toggleDimension(item.column_id)}
-                        className={cn(
-                          'group inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all cursor-pointer select-none',
-                          isChecked
-                            ? 'border-primary bg-primary text-primary-foreground shadow-2xs font-semibold'
-                            : 'border-border bg-background text-foreground hover:border-primary/60 hover:bg-accent/40',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {}}
-                          aria-label={item.business_name || item.column_name}
-                          className="h-3 w-3 rounded accent-primary pointer-events-none"
-                        />
-                        <span>{item.business_name || item.column_name}</span>
-                        <span
-                          className={cn(
-                            'rounded px-1 py-0.2 font-mono text-[9px]',
-                            isChecked
-                              ? 'bg-primary-foreground/20 text-primary-foreground'
-                              : 'bg-secondary text-muted-foreground',
-                          )}
-                        >
-                          {item.table_business_name}
-                        </span>
-                      </button>
-                    );
-                  })}
-
-                  {displayedDimensions.length === 0 && (
-                    <p className="p-2 text-xs text-muted-foreground italic w-full text-center">
-                      <Translated text={"Không tìm thấy chiều phân tích phù hợp."} />
-                    </p>
-                  )}
-                </div>
+                <DimensionPicker
+                  items={displayedDimensions}
+                  selectedIds={selectedDimensionIds}
+                  onToggle={toggleDimension}
+                  searching={Boolean(dimSearch.trim())}
+                />
               )}
             </div>
           </div>
