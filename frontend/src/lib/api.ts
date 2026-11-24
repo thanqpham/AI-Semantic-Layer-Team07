@@ -1693,6 +1693,14 @@ export interface LiveDbSummary {
 
 export interface LiveDbRecord extends LiveDbSummary {
   raw_schema: SqlDumpPreview['raw_schema'];
+  tls_mode?: string;
+}
+
+export interface LiveDbTlsOptions {
+  tls_mode: string;
+  ca_cert?: string;
+  client_cert?: string;
+  client_key?: string;
 }
 
 export async function connectLiveTargetDb(
@@ -1700,6 +1708,7 @@ export async function connectLiveTargetDb(
   dialect: 'auto' | 'postgresql' | 'mysql' | 'sqlite',
   connUrl: string,
   token: string,
+  tls?: LiveDbTlsOptions,
 ): Promise<LiveDbRecord> {
   const response = await fetch(`${API_BASE_URL}/api/v1/semantic/db/connect`, {
     method: 'POST',
@@ -1712,6 +1721,7 @@ export async function connectLiveTargetDb(
       display_name: displayName,
       dialect,
       conn_url: connUrl,
+      ...(tls ?? {}),
     }),
   });
   if (!response.ok) throw new Error(await readPreviewError(response));

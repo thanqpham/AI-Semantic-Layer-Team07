@@ -44,6 +44,7 @@ from src.services.introspection_errors import (
 )
 from src.services.schema_dump import parse_schema_dump
 from src.services.schema_normalization import build_fk_links, normalize_data_type, utc_timestamp
+from src.services.tls import build_async_ssl_args
 
 __all__ = [
     "ConnectionIntrospectionError",
@@ -110,7 +111,9 @@ def _validate_live_request(request: LiveSchemaRequest) -> None:
 async def _extract_live_schema(request: LiveSchemaRequest) -> SchemaExtractionResult:
     plain_url = _decrypt_url(request["conn_url_enc"])
     normalized_url = _normalize_url(plain_url, request["db_type"])
-    engine = create_async_engine(normalized_url, echo=False)
+    tls = request.get("tls")
+    connect_args, _ = build_async_ssl_args(tls, str(request["db_type"]))
+    engine = create_async_engine(normalized_url, echo=False, connect_args=connect_args)
     try:
         async with engine.connect() as connection:
             return await connection.run_sync(_read_live_schema, request)

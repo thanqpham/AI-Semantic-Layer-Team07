@@ -282,6 +282,10 @@ class LiveTargetDbModel(Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     dialect: Mapped[str] = mapped_column(String(50), nullable=False)
     conn_url_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    tls_mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="prefer")
+    ca_cert: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_cert: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     schema_metadata: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     categorical_discovery_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"

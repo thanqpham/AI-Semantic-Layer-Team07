@@ -9,7 +9,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.schema_metadata import SchemaDialect
+from src.models.db import LiveTargetDbModel
+from src.models.schema_metadata import (
+    RawSchemaMetadata,
+    SchemaDialect,
+    SchemaMetadata,
+    default_schema_identifier,
+)
+from src.services.database import decrypt_conn_url
 from src.services.live_db_service import (
     create_live_target_db,
     delete_live_target_db,
@@ -17,6 +24,7 @@ from src.services.live_db_service import (
     introspect_live_database,
     list_live_target_dbs,
 )
+from src.services.tls import validate_tls_settings
 
 
 @pytest.fixture
@@ -392,3 +400,49 @@ def test_introspection_rejects_partial_table_snapshot(temp_sqlite_db):
     with patch("src.services.live_db_service._introspect_table", return_value=None):
         with pytest.raises(ValueError, match="Incomplete introspection"):
             introspect_live_database(f"sqlite:///{temp_sqlite_db}", "auto")
+
+
+@pytest.mark.asyncio
+@patch("src.services.live_db_service.enrich_and_save_canonical_schema", new_callable=AsyncMock)
+@patch("src.services.live_db_service.ensure_semantic_database", new_callable=AsyncMock)
+async def test_create_live_target_db_persists_tls(
+    mock_ensure: AsyncMock,
+    mock_enrich: AsyncMock,
+    async_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """TLS settings passed to create_live_target_db are persisted with the client key encrypted."""
+    mock_ensure.return_value = 42
+    mock_enrich.return_value = {"tables": [], "relationships": [], "status": "draft"}
+
+    raw_schema = RawSchemaMetadata(
+        dialect=SchemaDialect.POSTGRESQL,
+        schemas=(SchemaMetadata(schema_name=default_schema_identifier(SchemaDialect.POSTGRESQL)),),
+        tables=(),
+    )
+    monkeypatch.setattr(
+        "src.services.live_db_service.introspect_live_database", lambda conn_url, dialect, tls=None: raw_schema
+    )
+
+    ca = "-----BEGIN CERTIFICATE-----"
+    cert = "-----BEGIN CERTIFICATE-----"
+    key = "-----BEGIN PRIVATE KEY-----"
+    tls = validate_tls_settings("verify_ca", ca, cert, key)
+
+    result = await create_live_target_db(
+        db=async_session,
+        user_id=1,
+        display_name="TLS Live DB",
+        dialect="postgresql",
+        conn_url="postgresql://u:p@h/db",
+        tls=tls,
+    )
+
+    assert result.tls_mode == "verify_ca"
+    row = await async_session.get(LiveTargetDbModel, result.id)
+    assert row is not None
+    assert row.tls_mode == "verify_ca"
+    assert row.ca_cert == ca
+    assert row.client_cert == cert
+    assert row.client_key_enc != key
+    assert decrypt_conn_url(row.client_key_enc) == key

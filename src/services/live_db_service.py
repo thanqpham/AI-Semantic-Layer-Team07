@@ -29,6 +29,7 @@ from src.models.schema_metadata import (
     default_schema_identifier,
 )
 from src.models.schemas import LiveDbResponse, LiveDbSummaryResponse
+from src.models.tls_settings import TlsSettings
 from src.services import enrichment_progress
 from src.services.categorical_discovery_policy import (
     declared_check_values,
@@ -38,6 +39,7 @@ from src.services.categorical_discovery_policy import (
 from src.services.database import encrypt_conn_url, get_db_session
 from src.services.schema_fingerprint import compute_schema_fingerprint
 from src.services.semantic_service import enrich_and_save_canonical_schema, ensure_semantic_database
+from src.services.tls import build_sync_ssl_args
 from src.services.unique_key_metadata import build_unique_keys
 
 logger = logging.getLogger(__name__)
@@ -62,12 +64,19 @@ def _sync_introspection_url(conn_url: str) -> str:
     return url.set(drivername=driver_name).render_as_string(hide_password=False)
 
 
-def introspect_live_database(conn_url: str, dialect: str | SchemaDialect) -> RawSchemaMetadata:
+def introspect_live_database(
+    conn_url: str, dialect: str | SchemaDialect, tls: TlsSettings | None = None
+) -> RawSchemaMetadata:
     """Read technical schema metadata from a live target database."""
     resolved_dialect = (
         dialect if isinstance(dialect, SchemaDialect) else resolve_and_validate_dialect(conn_url, dialect)
     )
-    engine = create_engine(_sync_introspection_url(conn_url))
+    connect_args, cleanup = build_sync_ssl_args(tls, str(resolved_dialect))
+    try:
+        engine = create_engine(_sync_introspection_url(conn_url), connect_args=connect_args)
+    except BaseException:
+        cleanup()
+        raise
     try:
         with engine.connect() as conn:
             inspector = inspect(conn)
@@ -87,6 +96,7 @@ def introspect_live_database(conn_url: str, dialect: str | SchemaDialect) -> Raw
             )
     finally:
         engine.dispose()
+        cleanup()
 
 
 def _introspect_table(
@@ -229,11 +239,12 @@ async def create_live_target_db(
     dialect: str | SchemaDialect | None,
     conn_url: str,
     org_id: int | None = None,
+    tls: TlsSettings | None = None,
 ) -> LiveDbResponse:
     """Introspect live database, encrypt connection URL, and save record."""
     logger.info("Connecting and introspecting live target DB '%s'...", display_name)
     resolved_dialect = resolve_and_validate_dialect(conn_url, dialect)
-    raw_schema = introspect_live_database(conn_url, resolved_dialect)
+    raw_schema = introspect_live_database(conn_url, resolved_dialect, tls)
     logger.info(
         "Introspection completed for '%s': dialect=%s, tables_found=%d",
         display_name,
@@ -246,6 +257,10 @@ async def create_live_target_db(
         display_name=display_name,
         dialect=resolved_dialect.value,
         conn_url_enc=conn_url_enc,
+        tls_mode=tls.mode.value if tls else "prefer",
+        ca_cert=tls.ca_cert if tls else None,
+        client_cert=tls.client_cert if tls else None,
+        client_key_enc=encrypt_conn_url(tls.client_key) if tls and tls.client_key else None,
         schema_metadata=raw_schema.model_dump(mode="json"),
     )
     db.add(model)
@@ -397,6 +412,7 @@ def _model_to_summary(model: LiveTargetDbModel) -> LiveDbSummaryResponse:
         semantic_db_id=model.semantic_db_id,
         display_name=model.display_name,
         dialect=raw_schema.dialect,
+        tls_mode=model.tls_mode or "prefer",
         table_count=len(raw_schema.tables),
         created_at=model.created_at,
         updated_at=model.updated_at,
@@ -410,6 +426,7 @@ def _model_to_response(model: LiveTargetDbModel, raw_schema: RawSchemaMetadata) 
         semantic_db_id=model.semantic_db_id,
         display_name=model.display_name,
         dialect=raw_schema.dialect,
+        tls_mode=model.tls_mode or "prefer",
         table_count=len(raw_schema.tables),
         created_at=model.created_at,
         updated_at=model.updated_at,

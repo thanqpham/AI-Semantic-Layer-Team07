@@ -24,6 +24,7 @@ from src.models.schema_metadata import (
     SchemaDialect,
     TableMetadata,
 )
+from src.models.tls_settings import TlsSettings
 from src.services.live_db_service import (
     introspect_live_database,
     resolve_and_validate_dialect,
@@ -39,6 +40,7 @@ class CanonicalBuilderService:
     def build_from_live_db(
         conn_url: str,
         dialect: str | SchemaDialect | None = None,
+        tls: TlsSettings | None = None,
     ) -> RawSchemaMetadata:
         """Build canonical schema metadata from a live target database connection URL.
 
@@ -47,7 +49,7 @@ class CanonicalBuilderService:
         the immutable Canonical contract.
         """
         resolved_dialect = resolve_and_validate_dialect(conn_url, dialect)
-        raw_schema = introspect_live_database(conn_url, resolved_dialect)
+        raw_schema = introspect_live_database(conn_url, resolved_dialect, tls)
         _validate_canonical_integrity(raw_schema)
         return raw_schema
 
