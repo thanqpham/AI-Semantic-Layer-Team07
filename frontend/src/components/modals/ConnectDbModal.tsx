@@ -47,11 +47,11 @@ interface ConnectDbModalProps {
 const engines: DbEngine[] = ['postgresql', 'mysql', 'sqlite', 'dump'];
 
 const tlsModeOptions: Array<{ value: string; label: string }> = [
-  { value: 'prefer', label: '' },
-  { value: 'disable', label: '' },
-  { value: 'require', label: '' },
-  { value: 'verify_ca', label: '' },
-  { value: 'verify_full', label: '' },
+  { value: 'prefer', label: 'prefer ' },
+  { value: 'disable', label: 'disable ' },
+  { value: 'require', label: 'require ' },
+  { value: 'verify_ca', label: 'verify_ca ' },
+  { value: 'verify_full', label: 'verify_full ' },
 ];
 
 const tlsSelectClass =
