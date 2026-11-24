@@ -246,7 +246,7 @@ async def create_live_target_db(
     """Introspect live database, encrypt connection URL, and save record."""
     logger.info("Connecting and introspecting live target DB '%s'...", display_name)
     resolved_dialect = resolve_and_validate_dialect(conn_url, dialect)
-    await ensure_read_only_account(conn_url, resolved_dialect)
+    await ensure_read_only_account(conn_url, resolved_dialect, tls)
     raw_schema = introspect_live_database(conn_url, resolved_dialect, tls)
     logger.info(
         "Introspection completed for '%s': dialect=%s, tables_found=%d",

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import get_settings
 from src.models.db import LiveTargetDbModel
 from src.models.schema_metadata import SchemaDialect
+from src.models.tls_settings import TlsMode, TlsSettings
 from src.services.live_db_service import create_live_target_db
 from src.services.target_db_privileges import (
     PrivilegeReport,
@@ -85,3 +86,21 @@ async def test_create_live_db_rejects_writable_account_without_saving(async_sess
         await create_live_target_db(async_session, 1, "Shop", SchemaDialect.POSTGRESQL, PG_URL)
     introspect.assert_not_called()
     assert await async_session.scalar(select(func.count()).select_from(LiveTargetDbModel)) == 0
+
+
+@pytest.mark.asyncio
+async def test_privilege_check_engine_receives_tls_args() -> None:
+    tls = TlsSettings(mode=TlsMode.REQUIRE)
+    with patch("src.services.target_db_privileges.create_async_engine", side_effect=RuntimeError("stop")) as factory:
+        with pytest.raises(RuntimeError, match="stop"):
+            await check_read_only_privileges(PG_URL, SchemaDialect.POSTGRESQL, tls)
+    assert factory.call_args.kwargs["connect_args"]["ssl"] == "require"
+
+
+@pytest.mark.asyncio
+async def test_ensure_passes_tls_to_privilege_check() -> None:
+    tls = TlsSettings(mode=TlsMode.REQUIRE)
+    check = AsyncMock(return_value=PrivilegeReport())
+    with patch("src.services.target_db_privileges.check_read_only_privileges", check):
+        await ensure_read_only_account(PG_URL, SchemaDialect.POSTGRESQL, tls)
+    check.assert_awaited_once_with(PG_URL, SchemaDialect.POSTGRESQL, tls)
