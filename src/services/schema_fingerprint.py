@@ -17,6 +17,7 @@ from sqlalchemy.engine import make_url
 
 from src.models.schema_metadata import RawSchemaMetadata, SchemaDialect
 from src.models.tls_settings import TlsSettings
+from src.services.target_db_privileges import read_only_connect_args
 from src.services.tls import build_sync_ssl_args
 
 logger = logging.getLogger(__name__)
@@ -93,9 +94,10 @@ def fast_introspect_schema_fingerprint(
 ) -> str:
     """Fast inspection of table and column signatures to compute fingerprint in <5ms."""
     connect_args, cleanup = build_sync_ssl_args(tls, str(dialect))
+    sync_url = _sync_url(conn_url)
     tables_data: list[dict[str, Any]] = []
     try:
-        engine = create_engine(_sync_url(conn_url), connect_args=connect_args)
+        engine = create_engine(sync_url, connect_args={**read_only_connect_args(sync_url), **connect_args})
     except BaseException:
         cleanup()
         raise

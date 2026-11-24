@@ -405,7 +405,9 @@ def test_introspection_rejects_partial_table_snapshot(temp_sqlite_db):
 @pytest.mark.asyncio
 @patch("src.services.live_db_service.enrich_and_save_canonical_schema", new_callable=AsyncMock)
 @patch("src.services.live_db_service.ensure_semantic_database", new_callable=AsyncMock)
+@patch("src.services.live_db_service.ensure_read_only_account", new_callable=AsyncMock)
 async def test_create_live_target_db_persists_tls(
+    mock_priv: AsyncMock,
     mock_ensure: AsyncMock,
     mock_enrich: AsyncMock,
     async_session: AsyncSession,

@@ -39,6 +39,7 @@ from src.services.categorical_discovery_policy import (
 from src.services.database import encrypt_conn_url, get_db_session
 from src.services.schema_fingerprint import compute_schema_fingerprint
 from src.services.semantic_service import enrich_and_save_canonical_schema, ensure_semantic_database
+from src.services.target_db_privileges import ensure_read_only_account, read_only_connect_args
 from src.services.tls import build_sync_ssl_args
 from src.services.unique_key_metadata import build_unique_keys
 
@@ -72,8 +73,9 @@ def introspect_live_database(
         dialect if isinstance(dialect, SchemaDialect) else resolve_and_validate_dialect(conn_url, dialect)
     )
     connect_args, cleanup = build_sync_ssl_args(tls, str(resolved_dialect))
+    sync_url = _sync_introspection_url(conn_url)
     try:
-        engine = create_engine(_sync_introspection_url(conn_url), connect_args=connect_args)
+        engine = create_engine(sync_url, connect_args={**read_only_connect_args(sync_url), **connect_args})
     except BaseException:
         cleanup()
         raise
@@ -244,6 +246,7 @@ async def create_live_target_db(
     """Introspect live database, encrypt connection URL, and save record."""
     logger.info("Connecting and introspecting live target DB '%s'...", display_name)
     resolved_dialect = resolve_and_validate_dialect(conn_url, dialect)
+    await ensure_read_only_account(conn_url, resolved_dialect)
     raw_schema = introspect_live_database(conn_url, resolved_dialect, tls)
     logger.info(
         "Introspection completed for '%s': dialect=%s, tables_found=%d",

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from src.models.db import LiveTargetDbModel
 from src.services.database import decrypt_conn_url
 from src.services.introspection import _normalize_url
+from src.services.target_db_privileges import read_only_connect_args
 from src.services.tls import build_async_ssl_args, load_tls_settings
 
 
@@ -30,9 +31,8 @@ async def attach_unique_keys(db: AsyncSession, db_id: int, metadata: list[dict])
         return
     settings = load_tls_settings(target)
     ssl_args, _ = build_async_ssl_args(settings, target.dialect)
-    engine = create_async_engine(
-        _normalize_url(decrypt_conn_url(target.conn_url_enc), target.dialect), echo=False, connect_args=ssl_args
-    )
+    url = _normalize_url(decrypt_conn_url(target.conn_url_enc), target.dialect)
+    engine = create_async_engine(url, echo=False, connect_args={**read_only_connect_args(url), **ssl_args})
     try:
         async with engine.connect() as connection:
             keys = await connection.run_sync(inspect_unique_keys, metadata)

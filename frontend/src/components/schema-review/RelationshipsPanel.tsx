@@ -278,6 +278,13 @@ export function RelationshipsPanel({
       setTimeout(() => rowFocus.current?.focus(), 0);
     });
 
+  const leaveDetail = (next: () => void) =>
+    guard(() => {
+      setDetail(false);
+      setSelected(null);
+      next();
+    });
+
   const changed = async () => {
     await load();
     if (dbId === currentDb.current) onReviewChanged();
@@ -418,6 +425,23 @@ export function RelationshipsPanel({
     }
   };
 
+  const detailNode = detail && (
+    <RelationshipDetail
+      item={selected}
+      draft={draft}
+      entities={entities}
+      preview={preview}
+      dirty={dirty}
+      busy={busy}
+      canManage={canManageSchema}
+      canApprove={canApproveSchema}
+      onChange={setDraft}
+      onSave={save}
+      onBack={back}
+      onDecision={decide}
+    />
+  );
+
   return (
     <div ref={panel} className="flex min-h-0 flex-1 flex-col space-y-3">
       <RelationshipToolbar
@@ -485,26 +509,15 @@ export function RelationshipsPanel({
                   open(item);
                 })
               }
+              detail={detailNode}
+              onLeaveDetail={leaveDetail}
             />
           )}
         </div>
 
-        {detail && (
+        {view === 'diagram' && detailNode && (
           <aside className="animate-slide-in-right z-30 flex w-full flex-col lg:w-[420px] lg:shrink-0 max-lg:fixed max-lg:inset-0 max-lg:bg-background/80 max-lg:p-4 max-lg:backdrop-blur">
-            <RelationshipDetail
-              item={selected}
-              draft={draft}
-              entities={entities}
-              preview={preview}
-              dirty={dirty}
-              busy={busy}
-              canManage={canManageSchema}
-              canApprove={canApproveSchema}
-              onChange={setDraft}
-              onSave={save}
-              onBack={back}
-              onDecision={decide}
-            />
+            {detailNode}
           </aside>
         )}
       </div>

@@ -222,6 +222,12 @@ def _patch_sync_engine(monkeypatch, module: str) -> dict:
     return captured
 
 
+# dev PR #59: read-only session args được gộp vào connect_args ở mọi engine site
+# (psycopg2 → "options", asyncpg → "server_settings") — contract mong đợi = {**RO, **TLS}
+RO_SYNC = {"options": "-c default_transaction_read_only=on"}
+RO_ASYNC = {"server_settings": {"default_transaction_read_only": "on"}}
+
+
 class TestSyncSiteWiring:
     # introspect_live_database / fast_introspect_schema_fingerprint dùng engine.connect()
     # + inspect(); inspector.get_table_names()=[] → schema 0 bảng vẫn hợp lệ
@@ -230,28 +236,28 @@ class TestSyncSiteWiring:
         from src.services.live_db_service import introspect_live_database
 
         introspect_live_database("postgresql://u:p@h/db", "postgresql", tls=TlsSettings(mode=TlsMode.REQUIRE))
-        assert captured["connect_args"] == {"sslmode": "require"}
+        assert captured["connect_args"] == {**RO_SYNC, "sslmode": "require"}
 
     def test_introspect_default_none_no_connect_args(self, monkeypatch):
         captured = _patch_sync_engine(monkeypatch, "src.services.live_db_service")
         from src.services.live_db_service import introspect_live_database
 
         introspect_live_database("postgresql://u:p@h/db", "postgresql", tls=None)
-        assert captured["connect_args"] == {}
+        assert captured["connect_args"] == RO_SYNC
 
     def test_fingerprint_passes_connect_args(self, monkeypatch):
         captured = _patch_sync_engine(monkeypatch, "src.services.schema_fingerprint")
         from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 
         fast_introspect_schema_fingerprint("postgresql://u:p@h/db", "postgresql", tls=TlsSettings(mode=TlsMode.REQUIRE))
-        assert captured["connect_args"] == {"sslmode": "require"}
+        assert captured["connect_args"] == {**RO_SYNC, "sslmode": "require"}
 
     def test_fingerprint_no_tls_no_connect_args(self, monkeypatch):
         captured = _patch_sync_engine(monkeypatch, "src.services.schema_fingerprint")
         from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 
         fast_introspect_schema_fingerprint("postgresql://u:p@h/db", "postgresql", tls=None)
-        assert captured["connect_args"] == {}
+        assert captured["connect_args"] == RO_SYNC
 
 
 def _patch_async_engine(monkeypatch, module: str) -> dict:
@@ -306,11 +312,11 @@ class TestAttachUniqueKeysSiteWiring:
 
     async def test_require_tls_connect_args(self, monkeypatch):
         captured = await self._run(monkeypatch, "require")
-        assert captured["connect_args"] == {"ssl": "require"}
+        assert captured["connect_args"] == {**RO_ASYNC, "ssl": "require"}
 
     async def test_prefer_tls_no_connect_args(self, monkeypatch):
         captured = await self._run(monkeypatch, "prefer")
-        assert captured["connect_args"] == {}
+        assert captured["connect_args"] == RO_ASYNC
 
 
 class TestExtractLiveSchemaSiteWiring:
@@ -323,7 +329,7 @@ class TestExtractLiveSchemaSiteWiring:
         from src.services.introspection import _extract_live_schema
 
         await _extract_live_schema(self._request(TlsSettings(mode=TlsMode.REQUIRE)))  # type: ignore[arg-type]
-        assert captured["connect_args"] == {"ssl": "require"}
+        assert captured["connect_args"] == {**RO_ASYNC, "ssl": "require"}
 
     async def test_no_tls_no_connect_args(self, monkeypatch):
         captured = _patch_async_engine(monkeypatch, "src.services.introspection")
@@ -331,7 +337,7 @@ class TestExtractLiveSchemaSiteWiring:
         from src.services.introspection import _extract_live_schema
 
         await _extract_live_schema(self._request(None))  # type: ignore[arg-type]
-        assert captured["connect_args"] == {}
+        assert captured["connect_args"] == RO_ASYNC
 
 
 def _patch_query_engine(monkeypatch) -> dict:
@@ -374,10 +380,10 @@ class TestAsyncSiteWiring:
                 "postgresql://u:p@h/db", "postgresql", compiled, tls=TlsSettings(mode=TlsMode.REQUIRE)
             )
         )
-        assert captured["connect_args"] == {"ssl": "require"}
+        assert captured["connect_args"] == {**RO_ASYNC, "ssl": "require"}
 
     def test_execute_compiled_query_no_tls_no_connect_args(self, monkeypatch):
         captured = _patch_query_engine(monkeypatch)
         compiled = SimpleNamespace(sql="SELECT 1", parameters={})
         asyncio.run(execute_compiled_query("postgresql://u:p@h/db", "postgresql", compiled))
-        assert captured["connect_args"] == {}
+        assert captured["connect_args"] == RO_ASYNC
