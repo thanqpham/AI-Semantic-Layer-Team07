@@ -95,6 +95,7 @@ from src.models.schemas import (
     SemanticTableUpdate,
     SqlDumpPreviewResponse,
 )
+from src.models.tls_settings import TlsSettings
 from src.observability.langfuse_tracing import observation, trace_summary
 from src.services import enrichment_progress
 from src.services.categorical_discovery_policy import safe_business_mappings, safe_observed_values
@@ -213,6 +214,7 @@ from src.services.semantic_service import (
 )
 from src.services.sql_dump_parser_models import SqlDumpParseError
 from src.services.sql_dump_scanner_models import SqlDumpScanError
+from src.services.tls import load_tls_settings, strip_tls_url_params, validate_tls_settings
 
 logger = logging.getLogger(__name__)
 
@@ -221,9 +223,10 @@ async def _execute_sql_on_live_db(
     conn_url: str,
     dialect: str,
     compiled: Any,
+    tls: TlsSettings | None = None,
 ) -> dict[str, Any]:
     """Adapt the query execution module to the route response shape."""
-    result = await execute_compiled_query(conn_url, dialect, compiled)
+    result = await execute_compiled_query(conn_url, dialect, compiled, tls=tls)
     return {"columns": result.columns, "rows": result.rows, "row_count": result.row_count}
 
 
@@ -450,6 +453,14 @@ async def remove_saved_imported_schema(
 # ---------------------------------------------------------------------------
 
 
+def _connect_failure_detail(exc: Exception) -> str:
+    """Prefix TLS handshake failures so clients can distinguish them from generic connect errors."""
+    lowered = str(exc).lower()
+    if any(token in lowered for token in ("ssl", "tls", "certificate")):
+        return f"tls_handshake_failed: {exc}"
+    return f"Failed to connect and introspect target database: {exc}"
+
+
 @router.post("/semantic/db/connect", response_model=LiveDbResponse, status_code=201)
 async def connect_live_target_db(
     body: LiveDbConnectRequest,
@@ -465,21 +476,27 @@ async def connect_live_target_db(
         current_user.id,
     )
     try:
+        tls = validate_tls_settings(body.tls_mode, body.ca_cert, body.client_cert, body.client_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
         active_org_id = await _request_org_id(db, current_user.id, org_id)
         await _require_org_permission(db, current_user.id, active_org_id, "can_manage_schema")
+        conn_url = strip_tls_url_params(body.conn_url)
         return await create_live_target_db(
             db,
             current_user.id,
             body.display_name,
             body.dialect,
-            body.conn_url,
+            conn_url,
             active_org_id,
+            tls=tls,
         )
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Failed to connect live DB '%s': %s", body.display_name, exc, exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Failed to connect and introspect target database: {exc}") from exc
+        raise HTTPException(status_code=400, detail=_connect_failure_detail(exc)) from exc
 
 
 @router.get("/semantic/db/saved", response_model=list[LiveDbSummaryResponse])
@@ -1765,7 +1782,9 @@ async def _query_target(
     if check_drift:
         try:
             conn_url = decrypt_conn_url(live_db.conn_url_enc)
-            current_fp = await asyncio.to_thread(fast_introspect_schema_fingerprint, conn_url, live_db.dialect)
+            current_fp = await asyncio.to_thread(
+                fast_introspect_schema_fingerprint, conn_url, live_db.dialect, load_tls_settings(live_db)
+            )
             if semantic_db.schema_fingerprint and current_fp != semantic_db.schema_fingerprint:
                 logger.info("Schema drift detected before query on db_id=%d. Triggering self-healing...", db_id)
                 await execute_self_healing(db, db_id, trigger_type="instant_check")
@@ -1868,7 +1887,7 @@ async def execute_semantic_query(
     # Execute on live DB
     try:
         conn_url = decrypt_conn_url(live_db.conn_url_enc)
-        exec_result = await _execute_sql_on_live_db(conn_url, live_db.dialect, compiled)
+        exec_result = await _execute_sql_on_live_db(conn_url, live_db.dialect, compiled, tls=load_tls_settings(live_db))
         return SemanticQueryResponse(
             sql=compiled.sql,
             parameters=compiled.parameters,

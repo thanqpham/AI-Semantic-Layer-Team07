@@ -13,9 +13,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from src.models.tls_settings import TlsSettings
 from src.observability import trace_action
 from src.services.query_compiler import CompiledQuery, validate_read_only
 from src.services.target_db_privileges import read_only_connect_args
+from src.services.tls import build_async_ssl_args
 
 
 @dataclass
@@ -47,12 +49,13 @@ async def execute_compiled_query(
     dialect: str,
     compiled: CompiledQuery,
     timeout_seconds: int = 15,
+    tls: TlsSettings | None = None,
 ) -> QueryResult:
     """Execute one validated SELECT using an async connection and hard timeout."""
     return await trace_action(
         "read_only_execute",
         {"dialect": dialect, "timeout_seconds": timeout_seconds},
-        _execute_validated_query(conn_url, dialect, compiled, timeout_seconds),
+        _execute_validated_query(conn_url, dialect, compiled, timeout_seconds, tls),
     )
 
 
@@ -61,12 +64,16 @@ async def _execute_validated_query(
     dialect: str,
     compiled: CompiledQuery,
     timeout_seconds: int,
+    tls: TlsSettings | None = None,
 ) -> QueryResult:
     """Run the validated query inside a read-only transaction."""
     read_dialect = "postgres" if dialect == "postgresql" else dialect
     validate_read_only(compiled.sql, read_dialect)
+    ssl_args, _ = build_async_ssl_args(tls, dialect)
     async_url = _async_url(conn_url, dialect)
-    engine = create_async_engine(async_url, pool_pre_ping=True, connect_args=read_only_connect_args(async_url))
+    engine = create_async_engine(
+        async_url, pool_pre_ping=True, connect_args={**read_only_connect_args(async_url), **ssl_args}
+    )
     try:
         async with asyncio.timeout(timeout_seconds):
             async with engine.connect() as connection:

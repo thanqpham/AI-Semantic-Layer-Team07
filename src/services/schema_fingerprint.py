@@ -16,7 +16,9 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import make_url
 
 from src.models.schema_metadata import RawSchemaMetadata, SchemaDialect
+from src.models.tls_settings import TlsSettings
 from src.services.target_db_privileges import read_only_connect_args
+from src.services.tls import build_sync_ssl_args
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +89,18 @@ def compute_schema_fingerprint(tables_or_schema: RawSchemaMetadata | list[Any] |
     return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # noqa: S324
 
 
-def fast_introspect_schema_fingerprint(conn_url: str, dialect: str | SchemaDialect) -> str:
+def fast_introspect_schema_fingerprint(
+    conn_url: str, dialect: str | SchemaDialect, tls: TlsSettings | None = None
+) -> str:
     """Fast inspection of table and column signatures to compute fingerprint in <5ms."""
+    connect_args, cleanup = build_sync_ssl_args(tls, str(dialect))
     sync_url = _sync_url(conn_url)
-    engine = create_engine(sync_url, connect_args=read_only_connect_args(sync_url))
     tables_data: list[dict[str, Any]] = []
+    try:
+        engine = create_engine(sync_url, connect_args={**read_only_connect_args(sync_url), **connect_args})
+    except BaseException:
+        cleanup()
+        raise
     try:
         with engine.connect() as conn:
             inspector = inspect(conn)
@@ -116,5 +125,6 @@ def fast_introspect_schema_fingerprint(conn_url: str, dialect: str | SchemaDiale
                 )
     finally:
         engine.dispose()
+        cleanup()
 
     return compute_schema_fingerprint(tables_data)

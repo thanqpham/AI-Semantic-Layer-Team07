@@ -496,6 +496,25 @@ class LiveDbConnectRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     dialect: str | None = Field(default="auto", description="Schema dialect or 'auto' for auto-detection")
     conn_url: str = Field(..., min_length=5, max_length=500)
+    tls_mode: str = Field(
+        default="prefer",
+        description="TLS mode: prefer, disable, require, verify_ca or verify_full",
+    )
+    ca_cert: str | None = Field(
+        default=None,
+        max_length=20000,
+        description="CA certificate PEM to verify the server (required for verify_ca/verify_full)",
+    )
+    client_cert: str | None = Field(
+        default=None,
+        max_length=20000,
+        description="Client certificate PEM for mutual TLS",
+    )
+    client_key: str | None = Field(
+        default=None,
+        max_length=20000,
+        description="Unencrypted client private key PEM (stored encrypted at rest)",
+    )
 
     @field_validator("display_name")
     @classmethod
@@ -516,6 +535,7 @@ class LiveDbSummaryResponse(BaseModel):
     semantic_db_id: int | None = None
     display_name: str
     dialect: SchemaDialect
+    tls_mode: str = "prefer"
     table_count: int
     created_at: datetime
     updated_at: datetime

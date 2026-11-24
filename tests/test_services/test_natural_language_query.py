@@ -571,6 +571,7 @@ async def test_execute_natural_language_query(catalog_fixture: dict) -> None:
         display_name="Test DB",
         dialect="sqlite",
         conn_url_enc="enc_url",
+        tls_mode="prefer",  # server_default chỉ áp dụng ở DB, instance Python cần giá trị tường minh
     )
     spec = SemanticQuerySpec(metric_ids=[1], dimensions=[DimensionSelection(column_id=10)], filters=[], limit=100)
 

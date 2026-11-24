@@ -50,6 +50,7 @@ from src.services.semantic_compile_error import SemanticCompileError
 from src.services.semantic_query_parser_context import catalog_capacity_error
 from src.services.semantic_query_values import _normalize_filter_values
 from src.services.semantic_value_mappings import mapping_metadata_fingerprint, read_approved_business_mappings
+from src.services.tls import load_tls_settings
 
 
 async def build_parser_catalog(db: AsyncSession, db_id: int) -> dict[str, Any]:
@@ -507,6 +508,7 @@ async def execute_natural_language_query(
             dialect=live_db.dialect,
             compiled=compiled,
             timeout_seconds=15,
+            tls=load_tls_settings(live_db),
         )
     explanation = format_deterministic_explanation(
         metric_ids=spec.metric_ids,
