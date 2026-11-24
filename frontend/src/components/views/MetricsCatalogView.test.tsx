@@ -83,7 +83,7 @@ describe('MetricsCatalogView', () => {
     cleanup();
   });
 
-  it('renders both Pending and Approved sections with counts', () => {
+  it('lands a Data Lead on the review queue and switches to the catalog', () => {
     render(
       <MetricsCatalogView
         {...dataLeadCapabilities}
@@ -96,13 +96,13 @@ describe('MetricsCatalogView', () => {
       />,
     );
 
-    // Section headers with counts
-    expect(screen.getByText(/Metrics Đang Chờ Phê Duyệt/)).toBeInTheDocument();
-    expect(screen.getByText(/Metrics Đã Phê Duyệt/)).toBeInTheDocument();
-
-    // Metric names
-    expect(screen.getByText('Doanh thu thuần')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Hàng chờ duyệt/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Số lượng đơn hàng mới')).toBeInTheDocument();
+    expect(screen.queryByText('Doanh thu thuần')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Danh mục/ }));
+    expect(screen.getByText('Doanh thu thuần')).toBeInTheDocument();
+    expect(screen.queryByText('Số lượng đơn hàng mới')).not.toBeInTheDocument();
   });
 
   it('shows individual approve button on pending metric cards', () => {
@@ -250,7 +250,8 @@ describe('MetricsCatalogView', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent(/chế độ chỉ xem/i);
     expect(screen.getByRole('status')).not.toHaveTextContent(/liên hệ Data Lead/i);
-    expect(screen.getByRole('button', { name: 'Tất cả(1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Danh mục(1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Hàng chờ duyệt/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Số lượng đơn hàng mới')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Gửi metric/i })).not.toBeInTheDocument();
     expect(
@@ -331,7 +332,7 @@ describe('MetricsCatalogView', () => {
     expect(screen.getByRole('button', { name: /Duyệt chỉ số này/i })).toBeInTheDocument();
   });
 
-  it('renders metric cards with formula expression in monospace', () => {
+  it('shows the formula in monospace inside the expanded technical details', () => {
     render(
       <MetricsCatalogView
         {...dataLeadCapabilities}
@@ -344,8 +345,9 @@ describe('MetricsCatalogView', () => {
         onApproveMetric={vi.fn()}
       />,
     );
-    // Verify formula expression display
-    expect(screen.getByText('SUM(price)')).toHaveClass('font-mono');
+    // Formulas live in the expanded technical details, not on the row.
+    expect(screen.queryByText('COUNT(id)')).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { expanded: false })[0]);
     expect(screen.getByText('COUNT(id)')).toHaveClass('font-mono');
   });
 
@@ -385,13 +387,14 @@ describe('MetricsCatalogView', () => {
         onApproveMetric={vi.fn()}
       />,
     );
-    // Filter tabs should show counts
-    expect(screen.getByRole('button', { name: /Tất cả\(2\)/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Chờ phê duyệt\(1\)/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Đã phê duyệt\(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Danh mục\(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Hàng chờ duyệt\(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Đã từ chối\(0\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Thùng rác\(0\)/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Tất cả\(/ })).not.toBeInTheDocument();
   });
 
-  it('counts only the rendered sections in the Tất cả tab for a member submitter', () => {
+  it('gives a member submitter the catalog plus their own submissions', () => {
     render(
       <MetricsCatalogView
         dbId={3}
@@ -402,11 +405,10 @@ describe('MetricsCatalogView', () => {
       />,
     );
 
-    // Sections rendered: "Đã gửi" (own unverified) + "Đã phê duyệt"; another user's
-    // pending metric is not displayed anywhere, so it must not inflate the total.
-    expect(screen.getByRole('button', { name: /Tất cả\(2\)/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Đã gửi\(1\)/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Đã phê duyệt\(1\)/ })).toBeInTheDocument();
+    // Another user's pending metric is not shown to a member, so it must not inflate counts.
+    expect(screen.getByRole('button', { name: /Danh mục\(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Đã gửi\(1\)/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: /Hàng chờ duyệt/ })).not.toBeInTheDocument();
   });
 
   it('filters metrics when filter tab is clicked', async () => {
@@ -423,10 +425,11 @@ describe('MetricsCatalogView', () => {
       />,
     );
 
-    // Click on "Chờ phê duyệt" tab
-    fireEvent.click(screen.getByText(/Chờ phê duyệt/));
+    fireEvent.click(screen.getByRole('button', { name: /^Danh mục/ }));
+    expect(screen.getByText('Doanh thu thuần')).toBeInTheDocument();
+    expect(screen.queryByText('Số lượng đơn hàng mới')).not.toBeInTheDocument();
 
-    // Only pending metric should be visible in the card grid
+    fireEvent.click(screen.getByRole('button', { name: /Hàng chờ duyệt/ }));
     expect(screen.getByText('Số lượng đơn hàng mới')).toBeInTheDocument();
     expect(screen.queryByText('Doanh thu thuần')).not.toBeInTheDocument();
   });
@@ -463,9 +466,9 @@ describe('MetricsCatalogView', () => {
         onApproveMetric={vi.fn()}
       />,
     );
-    // Status badges
-    expect(screen.getByText('Đã duyệt')).toBeInTheDocument();
     expect(screen.getByText('Chờ duyệt')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Danh mục/ }));
+    expect(screen.getByText('Đã duyệt')).toBeInTheDocument();
   });
 
   it('renders "+ Thêm thủ công" button for Data Lead and calls onAddMetric when clicked', () => {
@@ -750,7 +753,7 @@ describe('MetricsCatalogView history modal', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('lists rejected metrics in their own tab and keeps them out of All/Pending', () => {
+  it('lists rejected metrics in their own view and keeps them out of the catalog and queue', () => {
     const rejectedMetric: MetricRecord = {
       ...approvedMetric,
       metric_id: 9,
@@ -777,10 +780,10 @@ describe('MetricsCatalogView history modal', () => {
     expect(screen.queryByTitle('Phê duyệt chỉ số này')).toBeNull();
     expect(screen.queryByTitle('Từ chối chỉ số này')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Tất cả/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Danh mục/ }));
     expect(screen.queryByText('Tỉ lệ hoàn đơn')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /Chờ phê duyệt/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Hàng chờ duyệt/ }));
     expect(screen.queryByText('Tỉ lệ hoàn đơn')).toBeNull();
   });
 });

@@ -28,21 +28,38 @@ const metric: MetricRecord = {
 afterEach(cleanup);
 
 describe('MetricCard compact rows', () => {
-  it('expands full notes, description and filters, switches YAML and collapses', () => {
+  it('leads with the business description and keeps the formula in technical details', () => {
     render(<MetricCard metric={metric} onHistory={vi.fn()} />);
     const row = screen.getByRole('button', { expanded: false });
-    expect(screen.queryByText(metric.description!)).not.toBeInTheDocument();
+    expect(screen.getAllByText(metric.description!)).toHaveLength(1);
+    expect(screen.queryByText('Công thức')).not.toBeInTheDocument();
     fireEvent.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(metric.description!)).toBeInTheDocument();
+    expect(screen.getByText('Công thức')).toBeInTheDocument();
     expect(screen.getByText(/Giữ nguyên toàn bộ ghi chú/)).toHaveClass('whitespace-pre-wrap');
     expect(screen.getByText('Chung: status = "completed"')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'YAML' }));
     expect(screen.getByText('Metric definition (YAML)')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Định nghĩa' }));
-    expect(screen.getByText(metric.description!)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chi tiết kỹ thuật' }));
+    expect(screen.getByText('Công thức')).toBeInTheDocument();
     fireEvent.click(row);
-    expect(screen.queryByText(metric.description!)).not.toBeInTheDocument();
+    expect(screen.queryByText('Công thức')).not.toBeInTheDocument();
+  });
+
+  it('offers explore and add-to-dashboard only on approved, non-deleted metrics', () => {
+    const onExplore = vi.fn();
+    const onAddToDashboard = vi.fn();
+    const approved = { ...metric, status: 'approved' as const };
+    render(<MetricCard metric={approved} onHistory={vi.fn()} onExplore={onExplore} onAddToDashboard={onAddToDashboard} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Khám phá' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào Dashboard' }));
+    expect(onExplore).toHaveBeenCalledWith(approved.metric_id);
+    expect(onAddToDashboard).toHaveBeenCalledWith(approved.metric_id);
+
+    cleanup();
+    render(<MetricCard metric={{ ...metric, status: 'pending_approval' }} onHistory={vi.fn()} onExplore={onExplore} onAddToDashboard={onAddToDashboard} />);
+    expect(screen.queryByRole('button', { name: 'Khám phá' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thêm vào Dashboard' })).not.toBeInTheDocument();
   });
 
   it('shows ratio filters in the expanded metric details', () => {
