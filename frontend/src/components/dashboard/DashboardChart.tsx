@@ -49,7 +49,7 @@ export interface DashboardChartProps {
   dateFilterIgnored?: boolean;
 }
 
-const SERIES_COLORS = [1, 2, 3, 4, 5].map((n) => `var(--color-chart-${n})`);
+const SERIES_COLORS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `var(--chart-${n})`);
 const CHART_MARGIN = { top: 8, right: 12, left: 0, bottom: 4 };
 
 /** Render one dashboard widget visualization body including states and fallbacks. */
@@ -222,21 +222,31 @@ function KpiPanel({ metricName, data }: { metricName: string; data: DashboardWid
           {total === null ? '—' : formatNumberVi(total)}
         </p>
       </div>
-      <div className="h-12 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data.trendPoints} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="var(--color-chart-1)"
-              strokeWidth={2}
-              fill="var(--color-chart-1)"
-              fillOpacity={0.24}
-              isAnimationActive={false}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      {data.trendPoints.length > 1 && (
+        <div className="flex flex-col gap-1">
+          <div className="h-12 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data.trendPoints} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                <Tooltip content={<TooltipCard metricName={metricName} />} />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="var(--chart-1)"
+                  strokeWidth={2}
+                  fill="var(--chart-1)"
+                  fillOpacity={0.24}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
+            <span>{data.trendPoints[0].label}</span>
+            <span><Translated text="Xu hướng" /></span>
+            <span>{data.trendPoints[data.trendPoints.length - 1].label}</span>
+          </p>
+        </div>
+      )}
       <p className="sr-only">{trendSummary(metricName, data.trendPoints)}</p>
     </div>
   );
@@ -322,13 +332,11 @@ function CartesianPanel({
           <BarChart data={displayed} margin={CHART_MARGIN}>
             <ChartAxes />
             <Tooltip content={<TooltipCard metricName={metricName} />} />
-            <Bar
-              dataKey="value"
-              fill="var(--color-chart-1)"
-              radius={[4, 4, 0, 0]}
-              maxBarSize={32}
-              isAnimationActive={false}
-            />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={32} isAnimationActive={false}>
+              {displayed.map((point, index) => (
+                <Cell key={`${point.rawLabel}-${index}`} fill={SERIES_COLORS[index % SERIES_COLORS.length]} />
+              ))}
+            </Bar>
           </BarChart>
         ) : chartType === 'line' ? (
           <LineChart data={ordered} margin={CHART_MARGIN}>
@@ -337,10 +345,10 @@ function CartesianPanel({
             <Line
               type="monotone"
               dataKey="value"
-              stroke="var(--color-chart-1)"
+              stroke="var(--chart-1)"
               strokeWidth={2.5}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
+              dot={{ r: 3, fill: 'var(--card)', stroke: 'var(--chart-1)', strokeWidth: 2 }}
+              activeDot={{ r: 5, fill: 'var(--chart-1)', stroke: 'var(--card)', strokeWidth: 2 }}
               isAnimationActive={false}
             />
           </LineChart>
@@ -348,8 +356,8 @@ function CartesianPanel({
           <AreaChart data={ordered} margin={CHART_MARGIN}>
             <defs>
               <linearGradient id="dashboard-area-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.32} />
-                <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.45} />
+                <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
               </linearGradient>
             </defs>
             <ChartAxes />
@@ -357,8 +365,9 @@ function CartesianPanel({
             <Area
               type="monotone"
               dataKey="value"
-              stroke="var(--color-chart-1)"
-              strokeWidth={2}
+              stroke="var(--chart-1)"
+              strokeWidth={2.5}
+              activeDot={{ r: 5, fill: 'var(--chart-1)', stroke: 'var(--card)', strokeWidth: 2 }}
               fill="url(#dashboard-area-fill)"
               isAnimationActive={false}
             />
@@ -396,7 +405,7 @@ function PiePanel({ metricName, points }: { metricName: string; points: Dashboar
             innerRadius="55%"
             outerRadius="80%"
             paddingAngle={2}
-            stroke="var(--color-card)"
+            stroke="var(--card)"
             strokeWidth={1}
             isAnimationActive={false}
           >

@@ -121,8 +121,12 @@ function normalizeTitle(value: string): string | null {
 export function initFormState(
   editing: DashboardWidgetConfig | null,
   eligible: MetricRecord[],
+  presetMetricId: number | null = null,
 ): WidgetFormState {
-  if (!editing) return NEW_FORM;
+  if (!editing) {
+    const preset = eligible.some((metric) => metric.metric_id === presetMetricId) ? presetMetricId : null;
+    return preset === null ? NEW_FORM : { ...NEW_FORM, metricId: preset, orderMetricId: preset };
+  }
   const known = eligible.some((metric) => metric.metric_id === editing.metric_id);
   return {
     metricId: known ? editing.metric_id : null,
@@ -148,7 +152,12 @@ export function stateForChartChange(
     return { ...prev, chartType: nextChart, dimensionColId: null, timeGrain: null, additionalMetricIds: [], orderMetricId: null };
   }
   if (nextChart === 'line' || nextChart === 'area') {
-    return { ...prev, chartType: nextChart, dimensionColId: dimensionIsTime ? prev.dimensionColId : null };
+    return {
+      ...prev,
+      chartType: nextChart,
+      dimensionColId: dimensionIsTime ? prev.dimensionColId : null,
+      timeGrain: prev.timeGrain ?? 'month',
+    };
   }
   return {
     ...prev,
@@ -202,6 +211,51 @@ export function buildWidgetDraft(id: string, form: WidgetFormState): DashboardWi
     height: form.height,
     custom_title: normalizeTitle(form.title),
   };
+}
+
+export interface WidgetSuggestion {
+  key: string;
+  label: string;
+  form: WidgetFormState;
+}
+
+/** Reject dimension sets the compiler would refuse with INCOMPATIBLE_GRAIN. */
+export function validateGrain(form: WidgetFormState, grain: number[] | null): string | null {
+  if (grain === null) return null;
+  const dims = form.chartType === 'kpi' || form.dimensionColId === null ? [] : [form.dimensionColId];
+  const matches = dims.length === grain.length && dims.every((id) => grain.includes(id));
+  if (matches) return null;
+  return grain.length === 0
+    ? 'Chỉ số này chỉ trả về một con số tổng, hãy chọn dạng KPI.'
+    : 'Chỉ số này chỉ hỗ trợ chiều phân tích đã khai báo trong định nghĩa.';
+}
+
+/** Ready-to-save widgets derived from the metric's metadata (deterministic, no LLM). */
+export function buildSuggestions(metricId: number, meta: WidgetMeta, grain: number[] | null): WidgetSuggestion[] {
+  return buildAllSuggestions(metricId, meta).filter((suggestion) => validateGrain(suggestion.form, grain) === null);
+}
+
+function buildAllSuggestions(metricId: number, meta: WidgetMeta): WidgetSuggestion[] {
+  const time = meta.columns.find((column) => column.is_time_dimension) ?? null;
+  const base: WidgetFormState = { ...NEW_FORM, metricId, orderMetricId: metricId, dateFilterColumnId: time?.column_id ?? null };
+  const out: WidgetSuggestion[] = [];
+  if (time) {
+    out.push({ key: 'kpi', label: `Con số tổng (lọc theo ${time.business_name})`, form: { ...base, chartType: 'kpi' } });
+    out.push({
+      key: 'trend',
+      label: `Xu hướng theo tháng (${time.business_name})`,
+      form: { ...base, chartType: 'line', dimensionColId: time.column_id, timeGrain: 'month', width: 'full' },
+    });
+  }
+  for (const item of meta.dimensions.slice(0, 2)) {
+    const chartType = recommendChartForDimensionItem(item);
+    out.push({
+      key: `dim-${item.column_id}`,
+      label: `Theo ${item.business_name}`,
+      form: { ...base, chartType, dimensionColId: item.column_id, width: 'half' },
+    });
+  }
+  return out.filter((suggestion) => validateForm(suggestion.form) === null);
 }
 
 export function planMetricOptions(metrics: MetricRecord[], primaryId: number | null): MetricRecord[] {

@@ -90,6 +90,15 @@ export type DashboardDatePreset =
   | 'this_quarter'
   | 'this_year';
 
+export const DASHBOARD_DATE_PRESET_LABELS: Record<DashboardDatePreset, string> = {
+  last_7_days: '7 ngày qua',
+  last_30_days: '30 ngày qua',
+  last_90_days: '90 ngày qua',
+  this_month: 'Tháng này',
+  this_quarter: 'Quý này',
+  this_year: 'Năm này',
+};
+
 export const DASHBOARD_DATE_PRESETS: DashboardDatePreset[] = [
   'last_7_days',
   'last_30_days',
@@ -322,6 +331,20 @@ function findBaseTable(catalog: SemanticCatalog, definition: MetricDefinition): 
   );
 }
 
+/**
+ * Column ids a query-plan metric must be grouped by (its terminal stages'
+ * group_by). The compiler rejects any other dimension set with
+ * INCOMPATIBLE_GRAIN; an empty array means "totals only". Null = no plan.
+ */
+export function metricPlanGrain(metric: MetricRecord | null): number[] | null {
+  const plan = metric?.definition?.metric.query_plan;
+  if (!plan) return null;
+  const terminals = plan.stages.filter((stage) => plan.output_expression.includes(`${stage.name}.`));
+  const stages = terminals.length > 0 ? terminals : plan.stages;
+  const ids = stages.flatMap((stage) => stage.group_by.map((field) => field.column_id ?? -1));
+  return Array.from(new Set(ids));
+}
+
 function starterWidgetFor(
   metric: MetricRecord,
   table: CatalogTable,
@@ -379,13 +402,15 @@ export function buildStarterDashboardWidgets(input: {
     if (widgets.length >= DASHBOARD_STARTER_WIDGET_LIMIT) break;
     const definition = item.definition;
     if (item.status !== 'approved' || !definition || ![2, 3].includes(definition.schema_version ?? 0)) continue;
-    if (definition.metric.query_plan?.stages.some((stage) => stage.group_by.length > 0)) continue;
+    const grain = metricPlanGrain(item);
+    if (grain !== null && grain.length > 0) continue;
     if (!Array.isArray(definition.metric.filters)) continue;
     if (definition.diagnostics && definition.diagnostics.length > 0) continue;
     const table = findBaseTable(input.catalog, definition);
     if (!table) continue;
-    const widget = starterWidgetFor(item, table, widgets.length === 0);
-    if (widget) widgets.push(widget);
+    // Grain-locked plan metrics (empty group_by) only compile as a plain total, i.e. KPI.
+    const widget = starterWidgetFor(item, table, widgets.length === 0 || grain !== null);
+    if (widget && (grain === null || widget.chart_type === 'kpi')) widgets.push(widget);
   }
   return widgets.slice(0, DASHBOARD_STARTER_WIDGET_LIMIT);
 }

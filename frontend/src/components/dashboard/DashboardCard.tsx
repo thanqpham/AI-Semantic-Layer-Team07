@@ -5,6 +5,7 @@ import { ExternalLink, Pencil, Trash2 } from 'lucide-react';
 
 import { TimeGrain } from '@/lib/api';
 import {
+  DASHBOARD_DATE_PRESET_LABELS,
   DashboardDatePreset,
   DashboardWidgetConfig,
   getWidgetColSpan,
@@ -28,6 +29,7 @@ export interface DashboardCardProps {
   metricName: string;
   metricNames?: string[];
   dimensionLabel: string | null;
+  dateLabel?: string | null;
   isFirst: boolean;
   isLast: boolean;
   dragHandleProps?: Record<string, unknown>;
@@ -41,14 +43,23 @@ export interface DashboardCardProps {
   onDrillDown?: (widget: DashboardWidgetConfig, datePreset: DashboardDatePreset | null) => void;
 }
 
+/** Tell the reader which period and which date column the KPI total covers. */
+function kpiSubtitle(props: DashboardCardProps): string {
+  const period = props.datePreset ? DASHBOARD_DATE_PRESET_LABELS[props.datePreset].toLowerCase() : 'toàn bộ thời gian';
+  const prefix = props.widget.custom_title ? `${props.metricName} · ` : '';
+  return props.dateLabel ? `${prefix}Tổng ${period} · theo ${props.dateLabel}` : `${prefix}Tổng ${period}`;
+}
+
 export function DashboardCard(props: DashboardCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const title = props.widget.custom_title ?? props.metricName;
-  const subtitle = props.dimensionLabel
-    ? props.widget.custom_title
-      ? `${props.metricName} theo ${props.dimensionLabel}`
-      : `Theo ${props.dimensionLabel}`
-    : null;
+  const subtitle = props.widget.chart_type === 'kpi'
+    ? kpiSubtitle(props)
+    : props.dimensionLabel
+      ? props.widget.custom_title
+        ? `${props.metricName} theo ${props.dimensionLabel}`
+        : `Theo ${props.dimensionLabel}`
+      : null;
 
   const data = useDashboardWidgetData({
     dbId: props.dbId,

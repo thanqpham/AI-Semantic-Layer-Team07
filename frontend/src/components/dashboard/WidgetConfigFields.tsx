@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { FilterColumnItem, MetricRecord, RecommendedDimensionItem } from '@/lib/api';
 import { DashboardChartType } from '@/lib/dashboard';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Translated } from '@/components/ui/translated';
@@ -15,6 +16,7 @@ import {
   SELECT_CLASS,
   WIDTH_LABELS,
   WidgetFormState,
+  WidgetSuggestion,
 } from './widgetConfigForm';
 
 export function FormField({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
@@ -41,6 +43,7 @@ export function MetricPicker({ metrics, value, onChange }: {
       </FormField>
       <FormField label="Metric" id="widget-metric">
         <select id="widget-metric" className={SELECT_CLASS} value={value === null ? '' : String(value)} onChange={(event) => onChange(event.target.value)}>
+          <option value="">{translate('— Chọn chỉ số —')}</option>
           {filtered.map((metric) => <option key={metric.metric_id} value={String(metric.metric_id)}>{metric.name}</option>)}
         </select>
       </FormField>
@@ -112,10 +115,42 @@ export function DateFilterField({ timeColumns, value, required, onChange }: {
   return (
     <FormField label="Cột lọc ngày" id="widget-date-filter">
       <select id="widget-date-filter" className={SELECT_CLASS} aria-required={required} value={value ?? ''} onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}>
-        {!required && <option value="">{translate('Không áp dụng')}</option>}
+        <option value="">{translate(required ? '— Chọn —' : 'Không áp dụng')}</option>
         {timeColumns.map((column) => <option key={column.column_id} value={column.column_id}>{column.business_name}</option>)}
       </select>
     </FormField>
+  );
+}
+
+export function WidgetSuggestions({ loading, suggestions, onAdd, onCustomize, onCustom }: {
+  loading: boolean;
+  suggestions: WidgetSuggestion[];
+  onAdd: (suggestion: WidgetSuggestion) => void;
+  onCustomize: (suggestion: WidgetSuggestion) => void;
+  onCustom: () => void;
+}) {
+  const { translate } = useLanguage();
+  return (
+    <section className="flex flex-col gap-3" aria-label={translate('Gợi ý widget')}>
+      {loading && <p className="text-xs text-muted-foreground"><Translated text="Đang tạo gợi ý…" /></p>}
+      {!loading && suggestions.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {suggestions.map((suggestion) => (
+            <div key={suggestion.key} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+              <span className="text-xs text-muted-foreground">{translate(CHART_LABELS[suggestion.form.chartType])}</span>
+              <span className="text-sm font-medium text-foreground">{suggestion.label}</span>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" onClick={() => onAdd(suggestion)}><Translated text="＋ Thêm" /></Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => onCustomize(suggestion)}><Translated text="Tuỳ chỉnh" /></Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button type="button" variant="link" className="self-start px-0" onClick={onCustom}>
+        <Translated text="Tự cấu hình →" />
+      </Button>
+    </section>
   );
 }
 
