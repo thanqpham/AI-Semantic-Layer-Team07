@@ -41,7 +41,7 @@ export async function sendChatStream<T>(url: string, init: RequestInit, options:
         }
         if (frame.event === 'cancelled') {
           const payload = frame.data as { message?: string; execution_trace?: ExecutionTrace };
-          throw new ChatStreamError(payload.message || 'Đã dừng bởi bạn.', payload.execution_trace);
+          throw new ChatStreamError(payload.message || 'Interrupted', payload.execution_trace);
         }
         if (trace) options.onTrace(trace);
       }

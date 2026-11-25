@@ -40,7 +40,7 @@ async def test_cancel_persists_stopped_marker_and_replays_it(async_session):
     replay = await asyncio.wait_for(
         chat_orchestrator(str(database.id), body, None, user, async_session), timeout=3
     )
-    assert replay.chat_response == "Đã dừng bởi bạn."
+    assert replay.chat_response == "Interrupted"
     assert replay.execution_trace is not None
     assert replay.execution_trace["status"] == "cancelled"
 

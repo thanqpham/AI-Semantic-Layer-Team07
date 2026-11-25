@@ -49,7 +49,7 @@ AGENTS = {
     "semantic_parse",
 }
 SAFE_ERROR = "Không thể hoàn tất xử lý. Vui lòng thử lại."
-STOP_MESSAGE = "Đã dừng bởi bạn."
+STOP_MESSAGE = "Interrupted"
 COMPILE_ERROR_MESSAGES = {
     "AMBIGUOUS_FILTER_SCOPE": "Các điều kiện liên quan cần được làm rõ trước khi truy vấn.",
     "invalid_sql": "Không thể kiểm tra truy vấn đã biên dịch.",
