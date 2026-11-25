@@ -95,8 +95,97 @@ describe('metric definition utilities', () => {
       output_expression: 'per_customer.order_count',
     };
 
-    expect(formatMetricFormula(definition)).toBe('per_customer.order_count');
+    expect(formatMetricFormula(definition)).toBe('COUNT(DISTINCT orders.id)');
     expect(getMetricUsedColumns(definition)).toEqual(['id']);
+  });
+
+  it('renders COUNT_DISTINCT as SQL COUNT(DISTINCT ...)', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.formula = { function: 'COUNT_DISTINCT', expression: 'customer_id' };
+    expect(formatMetricFormula(definition)).toBe('COUNT(DISTINCT customer_id)');
+  });
+
+  it('formats ratio filters with readable operators', () => {
+    const definition = createMetricDefinition('leads');
+    definition.metric.formula.ratio = {
+      numerator: { function: 'COUNT_DISTINCT', expression: 'id', filters: [{ field: 'converted_order_id', operator: 'is_not_null', value: null }] },
+      denominator: { function: 'COUNT_DISTINCT', expression: 'id' },
+      scale: 100,
+    };
+    expect(formatMetricFormula(definition)).toBe(
+      '100 × (COUNT(DISTINCT id) WHERE converted_order_id khác NULL) / (COUNT(DISTINCT id))',
+    );
+    expect(formatMetricFormula(definition, { conditions: false })).toBe('100 × (COUNT(DISTINCT id)) / (COUNT(DISTINCT id))');
+  });
+
+  it('inlines stage refs in a plan ratio, leaving lookalike tokens alone', () => {
+    const definition = createMetricDefinition('orders');
+    const stage = (name: string, entity: string, expression: string) => ({
+      name, base_entity: entity, joins: [], group_by: [], filters: [],
+      aggregates: [{ name: 'n', function: 'COUNT_DISTINCT' as const, expression, filters: [] }],
+    });
+    definition.metric.query_plan = {
+      stages: [stage('returned_orders', 'product_returns', 'product_returns.order_id'), stage('all_orders', 'orders', 'orders.id')],
+      output_expression: 'returned_orders.n / all_orders.n + x.all_orders.n',
+    };
+    expect(formatMetricFormula(definition))
+      .toBe('COUNT(DISTINCT product_returns.order_id) / COUNT(DISTINCT orders.id) + x.all_orders.n');
+  });
+
+  it('collapses a multi-stage plan into one expression with HAVING on the source aggregate', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.query_plan = {
+      stages: [
+        { name: 'per_customer', base_entity: 'orders', joins: [], filters: [],
+          group_by: [{ name: 'customer_id', expression: 'orders.customer_id' }],
+          aggregates: [{ name: 'order_count', function: 'COUNT_DISTINCT', expression: 'orders.id', filters: [] }] },
+        { name: 'repeat_customers', source_stage: 'per_customer', joins: [], group_by: [],
+          filters: [{ field: 'order_count', operator: 'gte', value: 2 }],
+          aggregates: [{ name: 'customers', function: 'COUNT', expression: '*', filters: [] }] },
+        { name: 'total_customers', source_stage: 'per_customer', joins: [], group_by: [], filters: [],
+          aggregates: [{ name: 'customers', function: 'COUNT', expression: '*', filters: [] }] },
+      ],
+      output_expression: 'repeat_customers.customers / total_customers.customers',
+    };
+    expect(formatMetricFormula(definition))
+      .toBe('COUNT(customer_id HAVING COUNT(DISTINCT orders.id) ≥ 2) / COUNT(customer_id)');
+    expect(formatMetricFormula(definition, { conditions: false })).toBe('COUNT(customer_id) / COUNT(customer_id)');
+  });
+
+  it('labels plan filters by numerator/denominator role and inlines prior-stage outputs', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.filters = [{ field: 'orders.channel', operator: 'eq', value: 'Web' }];
+    definition.metric.query_plan = {
+      stages: [
+        { name: 'per_customer', base_entity: 'orders', joins: [], group_by: [{ name: 'customer_id', expression: 'orders.customer_id' }],
+          filters: [{ field: 'orders.status', operator: 'eq', value: 'completed' }],
+          aggregates: [{ name: 'order_count', function: 'COUNT_DISTINCT', expression: 'orders.id', filters: [] }] },
+        { name: 'repeat_customers', source_stage: 'per_customer', joins: [], group_by: [],
+          filters: [{ field: 'order_count', operator: 'gte', value: 2 }],
+          aggregates: [{ name: 'customers', function: 'COUNT', expression: '*', filters: [] }] },
+        { name: 'all_customers', base_entity: 'customers', joins: [], group_by: [], filters: [],
+          aggregates: [{ name: 'customers', function: 'COUNT', expression: '*',
+            filters: [{ field: 'customers.region', operator: 'eq', value: 'North' }] }] },
+      ],
+      output_expression: 'repeat_customers.customers / all_customers.customers',
+    };
+    expect(formatMetricFilters(definition)).toEqual([
+      'Chung (cả tử và mẫu): orders.channel = "Web"',
+      'Tử số: orders.status = "completed" VÀ COUNT(DISTINCT orders.id WHERE orders.status = "completed") ≥ 2',
+      'Mẫu số: customers.region = "North"',
+    ]);
+    expect(getMetricUsedColumns(definition)).not.toContain('order_count');
+  });
+
+  it('keeps base-stage filters inline as WHERE', () => {
+    const definition = createMetricDefinition('orders');
+    definition.metric.query_plan = {
+      stages: [{ name: 'paid', base_entity: 'orders', joins: [], group_by: [],
+        filters: [{ field: 'orders.status', operator: 'eq', value: 'paid' }],
+        aggregates: [{ name: 'revenue', function: 'SUM', expression: 'orders.amount', filters: [] }] }],
+      output_expression: 'paid.revenue',
+    };
+    expect(formatMetricFormula(definition)).toBe('SUM(orders.amount WHERE orders.status = "paid")');
   });
 });
 

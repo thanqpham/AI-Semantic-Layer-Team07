@@ -52,7 +52,7 @@ export function MetricCard({
   const [tab, setTab] = useState<'definition' | 'yaml'>('definition');
   const detailId = useId();
   const formula = definition
-    ? formatMetricFormula(definition)
+    ? formatMetricFormula(definition, { conditions: false }) // conditions shown in "Bộ lọc cố định" below
     : t('No definition', 'Chưa có định nghĩa');
 
   return (

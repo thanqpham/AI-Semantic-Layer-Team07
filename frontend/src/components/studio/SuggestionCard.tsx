@@ -59,10 +59,6 @@ export function SuggestionCard({
   const pillStatus = isRejected ? 'rejected' : isSaved ? lifecycle?.metric_status ?? null : null;
 
   const def = suggestion.definition.metric;
-  const plan = def.query_plan;
-  const stage = plan?.stages.length === 1 ? plan.stages[0] : undefined;
-  const aggregate = stage?.aggregates.length === 1 ? stage.aggregates[0] : undefined;
-  const simplePlan = aggregate && plan?.output_expression === `${stage?.name}.${aggregate.name}`;
   const yamlContent = suggestion.yaml_preview || JSON.stringify(suggestion.definition, null, 2);
   const usedColumns = getMetricUsedColumns(suggestion.definition);
   const filters = formatMetricFilters(suggestion.definition);
@@ -192,13 +188,8 @@ export function SuggestionCard({
               <Translated text={"Công thức tính"} />
             </span>
             <p className="mt-0.5 break-words font-mono text-xs font-medium text-foreground">
-              {simplePlan ? `${aggregate.function}(${aggregate.expression})` : formatMetricFormula(suggestion.definition)}
+              {formatMetricFormula(suggestion.definition, { conditions: false })}
             </p>
-            {!simplePlan && plan?.stages.flatMap((stage) => stage.aggregates.map((aggregate) => (
-              <p key={`${stage.name}.${aggregate.name}`} className="mt-1 break-words font-mono text-xs">
-                {`${stage.name}.${aggregate.name} = ${aggregate.function}(${aggregate.expression})`}
-              </p>
-            )))}
           </div>
           <div className="min-w-0 rounded-md border border-border bg-secondary/30 p-2.5">
             <span className="font-mono text-[10px] uppercase text-muted-foreground">

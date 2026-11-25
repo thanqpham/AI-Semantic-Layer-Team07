@@ -103,7 +103,7 @@ describe('MetricVersionDiff', () => {
     const rows = screen.getByTestId('metric-version-diff').querySelectorAll('[data-status]');
     expect(Array.from(rows).map((row) => row.getAttribute('data-status'))).toEqual(['removed', 'added']);
     for (const row of rows) expect(row).toHaveTextContent('Công thức');
-    expect(rows[1]).toHaveTextContent('COUNT_DISTINCT(order_id)');
+    expect(rows[1]).toHaveTextContent('COUNT(DISTINCT order_id)');
     expect(rows[1]).toHaveTextContent('cancelled');
   });
 });
