@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import func, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
@@ -461,6 +462,18 @@ def _connect_failure_detail(exc: Exception) -> str:
     return f"Failed to connect and introspect target database: {exc}"
 
 
+def _build_conn_url(body: LiveDbConnectRequest) -> str:
+    """Rebuild the full connection URL from split credential fields, or pass the URL through."""
+    if body.db_user is None and body.db_password is None:
+        return body.conn_url
+    if body.db_user is None or body.db_password is None:
+        raise ValueError("db_user and db_password must be provided together")
+    url = make_url(body.conn_url)
+    if url.username is not None or url.password is not None:
+        raise ValueError("conn_url must not contain credentials when db_user/db_password are provided")
+    return url.set(username=body.db_user, password=body.db_password).render_as_string(hide_password=False)
+
+
 @router.post("/semantic/db/connect", response_model=LiveDbResponse, status_code=201)
 async def connect_live_target_db(
     body: LiveDbConnectRequest,
@@ -477,12 +490,12 @@ async def connect_live_target_db(
     )
     try:
         tls = validate_tls_settings(body.tls_mode, body.ca_cert, body.client_cert, body.client_key)
+        conn_url = strip_tls_url_params(_build_conn_url(body))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         active_org_id = await _request_org_id(db, current_user.id, org_id)
         await _require_org_permission(db, current_user.id, active_org_id, "can_manage_schema")
-        conn_url = strip_tls_url_params(body.conn_url)
         return await create_live_target_db(
             db,
             current_user.id,

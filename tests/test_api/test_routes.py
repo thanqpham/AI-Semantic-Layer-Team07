@@ -196,8 +196,8 @@ async def test_connect_strips_sslmode_from_url(mock_create, client, async_sessio
 
 
 @pytest.mark.asyncio
-async def test_connect_malformed_url_returns_400_not_500(client, async_session):
-    """conn_url sai định dạng (port không phải số) phải trả về 400, không 500."""
+async def test_connect_malformed_url_returns_422_not_500(client, async_session):
+    """conn_url sai định dạng (port không phải số) phải trả về 422, không 500."""
     org_id = await _seed_data_lead_workspace(async_session)
     response = await client.post(
         "/api/v1/semantic/db/connect",
@@ -208,4 +208,4 @@ async def test_connect_malformed_url_returns_400_not_500(client, async_session):
         },
         headers={**get_test_headers(), "X-Organization-ID": str(org_id)},
     )
-    assert response.status_code == 400
+    assert response.status_code == 422

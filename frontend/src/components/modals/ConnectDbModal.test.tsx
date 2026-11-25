@@ -25,10 +25,10 @@ describe('ConnectDbModal authentication', () => {
 
   it('uses a persisted access token while AuthContext is still hydrating', async () => {
     render(<ConnectDbModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
-    fireEvent.change(screen.getByPlaceholderText('Ví dụ: CSDL thương mại điện tử'), { target: { value: 'Sales' } });
-    fireEvent.change(screen.getByPlaceholderText(/postgresql\+asyncpg/), { target: { value: 'postgresql+asyncpg://user:pass@localhost/sales' } });
+    fireEvent.change(screen.getByPlaceholderText('VD: CSDL bán hàng (Production)'), { target: { value: 'Sales' } });
+    fireEvent.change(screen.getByPlaceholderText(/localhost:5432/), { target: { value: 'postgresql://user:pass@localhost/sales' } });
     fireEvent.click(screen.getByText('Bắt Đầu Kết Nối & Introspect'));
-    await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Sales', 'auto', 'postgresql+asyncpg://user:pass@localhost/sales', 'stored-access-token'));
+    await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Sales', 'auto', 'postgresql://user:pass@localhost/sales', 'stored-access-token'));
     expect(screen.queryByText(/Vui lòng đăng nhập/)).not.toBeInTheDocument();
   });
 });
@@ -43,5 +43,31 @@ describe('ConnectDbModal guardrail copy', () => {
     expect(screen.getByText(/Mặc định 100 dòng/)).toBeInTheDocument();
     expect(screen.getByText(/Tối đa 1\.000 dòng/)).toBeInTheDocument();
     expect(screen.getByText(/Timeout 15 giây/)).toBeInTheDocument();
+  });
+});
+
+describe('ConnectDbModal credential split', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => { connectMock.mockReset(); connectMock.mockResolvedValue({ id: 9, display_name: 'Sales', dialect: 'postgresql', raw_schema: { tables: [] }, updated_at: '', semantic_db_id: 12 }); });
+
+  it('sends dbUser/dbPassword separately and masks the password input', async () => {
+    render(<ConnectDbModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText('VD: CSDL bán hàng (Production)'), { target: { value: 'Sales' } });
+    fireEvent.change(screen.getByPlaceholderText(/localhost:5432/), { target: { value: 'postgresql://localhost:5432/analytics' } });
+    fireEvent.change(screen.getByPlaceholderText('Ví dụ: semantic_reader'), { target: { value: 'semantic_reader' } });
+    fireEvent.change(screen.getByPlaceholderText('Nhập mật khẩu'), { target: { value: 'pw@ss:1' } });
+    expect(screen.getByPlaceholderText('Nhập mật khẩu')).toHaveProperty('type', 'password');
+    fireEvent.click(screen.getByText('Bắt Đầu Kết Nối & Introspect'));
+    await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Sales', 'auto', 'postgresql://localhost:5432/analytics', 'stored-access-token', { dbUser: 'semantic_reader', dbPassword: 'pw@ss:1' }));
+  });
+
+  it('requires user and password together', async () => {
+    render(<ConnectDbModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText('VD: CSDL bán hàng (Production)'), { target: { value: 'Sales' } });
+    fireEvent.change(screen.getByPlaceholderText(/localhost:5432/), { target: { value: 'postgresql://localhost:5432/analytics' } });
+    fireEvent.change(screen.getByPlaceholderText('Ví dụ: semantic_reader'), { target: { value: 'semantic_reader' } });
+    fireEvent.click(screen.getByText('Bắt Đầu Kết Nối & Introspect'));
+    expect(await screen.findByText('User và password phải đi cùng nhau')).toBeInTheDocument();
+    expect(connectMock).not.toHaveBeenCalled();
   });
 });

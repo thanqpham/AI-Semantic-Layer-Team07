@@ -496,6 +496,15 @@ class LiveDbConnectRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     dialect: str | None = Field(default="auto", description="Schema dialect or 'auto' for auto-detection")
     conn_url: str = Field(..., min_length=5, max_length=500)
+    db_user: str | None = Field(
+        default=None, min_length=1, max_length=100, description="DB username sent separately from URL"
+    )
+    db_password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="DB password sent separately from URL; stored only as part of encrypted URL",
+    )
     tls_mode: str = Field(
         default="prefer",
         description="TLS mode: prefer, disable, require, verify_ca or verify_full",

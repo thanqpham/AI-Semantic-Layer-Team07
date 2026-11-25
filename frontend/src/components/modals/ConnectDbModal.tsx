@@ -172,6 +172,8 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
   const [caCert, setCaCert] = useState('');
   const [clientCert, setClientCert] = useState('');
   const [clientKey, setClientKey] = useState('');
+  const [dbUser, setDbUser] = useState('');
+  const [dbPassword, setDbPassword] = useState('');
 
   const isDump = engine === 'dump';
   const tlsApplies = engine === 'postgresql' || engine === 'mysql';
@@ -185,6 +187,8 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
     setCaCert('');
     setClientCert('');
     setClientKey('');
+    setDbUser('');
+    setDbPassword('');
     setError('');
   };
 
@@ -247,6 +251,11 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           setIsProcessing(false);
           return;
         }
+        if (tlsApplies && Boolean(dbUser.trim()) !== Boolean(dbPassword.trim())) {
+          setError('User và password phải đi cùng nhau');
+          setIsProcessing(false);
+          return;
+        }
         const tls: LiveDbTlsOptions | undefined =
           tlsApplies && (tlsMode !== 'prefer' || caCert || clientCert || clientKey)
             ? {
@@ -257,8 +266,15 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
               }
             : undefined;
         const dbType = engine === 'sqlite' ? 'sqlite' : engine === 'mysql' ? 'mysql' : 'auto';
-        const liveRecord = tls
-          ? await connectLiveTargetDb(dbName.trim(), dbType, connUrl.trim(), accessToken, tls)
+        const connectOpts = tls || dbUser.trim() || dbPassword.trim()
+          ? {
+              tls,
+              ...(dbUser.trim() ? { dbUser: dbUser.trim() } : {}),
+              ...(dbPassword.trim() ? { dbPassword: dbPassword.trim() } : {}),
+            }
+          : undefined;
+        const liveRecord = connectOpts
+          ? await connectLiveTargetDb(dbName.trim(), dbType, connUrl.trim(), accessToken, connectOpts)
           : await connectLiveTargetDb(dbName.trim(), dbType, connUrl.trim(), accessToken);
         const newLayer = convertRawSchemaToLayer(
           liveRecord.id,
@@ -347,9 +363,12 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
                 id="db-host"
                 value={connUrl}
                 onChange={(e) => setConnUrl(e.target.value)}
-                placeholder="postgresql+asyncpg://user:pass@localhost:5432/analytics"
+                placeholder="postgresql://localhost:5432/analytics"
                 required
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                <Translated text={"URL chỉ gồm host:port/tên DB — nhập user & password vào ô riêng bên dưới."} />
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 <Translated text={"Đừng nhúng sslmode vào URL — cấu hình TLS ở mục bên dưới (tham số ssl trong URL sẽ bị loại bỏ)."} />
               </p>
@@ -367,6 +386,37 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
                 className="cursor-pointer file:cursor-pointer"
                 required
               />
+            </div>
+          )}
+
+          {/* DB credentials — separate fields keep credentials out of the URL */}
+          {tlsApplies && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="db-user" className="mb-1.5 block text-sm">
+                  <Translated text={"Tên đăng nhập"} />
+                </Label>
+                <Input
+                  id="db-user"
+                  value={dbUser}
+                  onChange={(e) => setDbUser(e.target.value)}
+                  placeholder="Ví dụ: semantic_reader"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <Label htmlFor="db-password" className="mb-1.5 block text-sm">
+                  <Translated text={"Mật khẩu"} />
+                </Label>
+                <Input
+                  id="db-password"
+                  type="password"
+                  value={dbPassword}
+                  onChange={(e) => setDbPassword(e.target.value)}
+                  placeholder="Nhập mật khẩu"
+                  autoComplete="new-password"
+                />
+              </div>
             </div>
           )}
 
