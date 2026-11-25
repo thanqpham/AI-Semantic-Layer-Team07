@@ -46,7 +46,7 @@ describe('SuggestionCard lifecycle states', () => {
       denominator: { function: 'COUNT_DISTINCT', expression: 'id' }, scale: 100, offset: 1,
     };
     render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
-    expect(screen.getByText(/1 \+ 100 × \(SUM\(amount\)\) \/ \(COUNT\(DISTINCT id\)\)/)).toBeInTheDocument();
+    expect(screen.getByText('1 + 100 × SUM(amount) / COUNT(DISTINCT id)')).toBeInTheDocument();
   });
 
   it('shows only the calculation without grouping details or query plan YAML', () => {

@@ -42,8 +42,11 @@ export function formatMetricFormula(definition: MetricDefinition, { conditions =
   const denominator = formatAggregate(formula.ratio.denominator, conditions);
   const scale = formula.ratio.scale ?? 1;
   const offset = formula.ratio.offset ?? 0;
-  const ratio = `${scale} × (${numerator}) / (${denominator})`;
-  return offset ? `${offset} + ${ratio}` : ratio;
+  // Parentheses only when a WHERE clause would otherwise run into the operator.
+  const wrap = (text: string) => (text.includes(' WHERE ') ? `(${text})` : text);
+  const ratio = `${wrap(numerator)} / ${wrap(denominator)}`;
+  const scaled = scale === 1 ? ratio : `${scale} × ${ratio}`;
+  return offset ? `${offset} + ${scaled}` : scaled;
 }
 
 /** Render an aggregate call as SQL, e.g. COUNT_DISTINCT(x) -> COUNT(DISTINCT x). */

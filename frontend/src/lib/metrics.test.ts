@@ -113,9 +113,11 @@ describe('metric definition utilities', () => {
       scale: 100,
     };
     expect(formatMetricFormula(definition)).toBe(
-      '100 × (COUNT(DISTINCT id) WHERE converted_order_id khác NULL) / (COUNT(DISTINCT id))',
+      '100 × (COUNT(DISTINCT id) WHERE converted_order_id khác NULL) / COUNT(DISTINCT id)',
     );
-    expect(formatMetricFormula(definition, { conditions: false })).toBe('100 × (COUNT(DISTINCT id)) / (COUNT(DISTINCT id))');
+    expect(formatMetricFormula(definition, { conditions: false })).toBe('100 × COUNT(DISTINCT id) / COUNT(DISTINCT id)');
+    definition.metric.formula.ratio.scale = 1;
+    expect(formatMetricFormula(definition, { conditions: false })).toBe('COUNT(DISTINCT id) / COUNT(DISTINCT id)');
   });
 
   it('inlines stage refs in a plan ratio, leaving lookalike tokens alone', () => {
