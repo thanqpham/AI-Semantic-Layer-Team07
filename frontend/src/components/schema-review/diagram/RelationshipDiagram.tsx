@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
+import { useTheme } from '@/context/ThemeContext';
 import {
   applyFocus,
   buildGraph,
@@ -135,6 +136,7 @@ function DiagramPanels({ mode, onModeChange, hideIsolated, onToggleIsolated, iso
 function DiagramCanvas({ entities, items, selectedKey, loading, emptyAction, onSelectEdge }: Props) {
   const [mode, setMode] = useState<LayoutMode>('balanced');
   const [hideIsolated, setHideIsolated] = useState(false);
+  const { theme } = useTheme();
   const { nodes, edges, onNodesChange, isolatedCount } = useLayout(entities, items, mode, hideIsolated);
   const [hover, setHover] = useState<string | null>(null);
   const view = useMemo(() => applyFocus(nodes, edges, { node: hover, edge: selectedKey }), [nodes, edges, hover, selectedKey]);
@@ -154,6 +156,7 @@ function DiagramCanvas({ entities, items, selectedKey, loading, emptyAction, onS
         nodesConnectable={false}
         minZoom={0.15}
         maxZoom={2.0}
+        colorMode={theme}
         fitView
         fitViewOptions={FIT_VIEW_OPTS}
         attributionPosition="bottom-left"
