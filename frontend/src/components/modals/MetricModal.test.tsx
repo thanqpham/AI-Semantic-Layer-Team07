@@ -79,7 +79,7 @@ describe('MetricModal', () => {
     );
     // Definition tab should be active and show form fields
     expect(screen.getByText('Tên metric')).toBeInTheDocument();
-    expect(screen.getByText('Thực thể gốc')).toBeInTheDocument();
+    expect(screen.getByText('Bảng gốc')).toBeInTheDocument();
     expect(screen.getByText('Hàm tổng hợp')).toBeInTheDocument();
     expect(screen.getByText('Biểu thức công thức')).toBeInTheDocument();
   });
