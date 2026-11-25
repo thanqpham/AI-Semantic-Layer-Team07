@@ -38,6 +38,21 @@ describe('dashboard bounded results', () => {
     expect(result.current.points.every((point) => point.label !== 'Khác')).toBe(true);
   });
 
+  it('still shows the KPI total when the optional trend query is rejected', async () => {
+    query.mockImplementation(async (_db, request) => {
+      if (request.dimensions?.length) throw new Error('INCOMPATIBLE_GRAIN');
+      return { sql: '', parameters: {}, columns: ['metric_5'], row_count: 1, rows: [[42]] };
+    });
+    const { result } = renderHook(() => useDashboardWidgetData({
+      dbId: 1,
+      widget: { ...widget, chart_type: 'kpi', dimension_col_id: null, date_filter_column_id: 7 },
+      globalGrain: null, datePreset: null, refreshGeneration: 0, enabled: true,
+    }));
+    await waitFor(() => expect(result.current.status).toBe('success'));
+    expect(result.current.totalValue).toBe(42);
+    expect(result.current.trendPoints).toEqual([]);
+  });
+
   it('keeps only the newest hundred periods and preserves missing values', async () => {
     query.mockResolvedValue({
       sql: '', parameters: {}, columns: ['dimension_3', 'metric_5'], row_count: 101,

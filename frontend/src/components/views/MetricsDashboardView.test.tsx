@@ -437,6 +437,17 @@ describe('MetricsDashboardView — edit, add, delete', () => {
     expect(screen.getByLabelText(/Chỉnh sửa widget/)).toBeInTheDocument();
   });
 
+  it('opens the add-widget modal with the requested metric only after the layout loads', async () => {
+    let resolveLoad: (value: unknown) => void = () => {};
+    apiMocks.loadDashboardApi.mockReturnValue(new Promise((resolve) => { resolveLoad = resolve; }));
+    renderView({ addMetricRequest: { metricId: 6, key: 1 } });
+    expect(screen.queryByLabelText('Chỉ số')).not.toBeInTheDocument();
+
+    resolveLoad(stateWith({ widgets: [] }));
+    const metricSelect = (await screen.findByLabelText('Chỉ số')) as HTMLSelectElement;
+    expect(metricSelect.value).toBe('6');
+  });
+
   it('adds a widget through the modal and persists the new layout', async () => {
     renderView();
     await screen.findByTestId('dashboard-card-title');
@@ -445,6 +456,7 @@ describe('MetricsDashboardView — edit, add, delete', () => {
 
     const metricSelect = await screen.findByLabelText('Chỉ số');
     fireEvent.change(metricSelect, { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tự cấu hình →' }));
     const dateSelect = await screen.findByLabelText('Cột lọc ngày');
     fireEvent.change(dateSelect, { target: { value: '15' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));

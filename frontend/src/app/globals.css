@@ -25,11 +25,14 @@
   --border: oklch(0.88 0.01 90);
   --input: oklch(0.92 0.01 90);
   --ring: oklch(0.12 0.01 60);
-  --chart-1: oklch(0.12 0.01 60);
-  --chart-2: oklch(0.35 0.02 60);
-  --chart-3: oklch(0.55 0.02 60);
-  --chart-4: oklch(0.70 0.02 60);
-  --chart-5: oklch(0.85 0.01 60);
+  --chart-1: oklch(0.55 0.19 255);
+  --chart-2: oklch(0.62 0.16 150);
+  --chart-3: oklch(0.72 0.16 70);
+  --chart-4: oklch(0.58 0.21 25);
+  --chart-5: oklch(0.58 0.2 305);
+  --chart-6: oklch(0.68 0.17 45);
+  --chart-7: oklch(0.65 0.12 195);
+  --chart-8: oklch(0.62 0.2 350);
   --radius: 0.25rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -61,11 +64,14 @@
   --border: oklch(0.26 0 0);
   --input: oklch(0.26 0 0);
   --ring: oklch(0.87 0 0);
-  --chart-1: oklch(0.985 0 0);
-  --chart-2: oklch(0.75 0 0);
-  --chart-3: oklch(0.55 0 0);
-  --chart-4: oklch(0.40 0 0);
-  --chart-5: oklch(0.25 0 0);
+  --chart-1: oklch(0.7 0.17 255);
+  --chart-2: oklch(0.75 0.16 150);
+  --chart-3: oklch(0.8 0.15 75);
+  --chart-4: oklch(0.7 0.19 25);
+  --chart-5: oklch(0.72 0.18 305);
+  --chart-6: oklch(0.78 0.15 45);
+  --chart-7: oklch(0.78 0.11 195);
+  --chart-8: oklch(0.74 0.18 350);
   --sidebar: oklch(0.12 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.985 0 0);
@@ -732,6 +738,41 @@
   button:hover .chart-bar-square-bar-2, .chart-bar-square-icon:hover .chart-bar-square-bar-2 { animation-delay: 0.15s; }
   button:hover .chart-bar-square-bar-3, .chart-bar-square-icon:hover .chart-bar-square-bar-3 { animation-delay: 0.3s; }
   button:hover .chart-bar-square-bar-4, .chart-bar-square-icon:hover .chart-bar-square-bar-4 { animation-delay: 0.45s; }
+}
+
+.compass-needle,
+.compass-ping {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+
+.compass-ping {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .compass-needle, .compass-icon:hover .compass-needle {
+    animation: compass-seek 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  button:hover .compass-ping, .compass-icon:hover .compass-ping {
+    animation: compass-ping 0.9s ease-out both;
+  }
+}
+
+/* Needle overshoots, swings back, then settles: a damped oscillation. */
+@keyframes compass-seek {
+  0% { transform: rotate(0deg); }
+  30% { transform: rotate(-55deg); }
+  55% { transform: rotate(28deg); }
+  75% { transform: rotate(-10deg); }
+  90% { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes compass-ping {
+  0% { opacity: 0.6; transform: scale(0.6); }
+  100% { opacity: 0; transform: scale(3); }
 }
 
 @keyframes chart-bar-square-draw {

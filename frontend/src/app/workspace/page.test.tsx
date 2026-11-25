@@ -303,17 +303,18 @@ describe('WorkspacePage metric approval sync', () => {
 
     render(<WorkspacePage />);
     expect(await screen.findByText('review-pending')).toBeInTheDocument();
-    const catalogCalls = vi.mocked(apiModule.getSemanticCatalogApi).mock.calls.length;
     fireEvent.click(screen.getByText('page-nav-dashboard'));
-    await waitFor(() => expect(apiModule.getSemanticCatalogApi).toHaveBeenCalledTimes(catalogCalls + 1));
     fireEvent.click(screen.getByText('page-nav-catalog'));
     expect(await screen.findByText('review-pending')).toBeInTheDocument();
+    // The catalog view uses the semantic catalog for group names, so let its initial load settle.
+    await waitFor(() => expect(apiModule.getSemanticCatalogApi).toHaveBeenCalled());
+    const catalogCalls = vi.mocked(apiModule.getSemanticCatalogApi).mock.calls.length;
     fireEvent.click(screen.getByText(`catalog-approve-${mode}`));
 
     expect(await screen.findByText('published-version-2')).toBeInTheDocument();
     expect(screen.queryByText('review-pending')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('page-nav-dashboard'));
-    await waitFor(() => expect(apiModule.getSemanticCatalogApi).toHaveBeenCalledTimes(catalogCalls + 2));
+    // Approval changes what is queryable, so the catalog must be refetched.
+    await waitFor(() => expect(apiModule.getSemanticCatalogApi).toHaveBeenCalledTimes(catalogCalls + 1));
   });
 
   it('excludes rejected metrics from the sidebar pending badge', async () => {

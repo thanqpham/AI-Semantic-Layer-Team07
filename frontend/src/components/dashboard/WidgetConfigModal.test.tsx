@@ -76,7 +76,14 @@ const PLAN_DEFINITION = {
   metric: {
     ...APPROVED_METRIC.definition!.metric,
     query_plan: {
-      stages: [{ name: 'result', base_entity: 'orders', joins: [], group_by: [], aggregates: [], filters: [] }],
+      stages: [{
+        name: 'result',
+        base_entity: 'orders',
+        joins: [],
+        group_by: [{ name: 'Khách hàng', expression: 'customer_name', column_id: 31 }],
+        aggregates: [],
+        filters: [],
+      }],
       output_expression: 'result.amount',
     },
   },
@@ -195,6 +202,7 @@ function choose(label: string, value: string): void {
 
 async function loadMetaForApprovedMetric(): Promise<void> {
   choose('Chỉ số', '5');
+  fireEvent.click(screen.getByRole('button', { name: 'Tự cấu hình →' }));
   const dateSelect = await screen.findByLabelText('Cột lọc ngày');
   await waitFor(() =>
     expect(within(dateSelect).getByRole('option', { name: 'Ngày tạo đơn' })).toBeInTheDocument(),
@@ -225,13 +233,13 @@ describe('WidgetConfigModal', () => {
     const optionNames = within(metricSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    expect(optionNames).toEqual(['Doanh thu thuần']);
+    expect(optionNames).toEqual(['— Chọn chỉ số —', 'Doanh thu thuần']);
     expect(screen.queryByText('Metric chờ duyệt')).not.toBeInTheDocument();
     expect(screen.queryByText('Metric legacy')).not.toBeInTheDocument();
     expect(screen.queryByText('Metric lỗi grain')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Tìm chỉ số'), { target: { value: 'zzz-không-có' } });
-    expect(within(metricSelect).queryAllByRole('option')).toHaveLength(0);
+    expect(within(metricSelect).queryAllByRole('option')).toHaveLength(1);
     expect(screen.getByText('Không có metric đã duyệt nào.')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Tìm chỉ số'), { target: { value: 'doanh' } });
@@ -476,8 +484,72 @@ describe('WidgetConfigModal', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  it('offers one-click suggestions after a metric is chosen', async () => {
+    const { onSave } = renderModal();
+    expect(screen.queryByRole('button', { name: 'Lưu' })).not.toBeInTheDocument();
+
+    choose('Chỉ số', '5');
+    await screen.findByText('Xu hướng theo tháng (Ngày tạo đơn)');
+    expect(screen.getByText('Con số tổng (lọc theo Ngày tạo đơn)')).toBeInTheDocument();
+    expect(screen.getByText('Theo Tên khách hàng')).toBeInTheDocument();
+    expect(screen.getByText('Theo Mã đơn hàng')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: '＋ Thêm' })[1]);
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      metric_id: 5,
+      chart_type: 'line',
+      dimension_col_id: 15,
+      date_filter_column_id: 15,
+      time_grain: 'month',
+    });
+    expect(apiMocks.executeSemanticQueryApi).not.toHaveBeenCalled();
+  });
+
+  it('only suggests the declared grain for query-plan metrics', async () => {
+    renderModal({ metrics: [makeMetric({ definition: PLAN_DEFINITION })] });
+    choose('Chỉ số', '5');
+    await screen.findByText('Theo Tên khách hàng');
+    expect(screen.getAllByRole('button', { name: '＋ Thêm' })).toHaveLength(1);
+  });
+
+  it('limits totals-only plan metrics (empty group_by) to KPI and blocks other charts', async () => {
+    const plan = PLAN_DEFINITION.metric.query_plan!;
+    const totalsOnly = makeMetric({
+      definition: {
+        ...PLAN_DEFINITION,
+        metric: { ...PLAN_DEFINITION.metric, query_plan: { ...plan, stages: [{ ...plan.stages[0], group_by: [] }] } },
+      },
+    });
+    renderModal({ metrics: [totalsOnly] });
+    choose('Chỉ số', '5');
+    await screen.findByText('Con số tổng (lọc theo Ngày tạo đơn)');
+    expect(screen.getAllByRole('button', { name: '＋ Thêm' })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tự cấu hình →' }));
+    choose('Loại biểu đồ', 'pie');
+    choose('Chiều dữ liệu', '31');
+    expect(screen.getByRole('button', { name: 'Lưu' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('chỉ trả về một con số tổng');
+  });
+
+  it('opens a suggestion in the full form for customizing', async () => {
+    const { onSave } = renderModal();
+    choose('Chỉ số', '5');
+    await screen.findByText('Theo Tên khách hàng');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Tuỳ chỉnh' })[2]);
+    expect(selectByLabel('Chiều dữ liệu').value).toBe('31');
+    expect(selectByLabel('Cột lọc ngày').value).toBe('15');
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    expect(onSave.mock.calls[0][0]).toMatchObject({ dimension_col_id: 31, date_filter_column_id: 15 });
+  });
+
   it('blocks saving an incomplete configuration', async () => {
     const { onSave } = renderModal();
+    choose('Chỉ số', '5');
+    fireEvent.click(screen.getByRole('button', { name: 'Tự cấu hình →' }));
+    choose('Chỉ số', '');
 
     const saveButton = screen.getByRole('button', { name: 'Lưu' });
     expect(saveButton).toBeDisabled();

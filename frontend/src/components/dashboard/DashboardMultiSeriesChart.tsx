@@ -16,7 +16,7 @@ import {
 } from 'recharts';
 import { DashboardPoint, formatCellValue, formatShortNumber, sortPointsByTimeKey } from './dashboardFormatters';
 
-const SERIES_COLORS = [1, 2, 3, 4, 5].map((n) => `var(--color-chart-${n})`);
+const SERIES_COLORS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `var(--chart-${n})`);
 const CHART_MARGIN = { top: 8, right: 12, left: 0, bottom: 4 };
 
 export function DashboardMultiSeriesChart({ chartType, series, points }: {

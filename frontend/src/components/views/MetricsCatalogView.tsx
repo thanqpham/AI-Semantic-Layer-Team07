@@ -3,8 +3,6 @@
 import {
   AlertTriangle,
   CheckCheck,
-  CheckCircle2,
-  Clock3,
   Plus,
   RotateCcw,
   Search,
@@ -15,6 +13,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
+import { CatalogGroupedList } from '@/components/metrics/CatalogGroupedList';
+import { CatalogModeBar, type CatalogTab } from '@/components/metrics/CatalogModeBar';
 import { MetricCard } from '@/components/metrics/MetricCard';
 import { MetricReviewPanel } from '@/components/metrics/MetricReviewPanel';
 import { MetricAuditPanel } from '@/components/metrics/MetricAuditPanel';
@@ -33,8 +33,8 @@ import {
   rejectMetricRequestApi,
   reviewMetricProposalApi,
   ReviewedMetricProposal,
+  SemanticCatalog,
 } from '@/lib/api';
-import { cn } from '@/lib/utils';
 import type { WorkspaceDatabase } from '@/components/workspace/shared';
 import { ViewHeader } from '@/components/workspace/ViewHeader';
 import { formatMetricFormula, metricName } from '@/lib/metrics';
@@ -56,6 +56,10 @@ interface MetricsCatalogViewProps {
   onApproveMetric?: (id: number) => Promise<void> | void;
   /** Rejects the metric server-side; the mandatory reason comes from MetricRejectDialog. */
   onRejectMetric?: (id: number, reason: string) => Promise<void> | void;
+  onExploreMetric?: (id: number) => void;
+  /** Used to show business (Vietnamese) group names; raw table names are shown until it loads. */
+  catalog?: SemanticCatalog | null;
+  onAddMetricToDashboard?: (id: number) => void;
   onSubmitMetric?: () => void;
   onMetricsChanged?: () => Promise<void> | void;
   canSubmitMetric?: boolean;
@@ -65,6 +69,24 @@ interface MetricsCatalogViewProps {
   database?: WorkspaceDatabase | null;
   onOpenSyncLogs?: () => void;
   hasHealedLogs?: boolean;
+}
+
+/** Metrics a Data Lead still has to act on (the review queue). */
+function isQueued(item: MetricRecord, canManage: boolean): boolean {
+  return (
+    !item.is_deleted &&
+    (item.status === 'pending_approval' ||
+      item.status === 'needs_review' ||
+      Boolean(item.has_pending_version) ||
+      (canManage && item.status === 'unverified'))
+  );
+}
+
+/** Land Data Leads on the queue when there is work, everyone else on the catalog. */
+function initialTab(metrics: MetricRecord[], canManage: boolean, isMemberSubmitter: boolean): CatalogTab {
+  if (canManage && metrics.some((item) => isQueued(item, true))) return 'pending';
+  if (isMemberSubmitter && metrics.some((item) => !item.is_deleted && item.status === 'unverified')) return 'submitted';
+  return 'approved';
 }
 
 export function MetricsCatalogView(props: MetricsCatalogViewProps) {
@@ -84,10 +106,10 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
   const [rejecting, setRejecting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'submitted' | 'approved' | 'rejected' | 'trash' | 'audit'>('all');
   const canManage = Boolean(props.canManageMetrics);
   const canApprove = Boolean(props.canApproveMetrics);
   const isMemberSubmitter = props.canSubmitMetric === true && !canManage;
+  const [filterTab, setFilterTab] = useState<CatalogTab>(() => initialTab(props.metrics, canManage, isMemberSubmitter));
 
   const visibleMetrics = useMemo(
     () =>
@@ -150,13 +172,7 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
 
   const pendingMetrics = useMemo(
     () =>
-      activeMetrics.filter(
-        (item) =>
-          item.status === 'pending_approval' ||
-          item.status === 'needs_review' ||
-          Boolean(item.has_pending_version) ||
-          (canManage && item.status === 'unverified'),
-      ),
+      activeMetrics.filter((item) => isQueued(item, canManage)),
     [canManage, activeMetrics],
   );
 
@@ -180,14 +196,16 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
     [filtered],
   );
 
-  const totalPending = visibleMetrics.filter(
-    (item) =>
-      !item.is_deleted &&
-      (item.status === 'pending_approval' ||
-        item.status === 'needs_review' ||
-        Boolean(item.has_pending_version) ||
-        (canManage && item.status === 'unverified')),
-  ).length;
+  const totalPending = visibleMetrics.filter((item) => isQueued(item, canManage)).length;
+
+  const tabMetrics =
+    filterTab === 'pending'
+      ? pendingMetrics
+      : filterTab === 'submitted'
+        ? submittedMetrics
+        : filterTab === 'rejected'
+          ? rejectedMetrics
+          : approvedMetrics;
 
   const approveAll = async () => {
     if (!props.onApproveAll) return;
@@ -409,82 +427,22 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-          {[
-            {
-              key: 'all' as const,
-              label: 'Tất cả',
-              count:
-                (isMemberSubmitter ? submittedMetrics.length : pendingMetrics.length) +
-                approvedMetrics.length,
-            },
-            ...(canManage
-              ? [
-                {
-                  key: 'pending' as const,
-                  label: 'Chờ phê duyệt',
-                  count: pendingMetrics.length,
-                },
-              ]
-              : []),
-            ...(isMemberSubmitter
-              ? [
-                {
-                  key: 'submitted' as const,
-                  label: 'Đã gửi',
-                  count: submittedMetrics.length,
-                },
-              ]
-              : []),
-            {
-              key: 'approved' as const,
-              label: 'Đã phê duyệt',
-              count: approvedMetrics.length,
-            },
-            {
-              key: 'rejected' as const,
-              label: 'Đã từ chối',
-              count: rejectedMetrics.length,
-            },
-            { key: 'audit' as const, label: 'Audit', count: 0 },
-            ...(canManage
-              ? [
-                {
-                  key: 'trash' as const,
-                  label: 'Thùng rác',
-                  count: trashMetrics.length,
-                },
-              ]
-              : []),
-          ].map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => {
-                setFilterTab(f.key);
-                setSelectedTrashIds([]);
-              }}
-              className={cn(
-                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer',
-                filterTab === f.key
-                  ? 'bg-primary text-primary-foreground font-semibold'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Translated text={f.label} />
-              <span
-                className={cn(
-                  'rounded-full px-1.5 py-0.2 text-[10px] font-mono',
-                  filterTab === f.key
-                    ? 'bg-primary-foreground/20 text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground',
-                )}
-              >
-                ({f.count})
-              </span>
-            </button>
-          ))}
-        </div>
+        <CatalogModeBar
+          value={filterTab}
+          onChange={(tab) => {
+            setFilterTab(tab);
+            setSelectedTrashIds([]);
+          }}
+          canManage={canManage}
+          isMemberSubmitter={isMemberSubmitter}
+          counts={{
+            approved: approvedMetrics.length,
+            pending: pendingMetrics.length,
+            submitted: submittedMetrics.length,
+            rejected: rejectedMetrics.length,
+            trash: trashMetrics.length,
+          }}
+        />
       </div>
 
       {/* Main Catalog Body */}
@@ -635,104 +593,16 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
               )}
             </div>
           </div>
-        ) : filterTab === 'all' ? (
-          <div className="space-y-6">
-            {(canManage || isMemberSubmitter) && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between border-b border-border pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-secondary text-amber-500">
-                      <Clock3 className="h-3.5 w-3.5" />
-                    </span>
-                    <div>
-                      <h2 className="font-semibold text-sm text-foreground">
-                        <Translated text={isMemberSubmitter ? '1. Đã gửi' : '1. Metrics Đang Chờ Phê Duyệt'} />
-                      </h2>
-                      <p className="text-[11px] text-muted-foreground">
-                        <Translated text={isMemberSubmitter
-                          ? 'Các metric bạn đã gửi đang chờ Data Lead xem xét'
-                          : 'Các chỉ số cần Data Lead review và phê duyệt'} />
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                    {isMemberSubmitter ? submittedMetrics.length : pendingMetrics.length} <Translated text={"chỉ số"} /></span>
-                </div>
-
-                {(isMemberSubmitter ? submittedMetrics : pendingMetrics).length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center text-xs text-muted-foreground">
-                    <Translated text={"Không có metric nào đang chờ duyệt."} />
-                  </div>
-                ) : (
-                  <div className="min-w-0 divide-y divide-border overflow-visible rounded-lg border border-border bg-card">
-                    {(isMemberSubmitter ? submittedMetrics : pendingMetrics).map((metric) => (
-                      <MetricCard
-                        key={metric.metric_id}
-                        metric={metric}
-                        onEdit={canManage ? props.onEditMetric : undefined}
-                        onDelete={canManage ? openDeleteDialog : undefined}
-                        onHistory={showHistory}
-                        onApprove={canApprove ? props.onApproveMetric : undefined}
-                        onReject={canApprove && props.onRejectMetric ? openRejectDialog : undefined}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* Section 2: Approved */}
-            <section className="space-y-3">
-              <div className="flex items-center justify-between border-b border-border pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-secondary text-emerald-500">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  </span>
-                  <div>
-                    <h2 className="font-semibold text-sm text-foreground">
-                      <Translated text={"2. Metrics Đã Phê Duyệt (Official Metrics)"} />
-                    </h2>
-                    <p className="text-[11px] text-muted-foreground">
-                      <Translated text={"Các chỉ số chuẩn hóa đã sẵn sàng để truy vấn trong Metric Explorer và Export"} />
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-full border border-border bg-secondary px-2.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                  {approvedMetrics.length} <Translated text={"chỉ số"} /></span>
-              </div>
-
-              {approvedMetrics.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center text-xs text-muted-foreground">
-                  <Translated text={canApprove
-                    ? 'Chưa có metric nào được phê duyệt. Hãy duyệt các metric ở phần trên.'
-                    : 'Chưa có metric nào được phê duyệt.'} />
-                </div>
-              ) : (
-                <div className="min-w-0 divide-y divide-border overflow-visible rounded-lg border border-border bg-card">
-                  {approvedMetrics.map((metric) => (
-                    <MetricCard
-                      key={metric.metric_id}
-                      metric={metric}
-                      onEdit={canManage ? props.onEditMetric : undefined}
-                      onDelete={canManage ? openDeleteDialog : undefined}
-                      onHistory={showHistory}
-                      onApprove={canApprove ? props.onApproveMetric : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+        ) : tabMetrics.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center text-xs text-muted-foreground">
+            <Translated text={emptyTabMessage(filterTab, canApprove)} />
           </div>
         ) : (
-          <div className="min-w-0 divide-y divide-border overflow-visible rounded-lg border border-border bg-card">
-            {(filterTab === 'pending'
-              ? pendingMetrics
-              : filterTab === 'submitted'
-                ? submittedMetrics
-                : filterTab === 'rejected'
-                  ? rejectedMetrics
-                  : approvedMetrics
-            ).map((metric) => (
+          <CatalogGroupedList
+            key={filterTab}
+            metrics={tabMetrics}
+            catalog={props.catalog ?? null}
+            renderCard={(metric) => (
               <MetricCard
                 key={metric.metric_id}
                 metric={metric}
@@ -741,9 +611,11 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
                 onHistory={showHistory}
                 onApprove={canApprove ? props.onApproveMetric : undefined}
                 onReject={canApprove && props.onRejectMetric ? openRejectDialog : undefined}
+                onExplore={props.onExploreMetric}
+                onAddToDashboard={props.onAddMetricToDashboard}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
       </div>
 
@@ -819,4 +691,13 @@ export function MetricsCatalogView(props: MetricsCatalogViewProps) {
       )}
     </div>
   );
+}
+
+function emptyTabMessage(tab: CatalogTab, canApprove: boolean): string {
+  if (tab === 'pending') return 'Không có metric nào đang chờ duyệt.';
+  if (tab === 'submitted') return 'Bạn chưa gửi metric nào đang chờ duyệt.';
+  if (tab === 'rejected') return 'Không có metric nào bị từ chối.';
+  return canApprove
+    ? 'Chưa có metric nào được phê duyệt. Hãy duyệt các metric trong Hàng chờ duyệt.'
+    : 'Chưa có metric nào được phê duyệt.';
 }

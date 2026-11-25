@@ -607,6 +607,17 @@ export default function WorkspacePage() {
     [notify, semanticDbId],
   );
 
+  const [dashboardAddRequest, setDashboardAddRequest] = useState<{ metricId: number; key: number } | null>(null);
+  const exploreMetric = useCallback((metricId: number) => {
+    explorerSelectionKey.current += 1;
+    setExplorerInitialSelection({ metricId, dateFilters: [], requestKey: explorerSelectionKey.current });
+    setTab('explorer');
+  }, []);
+  const addMetricToDashboard = useCallback((metricId: number) => {
+    setDashboardAddRequest((current) => ({ metricId, key: (current?.key ?? 0) + 1 }));
+    setTab('dashboard');
+  }, []);
+
   const handleDashboardDrillDown = useCallback(
     (widget: DashboardWidgetConfig, datePreset: DashboardDatePreset | null) => {
       const dateFilters = resolveDrillDownDateFilters(widget, datePreset, new Date());
@@ -631,7 +642,7 @@ export default function WorkspacePage() {
       setLayers((current) =>
         current.map((item) => (item.id === activeLayerId ? { ...item, metrics } : item)),
       );
-      if (tab === 'explorer' || tab === 'dashboard') {
+      if (tab === 'explorer' || tab === 'dashboard' || tab === 'metrics') {
         const nextCatalog = await getSemanticCatalogApi(dbId);
         setCatalog(nextCatalog);
       } else {
@@ -646,9 +657,9 @@ export default function WorkspacePage() {
     refreshSemanticDataRef.current = refreshSemanticData;
   }, [refreshSemanticData]);
 
-  // Load catalog on-demand when user opens Explorer or Dashboard tabs
+  // Load catalog on-demand for Explorer, Dashboard, and the Metrics catalog (business group names)
   useEffect(() => {
-    if ((tab === 'explorer' || tab === 'dashboard') && semanticDbId) {
+    if ((tab === 'explorer' || tab === 'dashboard' || tab === 'metrics') && semanticDbId) {
       const dbId = String(semanticDbId);
       if (!catalog || catalog.db_id !== Number(semanticDbId)) {
         void getSemanticCatalogApi(dbId)
@@ -979,6 +990,9 @@ export default function WorkspacePage() {
               onApproveAll={canApproveMetrics ? approve : undefined}
               onApproveMetric={canApproveMetrics ? approveSingleMetric : undefined}
               onRejectMetric={canApproveMetrics ? rejectSingleMetric : undefined}
+              onExploreMetric={exploreMetric}
+              catalog={catalog}
+              onAddMetricToDashboard={canEditDashboard ? addMetricToDashboard : undefined}
               onMetricsChanged={refreshSemanticData}
               refreshKey={catalogRefreshKey}
               onOpenSyncLogs={() => setSyncModalOpen(true)}
@@ -1005,6 +1019,7 @@ export default function WorkspacePage() {
               database={layerToDatabase(activeLayer)}
               canEdit={canEditDashboard}
               onDrillDown={handleDashboardDrillDown}
+              addMetricRequest={dashboardAddRequest}
             />
           )}
           {tab === 'export' && canExport && (
