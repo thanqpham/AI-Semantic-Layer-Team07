@@ -71,6 +71,21 @@ it('shows pending relationship tab and bulk approves only tables and columns', a
 });
 
 
+it('does not mount the relationships panel before its tab is first opened', async () => {
+  vi.mocked(getSchemaReviewApi).mockResolvedValue(emptyReview);
+  render(<SchemaReviewView dbId={7} canManageSchema canApproveSchema />);
+  await screen.findByRole('tab', { name: /Liên kết/ });
+  // Mounted hidden, React Flow would initialize in a 0x0 container and auto-zoom breaks.
+  expect(screen.queryByText('Relationship queue')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: /Liên kết/ }));
+  expect(screen.getByText('Relationship queue')).toBeInTheDocument();
+
+  // Keeping it mounted after visiting preserves in-progress review state.
+  fireEvent.click(screen.getByRole('tab', { name: 'Bảng & cột' }));
+  expect(screen.getByText('Relationship queue')).toBeInTheDocument();
+});
+
 it('does not advertise or load a read-only review queue without schema permission', () => {
  vi.mocked(getSchemaReviewApi).mockClear();
  render(<SchemaReviewView dbId={7} />);
