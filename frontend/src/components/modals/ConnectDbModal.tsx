@@ -101,11 +101,7 @@ const TlsSettingsSection: React.FC<TlsSettingsSectionProps> = ({
         ))}
       </select>
 
-      {!showClientPair && (
-        <p className="mt-1.5 text-xs text-destructive">
-          <Translated text={"Kênh không được kiểm chứng chỉ — chỉ dùng cho dev/localhost"} />
-        </p>
-      )}
+      
 
       {showCa && (
         <div className="mt-2">
