@@ -49,6 +49,7 @@ AGENTS = {
     "semantic_parse",
 }
 SAFE_ERROR = "Không thể hoàn tất xử lý. Vui lòng thử lại."
+STOP_MESSAGE = "Đã dừng bởi bạn."
 COMPILE_ERROR_MESSAGES = {
     "AMBIGUOUS_FILTER_SCOPE": "Các điều kiện liên quan cần được làm rõ trước khi truy vấn.",
     "invalid_sql": "Không thể kiểm tra truy vấn đã biên dịch.",
@@ -288,8 +289,8 @@ class ChatExecution:
         if self.trace["status"] != "running":
             return self.snapshot()
         for step_id in list(self.steps):
-            self.end(step_id, "failed" if status == "error" else "finished")
-        if status != "error":
+            self.end(step_id, "cancelled" if status == "cancelled" else "failed" if status == "error" else "finished")
+        if status not in {"error", "cancelled"}:
             terminal = (
                 "clarification"
                 if status == "needs_clarification"
@@ -366,6 +367,8 @@ async def stream_execution(task: asyncio.Task, execution: ChatExecution) -> Asyn
         yield sse("progress", event)
     try:
         result = task.result()
+    except asyncio.CancelledError:
+        yield sse("cancelled", {"message": STOP_MESSAGE, "execution_trace": execution.finish("cancelled")})
     except Exception:
         yield sse("error", {"message": SAFE_ERROR, "execution_trace": execution.finish("error")})
     else:

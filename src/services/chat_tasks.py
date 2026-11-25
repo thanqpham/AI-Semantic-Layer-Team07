@@ -35,6 +35,16 @@ def start_chat_task(
     return _tasks[key], _executions[key]
 
 
+def cancel_chat_task(key: tuple[int, int | None, str, str]) -> bool:
+    """Stop a still-running shared execution; return False once it has finished."""
+    # shortcut: tiny race if the task completes between done() and cancel(), reload then replays the real answer
+    task = _tasks.get(key)
+    if task is None or task.done():
+        return False
+    task.cancel()
+    return True
+
+
 def _finish_task(key: tuple[int, int | None, str, str], task: asyncio.Task) -> None:
     _executions[key].changed.set()
     _tasks.pop(key, None)

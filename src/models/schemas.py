@@ -1060,6 +1060,18 @@ class ChatRequest(BaseModel):
     )
 
 
+class ChatCancelRequest(BaseModel):
+    """Request payload dừng một lượt chat đang chạy."""
+
+    client_message_id: str = Field(..., min_length=1, max_length=100)
+
+
+class ChatCancelResponse(BaseModel):
+    """Kết quả yêu cầu dừng chat."""
+
+    cancelled: bool = Field(..., description="True nếu lượt chat đang chạy và đã bị dừng")
+
+
 class ChatMessageResponse(BaseModel):
     """Persisted chat message returned to the frontend."""
 

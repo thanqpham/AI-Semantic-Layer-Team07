@@ -44,6 +44,19 @@ describe('StudioChatStream', () => {
     expect(screen.queryByTestId('prompt-suggestion-strip')).not.toBeInTheDocument();
   });
 
+  it('swaps the send button for a stop button while the agent is running', () => {
+    const onStop = vi.fn();
+    const { rerender } = render(
+      <StudioChatStream messages={[]} onSendMessage={vi.fn()} isLoading tableNames={[]} onStop={onStop} />,
+    );
+
+    fireEvent.click(screen.getByTestId('stop-chat-button'));
+    expect(onStop).toHaveBeenCalledTimes(1);
+
+    rerender(<StudioChatStream messages={[]} onSendMessage={vi.fn()} isLoading={false} tableNames={[]} />);
+    expect(screen.queryByTestId('stop-chat-button')).not.toBeInTheDocument();
+  });
+
   it('grows the composer with typed content and shrinks it after sending', async () => {
     const onSendMessage = vi.fn().mockResolvedValue(undefined);
     render(<StudioChatStream messages={[]} onSendMessage={onSendMessage} isLoading={false} tableNames={[]} />);

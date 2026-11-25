@@ -39,6 +39,10 @@ export async function sendChatStream<T>(url: string, init: RequestInit, options:
           const error = frame.data as { message: string; execution_trace?: ExecutionTrace };
           throw new ChatStreamError(error.message, error.execution_trace);
         }
+        if (frame.event === 'cancelled') {
+          const payload = frame.data as { message?: string; execution_trace?: ExecutionTrace };
+          throw new ChatStreamError(payload.message || 'Đã dừng bởi bạn.', payload.execution_trace);
+        }
         if (trace) options.onTrace(trace);
       }
       throw new Error('Stream ended before result');

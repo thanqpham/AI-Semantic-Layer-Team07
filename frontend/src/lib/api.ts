@@ -985,6 +985,13 @@ export async function sendChatOrchestratorApi(
   return chatRequest<ChatOrchestratorResponse>(`${API_BASE}/api/v1/semantic/${dbId}/chat`, init);
 }
 
+export async function cancelChatRunApi(dbId: string, clientMessageId: string): Promise<{ cancelled: boolean }> {
+  return chatRequest<{ cancelled: boolean }>(`${API_BASE}/api/v1/semantic/${dbId}/chat/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ client_message_id: clientMessageId }),
+  });
+}
+
 export interface MetricRequest {
   proposal_id?: string | null;
   review?: MetricReview | null;

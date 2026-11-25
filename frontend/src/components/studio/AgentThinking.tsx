@@ -184,6 +184,7 @@ export function AgentThinking({
         needs_clarification: t('Needs clarification', 'Cần làm rõ'),
         error: t('Error', 'Có lỗi'),
         partial: t('Partially completed', 'Hoàn tất một phần'),
+        cancelled: t('Stopped', 'Đã dừng'),
       }[trace.status];
 
   const handleToggleFlow = (event: React.MouseEvent<HTMLButtonElement>) => {

@@ -45,6 +45,8 @@ from src.models.schema_metadata import DiagnosticCode, RawSchemaMetadata, Schema
 from src.models.schemas import (
     ApproveRequest,
     CanonicalRelationshipResponse,
+    ChatCancelRequest,
+    ChatCancelResponse,
     ChatClarificationPayload,
     ChatClarificationSelection,
     ChatMessageResponse,
@@ -126,7 +128,7 @@ from src.services.chat_service import (
     save_chat_message,
     update_chat_session_title,
 )
-from src.services.chat_tasks import start_chat_task
+from src.services.chat_tasks import cancel_chat_task, start_chat_task
 from src.services.chat_trace_storage import execute_with_trace
 from src.services.database import decrypt_conn_url, get_db_session, get_session_factory, lock_semantic_database
 from src.services.dimension_recommender import get_dimensions_for_metric, get_filter_columns_for_metric
@@ -2323,6 +2325,22 @@ async def chat_orchestrator_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/semantic/{db_id}/chat/cancel", response_model=ChatCancelResponse)
+async def cancel_chat_run(
+    db_id: str,
+    body: ChatCancelRequest,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> ChatCancelResponse:
+    """Stop one still-running chat execution owned by the current user."""
+    numeric_db_id = _chat_db_id(db_id)
+    await get_chat_database(db, current_user.id, numeric_db_id, org_id=org_id)
+    # Key must mirror _start_chat_request: raw db_id string, not the numeric id.
+    cancelled = cancel_chat_task((current_user.id, org_id, db_id, body.client_message_id))
+    return ChatCancelResponse(cancelled=cancelled)
 
 
 async def _authorize_chat_subscription(
