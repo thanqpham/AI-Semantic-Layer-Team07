@@ -26,9 +26,9 @@ describe('ConnectDbModal authentication', () => {
   it('uses a persisted access token while AuthContext is still hydrating', async () => {
     render(<ConnectDbModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
     fireEvent.change(screen.getByPlaceholderText('VD: CSDL bán hàng (Production)'), { target: { value: 'Sales' } });
-    fireEvent.change(screen.getByPlaceholderText(/localhost:5432/), { target: { value: 'postgresql://user:pass@localhost/sales' } });
+    fireEvent.change(screen.getByPlaceholderText(/localhost:5432/), { target: { value: 'postgresql://localhost:5432/sales' } });
     fireEvent.click(screen.getByText('Bắt Đầu Kết Nối & Introspect'));
-    await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Sales', 'auto', 'postgresql://user:pass@localhost/sales', 'stored-access-token'));
+    await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Sales', 'auto', 'postgresql://localhost:5432/sales', 'stored-access-token'));
     expect(screen.queryByText(/Vui lòng đăng nhập/)).not.toBeInTheDocument();
   });
 });
@@ -68,6 +68,15 @@ describe('ConnectDbModal credential split', () => {
     fireEvent.change(screen.getByPlaceholderText('Ví dụ: semantic_reader'), { target: { value: 'semantic_reader' } });
     fireEvent.click(screen.getByText('Bắt Đầu Kết Nối & Introspect'));
     expect(await screen.findByText('User và password phải đi cùng nhau')).toBeInTheDocument();
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a URL that embeds credentials', async () => {
+    render(<ConnectDbModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText('VD: CSDL bán hàng (Production)'), { target: { value: 'Sales' } });
+    fireEvent.change(screen.getByPlaceholderText(/localhost:5432/), { target: { value: 'postgresql://semantic_reader:reader123@localhost:5432/demo_shop' } });
+    fireEvent.click(screen.getByText('Bắt Đầu Kết Nối & Introspect'));
+    expect(await screen.findByText('URL không được chứa user/password - nhập vào ô Tên đăng nhập và Mật khẩu bên dưới')).toBeInTheDocument();
     expect(connectMock).not.toHaveBeenCalled();
   });
 });

@@ -236,6 +236,12 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           setIsProcessing(false);
           return;
         }
+        // chặn pattern cũ nhúng credential vào URL — API vẫn giữ backward-compat cho client cũ
+        if (/:\/\/[^/@\s]+@/.test(connUrl.trim())) {
+          setError('URL không được chứa user/password — nhập vào ô Tên đăng nhập và Mật khẩu bên dưới');
+          setIsProcessing(false);
+          return;
+        }
         const isVerify = tlsMode === 'verify_ca' || tlsMode === 'verify_full';
         if (tlsApplies && isVerify && !caCert) {
           setError('Cần nạp chứng chỉ CA cho mức verify');
