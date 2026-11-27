@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy import select
+
 from src.agents.state import AgentState
+from src.models.db import LiveTargetDbModel
+from src.models.tls_settings import TlsSettings
 from src.observability import trace_action, trace_node
+from src.services.database import get_db_session
 from src.services.introspection import (
     ConnectionIntrospectionError,
     IntrospectionError,
@@ -14,6 +19,7 @@ from src.services.introspection import (
     UnsupportedDatabaseTypeError,
     extract_raw_schema,
 )
+from src.services.tls import load_tls_settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ async def introspect_node(state: AgentState) -> dict[str, object]:
         "conn_url_enc": state["conn_url_enc"],
         "db_type": state["db_type"],
         "connection_id": state["db_id"],
+        "tls": await _load_tls_for_connection(state["db_id"]),
     }
     try:
         result = await trace_action("schema_introspection", {"db_type": state["db_type"]}, extract_raw_schema(req))
@@ -43,6 +50,17 @@ async def introspect_node(state: AgentState) -> dict[str, object]:
         len(result["raw_schema"]["tables"]),
     )
     return {"raw_schema": result["raw_schema"], "introspection_warnings": result["warnings"]}
+
+
+async def _load_tls_for_connection(db_id: int) -> TlsSettings | None:
+    """Load persisted TLS settings for the connection behind this Flow 1 run."""
+    try:
+        async for session in get_db_session():
+            target = await session.scalar(select(LiveTargetDbModel).where(LiveTargetDbModel.semantic_db_id == db_id))
+            return load_tls_settings(target) if target else None
+    except Exception:  # TLS absence must degrade, never crash Flow 1
+        logger.warning("TLS settings unavailable db_id=%s; continuing without TLS.", db_id)
+    return None
 
 
 def _error_response(state: AgentState, exc: IntrospectionError) -> dict[str, object]:

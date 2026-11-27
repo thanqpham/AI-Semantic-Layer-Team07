@@ -88,16 +88,18 @@ async function loadKpiPayload(
   widget: DashboardWidgetConfig,
   requests: SemanticQueryRequest[],
 ): Promise<WidgetPayload> {
+  // The sparkline is optional: grain-locked plan metrics reject any dimension,
+  // so a failed trend must not hide a valid total.
   const [totalResult, trendResult] = await Promise.all([
     runWidgetExecution(dbId, requests[0]),
-    runWidgetExecution(dbId, requests[1]),
+    runWidgetExecution(dbId, requests[1]).catch(() => null),
   ]);
   return {
     points: [],
     hiddenCount: 0,
-    hasMore: trendResult.rows.length > WIDGET_ROW_LIMIT,
+    hasMore: (trendResult?.rows.length ?? 0) > WIDGET_ROW_LIMIT,
     totalValue: extractTotalValue(totalResult, widget.metric_id),
-    trendPoints: buildWidgetPoints({
+    trendPoints: trendResult === null ? [] : buildWidgetPoints({
       result: { ...trendResult, rows: trendResult.rows.slice(0, WIDGET_ROW_LIMIT) },
       metricId: widget.metric_id,
       dimensionId: widget.date_filter_column_id,

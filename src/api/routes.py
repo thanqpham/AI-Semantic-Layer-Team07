@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import func, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
@@ -44,6 +45,8 @@ from src.models.schema_metadata import DiagnosticCode, RawSchemaMetadata, Schema
 from src.models.schemas import (
     ApproveRequest,
     CanonicalRelationshipResponse,
+    ChatCancelRequest,
+    ChatCancelResponse,
     ChatClarificationPayload,
     ChatClarificationSelection,
     ChatMessageResponse,
@@ -95,6 +98,7 @@ from src.models.schemas import (
     SemanticTableUpdate,
     SqlDumpPreviewResponse,
 )
+from src.models.tls_settings import TlsSettings
 from src.observability.langfuse_tracing import observation, trace_summary
 from src.services import enrichment_progress
 from src.services.categorical_discovery_policy import safe_business_mappings, safe_observed_values
@@ -124,7 +128,7 @@ from src.services.chat_service import (
     save_chat_message,
     update_chat_session_title,
 )
-from src.services.chat_tasks import start_chat_task
+from src.services.chat_tasks import cancel_chat_task, start_chat_task
 from src.services.chat_trace_storage import execute_with_trace
 from src.services.database import decrypt_conn_url, get_db_session, get_session_factory, lock_semantic_database
 from src.services.dimension_recommender import get_dimensions_for_metric, get_filter_columns_for_metric
@@ -213,6 +217,7 @@ from src.services.semantic_service import (
 )
 from src.services.sql_dump_parser_models import SqlDumpParseError
 from src.services.sql_dump_scanner_models import SqlDumpScanError
+from src.services.tls import load_tls_settings, strip_tls_url_params, validate_tls_settings
 
 logger = logging.getLogger(__name__)
 
@@ -221,9 +226,10 @@ async def _execute_sql_on_live_db(
     conn_url: str,
     dialect: str,
     compiled: Any,
+    tls: TlsSettings | None = None,
 ) -> dict[str, Any]:
     """Adapt the query execution module to the route response shape."""
-    result = await execute_compiled_query(conn_url, dialect, compiled)
+    result = await execute_compiled_query(conn_url, dialect, compiled, tls=tls)
     return {"columns": result.columns, "rows": result.rows, "row_count": result.row_count}
 
 
@@ -450,6 +456,26 @@ async def remove_saved_imported_schema(
 # ---------------------------------------------------------------------------
 
 
+def _connect_failure_detail(exc: Exception) -> str:
+    """Prefix TLS handshake failures so clients can distinguish them from generic connect errors."""
+    lowered = str(exc).lower()
+    if any(token in lowered for token in ("ssl", "tls", "certificate")):
+        return f"tls_handshake_failed: {exc}"
+    return f"Failed to connect and introspect target database: {exc}"
+
+
+def _build_conn_url(body: LiveDbConnectRequest) -> str:
+    """Rebuild the full connection URL from split credential fields, or pass the URL through."""
+    if body.db_user is None and body.db_password is None:
+        return body.conn_url
+    if body.db_user is None or body.db_password is None:
+        raise ValueError("db_user and db_password must be provided together")
+    url = make_url(body.conn_url)
+    if url.username is not None or url.password is not None:
+        raise ValueError("conn_url must not contain credentials when db_user/db_password are provided")
+    return url.set(username=body.db_user, password=body.db_password).render_as_string(hide_password=False)
+
+
 @router.post("/semantic/db/connect", response_model=LiveDbResponse, status_code=201)
 async def connect_live_target_db(
     body: LiveDbConnectRequest,
@@ -465,6 +491,11 @@ async def connect_live_target_db(
         current_user.id,
     )
     try:
+        tls = validate_tls_settings(body.tls_mode, body.ca_cert, body.client_cert, body.client_key)
+        conn_url = strip_tls_url_params(_build_conn_url(body))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
         active_org_id = await _request_org_id(db, current_user.id, org_id)
         await _require_org_permission(db, current_user.id, active_org_id, "can_manage_schema")
         return await create_live_target_db(
@@ -472,14 +503,15 @@ async def connect_live_target_db(
             current_user.id,
             body.display_name,
             body.dialect,
-            body.conn_url,
+            conn_url,
             active_org_id,
+            tls=tls,
         )
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Failed to connect live DB '%s': %s", body.display_name, exc, exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Failed to connect and introspect target database: {exc}") from exc
+        raise HTTPException(status_code=400, detail=_connect_failure_detail(exc)) from exc
 
 
 @router.get("/semantic/db/saved", response_model=list[LiveDbSummaryResponse])
@@ -1765,7 +1797,9 @@ async def _query_target(
     if check_drift:
         try:
             conn_url = decrypt_conn_url(live_db.conn_url_enc)
-            current_fp = await asyncio.to_thread(fast_introspect_schema_fingerprint, conn_url, live_db.dialect)
+            current_fp = await asyncio.to_thread(
+                fast_introspect_schema_fingerprint, conn_url, live_db.dialect, load_tls_settings(live_db)
+            )
             if semantic_db.schema_fingerprint and current_fp != semantic_db.schema_fingerprint:
                 logger.info("Schema drift detected before query on db_id=%d. Triggering self-healing...", db_id)
                 await execute_self_healing(db, db_id, trigger_type="instant_check")
@@ -1868,7 +1902,7 @@ async def execute_semantic_query(
     # Execute on live DB
     try:
         conn_url = decrypt_conn_url(live_db.conn_url_enc)
-        exec_result = await _execute_sql_on_live_db(conn_url, live_db.dialect, compiled)
+        exec_result = await _execute_sql_on_live_db(conn_url, live_db.dialect, compiled, tls=load_tls_settings(live_db))
         return SemanticQueryResponse(
             sql=compiled.sql,
             parameters=compiled.parameters,
@@ -2291,6 +2325,22 @@ async def chat_orchestrator_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/semantic/{db_id}/chat/cancel", response_model=ChatCancelResponse)
+async def cancel_chat_run(
+    db_id: str,
+    body: ChatCancelRequest,
+    org_id: int | None = Header(default=None, alias="X-Organization-ID"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> ChatCancelResponse:
+    """Stop one still-running chat execution owned by the current user."""
+    numeric_db_id = _chat_db_id(db_id)
+    await get_chat_database(db, current_user.id, numeric_db_id, org_id=org_id)
+    # Key must mirror _start_chat_request: raw db_id string, not the numeric id.
+    cancelled = cancel_chat_task((current_user.id, org_id, db_id, body.client_message_id))
+    return ChatCancelResponse(cancelled=cancelled)
 
 
 async def _authorize_chat_subscription(

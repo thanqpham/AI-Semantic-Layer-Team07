@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { useTheme } from '@/context/ThemeContext';
 import {
   buildAgentFlowGraph,
   collectVisibleAgentIds,
@@ -205,6 +206,7 @@ function AgentFlowGraphViewport({
   onEdgesChange,
   onNodeClick,
 }: AgentFlowGraphViewportProps) {
+  const { theme } = useTheme();
   return (
     <div className="relative h-56 w-full overflow-hidden rounded-t-md border border-border bg-card/40">
       <ReactFlow
@@ -220,6 +222,7 @@ function AgentFlowGraphViewport({
         panOnDrag={true}
         zoomOnScroll={true}
         preventScrolling={false}
+        colorMode={theme}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />

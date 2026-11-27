@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypeAlias
+from typing import Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
+
+from src.models.tls_settings import TlsSettings
 
 DatabaseType = Literal["postgresql", "mysql", "sqlite"]
 DumpDatabaseType = Literal["postgresql", "mysql"]
@@ -96,6 +98,7 @@ class LiveSchemaRequest(TypedDict):
     conn_url_enc: str
     db_type: DatabaseType
     connection_id: int
+    tls: NotRequired[TlsSettings | None]
 
 
 class DumpSchemaRequest(TypedDict):

@@ -1484,7 +1484,11 @@ function RechartsInteractiveStudio({
                     );
                   }}
                 />
-                <Bar dataKey="value" fill="var(--color-primary, #6366f1)" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                  {chartData.map((_, index) => (
+                    <Cell key={`bar-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -1526,10 +1530,10 @@ function RechartsInteractiveStudio({
                 <Line
                   type="monotone"
                   dataKey="value"
-                  stroke="var(--color-primary, #6366f1)"
+                  stroke="var(--chart-1)"
                   strokeWidth={3}
-                  dot={{ r: 4, fill: 'var(--color-primary, #6366f1)' }}
-                  activeDot={{ r: 6 }}
+                  dot={{ r: 4, fill: 'var(--card)', stroke: 'var(--chart-1)', strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: 'var(--chart-1)', stroke: 'var(--card)', strokeWidth: 2 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -1540,8 +1544,8 @@ function RechartsInteractiveStudio({
               <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 30 }}>
                 <defs>
                   <linearGradient id="areaGradientRecharts" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-primary, #6366f1)" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="var(--color-primary, #6366f1)" stopOpacity={0.0} />
+                    <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
@@ -1578,8 +1582,9 @@ function RechartsInteractiveStudio({
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="var(--color-primary, #6366f1)"
+                  stroke="var(--chart-1)"
                   strokeWidth={2.5}
+                  activeDot={{ r: 5, fill: 'var(--chart-1)', stroke: 'var(--card)', strokeWidth: 2 }}
                   fillOpacity={1}
                   fill="url(#areaGradientRecharts)"
                 />

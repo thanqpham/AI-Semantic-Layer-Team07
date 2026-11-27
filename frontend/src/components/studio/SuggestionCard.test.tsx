@@ -46,7 +46,7 @@ describe('SuggestionCard lifecycle states', () => {
       denominator: { function: 'COUNT_DISTINCT', expression: 'id' }, scale: 100, offset: 1,
     };
     render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
-    expect(screen.getByText(/1 \+ 100 × \(SUM\(amount\)\) \/ \(COUNT_DISTINCT\(id\)\)/)).toBeInTheDocument();
+    expect(screen.getByText('1 + 100 × SUM(amount) / COUNT(DISTINCT id)')).toBeInTheDocument();
   });
 
   it('shows only the calculation without grouping details or query plan YAML', () => {
@@ -58,31 +58,35 @@ describe('SuggestionCard lifecycle states', () => {
         aggregates: [{ name: 'order_count', function: 'COUNT_DISTINCT', expression: 'order_items.order_id', filters: [] }], filters: [] }],
     };
     render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
-    expect(screen.getByText('COUNT_DISTINCT(order_items.order_id)')).toBeInTheDocument();
+    expect(screen.getByText('COUNT(DISTINCT order_items.order_id)')).toBeInTheDocument();
     expect(screen.queryByText(/Nhóm theo/)).not.toBeInTheDocument();
     expect(screen.queryByText(/per_product.order_count/)).not.toBeInTheDocument();
     expect(screen.queryByText(/column_id:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/source_stage:/)).not.toBeInTheDocument();
   });
 
-  it('shows the output and intermediate calculations for a multi-stage plan', () => {
+  it('collapses a multi-stage plan into a single formula line', () => {
     const suggestion = makeSuggestion();
     suggestion.definition.metric.query_plan = {
       output_expression: 'repeat.customers / total.customers',
       stages: [
-        { name: 'repeat', base_entity: 'orders', joins: [], group_by: [],
-          aggregates: [{ name: 'customers', function: 'COUNT_DISTINCT', expression: 'orders.customer_id', filters: [] }], filters: [] },
-        { name: 'total', base_entity: 'orders', joins: [], group_by: [],
+        { name: 'per_customer', base_entity: 'orders', joins: [], group_by: [{ name: 'customer_id', expression: 'orders.customer_id' }],
+          aggregates: [{ name: 'order_count', function: 'COUNT_DISTINCT', expression: 'orders.id', filters: [] }], filters: [] },
+        { name: 'repeat', source_stage: 'per_customer', joins: [], group_by: [],
+          aggregates: [{ name: 'customers', function: 'COUNT', expression: '*', filters: [] }],
+          filters: [{ field: 'order_count', operator: 'gte', value: 2 }] },
+        { name: 'total', source_stage: 'per_customer', joins: [], group_by: [],
           aggregates: [{ name: 'customers', function: 'COUNT', expression: '*', filters: [] }], filters: [] },
       ],
     };
     render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
-    expect(screen.getByText('repeat.customers / total.customers')).toBeInTheDocument();
-    expect(screen.getByText('repeat.customers = COUNT_DISTINCT(orders.customer_id)')).toBeInTheDocument();
-    expect(screen.getByText('total.customers = COUNT(*)')).toBeInTheDocument();
+    expect(screen.getByText('COUNT(customer_id) / COUNT(customer_id)')).toBeInTheDocument();
+    // Conditions live in the filter box next to the formula, labelled by role.
+    expect(screen.getByText('Tử số: COUNT(DISTINCT orders.id) ≥ 2')).toBeInTheDocument();
+    expect(screen.queryByText(/per_customer\.order_count =/)).not.toBeInTheDocument();
   });
 
-  it('lists stage and aggregate filters with their separate scopes', () => {
+  it('merges single-stage plan filters under the shared scope', () => {
     const suggestion = makeSuggestion();
     suggestion.definition.metric.query_plan = {
       output_expression: 'totals.revenue', stages: [{ name: 'totals', base_entity: 'orders', joins: [], group_by: [],
@@ -91,8 +95,8 @@ describe('SuggestionCard lifecycle states', () => {
           filters: [{ field: 'orders.region', operator: 'in', value: ['north', 'south'] }] }] }],
     };
     render(<SuggestionCard suggestion={suggestion} catalogNameConflict={false} onSave={vi.fn()} />);
-    expect(screen.getByText('Bước totals: orders.status = ""')).toBeInTheDocument();
-    expect(screen.getByText('Bước totals, phép tính revenue: orders.region thuộc ["north", "south"]')).toBeInTheDocument();
+    expect(screen.getByText('Chung: orders.status = "" VÀ orders.region thuộc ["north", "south"]')).toBeInTheDocument();
+    expect(screen.queryByText(/Bước totals/)).not.toBeInTheDocument();
     expect(screen.queryByText('Không có bộ lọc')).not.toBeInTheDocument();
   });
 

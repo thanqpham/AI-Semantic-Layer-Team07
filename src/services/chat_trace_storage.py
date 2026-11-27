@@ -1,5 +1,6 @@
 """Attach public execution traces to existing chat message metadata."""
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
@@ -7,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.db import ChatMessageModel
 from src.models.schemas import ChatRequest, ChatResponse
-from src.services.chat_execution import AGENTS, SAFE_ERROR, ChatExecution, current_execution, execution_context
+from src.services.chat_execution import (
+    AGENTS,
+    SAFE_ERROR,
+    STOP_MESSAGE,
+    ChatExecution,
+    current_execution,
+    execution_context,
+)
 from src.services.chat_service import save_chat_message
 
 logger = logging.getLogger(__name__)
@@ -23,6 +31,13 @@ async def execute_with_trace(
     with execution_context(execution):
         try:
             response = await operation()
+        except asyncio.CancelledError:
+            execution.finish("cancelled")
+            try:
+                await _persist_terminal_reply(db, body, execution, STOP_MESSAGE, "cancelled")
+            except Exception:
+                logger.exception("Failed to persist the chat cancellation marker")
+            raise
         except Exception as exc:
             logger.error("Chat processing failed (run_id=%s type=%s)", execution.trace["run_id"], type(exc).__name__)
             execution.finish("error")
@@ -79,6 +94,17 @@ async def _persist_failure(
     execution: ChatExecution,
 ) -> None:
     """Save a safe failed reply only if this authorized request already saved a user message."""
+    await _persist_terminal_reply(db, body, execution, SAFE_ERROR, "error")
+
+
+async def _persist_terminal_reply(
+    db: AsyncSession,
+    body: ChatRequest,
+    execution: ChatExecution,
+    text: str,
+    status: str,
+) -> None:
+    """Save a safe terminal reply (error or stop marker) after a saved user message."""
     await db.rollback()
     if not execution.user_message_id:
         return
@@ -88,12 +114,12 @@ async def _persist_failure(
             db,
             message.session_id,
             "assistant",
-            SAFE_ERROR,
+            text,
             intent="chitchat",
             metadata_json={
                 "schema_version": 2,
-                "status": "error",
-                "error": SAFE_ERROR,
+                "status": status,
+                **({"error": text} if status == "error" else {}),
                 "execution_trace": execution.snapshot(),
             },
             client_message_id=f"{body.client_message_id}:assistant" if body.client_message_id else None,

@@ -8,6 +8,7 @@ import {
   ChatMessageItem,
   ChatClarificationSelection,
   ChatSessionItem,
+  cancelChatRunApi,
   createMetricApi,
   getChatSessionDetailApi,
   MetricPromptSuggestion,
@@ -30,6 +31,7 @@ import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 import { PendingChat, pendingChatKey, readPendingChat, storePendingChat } from '@/lib/pendingChat';
 import { ChatProgressOptions, ChatStreamError } from '@/lib/chatStream';
+import { ExecutionTrace } from '@/lib/chatTrace';
 
 interface AIStudioViewProps {
   layer: SemanticLayerData;
@@ -78,6 +80,7 @@ export function AIStudioView({
   const canGenerateMetrics = mode === 'metric_studio';
   const requestVersion = useRef(0);
   const requestController = useRef<AbortController | null>(null);
+  const activeRequestRef = useRef<{ clientMessageId: string; storageKey: string; version: number } | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
 
   const submittedRequestKeys = useMemo(
@@ -121,6 +124,35 @@ export function AIStudioView({
     ]);
   };
 
+  const markStopped = (thinkingId: string, trace?: ExecutionTrace | null) => {
+    setMessages((current) => current.map((item) => item.id === thinkingId ? {
+      ...item,
+      text: 'Interrupted',
+      isError: false,
+      reconnecting: false,
+      executionTrace: trace
+        ?? (item.executionTrace ? { ...item.executionTrace, status: 'cancelled' as const } : null),
+    } : item));
+  };
+
+  const stop = async () => {
+    const active = activeRequestRef.current;
+    const controller = requestController.current;
+    if (!active || !controller || controller.signal.aborted || active.version !== requestVersion.current) return;
+    let cancelled = true;
+    try {
+      ({ cancelled } = await cancelChatRunApi(String(semanticDbId), active.clientMessageId));
+    } catch {
+      // shortcut: mạng lỗi vẫn dừng cục bộ — backend có thể còn chạy, reload sẽ thấy kết quả
+    }
+    if (!cancelled) return; // lượt chat đã kịp hoàn tất, chờ SSE trả kết quả
+    controller.abort();
+    if (readPendingChat(active.storageKey)?.clientMessageId === active.clientMessageId) {
+      storePendingChat(active.storageKey, null);
+    }
+    markStopped(`${active.clientMessageId}:thinking`);
+  };
+
   const send = async (
     prompt: string, _targetTables: string[], reuseMetricId?: number,
     selection?: ChatClarificationSelection, pending?: PendingChat,
@@ -147,6 +179,7 @@ export function AIStudioView({
     requestController.current?.abort();
     const controller = new AbortController();
     requestController.current = controller;
+    activeRequestRef.current = { clientMessageId, storageKey, version };
     const thinkingId = `${clientMessageId}:thinking`;
     const progress: ChatProgressOptions = {
       signal: controller.signal,
@@ -242,6 +275,11 @@ export function AIStudioView({
       ]);
     } catch (error) {
       if (version !== requestVersion.current || controller.signal.aborted) return;
+      if (error instanceof ChatStreamError && error.trace?.status === 'cancelled') {
+        if (readPendingChat(storageKey)?.clientMessageId === clientMessageId) storePendingChat(storageKey, null);
+        markStopped(thinkingId, error.trace);
+        return;
+      }
       if (error instanceof ChatStreamError && error.trace) {
         const failedTrace = error.trace;
         if (failedTrace.status !== 'running' && readPendingChat(storageKey)?.clientMessageId === clientMessageId) storePendingChat(storageKey, null);
@@ -254,7 +292,10 @@ export function AIStudioView({
         appendError(setMessages, error instanceof Error ? error.message : 'Không thể xử lý yêu cầu');
       }
     } finally {
-      if (version === requestVersion.current) setLoading(false);
+      if (version === requestVersion.current) {
+        setLoading(false);
+        activeRequestRef.current = null;
+      }
     }
   };
 
@@ -499,6 +540,7 @@ export function AIStudioView({
           reconnecting={reconnecting}
           messages={messages}
           onSendMessage={send}
+          onStop={loading ? stop : undefined}
           isLoading={loading || loadingSessions}
           tableNames={layer.tables.map((table) => table.table_name)}
           onAddMetric={canGenerateMetrics ? save : undefined}

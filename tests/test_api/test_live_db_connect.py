@@ -3,13 +3,22 @@
 import os
 import sqlite3
 import tempfile
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import create_access_token
 from src.models.db import LiveTargetDbModel, OrganizationMemberModel, UserModel
+from src.models.schema_metadata import (
+    RawSchemaMetadata,
+    SchemaDialect,
+    SchemaMetadata,
+    default_schema_identifier,
+)
+from src.services.database import decrypt_conn_url
 from src.services.organization_service import create_organization
 
 CONNECT_ENDPOINT = "/api/v1/semantic/db/connect"
@@ -184,3 +193,89 @@ def test_live_db_introspect_does_not_read_categorical_rows(temp_sqlite_db: str) 
 
     assert is_completed_col.sample_values is None
     assert status_col.sample_values is None
+
+
+RAW_SCHEMA_FIXTURE = RawSchemaMetadata(
+    dialect=SchemaDialect.POSTGRESQL,
+    schemas=(SchemaMetadata(schema_name=default_schema_identifier(SchemaDialect.POSTGRESQL)),),
+    tables=(),
+)
+
+
+@pytest.mark.asyncio
+@patch("src.services.live_db_service.ensure_read_only_account", new_callable=AsyncMock)
+@patch("src.services.live_db_service.introspect_live_database", return_value=RAW_SCHEMA_FIXTURE)
+async def test_live_db_connect_split_credentials_roundtrip(
+    mock_introspect, mock_priv, client, async_session: AsyncSession
+):
+    """db_user/db_password được ghép lại thành URL đầy đủ rồi encrypt Fernet."""
+    org_id = await _data_lead_workspace(async_session)
+    payload = {
+        "display_name": "Split Creds",
+        "dialect": "postgresql",
+        "conn_url": "postgresql://localhost:5432/analytics",
+        "db_user": "semantic_reader",
+        "db_password": "p@ss:wo/rd%1",
+    }
+    res = await client.post(CONNECT_ENDPOINT, json=payload, headers=_token_headers(org_id=org_id))
+    assert res.status_code == 201
+    assert "p@ss:wo/rd%1" not in res.text  # password không echo trong response
+    row = (await async_session.execute(select(LiveTargetDbModel))).scalars().one()
+    url = make_url(decrypt_conn_url(row.conn_url_enc))
+    assert url.username == "semantic_reader"
+    assert url.password == "p@ss:wo/rd%1"  # ký tự @ : / % round-trip đúng
+    assert "p@ss" not in row.conn_url_enc  # ciphertext, không plaintext
+
+
+@pytest.mark.asyncio
+async def test_live_db_connect_split_credentials_validation(client, async_session: AsyncSession):
+    """Một mình một trường, hoặc URL đã nhúng credential + parts → 422."""
+    org_id = await _data_lead_workspace(async_session)
+    headers = _token_headers(org_id=org_id)
+    res = await client.post(
+        CONNECT_ENDPOINT,
+        json={
+            "display_name": "Half Creds",
+            "dialect": "postgresql",
+            "conn_url": "postgresql://localhost:5432/db",
+            "db_user": "sem",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 422
+    res = await client.post(
+        CONNECT_ENDPOINT,
+        json={
+            "display_name": "Dup Creds",
+            "dialect": "postgresql",
+            "conn_url": "postgresql://old:pw@localhost:5432/db",
+            "db_user": "sem",
+            "db_password": "x",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 422
+    res = await client.post(
+        CONNECT_ENDPOINT,
+        json={
+            "display_name": "Password Only URL",
+            "dialect": "postgresql",
+            "conn_url": "postgresql://:pw@localhost:5432/db",
+            "db_user": "sem",
+            "db_password": "x",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 422
+    res = await client.post(
+        CONNECT_ENDPOINT,
+        json={
+            "display_name": "Empty User",
+            "dialect": "postgresql",
+            "conn_url": "postgresql://localhost:5432/db",
+            "db_user": "",
+            "db_password": "x",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 422

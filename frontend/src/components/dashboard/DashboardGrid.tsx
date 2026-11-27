@@ -75,6 +75,7 @@ interface WidgetViewModel {
   metricName: string;
   metricNames: string[];
   dimensionLabel: string | null;
+  dateLabel: string | null;
 }
 
 const gridAnnouncements: Announcements = {
@@ -165,18 +166,19 @@ function buildWidgetViewModels(props: DashboardGridProps): WidgetViewModel[] {
       widget,
       metricName: metricNames[0],
       metricNames,
-      dimensionLabel: resolveDimensionLabel(widget, props.catalog),
+      dimensionLabel: resolveColumnLabel(widget.dimension_col_id, props.catalog),
+      dateLabel: resolveColumnLabel(widget.date_filter_column_id, props.catalog),
     };
   });
 }
 
-function resolveDimensionLabel(
-  widget: DashboardWidgetConfig,
+function resolveColumnLabel(
+  columnId: number | null,
   catalog: SemanticCatalog | null,
 ): string | null {
-  if (widget.dimension_col_id === null || !catalog) return null;
+  if (columnId === null || !catalog) return null;
   for (const table of catalog.tables) {
-    const column = table.columns.find((c) => c.column_id === widget.dimension_col_id);
+    const column = table.columns.find((c) => c.column_id === columnId);
     if (column) return column.business_name || column.column_name;
   }
   return null;
@@ -228,6 +230,7 @@ function SortableCard(props: SortableCardProps) {
         metricName={props.model.metricName}
         metricNames={props.model.metricNames}
         dimensionLabel={props.model.dimensionLabel}
+        dateLabel={props.model.dateLabel}
         isFirst={props.index === 0}
         isLast={props.index === props.total - 1}
         isDragging={isDragging}

@@ -91,7 +91,7 @@ function DialogContent({
         aria-modal="true"
         data-slot="dialog-content"
         className={cn(
-          'relative z-50 grid w-full max-w-lg gap-4 rounded-xl border border-border bg-background p-6 shadow-2xl transition-all duration-200 animate-in fade-in zoom-in-95',
+          'relative z-50 grid w-full max-w-lg max-h-[90vh] overflow-y-auto gap-4 rounded-xl border border-border bg-background p-6 shadow-2xl transition-all duration-200 animate-in fade-in zoom-in-95',
           className,
         )}
         onClick={(e) => e.stopPropagation()}

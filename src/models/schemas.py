@@ -496,6 +496,34 @@ class LiveDbConnectRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     dialect: str | None = Field(default="auto", description="Schema dialect or 'auto' for auto-detection")
     conn_url: str = Field(..., min_length=5, max_length=500)
+    db_user: str | None = Field(
+        default=None, min_length=1, max_length=100, description="DB username sent separately from URL"
+    )
+    db_password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="DB password sent separately from URL; stored only as part of encrypted URL",
+    )
+    tls_mode: str = Field(
+        default="prefer",
+        description="TLS mode: prefer, disable, require, verify_ca or verify_full",
+    )
+    ca_cert: str | None = Field(
+        default=None,
+        max_length=20000,
+        description="CA certificate PEM to verify the server (required for verify_ca/verify_full)",
+    )
+    client_cert: str | None = Field(
+        default=None,
+        max_length=20000,
+        description="Client certificate PEM for mutual TLS",
+    )
+    client_key: str | None = Field(
+        default=None,
+        max_length=20000,
+        description="Unencrypted client private key PEM (stored encrypted at rest)",
+    )
 
     @field_validator("display_name")
     @classmethod
@@ -516,6 +544,7 @@ class LiveDbSummaryResponse(BaseModel):
     semantic_db_id: int | None = None
     display_name: str
     dialect: SchemaDialect
+    tls_mode: str = "prefer"
     table_count: int
     created_at: datetime
     updated_at: datetime
@@ -1029,6 +1058,18 @@ class ChatRequest(BaseModel):
         gt=0,
         description="Approved metric ID to calculate directly from an existing duplicate notice",
     )
+
+
+class ChatCancelRequest(BaseModel):
+    """Request payload dừng một lượt chat đang chạy."""
+
+    client_message_id: str = Field(..., min_length=1, max_length=100)
+
+
+class ChatCancelResponse(BaseModel):
+    """Kết quả yêu cầu dừng chat."""
+
+    cancelled: bool = Field(..., description="True nếu lượt chat đang chạy và đã bị dừng")
 
 
 class ChatMessageResponse(BaseModel):

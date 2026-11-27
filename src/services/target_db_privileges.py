@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from src.config import get_settings
 from src.models.schema_metadata import SchemaDialect
+from src.models.tls_settings import TlsSettings
+from src.services.tls import build_async_ssl_args
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +68,11 @@ def read_only_connect_args(conn_url: str | URL) -> dict[str, Any]:
     return {}
 
 
-async def ensure_read_only_account(conn_url: str, dialect: SchemaDialect) -> PrivilegeReport:
+async def ensure_read_only_account(
+    conn_url: str, dialect: SchemaDialect, tls: TlsSettings | None = None
+) -> PrivilegeReport:
     """Reject write-capable accounts unless TARGET_DB_REQUIRE_READ_ONLY is disabled."""
-    report = await check_read_only_privileges(conn_url, dialect)
+    report = await check_read_only_privileges(conn_url, dialect, tls)
     for warning in report.warnings:
         logger.warning("Target DB privilege warning: %s", warning)
     if report.violations and get_settings().target_db_require_read_only:
@@ -77,12 +81,15 @@ async def ensure_read_only_account(conn_url: str, dialect: SchemaDialect) -> Pri
     return report
 
 
-async def check_read_only_privileges(conn_url: str, dialect: SchemaDialect) -> PrivilegeReport:
+async def check_read_only_privileges(
+    conn_url: str, dialect: SchemaDialect, tls: TlsSettings | None = None
+) -> PrivilegeReport:
     """Inspect the account's privileges; SQLite has no accounts and returns an empty report."""
     if dialect == SchemaDialect.SQLITE:
         return PrivilegeReport()
     url = make_url(conn_url).set(drivername=_ASYNC_DRIVERS[dialect])
-    engine = create_async_engine(url, connect_args=read_only_connect_args(url))
+    ssl_args, _ = build_async_ssl_args(tls, str(dialect))
+    engine = create_async_engine(url, connect_args={**read_only_connect_args(url), **ssl_args})
     try:
         async with engine.connect() as connection:
             if dialect == SchemaDialect.POSTGRESQL:

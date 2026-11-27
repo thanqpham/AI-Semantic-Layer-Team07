@@ -30,6 +30,7 @@ import {
   saveImportedSchema,
   updateLayer,
   uploadSqlDumpPreview,
+  type LiveDbTlsOptions,
 } from '@/lib/api';
 import { getStoredToken } from '@/lib/jwt';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,110 @@ interface ConnectDbModalProps {
 
 const engines: DbEngine[] = ['postgresql', 'mysql', 'sqlite', 'dump'];
 
+const tlsModeOptions: Array<{ value: string; label: string }> = [
+  { value: 'prefer', label: 'prefer ' },
+  { value: 'disable', label: 'disable ' },
+  { value: 'require', label: 'require ' },
+  { value: 'verify_ca', label: 'verify_ca ' },
+  { value: 'verify_full', label: 'verify_full ' },
+];
+
+const tlsSelectClass =
+  'border-input h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+
+interface TlsSettingsSectionProps {
+  tlsMode: string;
+  onTlsModeChange: (value: string) => void;
+  onCaCert: (value: string) => void;
+  onClientCert: (value: string) => void;
+  onClientKey: (value: string) => void;
+}
+
+const TlsSettingsSection: React.FC<TlsSettingsSectionProps> = ({
+  tlsMode,
+  onTlsModeChange,
+  onCaCert,
+  onClientCert,
+  onClientKey,
+}) => {
+  const readFile = (file: File | undefined, setter: (value: string) => void) => {
+    if (!file) {
+      setter('');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setter(String(reader.result ?? ''));
+    reader.readAsText(file);
+  };
+
+  const showCa = tlsMode === 'verify_ca' || tlsMode === 'verify_full';
+  const showClientPair = tlsMode === 'require' || showCa;
+
+  return (
+    <div>
+      <Label htmlFor="tls-mode" className="mb-1.5 block text-sm">
+        <Translated text={"Bảo mật kết nối (TLS)"} />
+      </Label>
+      <select
+        id="tls-mode"
+        value={tlsMode}
+        onChange={(e) => onTlsModeChange(e.target.value)}
+        className={tlsSelectClass}
+      >
+        {tlsModeOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+
+      
+
+      {showCa && (
+        <div className="mt-2">
+          <Label htmlFor="tls-ca" className="mb-1.5 block text-sm">
+            <Translated text={"Chứng chỉ CA (.pem/.crt)"} />
+          </Label>
+          <Input
+            id="tls-ca"
+            type="file"
+            accept=".pem,.crt,.key"
+            onChange={(e) => readFile(e.target.files?.[0], onCaCert)}
+            className="cursor-pointer file:cursor-pointer"
+          />
+        </div>
+      )}
+
+      {showClientPair && (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="tls-client-cert" className="mb-1.5 block text-sm">
+              <Translated text={"Client certificate (.pem/.crt)"} />
+            </Label>
+            <Input
+              id="tls-client-cert"
+              type="file"
+              accept=".pem,.crt,.key"
+              onChange={(e) => readFile(e.target.files?.[0], onClientCert)}
+              className="cursor-pointer file:cursor-pointer"
+            />
+          </div>
+          <div>
+            <Label htmlFor="tls-client-key" className="mb-1.5 block text-sm">
+              <Translated text={"Client key (.key/.pem)"} />
+            </Label>
+            <Input
+              id="tls-client-key"
+              type="file"
+              accept=".pem,.crt,.key"
+              onChange={(e) => readFile(e.target.files?.[0], onClientKey)}
+              className="cursor-pointer file:cursor-pointer"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
   isOpen,
   onClose,
@@ -59,14 +164,27 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [tlsMode, setTlsMode] = useState<string>('prefer');
+  const [caCert, setCaCert] = useState('');
+  const [clientCert, setClientCert] = useState('');
+  const [clientKey, setClientKey] = useState('');
+  const [dbUser, setDbUser] = useState('');
+  const [dbPassword, setDbPassword] = useState('');
 
   const isDump = engine === 'dump';
+  const tlsApplies = engine === 'postgresql' || engine === 'mysql';
 
   const resetForm = () => {
     setDbName('');
     setConnUrl('');
     setDescription('');
     setFile(null);
+    setTlsMode('prefer');
+    setCaCert('');
+    setClientCert('');
+    setClientKey('');
+    setDbUser('');
+    setDbPassword('');
     setError('');
   };
 
@@ -118,13 +236,48 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
           setIsProcessing(false);
           return;
         }
+        // chặn pattern cũ nhúng credential vào URL — API vẫn giữ backward-compat cho client cũ
+        if (/:\/\/[^/@\s]+@/.test(connUrl.trim())) {
+          setError('URL không được chứa user/password — nhập vào ô Tên đăng nhập và Mật khẩu bên dưới');
+          setIsProcessing(false);
+          return;
+        }
+        const isVerify = tlsMode === 'verify_ca' || tlsMode === 'verify_full';
+        if (tlsApplies && isVerify && !caCert) {
+          setError('Cần nạp chứng chỉ CA cho mức verify');
+          setIsProcessing(false);
+          return;
+        }
+        if (tlsApplies && Boolean(clientCert) !== Boolean(clientKey)) {
+          setError('Client certificate và key phải đi cùng nhau');
+          setIsProcessing(false);
+          return;
+        }
+        if (tlsApplies && Boolean(dbUser.trim()) !== Boolean(dbPassword.trim())) {
+          setError('User và password phải đi cùng nhau');
+          setIsProcessing(false);
+          return;
+        }
+        const tls: LiveDbTlsOptions | undefined =
+          tlsApplies && (tlsMode !== 'prefer' || caCert || clientCert || clientKey)
+            ? {
+                tls_mode: tlsMode,
+                ...(caCert ? { ca_cert: caCert } : {}),
+                ...(clientCert ? { client_cert: clientCert } : {}),
+                ...(clientKey ? { client_key: clientKey } : {}),
+              }
+            : undefined;
         const dbType = engine === 'sqlite' ? 'sqlite' : engine === 'mysql' ? 'mysql' : 'auto';
-        const liveRecord = await connectLiveTargetDb(
-          dbName.trim(),
-          dbType,
-          connUrl.trim(),
-          accessToken,
-        );
+        const connectOpts = tls || dbUser.trim() || dbPassword.trim()
+          ? {
+              tls,
+              ...(dbUser.trim() ? { dbUser: dbUser.trim() } : {}),
+              ...(dbPassword.trim() ? { dbPassword: dbPassword.trim() } : {}),
+            }
+          : undefined;
+        const liveRecord = connectOpts
+          ? await connectLiveTargetDb(dbName.trim(), dbType, connUrl.trim(), accessToken, connectOpts)
+          : await connectLiveTargetDb(dbName.trim(), dbType, connUrl.trim(), accessToken);
         const newLayer = convertRawSchemaToLayer(
           liveRecord.id,
           liveRecord.display_name || dbName.trim(),
@@ -212,9 +365,15 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
                 id="db-host"
                 value={connUrl}
                 onChange={(e) => setConnUrl(e.target.value)}
-                placeholder="postgresql+asyncpg://user:pass@localhost:5432/analytics"
+                placeholder="postgresql://localhost:5432/analytics"
                 required
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                <Translated text={"URL chỉ gồm host:port/tên DB — nhập user & password vào ô riêng bên dưới."} />
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                <Translated text={"Đừng nhúng sslmode vào URL — cấu hình TLS ở mục bên dưới (tham số ssl trong URL sẽ bị loại bỏ)."} />
+              </p>
             </div>
           ) : (
             <div>
@@ -232,6 +391,37 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
             </div>
           )}
 
+          {/* DB credentials — separate fields keep credentials out of the URL */}
+          {tlsApplies && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="db-user" className="mb-1.5 block text-sm">
+                  <Translated text={"Tên đăng nhập"} />
+                </Label>
+                <Input
+                  id="db-user"
+                  value={dbUser}
+                  onChange={(e) => setDbUser(e.target.value)}
+                  placeholder="Ví dụ: semantic_reader"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <Label htmlFor="db-password" className="mb-1.5 block text-sm">
+                  <Translated text={"Mật khẩu"} />
+                </Label>
+                <Input
+                  id="db-password"
+                  type="password"
+                  value={dbPassword}
+                  onChange={(e) => setDbPassword(e.target.value)}
+                  placeholder="Nhập mật khẩu"
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Description */}
           <div>
             <Label htmlFor="db-desc" className="mb-1.5 block text-sm">
@@ -244,6 +434,17 @@ export const ConnectDbModal: React.FC<ConnectDbModalProps> = ({
               placeholder={translate("Mô tả mục đích hoặc nội dung của nguồn dữ liệu này")}
             />
           </div>
+
+          {/* TLS Settings — only engines that support TLS */}
+          {tlsApplies && (
+            <TlsSettingsSection
+              tlsMode={tlsMode}
+              onTlsModeChange={setTlsMode}
+              onCaCert={setCaCert}
+              onClientCert={setClientCert}
+              onClientKey={setClientKey}
+            />
+          )}
 
           {/* Guardrails Safety Box */}
           <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs">

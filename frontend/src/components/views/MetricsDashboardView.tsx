@@ -11,6 +11,7 @@ import {
 import {
   buildStarterDashboardWidgets,
   colSpanToWidth,
+  DASHBOARD_DATE_PRESET_LABELS,
   DashboardDatePreset,
   DashboardLayout,
   DashboardLayoutState,
@@ -32,14 +33,7 @@ import { Button } from '@/components/ui/button';
 import { Translated } from '@/components/ui/translated';
 import { useLanguage } from '@/context/LanguageContext';
 
-const DATE_PRESET_LABELS: Record<DashboardDatePreset, string> = {
-  last_7_days: '7 ngày qua',
-  last_30_days: '30 ngày qua',
-  last_90_days: '90 ngày qua',
-  this_month: 'Tháng này',
-  this_quarter: 'Quý này',
-  this_year: 'Năm này',
-};
+const DATE_PRESET_LABELS = DASHBOARD_DATE_PRESET_LABELS;
 
 export interface MetricsDashboardViewProps {
   dbId: number | string;
@@ -49,6 +43,8 @@ export interface MetricsDashboardViewProps {
   canEdit?: boolean;
   onOpenCatalog?: () => void;
   onDrillDown?: (widget: DashboardWidgetConfig, datePreset: DashboardDatePreset | null) => void;
+  /** Request from another screen to add a widget for this metric; `key` makes repeats distinct. */
+  addMetricRequest?: { metricId: number; key: number } | null;
 }
 
 export function MetricsDashboardView(props: MetricsDashboardViewProps) {
@@ -71,6 +67,17 @@ export function MetricsDashboardView(props: MetricsDashboardViewProps) {
   const [conflictVersion, setConflictVersion] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<DashboardWidgetConfig | null>(null);
+  const [presetMetricId, setPresetMetricId] = useState<number | null>(null);
+  const [handledAddKey, setHandledAddKey] = useState<number | null>(null);
+  const addRequest = props.addMetricRequest ?? null;
+  // Wait for the saved layout: saving a widget onto a not-yet-loaded (null) layout would wipe it.
+  if (addRequest && addRequest.key !== handledAddKey && canEdit && working !== null) {
+    setHandledAddKey(addRequest.key);
+    setEditMode(true);
+    setEditingWidget(null);
+    setPresetMetricId(addRequest.metricId);
+    setModalOpen(true);
+  }
 
   const versionRef = useRef(version);
   const conflictRef = useRef(conflict);
@@ -180,6 +187,7 @@ export function MetricsDashboardView(props: MetricsDashboardViewProps) {
       : { widgets: [...current, widget] };
     setModalOpen(false);
     setEditingWidget(null);
+    setPresetMetricId(null);
     void mutate(next);
   };
   const handleReset = () => {
@@ -283,8 +291,9 @@ export function MetricsDashboardView(props: MetricsDashboardViewProps) {
         querySupported={querySupported}
         metrics={metrics}
         editingWidget={editingWidget}
+        initialMetricId={presetMetricId}
         onSave={handleAddSave}
-        onCancel={() => { setModalOpen(false); setEditingWidget(null); }}
+        onCancel={() => { setModalOpen(false); setEditingWidget(null); setPresetMetricId(null); }}
       />
     </div>
   );

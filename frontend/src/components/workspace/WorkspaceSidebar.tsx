@@ -4,7 +4,6 @@ import { useState, type ComponentType, type SVGProps } from 'react';
 import {
   ChevronDown,
   ChevronLeft,
-  Compass,
   History,
   PanelLeftClose,
   Plus,
@@ -26,6 +25,7 @@ import { Translated } from '@/components/ui/translated';
 import { BotMessageSquareIcon } from '@/components/ui/BotMessageSquareIcon';
 import { ClipboardDocumentListIcon } from '@/components/ui/ClipboardDocumentListIcon';
 import { ChartBarSquareIcon } from '@/components/ui/ChartBarSquareIcon';
+import { CompassIcon } from '@/components/ui/CompassIcon';
 import { BuildingOffice2Icon } from '@/components/ui/BuildingOffice2Icon';
 import { CircleStackIcon } from '@/components/ui/CircleStackIcon';
 import { ArrowUpTrayIcon } from '@/components/ui/ArrowUpTrayIcon';
@@ -74,7 +74,7 @@ const navItems: { id: ViewId; label: string; icon: ComponentType<SVGProps<SVGSVG
   { id: 'ai-studio', label: 'AI Studio', icon: BotMessageSquareIcon },
   { id: 'schema', label: 'Schema Review', icon: CircleStackIcon },
   { id: 'catalog', label: 'Metrics Catalog', icon: ClipboardDocumentListIcon },
-  { id: 'explorer', label: 'Metric Explorer', icon: Compass },
+  { id: 'explorer', label: 'Metric Explorer', icon: CompassIcon },
   { id: 'dashboard', label: 'Metrics Dashboard', icon: ChartBarSquareIcon },
   { id: 'export', label: 'Export Playground', icon: ArrowUpTrayIcon },
 ];

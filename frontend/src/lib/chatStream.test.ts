@@ -38,6 +38,17 @@ describe('chat streaming reconnect', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('ends without retrying when the server reports the run was cancelled', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response(
+      `event: snapshot\ndata: ${JSON.stringify(traceFixture)}\n\n`
+      + `event: cancelled\ndata: ${JSON.stringify({ message: 'Interrupted', execution_trace: { ...traceFixture, status: 'cancelled' } })}\n\n`,
+    ));
+    vi.stubGlobal('fetch', fetch);
+    const failure = sendChatStream('/chat', {}, options());
+    await expect(failure).rejects.toMatchObject({ message: 'Interrupted', trace: { status: 'cancelled' } });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('aborts a reconnect wait when switching conversations', async () => {
     vi.useFakeTimers();
     const fetch = vi.fn().mockRejectedValue(new TypeError('offline'));

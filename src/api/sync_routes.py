@@ -30,6 +30,7 @@ from src.services.live_db_service import introspect_live_database
 from src.services.schema_cron_service import run_daily_schema_sync_job
 from src.services.schema_fingerprint import fast_introspect_schema_fingerprint
 from src.services.schema_self_healing_service import detect_drift_details, execute_self_healing
+from src.services.tls import load_tls_settings
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +81,14 @@ async def get_sync_status(
     if live_db:
         try:
             conn_url = decrypt_conn_url(live_db.conn_url_enc)
-            current_fp = await asyncio.to_thread(fast_introspect_schema_fingerprint, conn_url, live_db.dialect)
+            current_fp = await asyncio.to_thread(
+                fast_introspect_schema_fingerprint, conn_url, live_db.dialect, load_tls_settings(live_db)
+            )
             in_sync = current_fp == sem_db.schema_fingerprint
             if not in_sync:
-                raw_schema = await asyncio.to_thread(introspect_live_database, conn_url, live_db.dialect)
+                raw_schema = await asyncio.to_thread(
+                    introspect_live_database, conn_url, live_db.dialect, load_tls_settings(live_db)
+                )
                 tbl_stmt = (
                     select(SemanticTableModel)
                     .where(SemanticTableModel.db_id == db_id)

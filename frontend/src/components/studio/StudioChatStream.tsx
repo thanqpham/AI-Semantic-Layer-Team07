@@ -4,6 +4,7 @@ import {
   ArrowUp,
   Lightbulb,
   Sparkles,
+  Square,
   User,
 } from 'lucide-react';
 import React, { KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -53,6 +54,7 @@ interface StudioChatStreamProps {
   reconnecting?: boolean;
   messages: ChatMessage[];
   onSendMessage: (promptText: string, targetTables: string[]) => Promise<void>;
+  onStop?: () => void;
   isLoading: boolean;
   tableNames: string[];
   onAddMetric?: (suggestion: MetricSuggestion) => Promise<MetricRecord | void> | void;
@@ -319,15 +321,32 @@ export function StudioChatStream(props: StudioChatStreamProps) {
               )}
               className="max-h-40 min-h-8 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
-            <Button
-              size="icon"
-              className="h-8 w-8 shrink-0 rounded-lg cursor-pointer"
-              onClick={() => void send()}
-              disabled={!input.trim() || props.isLoading}
-              aria-label={translate("Send message")}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
+            {props.isLoading && props.onStop ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={props.onStop}
+                aria-label={translate('Dừng tạo phản hồi')}
+                data-testid="stop-chat-button"
+                className="group relative size-8 shrink-0 cursor-pointer overflow-hidden rounded-full border border-rose-300/60 bg-rose-500/10 text-rose-600 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),inset_0_-2px_3px_rgba(244,63,94,0.18),0_2px_6px_rgba(244,63,94,0.18)] backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:border-rose-400/70 hover:bg-rose-500/20 hover:text-rose-600 hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),inset_0_-2px_3px_rgba(244,63,94,0.28),0_4px_14px_rgba(244,63,94,0.35)] active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 dark:border-rose-300/25 dark:bg-rose-400/15 dark:text-rose-300 dark:hover:border-rose-300/40 dark:hover:bg-rose-400/25 dark:hover:text-rose-300"
+              >
+                {/* Liquid glass: specular gloss cố định phía trên */}
+                <span aria-hidden className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-white/75 via-white/15 to-transparent dark:from-white/20" />
+                {/* Liquid sweep: dải sáng quét ngang khi hover */}
+                <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-white/0 blur-[2px] transition-all duration-700 ease-out group-hover:left-full group-hover:bg-white/60 motion-reduce:transition-none" />
+                <Square strokeWidth={2.5} />
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-lg cursor-pointer"
+                onClick={() => void send()}
+                disabled={!input.trim() || props.isLoading}
+                aria-label={translate("Send message")}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+            )}
           </div>
           <p className="text-center font-mono text-[10px] text-muted-foreground">
             <Translated text={canGenerateMetrics

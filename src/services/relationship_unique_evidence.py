@@ -8,6 +8,7 @@ from src.models.db import LiveTargetDbModel
 from src.services.database import decrypt_conn_url
 from src.services.introspection import _normalize_url
 from src.services.target_db_privileges import read_only_connect_args
+from src.services.tls import build_async_ssl_args, load_tls_settings
 
 
 def inspect_unique_keys(connection: Connection, metadata: list[dict]) -> list[list[list[str]]]:
@@ -28,8 +29,10 @@ async def attach_unique_keys(db: AsyncSession, db_id: int, metadata: list[dict])
     target = await db.scalar(select(LiveTargetDbModel).where(LiveTargetDbModel.semantic_db_id == db_id))
     if target is None:
         return
+    settings = load_tls_settings(target)
+    ssl_args, _ = build_async_ssl_args(settings, target.dialect)
     url = _normalize_url(decrypt_conn_url(target.conn_url_enc), target.dialect)
-    engine = create_async_engine(url, echo=False, connect_args=read_only_connect_args(url))
+    engine = create_async_engine(url, echo=False, connect_args={**read_only_connect_args(url), **ssl_args})
     try:
         async with engine.connect() as connection:
             keys = await connection.run_sync(inspect_unique_keys, metadata)

@@ -33,6 +33,7 @@ from src.services.live_db_service import introspect_live_database, resolve_and_v
 from src.services.relationship_sync import invalidate_relationship_columns, reconcile_relationships
 from src.services.schema_fingerprint import compute_schema_fingerprint
 from src.services.schema_review_service import preserve_approved_legacy_values
+from src.services.tls import load_tls_settings
 
 logger = logging.getLogger(__name__)
 
@@ -694,7 +695,7 @@ async def execute_self_healing(
 
     conn_url = decrypt_conn_url(live_db.conn_url_enc)
     resolved_dialect = resolve_and_validate_dialect(conn_url, live_db.dialect)
-    raw_schema = introspect_live_database(conn_url, resolved_dialect)
+    raw_schema = introspect_live_database(conn_url, resolved_dialect, load_tls_settings(live_db))
     await lock_semantic_database(db, semantic_db_id)
     new_fp = compute_schema_fingerprint(raw_schema)
     old_fp = sem_db.schema_fingerprint

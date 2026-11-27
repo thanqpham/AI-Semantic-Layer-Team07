@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { ChevronRight, MoreHorizontal, Check, Edit2, History, RotateCcw, ShieldAlert, Sparkles, Trash2, User, X } from 'lucide-react';
+import { ChevronRight, Compass, LayoutDashboard, MoreHorizontal, Check, Edit2, History, RotateCcw, ShieldAlert, Sparkles, Trash2, User, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { MetricRecord } from '@/lib/api';
@@ -21,6 +21,10 @@ interface MetricCardProps {
   /** Opens the reject dialog — the mandatory reason is collected there, not here. */
   onReject?: (id: number) => void;
   onRestore?: (id: number) => Promise<void> | void;
+  /** Open this approved metric in Metric Explorer. */
+  onExplore?: (id: number) => void;
+  /** Open the dashboard's add-widget flow with this metric preselected. */
+  onAddToDashboard?: (id: number) => void;
 }
 
 export function MetricCard({
@@ -34,18 +38,21 @@ export function MetricCard({
   onApprove,
   onReject,
   onRestore,
+  onExplore,
+  onAddToDashboard,
 }: MetricCardProps) {
   const { translate, t } = useLanguage();
   const definition = metric.definition;
   const isDeleted = Boolean(metric.is_deleted);
   const isRejected = metric.status === 'rejected';
   const isPending = metric.status !== 'approved' && !isRejected;
+  const isUsable = !isDeleted && metric.status === 'approved';
 
   const [expanded, setExpanded] = useState(false);
   const [tab, setTab] = useState<'definition' | 'yaml'>('definition');
   const detailId = useId();
   const formula = definition
-    ? formatMetricFormula(definition)
+    ? formatMetricFormula(definition, { conditions: false }) // conditions shown in "Bộ lọc cố định" below
     : t('No definition', 'Chưa có định nghĩa');
 
   return (
@@ -65,22 +72,22 @@ export function MetricCard({
           aria-expanded={expanded}
           aria-controls={detailId}
           onClick={() => setExpanded(!expanded)}
-          className="grid min-w-0 flex-1 cursor-pointer grid-cols-[16px_minmax(0,1fr)] items-start gap-x-2 gap-y-2 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-primary @3xl:grid-cols-[16px_minmax(0,1fr)_minmax(0,0.7fr)_140px] @3xl:gap-x-4"
+          className="grid min-w-0 flex-1 cursor-pointer grid-cols-[16px_minmax(0,1fr)] items-start gap-x-2 gap-y-2 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-primary @3xl:grid-cols-[16px_minmax(0,1fr)_140px] @3xl:gap-x-4"
         >
           <ChevronRight aria-hidden="true" className={`mt-1 h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
           <span className="min-w-0">
             <span className="block break-words text-sm font-medium text-foreground [overflow-wrap:anywhere]">{metricName(metric)}</span>
+            <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+              {metric.description || <Translated text="Chưa có mô tả nghiệp vụ. Mở rộng để xem định nghĩa." />}
+            </span>
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-              {definition?.metric.name !== metricName(metric) && <span className="break-all font-mono">{definition?.metric.name}</span>}
-              {definition && <span className="break-all">· {definition.metric.base_entity}</span>}
-              <span>· v{metric.version || 1}</span>
+              <span>v{metric.version || 1}</span>
               <span className="inline-flex items-center gap-1" title={translate(metric.source === 'manual' ? 'Tạo thủ công' : 'AI đề xuất')}>
                 {metric.source === 'manual' ? <User className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
                 {metric.source === 'manual' ? <Translated text="Thủ công" /> : 'AI'}
               </span>
             </span>
           </span>
-          <code className="col-start-2 line-clamp-2 min-w-0 break-all font-mono text-xs leading-5 text-muted-foreground @3xl:col-start-auto" title={formula}>{formula}</code>
           <span className="col-start-2 flex flex-wrap items-center gap-1.5 @3xl:col-start-auto">
             {isDeleted ? (
               <span className="inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive border border-destructive/30">
@@ -98,6 +105,25 @@ export function MetricCard({
           </span>
         </button>
         <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-1.5">
+          {isUsable && onExplore && (
+            <Button size="sm" className="h-7 gap-1 rounded-md px-2.5 text-xs cursor-pointer" onClick={() => onExplore(metric.metric_id)}>
+              <Compass className="h-3.5 w-3.5" />
+              <Translated text="Khám phá" />
+            </Button>
+          )}
+          {isUsable && onAddToDashboard && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 rounded-md px-2.5 text-xs cursor-pointer"
+              onClick={() => onAddToDashboard(metric.metric_id)}
+              aria-label={translate('Thêm vào Dashboard')}
+              title={translate('Thêm vào Dashboard')}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline"><Translated text="＋ Dashboard" /></span>
+            </Button>
+          )}
           {!isDeleted && isPending && onApprove && (
             <Button
               size="sm"
@@ -242,7 +268,7 @@ export function MetricCard({
                   <button key={value} type="button" aria-pressed={tab === value} aria-controls={`${detailId}-panel`}
                     onClick={() => setTab(value)}
                     className={`cursor-pointer border-b-2 px-3 py-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-primary ${tab === value ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-                    {value === 'yaml' ? 'YAML' : t('Definition', 'Định nghĩa')}
+                    {value === 'yaml' ? 'YAML' : t('Technical details', 'Chi tiết kỹ thuật')}
                   </button>
                 ))}
               </div>

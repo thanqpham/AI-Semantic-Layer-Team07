@@ -985,6 +985,13 @@ export async function sendChatOrchestratorApi(
   return chatRequest<ChatOrchestratorResponse>(`${API_BASE}/api/v1/semantic/${dbId}/chat`, init);
 }
 
+export async function cancelChatRunApi(dbId: string, clientMessageId: string): Promise<{ cancelled: boolean }> {
+  return chatRequest<{ cancelled: boolean }>(`${API_BASE}/api/v1/semantic/${dbId}/chat/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ client_message_id: clientMessageId }),
+  });
+}
+
 export interface MetricRequest {
   proposal_id?: string | null;
   review?: MetricReview | null;
@@ -1709,6 +1716,20 @@ export interface LiveDbSummary {
 
 export interface LiveDbRecord extends LiveDbSummary {
   raw_schema: SqlDumpPreview['raw_schema'];
+  tls_mode?: string;
+}
+
+export interface LiveDbTlsOptions {
+  tls_mode: string;
+  ca_cert?: string;
+  client_cert?: string;
+  client_key?: string;
+}
+
+export interface LiveDbConnectOptions {
+  tls?: LiveDbTlsOptions;
+  dbUser?: string;
+  dbPassword?: string;
 }
 
 export async function connectLiveTargetDb(
@@ -1716,6 +1737,7 @@ export async function connectLiveTargetDb(
   dialect: 'auto' | 'postgresql' | 'mysql' | 'sqlite',
   connUrl: string,
   token: string,
+  opts?: LiveDbConnectOptions,
 ): Promise<LiveDbRecord> {
   const response = await fetch(`${API_BASE_URL}/api/v1/semantic/db/connect`, {
     method: 'POST',
@@ -1728,6 +1750,9 @@ export async function connectLiveTargetDb(
       display_name: displayName,
       dialect,
       conn_url: connUrl,
+      ...(opts?.tls ?? {}),
+      ...(opts?.dbUser ? { db_user: opts.dbUser } : {}),
+      ...(opts?.dbPassword ? { db_password: opts.dbPassword } : {}),
     }),
   });
   if (!response.ok) throw new Error(await readPreviewError(response));

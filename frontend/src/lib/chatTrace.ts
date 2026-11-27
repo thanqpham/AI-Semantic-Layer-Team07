@@ -1,4 +1,4 @@
-export type TraceStatus = 'running' | 'completed' | 'partial' | 'needs_clarification' | 'error';
+export type TraceStatus = 'running' | 'completed' | 'partial' | 'needs_clarification' | 'error' | 'cancelled';
 
 export interface TraceEvent {
   seq: number;
@@ -8,7 +8,7 @@ export interface TraceEvent {
   step_id: string;
   node: string;
   action?: string;
-  status: 'started' | 'finished' | 'failed';
+  status: 'started' | 'finished' | 'failed' | 'cancelled';
   summary: string;
   outcome_summary?: string;
   duration_ms?: number;

@@ -20,6 +20,9 @@ vi.mock('@xyflow/react', async (importOriginal) => {
   };
 });
 
+const themeMock = vi.hoisted(() => ({ theme: 'light' as 'light' | 'dark' }));
+vi.mock('@/context/ThemeContext', () => ({ useTheme: () => themeMock }));
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -381,5 +384,38 @@ describe('AgentFlowCanvas', () => {
 
     // fitView should be called again for run-2
     expect(mockFitView).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AgentFlowCanvas theme', () => {
+  afterEach(() => {
+    themeMock.theme = 'light';
+  });
+
+  const traced = makeTrace({
+    events: [
+      {
+        seq: 1,
+        kind: 'step',
+        step_id: 's-theme-1',
+        node: 'orchestrator',
+        action: 'route',
+        at: '',
+        elapsed_ms: 100,
+        status: 'started',
+        summary: 'Khởi tạo',
+      },
+    ],
+  });
+
+  it('marks React Flow dark so zoom controls follow dark mode', () => {
+    themeMock.theme = 'dark';
+    renderCanvas(traced);
+    expect(document.querySelector('.react-flow')).toHaveClass('dark');
+  });
+
+  it('stays light when the app theme is light', () => {
+    renderCanvas(traced);
+    expect(document.querySelector('.react-flow')).not.toHaveClass('dark');
   });
 });

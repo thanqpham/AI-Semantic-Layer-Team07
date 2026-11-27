@@ -63,8 +63,50 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # TLS demo target (không bật mặc định): chạy tay
+  #   docker compose -f infra/docker-compose.dev.yml --profile tls-demo up -d target-postgres-tls
+  # rồi bash scripts/tls/gen_certs.sh trước đó. Lưu ý Windows/Docker Desktop:
+  # nếu postgres từ chối /certs/server.key vì perms bind mount, dùng
+  # command: sh -c "cp /certs/* /tmp/c && chmod 600 /tmp/c/server.key && exec postgres -c ssl=on -c ssl_cert_file=/tmp/c/server.crt -c ssl_key_file=/tmp/c/server.key -c hba_file=/tmp/c/pg_hba.conf"
+  target-postgres-tls:
+    image: postgres:16-alpine
+    profiles: ["tls-demo"]
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo123
+      POSTGRES_DB: demo_shop
+    ports:
+      - "15432:5432"
+    volumes:
+      - ../scripts/tls/certs:/certs:ro
+      - tls_certs_secure:/certs-sec
+    # Windows bind-mounts cannot hold 0600 perms -> postgres refuses server.key
+    # ("has group or world access"). Copy keys into a named volume first (chmod
+    # works there), then start postgres via the image entrypoint (initdb-safe).
+    command: >
+      bash -c 'cp /certs/server.crt /certs/server.key /certs/client.crt /certs/client.key /certs/ca.crt /certs/pg_hba.conf /certs-sec/ &&
+      chmod 600 /certs-sec/server.key /certs-sec/client.key &&
+      chown postgres:postgres /certs-sec/server.key /certs-sec/client.key &&
+      exec docker-entrypoint.sh postgres -c ssl=on
+      -c ssl_cert_file=/certs-sec/server.crt
+      -c ssl_key_file=/certs-sec/server.key
+      -c ssl_ca_file=/certs-sec/ca.crt
+      -c log_connections=on
+      -c hba_file=/certs-sec/pg_hba.conf'
+    networks:
+      default: {}
+      backend_net: {}
+
+networks:
+  backend_net:
+    # Stack backend/frontend chạy ở project "ai-semantic-layer-team07" — khai báo
+    # external để alias DNS "target-postgres-tls" resolve được từ backend container.
+    name: ai-semantic-layer-team07_default
+    external: true
+
 volumes:
   postgres_data:
+  tls_certs_secure:
     # persist data giữa các lần restart
   pgadmin_data:
 

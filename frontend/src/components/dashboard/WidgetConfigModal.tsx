@@ -15,7 +15,7 @@ import {
   RecommendedDimensionItem,
   TimeGrain,
 } from '@/lib/api';
-import { DashboardChartType, DashboardWidgetConfig } from '@/lib/dashboard';
+import { DashboardChartType, DashboardWidgetConfig, metricPlanGrain } from '@/lib/dashboard';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -33,11 +33,14 @@ import {
   LayoutFields,
   MetricComparePicker,
   MetricPicker,
+  WidgetSuggestions,
 } from './WidgetConfigFields';
 import { useDashboardWidgetData, DashboardWidgetData } from './useDashboardWidgetData';
 import { useWidgetConfigMeta } from './useWidgetConfigMeta';
 import {
+  buildSuggestions,
   buildWidgetDraft,
+  validateGrain,
   CHART_LABELS,
   createWidgetId,
   GRAIN_LABELS,
@@ -61,6 +64,8 @@ export interface WidgetConfigModalProps {
   querySupported: boolean;
   metrics: MetricRecord[];
   editingWidget: DashboardWidgetConfig | null;
+  /** Preselect this metric when creating a widget (ignored if not executable). */
+  initialMetricId?: number | null;
   onSave: (widget: DashboardWidgetConfig) => void;
   onCancel: () => void;
 }
@@ -80,10 +85,12 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
   const { translate } = useLanguage();
   const eligibleMetrics = useMemo(() => selectExecutableMetrics(props.metrics), [props.metrics]);
   const [form, setForm] = useState<WidgetFormState>(() =>
-    initFormState(props.editingWidget, eligibleMetrics),
+    initFormState(props.editingWidget, eligibleMetrics, props.initialMetricId ?? null),
   );
   const [widgetId] = useState(() => props.editingWidget?.id ?? createWidgetId());
   const [previewWidget, setPreviewWidget] = useState<DashboardWidgetConfig | null>(null);
+  // New widgets start on 1-click suggestions; editing goes straight to the full form.
+  const [custom, setCustom] = useState(props.editingWidget !== null);
   const sanitizeOnLoad = useCallback((meta: WidgetMeta) => {
     const dimensionIds = new Set(meta.dimensions.map((item) => item.column_id));
     const timeIds = new Set(
@@ -111,7 +118,15 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
   );
   const dimensionIsTime =
     form.dimensionColId !== null && timeColumns.some((column) => column.column_id === form.dimensionColId);
-  const validationMessage = validateForm(form);
+  const grain = useMemo(
+    () => metricPlanGrain(eligibleMetrics.find((metric) => metric.metric_id === form.metricId) ?? null),
+    [eligibleMetrics, form.metricId],
+  );
+  const suggestions = useMemo(
+    () => (currentMeta ? buildSuggestions(currentMeta.metricId, currentMeta, grain) : []),
+    [currentMeta, grain],
+  );
+  const validationMessage = validateForm(form) ?? validateGrain(form, grain);
   const canSave = validationMessage === null && !loadingMeta && metaError === null;
 
   const previewData = useDashboardWidgetData({
@@ -182,6 +197,16 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
 
         <div className="flex flex-col gap-4">
           <MetricPicker metrics={eligibleMetrics} value={form.metricId} onChange={handleMetricChange} />
+          {!custom && form.metricId !== null && (
+            <WidgetSuggestions
+              loading={loadingMeta}
+              suggestions={suggestions}
+              onAdd={(suggestion) => props.onSave(buildWidgetDraft(widgetId, suggestion.form))}
+              onCustomize={(suggestion) => { setForm(suggestion.form); setCustom(true); }}
+              onCustom={() => setCustom(true)}
+            />
+          )}
+          {custom && (<>
           {form.chartType !== 'kpi' && form.chartType !== 'pie' && form.metricId !== null && (
             <MetricComparePicker
               metrics={compareOptions}
@@ -264,18 +289,19 @@ function WidgetConfigModalInner(props: WidgetConfigModalProps) {
             data={previewData}
             onPreview={runPreview}
           />
+          </>)}
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           {metaError ? (
             <p role="alert" className="flex-1 text-xs font-medium text-destructive">{metaError}</p>
-          ) : validationMessage ? (
+          ) : custom && validationMessage ? (
             <p role="alert" className="flex-1 text-xs font-medium text-destructive">{validationMessage}</p>
           ) : (
             <p className="flex-1" />
           )}
           <Button type="button" variant="outline" onClick={props.onCancel}><Translated text={"Hủy"} /></Button>
-          <Button type="button" disabled={!canSave} onClick={handleSave}><Translated text={"Lưu"} /></Button>
+          {custom && <Button type="button" disabled={!canSave} onClick={handleSave}><Translated text={"Lưu"} /></Button>}
         </div>
       </DialogContent>
     </Dialog>
